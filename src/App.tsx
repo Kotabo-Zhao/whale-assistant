@@ -1341,7 +1341,7 @@ function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onL
   const badgeOf = (entry: SettingsHomeEntry): string => entry.id === 'runtime-page'
     ? (keepAlive.foregroundServiceActive ? t("后台保持中") : keepAlive.keepRuntimeInBackground ? t("已开启") : t("未开启"))
     : entry.id === 'device-shell'
-      ? (!shizuku.installed ? t("未安装") : shizuku.connected ? t("已连接") : shizuku.permission === 'granted' ? t("已授权") : t("待授权"))
+      ? (!shizuku.installed ? t("未安装") : !shizuku.running ? t("未运行") : shizuku.permission !== 'granted' ? t(shizuku.permission === 'denied' ? "已拒绝" : "待授权") : shizuku.connected ? t("已连接") : t("已授权"))
       : entry.id === 'diagnostics'
         ? (diagnostic.enabled ? t("收集中") : t("未收集"))
         : ''
@@ -2814,7 +2814,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
           <div className="section-title section-title-action">
             <span className="section-icon"><Smartphone size={19} /></span>
             <div><h2 id="shizuku-settings">Shizuku</h2><p>{t("设备 Shell ·")}{shizukuLabel}{shizukuVersions === '' ? '' : ` · ${shizukuVersions}`}</p></div>
-            <span className={`status-chip ${shizuku.permission === 'granted' ? 'success' : ''}`}>{shizukuLabel}</span>
+            <span className={`status-chip ${shizuku.installed && shizuku.running && shizuku.permission === 'granted' && shizuku.connected ? 'success' : ''}`}>{shizukuLabel}</span>
           </div>
           <div className="settings-inline-actions">
             {shizuku.installed && shizuku.running && shizuku.permission !== 'granted' && (
@@ -2825,17 +2825,18 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
               <button className="button button-secondary" type="button" onClick={onOpenShizuku} disabled={busy !== null}>
                 <ExternalLink size={18} />{t("打开 Shizuku")}</button>
             )}
-            {shizuku.permission === 'granted' && !shizuku.connected && (
+            {shizuku.installed && shizuku.running && shizuku.permission === 'granted' && !shizuku.connected && (
               <button className="button button-secondary" type="button" onClick={onConnect} disabled={busy !== null}>
                 {busy === 'shizuku-connect' ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}{t("连接 Shizuku")}</button>
             )}
-            {shizuku.permission === 'granted' && shizuku.connected && (
+            {shizuku.installed && shizuku.running && shizuku.permission === 'granted' && shizuku.connected && (
               <div className="permission-granted"><CheckCircle2 size={18} />{t("连接可用")}</div>
             )}
           </div>
           <p className="settings-note">
             {t("Shizuku 提供设备命令和文件操作能力，权限取决于其启动模式。未安装、未授权或断开时，设备工具不可用，不影响 Ubuntu 终端与 Harness。")}
           </p>
+          {shizuku.installed && !shizuku.running && <p className="settings-note">{t('无线调试配对完成后，还需在 Shizuku 应用中点击「启动」；如果启动失败，可关闭再开启无线调试后重试。')}</p>}
         </section>
         </>
         )}

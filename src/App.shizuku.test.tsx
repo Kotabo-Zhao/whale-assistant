@@ -94,4 +94,12 @@ describe('Shizuku 版本显示', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('若刚更新过 Shizuku，请在 Shizuku 中停止服务后重新启动')
   })
+
+  it('服务未运行时不会把旧授权或连接状态展示为可用', async () => {
+    const section = await openShizukuPage({ running: false, permission: 'granted', connected: true })
+    expect(within(section).getByText('未运行')).not.toHaveClass('success')
+    expect(within(section).queryByText('连接可用')).toBeNull()
+    expect(within(section).queryByRole('button', { name: '连接 Shizuku' })).toBeNull()
+    expect(within(section).getByText(/配对完成后，还需在 Shizuku 应用中点击/)).toBeVisible()
+  })
 })
