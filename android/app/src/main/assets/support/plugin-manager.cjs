@@ -333,7 +333,7 @@ function satisfiesRange(version, range) {
  * 返回 { version, range } 或 null（在探测上限内没有兼容版本）。
  * 探测次数有上限：每个候选都要额外问一次 npm，不设上限会在版本很多的包上退化。
  */
-function selectNewestCompatible(versions, runtimeDsh, rangeOf, maxProbes = 6) {
+function selectNewestCompatible(versions, runtimeDsh, rangeOf, maxProbes = 6, canUse = () => true) {
   if (!parseVersion(runtimeDsh) || !Array.isArray(versions)) return null
   const parsed = [...new Set(versions)]
     .filter(item => typeof item === 'string' && VERSION.test(item))
@@ -353,20 +353,21 @@ function selectNewestCompatible(versions, runtimeDsh, rangeOf, maxProbes = 6) {
     probes += 1
     const range = typeof rangeOf === 'function' ? rangeOf(candidate.text) : null
     if (range === null || range === undefined || range === '' || range === '*') {
-      return { version: candidate.text, range: null }
+      if (canUse(candidate.text)) return { version: candidate.text, range: null }
+      continue
     }
     if (typeof range !== 'string' || range.length > 256) continue
-    if (satisfiesRange(runtimeDsh, range)) return { version: candidate.text, range }
+    if (satisfiesRange(runtimeDsh, range) && canUse(candidate.text)) return { version: candidate.text, range }
   }
   return null
 }
 
 /** Full registry metadata lets us scan more than six historical versions without one request per version. */
-function selectFromPackument(payload, id, runtimeDsh) {
+function selectFromPackument(payload, id, runtimeDsh, platform, arch) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.name !== id ||
       !payload.versions || typeof payload.versions !== 'object' || Array.isArray(payload.versions)) return { available: false }
   const versions = Object.keys(payload.versions)
-  if (!versions.length || versions.length > 5000 || !parseVersion(runtimeDsh)) return { available: false }
+  if (!versions.length || versions.length > 5000 || !parseVersion(runtimeDsh) || typeof platform !== 'string' || typeof arch !== 'string') return { available: false }
   const parsed = versions.filter(v => VERSION.test(v) && parseVersion(v))
   if (!parsed.length) return { available: false }
   for (const version of parsed) {
@@ -374,8 +375,17 @@ function selectFromPackument(payload, id, runtimeDsh) {
     if (!meta || typeof meta !== 'object' || Array.isArray(meta) || meta.name !== id || meta.version !== version) return { available: false }
     try { declaredDshRange(meta, id) } catch { return { available: false } }
   }
-  const selection = selectNewestCompatible(parsed, runtimeDsh, version => declaredDshRange(payload.versions[version], id), 5000)
-  return { available: true, selection, checked: parsed.length }
+  let rejected = null
+  let selection
+  try {
+    selection = selectNewestCompatible(parsed, runtimeDsh, version => declaredDshRange(payload.versions[version], id), 5000, version => {
+      const code = npmMetadataCheck(payload.versions[version], id, version, platform, arch)
+      if (code === 'PLUGIN_METADATA_UNAVAILABLE') throw new Error(code)
+      if (code) { rejected = code; return false }
+      return true
+    })
+  } catch { return { available: false } }
+  return { available: true, selection, checked: parsed.length, rejected }
 }
 
 /** A bounded, anonymous HTTPS child process. No user credentials or custom registries are inherited. */
@@ -1856,10 +1866,10 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     })
     let batchSelection = { available: false }
     if (batch.status === 0) {
-      try { batchSelection = selectFromPackument(JSON.parse(batch.stdout), id, runtimeDsh) } catch { /* use bounded npm fallback */ }
+      try { batchSelection = selectFromPackument(JSON.parse(batch.stdout), id, runtimeDsh, process.platform, process.arch) } catch { /* use bounded npm fallback */ }
     }
     if (batchSelection.available) {
-      if (batchSelection.selection === null) fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
+      if (batchSelection.selection === null) fail(batchSelection.rejected ?? 'PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
       const version = batchSelection.selection.version
       const cache = new Map()
       const actualRange = engineRangeOf(npm, id, version, common, environment, cache)
@@ -1874,12 +1884,19 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     if (typeof versions === 'string') versions = [versions]
     if (!Array.isArray(versions) || versions.length === 0 || versions.length > 5000) fail('PLUGIN_METADATA_UNAVAILABLE', id)
     const cache = new Map()
+    let rejected = null
     const selection = selectNewestCompatible(versions, runtimeDsh,
-      candidate => engineRangeOf(npm, id, candidate, common, environment, cache))
+      candidate => engineRangeOf(npm, id, candidate, common, environment, cache), 6, candidate => {
+        const meta = readRegistryMetadata(cache.get(candidate), id, candidate)
+        const code = npmMetadataCheck(meta, id, candidate, process.platform, process.arch)
+        if (code === 'PLUGIN_METADATA_UNAVAILABLE') fail(code, id)
+        if (code) { rejected = code; return false }
+        return true
+      })
     if (selection === null) {
       // The bounded scan is not proof that every historical version is incompatible.
       if (engineScanIncomplete(versions, cache.size)) fail('PLUGIN_ENGINE_SCAN_INCOMPLETE', `${id} dsh=${runtimeDsh}`)
-      fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
+      fail(rejected ?? 'PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
     }
     // The already verified selected-version response is reused: no second metadata request.
     installAfterMetadata(() => cache.get(selection.version), install, id, selection.version, process.platform, process.arch)

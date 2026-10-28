@@ -243,25 +243,43 @@ test('批量元数据可发现六个新版本以外的兼容版本，身份或�
   const versions = {}
   for (let i = 1; i <= 10; i++) versions[`1.0.${i}`] = { name: 'demo', version: `1.0.${i}`, dsh: { engines: { dsh: i <= 3 ? '>=0.1.0' : '>=9.0.0' } } }
   const payload = { name: 'demo', versions }
-  const result = selectFromPackument(payload, 'demo', '0.2.0')
+  const result = selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64')
   assert.equal(result.available, true)
   assert.equal(result.selection.version, '1.0.3')
   assert.equal(result.checked, 10)
-  assert.deepEqual(selectFromPackument(payload, 'wrong', '0.2.0'), { available: false })
+  assert.deepEqual(selectFromPackument(payload, 'wrong', '0.2.0', 'linux', 'arm64'), { available: false })
   payload.versions['1.0.2'].name = 'other'
-  assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0'), { available: false })
+  assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
   payload.versions['1.0.2'].name = 'demo'
   payload.versions['1.0.2'].dsh.engines.dsh = 42
-  assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0'), { available: false })
+  assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
 })
 
 test('批量元数据确认所有版本不兼容，以及未声明要求的版本', () => {
   const make = (version, range) => ({ name: 'demo', version, ...(range === null ? {} : { dsh: { engines: { dsh: range } } }) })
   const payload = { name: 'demo', versions: { '1.0.0': make('1.0.0', '>=9.0.0'), '1.0.1': make('1.0.1', '>=9.0.0') } }
-  assert.equal(selectFromPackument(payload, 'demo', '0.2.0').selection, null)
+  assert.equal(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64').selection, null)
   payload.versions['1.0.0'] = make('1.0.0', null)
-  assert.equal(selectFromPackument(payload, 'demo', '0.2.0').selection.version, '1.0.0')
-  assert.deepEqual(selectFromPackument({ name: 'demo', versions: {} }, 'demo', '0.2.0'), { available: false })
+  assert.equal(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64').selection.version, '1.0.0')
+  assert.deepEqual(selectFromPackument({ name: 'demo', versions: {} }, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
+})
+
+test('批量和有限回退会跳过平台或原生扩展不适配的新版', () => {
+  const versions = {
+    '1.0.3': { name: 'demo', version: '1.0.3', os: ['win32'] },
+    '1.0.2': { name: 'demo', version: '1.0.2', gypfile: true },
+    '1.0.1': { name: 'demo', version: '1.0.1', os: ['linux'], cpu: ['arm64'] },
+  }
+  const result = selectFromPackument({ name: 'demo', versions }, 'demo', '0.2.0', 'linux', 'arm64')
+  assert.equal(result.selection.version, '1.0.1')
+  delete versions['1.0.1']
+  assert.equal(selectFromPackument({ name: 'demo', versions }, 'demo', '0.2.0', 'linux', 'arm64').rejected, 'PLUGIN_NATIVE_UNSUPPORTED')
+  versions['1.0.3'].os = [7]
+  assert.deepEqual(selectFromPackument({ name: 'demo', versions }, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
+  const checked = []
+  const chosen = selectNewestCompatible(['1.0.3', '1.0.2', '1.0.1'], '0.2.0', () => null, 6, v => { checked.push(v); return v === '1.0.1' })
+  assert.equal(chosen.version, '1.0.1')
+  assert.deepEqual(checked, ['1.0.3', '1.0.2', '1.0.1'])
 })
 
 test('范围匹配严格对齐 npm 语义（含预发布与插入符）', () => {
