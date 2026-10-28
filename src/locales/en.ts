@@ -1977,4 +1977,5 @@ export const english: Readonly<Record<string, string>> = {
   "配置成功后这里会出现「打开 Harness」按钮；": "Once a credential is saved, the “Open Harness” button appears here;",
   "插件声明不支持当前运行环境的平台或处理器，已保留原版本": "The plugin does not support this runtime platform or processor; the previous version was preserved.",
   "无法核对插件版本元数据，请检查网络后重试，已保留原版本": "Could not verify plugin version metadata; check your connection and retry. The previous version was preserved.",
+  "无法确认当前 Harness 版本，请修复运行环境后重试，已保留原版本": "Could not verify the current Harness version; repair the runtime and retry. The previous version was preserved.",
 }

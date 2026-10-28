@@ -18,6 +18,7 @@ const errorMessages: Record<string, string> = {
   PLUGIN_NATIVE_UNSUPPORTED: '插件或依赖包含移动端受限的原生扩展，已保留原版本',
   PLUGIN_PLATFORM_UNSUPPORTED: '插件声明不支持当前运行环境的平台或处理器，已保留原版本',
   PLUGIN_METADATA_UNAVAILABLE: '无法核对插件版本元数据，请检查网络后重试，已保留原版本',
+  PLUGIN_RUNTIME_VERSION_UNAVAILABLE: '无法确认当前 Harness 版本，请修复运行环境后重试，已保留原版本',
   PLUGIN_SCAN_UNAVAILABLE: '无法完整检查插件依赖（可能包含链接或超过检查限制），已保留原版本',
   PLUGIN_LINK_UNSUPPORTED: '设备不支持安全更新所需的文件链接，已保留原版本',
   PLUGIN_RECOVERY_FAILED: '上次更新尚未恢复，请重试或检查运行时',

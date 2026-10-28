@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const { createManager, npmMetadataCheck, installAfterMetadata, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
+const { createManager, npmMetadataCheck, readRegistryMetadata, declaredDshRange, installAfterMetadata, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
   require('../android/app/src/main/assets/support/plugin-manager.cjs')
 
 test('npm 元数据预检区分平台不兼容、原生扩展和无法核验', () => {
@@ -36,6 +36,16 @@ test('无法核验或平台不支持时不下载插件', () => {
   assert.deepEqual(calls, [])
   check({ status: 0, stdout: JSON.stringify({ name: 'test-plugin', version: '1.2.3', cpu: ['arm64'] }) })
   assert.deepEqual(calls, ['test-plugin@1.2.3'])
+})
+
+test('无法读取元数据不能伪装为未声明引擎范围', () => {
+  const good = { name: 'test-plugin', version: '1.2.3', dsh: { engines: { dsh: '>=0.2.0' } } }
+  assert.throws(() => readRegistryMetadata({ status: 1, stdout: '' }, 'test-plugin', '1.2.3'), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => readRegistryMetadata({ status: 0, stdout: '' }, 'test-plugin', '1.2.3'), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => readRegistryMetadata({ status: 0, stdout: JSON.stringify({ name: 'other', version: '1.2.3' }) }, 'test-plugin', '1.2.3'), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.equal(declaredDshRange(readRegistryMetadata({ status: 0, stdout: JSON.stringify(good) }, 'test-plugin', '1.2.3'), 'test-plugin'), '>=0.2.0')
+  assert.equal(declaredDshRange({ name: 'test-plugin' }, 'test-plugin'), null)
+  assert.throws(() => declaredDshRange({ dsh: { engines: { dsh: 42 } } }, 'test-plugin'), /PLUGIN_METADATA_UNAVAILABLE/)
 })
 
 test('裸导入抽取只认包名，路径与内建模块一律忽略', () => {
@@ -362,6 +372,33 @@ test('下载失败保留旧插件并清理失败暂存目录', t => {
   const { manager, root } = fixture(t, () => { throw new Error('PLUGIN_UPDATE_FAILED') })
   assert.throws(() => manager.update('test-plugin'), /PLUGIN_UPDATE_FAILED/)
   assert.equal(manager.list().plugins[1].version, '1.0.0')
+  assert.deepEqual(fs.readdirSync(path.join(root, 'root/.dsh-mobile/plugin-manager/versions')), [])
+})
+
+test('下载包实际声明与运行时冲突时事务不切换旧版本', t => {
+  const { manager, root, write } = fixture(t, (id, directory) => {
+    installer(id, directory)
+    const file = path.join(directory, 'node_modules', id, 'package.json')
+    const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
+    pkg.dsh.engines = { dsh: '>=9.0.0' }
+    fs.writeFileSync(file, JSON.stringify(pkg))
+  })
+  write('opt/dsh/node_modules/@deepseek-ai/dsh/package.json', { name: '@deepseek-ai/dsh', version: '0.2.1-rc.2' })
+  assert.throws(() => manager.update('test-plugin'), /PLUGIN_ENGINE_UNSUPPORTED/)
+  assert.equal(manager.list().plugins.find(p => p.id === 'test-plugin').version, '1.0.0')
+  assert.deepEqual(fs.readdirSync(path.join(root, 'root/.dsh-mobile/plugin-manager/versions')), [])
+})
+
+test('声明引擎范围但运行时版本不可读时不切换旧版本', t => {
+  const { manager, root } = fixture(t, (id, directory) => {
+    installer(id, directory)
+    const file = path.join(directory, 'node_modules', id, 'package.json')
+    const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
+    pkg.dsh.engines = { dsh: '>=0.2.0' }
+    fs.writeFileSync(file, JSON.stringify(pkg))
+  })
+  assert.throws(() => manager.update('test-plugin'), /PLUGIN_RUNTIME_VERSION_UNAVAILABLE/)
+  assert.equal(manager.list().plugins.find(p => p.id === 'test-plugin').version, '1.0.0')
   assert.deepEqual(fs.readdirSync(path.join(root, 'root/.dsh-mobile/plugin-manager/versions')), [])
 })
 

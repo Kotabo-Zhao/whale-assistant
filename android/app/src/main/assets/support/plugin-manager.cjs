@@ -430,12 +430,26 @@ function npmMetadataCheck(payload, id, version, platform, arch) {
   return null
 }
 
+/** Missing declaration and unavailable metadata are distinct states. */
+function readRegistryMetadata(reply, id, version) {
+  if (!reply || reply.status !== 0) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+  let payload
+  try { payload = JSON.parse(reply.stdout) } catch { fail('PLUGIN_METADATA_UNAVAILABLE', id) }
+  const metadata = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata) || metadata.name !== id || metadata.version !== version) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+  return metadata
+}
+function declaredDshRange(metadata, id) {
+  const range = metadata?.dsh?.engines?.dsh
+  if (range === undefined) return null
+  if (typeof range !== 'string' || range.length < 1 || range.length > 256) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+  return range
+}
+
 /** No package download may begin until the selected registry version passes metadata checks. */
 function installAfterMetadata(probe, install, id, version, platform, arch) {
   const reply = probe()
-  if (!reply || reply.status !== 0) fail('PLUGIN_METADATA_UNAVAILABLE', id)
-  let metadata
-  try { metadata = JSON.parse(reply.stdout) } catch { fail('PLUGIN_METADATA_UNAVAILABLE', id) }
+  const metadata = readRegistryMetadata(reply, id, version)
   const error = npmMetadataCheck(metadata, id, version, platform, arch)
   if (error) fail(error, id)
   if (install(id + '@' + version).status !== 0) fail('PLUGIN_UPDATE_FAILED')
@@ -1743,17 +1757,14 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     }
   }
 
-  /** 问 npm 某个具体版本声明的 dsh 引擎范围；查询失败或未声明都按"未声明"处理。 */
-  function engineRangeOf(npm, id, version, common, environment) {
-    const probe = spawnSync(
-      process.execPath,
-      [npm, 'view', `${id}@${version}`, 'dsh.engines.dsh', '--json', ...common],
-      { env: environment, encoding: 'utf8', timeout: 20000, maxBuffer: 65536 },
-    )
-    if (probe.status !== 0) return null
-    let range
-    try { range = JSON.parse(probe.stdout) } catch { return null }
-    return typeof range === 'string' && range.length > 0 && range.length <= 256 ? range : null
+  /** Reuse full, identity-checked metadata for selection and preflight. */
+  function engineRangeOf(npm, id, version, common, environment, cache) {
+    const probe = spawnSync(process.execPath,
+      [npm, 'view', `${id}@${version}`, '--json', '--fetch-retries=1', '--fetch-timeout=15000', ...common],
+      { env: environment, encoding: 'utf8', timeout: 25000, maxBuffer: 2 * 1024 * 1024 })
+    const metadata = readRegistryMetadata(probe, id, version)
+    cache.set(version, probe)
+    return declaredDshRange(metadata, id)
   }
 
   function npmInstall(id, directory) {
@@ -1783,38 +1794,19 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
       return
     }
     const runtimeDsh = runtimeDshVersion()
-    let version = null
-    if (runtimeDsh === null) {
-      // 读不到运行时版本（异常安装形态）时保持旧行为，不因为探测失败而拒绝更新。
-      const latest = spawnSync(process.execPath, [npm, 'view', id, 'dist-tags.latest', '--json', ...common], { env: environment, encoding: 'utf8', timeout: 45000, maxBuffer: 65536 })
-      if (latest.status !== 0) fail('PLUGIN_UPDATE_FAILED')
-      let parsed
-      try { parsed = JSON.parse(latest.stdout) } catch { fail('PLUGIN_UPDATE_FAILED') }
-      if (typeof parsed !== 'string' || parsed.length > 64 || !VERSION.test(parsed)) fail('PLUGIN_UPDATE_FAILED')
-      version = parsed
-    } else {
-      // 按运行时 dsh 版本挑选引擎兼容的最高版本，而不是无脑 latest。
-      const listed = spawnSync(process.execPath, [npm, 'view', id, 'versions', '--json', ...common], { env: environment, encoding: 'utf8', timeout: 45000, maxBuffer: 1024 * 1024 })
-      if (listed.status !== 0) fail('PLUGIN_UPDATE_FAILED')
-      let versions
-      try { versions = JSON.parse(listed.stdout) } catch { fail('PLUGIN_UPDATE_FAILED') }
-      if (typeof versions === 'string') versions = [versions]
-      if (!Array.isArray(versions) || versions.length === 0 || versions.length > 5000) fail('PLUGIN_UPDATE_FAILED')
-      const selection = selectNewestCompatible(
-        versions,
-        runtimeDsh,
-        candidate => engineRangeOf(npm, id, candidate, common, environment),
-      )
-      if (selection === null) fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
-      version = selection.version
-    }
-    // 查询固定版本元数据，先拒绝明确不支持当前 Linux/CPU 的包，再下载依赖。
-    // 元数据没有声明不等于兼容；下载后仍对完整依赖树执行原生模块检查。
-    installAfterMetadata(
-      () => spawnSync(process.execPath, [npm, 'view', id + '@' + version, '--json', '--fetch-retries=1', '--fetch-timeout=15000', ...common],
-        { env: environment, encoding: 'utf8', timeout: 25000, maxBuffer: 2 * 1024 * 1024 }),
-      install, id, version, process.platform, process.arch,
-    )
+    if (runtimeDsh === null) fail('PLUGIN_RUNTIME_VERSION_UNAVAILABLE', id)
+    const listed = spawnSync(process.execPath, [npm, 'view', id, 'versions', '--json', ...common], { env: environment, encoding: 'utf8', timeout: 45000, maxBuffer: 1024 * 1024 })
+    if (listed.status !== 0) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+    let versions
+    try { versions = JSON.parse(listed.stdout) } catch { fail('PLUGIN_METADATA_UNAVAILABLE', id) }
+    if (typeof versions === 'string') versions = [versions]
+    if (!Array.isArray(versions) || versions.length === 0 || versions.length > 5000) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+    const cache = new Map()
+    const selection = selectNewestCompatible(versions, runtimeDsh,
+      candidate => engineRangeOf(npm, id, candidate, common, environment, cache))
+    if (selection === null) fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
+    // The already verified selected-version response is reused: no second metadata request.
+    installAfterMetadata(() => cache.get(selection.version), install, id, selection.version, process.platform, process.arch)
   }
   /** 解析闭包补全：详见 updateInternal 里的调用点说明。 */
   function linkUnresolvedRuntimeDependencies(stageModules, stagedNames) {
@@ -1947,6 +1939,13 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     const selected = read(path.join(stageModules, id, 'package.json'))
     const declared = bundlePatchFiles(selected)
     if (selected.name !== id || !VERSION.test(selected.version ?? '') || declared === null) fail('PLUGIN_UPDATE_FAILED')
+    // Registry declarations can differ from the downloaded package; check the staged package before any cutover.
+    const actualRange = declaredDshRange(selected, id)
+    if (actualRange !== null) {
+      const runningVersion = runtimeDshVersion()
+      if (runningVersion === null) fail('PLUGIN_RUNTIME_VERSION_UNAVAILABLE', id)
+      if (!satisfiesRange(runningVersion, actualRange)) fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runningVersion}`)
+    }
     for (const relative of declared) {
       const patch = path.resolve(stageModules, id, relative)
       if (!within(path.join(stageModules, id), patch) || !fs.statSync(safe(patch)).isFile()) fail('PLUGIN_UPDATE_FAILED')
@@ -2157,6 +2156,8 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
 module.exports = {
   createManager,
   npmMetadataCheck,
+  readRegistryMetadata,
+  declaredDshRange,
   installAfterMetadata,
   validName,
   within,
