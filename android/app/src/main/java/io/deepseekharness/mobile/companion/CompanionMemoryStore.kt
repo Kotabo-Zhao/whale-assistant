@@ -113,13 +113,10 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                 val query = (request.opt("query") as? String)?.trim() ?: throw invalid()
                 if (query.length > 100) throw invalid()
                 val rows = load()
-                val results = JSONArray()
-                for (index in rows.length() - 1 downTo 0) {
-                    val row = rows.getJSONObject(index)
-                    if (row.optString("status") != "pending" && (query.isEmpty() || row.getString("text").contains(query, ignoreCase = true)) && results.length() < 10) results.put(row)
-                }
-                val confirmed = (0 until rows.length()).count { rows.getJSONObject(it).optString("status") != "pending" }
-                JSONObject().put("items", results).put("total", confirmed).toString()
+                val confirmed = (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.optString("status") != "pending" }
+                val result = CompanionMemorySearch.find(confirmed, query)
+                JSONObject().put("items", JSONArray(result.items)).put("total", confirmed.size).put("matchMode", result.mode)
+                    .put("notice", if (result.mode == "related") "关键词关联结果可能无关；使用或删除前请核对内容。" else JSONObject.NULL).toString()
             }
             "delete" -> {
                 val id = request.opt("id") as? String ?: throw invalid()
@@ -137,6 +134,45 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
     }
 
     private fun invalid() = RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数无效或包含敏感内容")
+}
+
+/** Bounded lexical fallback for rephrased queries; it does not infer facts or use pending items. */
+internal object CompanionMemorySearch {
+    data class Result(val items: List<JSONObject>, val mode: String)
+    private val chinese = Regex("[\\u4e00-\\u9fff]{2,}")
+    private val words = Regex("[a-z0-9]{3,}")
+    private val commonWords = setOf("the", "and", "what", "which", "that", "this", "with", "for", "you", "your", "remember")
+    private val commonPairs = setOf("什么", "如何", "怎么", "是否", "可以", "记得", "记住", "我的", "我们", "你说", "请问", "一下", "多少", "这个", "那个")
+    private fun terms(text: String): Set<String> {
+        val normalized = text.lowercase(java.util.Locale.ROOT)
+        val result = mutableSetOf<String>()
+        for (word in words.findAll(normalized)) if (word.value !in commonWords) result.add(word.value)
+        for (run in chinese.findAll(normalized)) {
+            val value = run.value
+            for (i in 0 until value.length - 1) {
+                val pair = value.substring(i, i + 2)
+                if (pair !in commonPairs) result.add(pair)
+            }
+        }
+        return result
+    }
+    fun find(rows: List<JSONObject>, query: String): Result {
+        val newestFirst = rows.asReversed()
+        if (query.isEmpty()) return Result(newestFirst.take(10), "recent")
+        val exact = newestFirst.filter { it.getString("text").contains(query, ignoreCase = true) }
+        if (exact.isNotEmpty()) return Result(exact.take(10), "exact")
+        val keywords = terms(query)
+        if (keywords.isEmpty()) return Result(emptyList(), "none")
+        val matches = newestFirst.mapIndexedNotNull { index, row ->
+            val shared = terms(row.getString("text")).intersect(keywords)
+            val latin = shared.count { it[0] in 'a'..'z' || it[0] in '0'..'9' }
+            val han = shared.size - latin
+            // A single Chinese bigram is too broad; English words need at least four characters.
+            val meaningfulWord = shared.any { it.length >= 4 && (it[0] in 'a'..'z' || it[0] in '0'..'9') }
+            if (han < 2 && !meaningfulWord) null else Triple(row, han + latin * 2, index)
+        }.sortedWith(compareByDescending<Triple<JSONObject, Int, Int>> { it.second }.thenBy { it.third })
+        return Result(matches.take(10).map { it.first }, if (matches.isEmpty()) "none" else "related")
+    }
 }
 
 /** Export is a user-selected snapshot; it does not alter or migrate the stored data. */

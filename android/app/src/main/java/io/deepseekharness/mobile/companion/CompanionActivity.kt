@@ -158,6 +158,16 @@ class CompanionActivity : AppCompatActivity() {
         if (pendingCount == null) paragraph("无法读取长期记忆，原数据已保留。")
         else if (pendingCount > 0) paragraph("有 $pendingCount 条记忆等待确认。")
         button("查看、确认和管理长期记忆") { showMemories() }
+        button("搜索长期记忆") {
+            val input = android.widget.EditText(this).apply {
+                hint = "输入记忆内容关键词"
+                filters = arrayOf(android.text.InputFilter.LengthFilter(100))
+            }
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("搜索长期记忆")
+                .setMessage("按内容查找，也包括尚待确认的候选。留空显示全部。")
+                .setView(input).setNegativeButton("取消", null)
+                .setPositiveButton("搜索") { _, _ -> showMemories(input.text.toString().trim()) }.show()
+        }
         button("导出长期记忆") { if (!memoryBusy) memoryExport.launch("whale-memory.json") else paragraph("记忆文件操作正在进行，请稍候。") }
         button("从文件导入记忆") { if (!memoryBusy) memoryImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("记忆文件操作正在进行，请稍候。") }
         paragraph("导出为未加密 JSON，包含所有记忆和来源；由你选择保存位置，云盘等服务可能同步文件。导入前会显示待新增内容，由你确认后合并。")
@@ -469,10 +479,16 @@ class CompanionActivity : AppCompatActivity() {
         if (!opened) android.widget.Toast.makeText(this, "无法打开应用，它可能已卸载或没有启动入口。", android.widget.Toast.LENGTH_LONG).show()
     }
 
-    private fun showMemories() {
+    private fun showMemories(query: String = "") {
         val memory = CompanionMemoryStore(this)
-        val records = runCatching { memory.listForUser() }.getOrElse { paragraph("无法读取长期记忆，原数据已保留。"); return }
-        if (records.length() == 0) { paragraph("还没有长期记忆。"); return }
+        val all = runCatching { memory.listForUser() }.getOrElse { paragraph("无法读取长期记忆，原数据已保留。"); return }
+        if (all.length() == 0) { paragraph("还没有长期记忆。"); return }
+        val records = org.json.JSONArray()
+        for (index in 0 until all.length()) {
+            val row = all.getJSONObject(index)
+            if (query.isEmpty() || row.getString("text").contains(query, ignoreCase = true)) records.put(row)
+        }
+        if (records.length() == 0) { paragraph("没有匹配的记忆，请尝试其他关键词。"); return }
         val labels = Array(records.length()) {
             val row = records.getJSONObject(it)
             val source = when (row.optString("source")) { "assistant_tool" -> "助手记忆工具"; "user_edit" -> "用户编辑"; else -> "来源未知" }

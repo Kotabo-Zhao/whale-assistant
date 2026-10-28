@@ -38,6 +38,33 @@ class CompanionMemoryEngineTest {
         } finally { Files.deleteIfExists(path) }
     }
 
+    @Test fun searchesRelatedKeywordsWithoutReturningPendingOrInventingMatches() {
+        val rows = JSONArray()
+            .put(JSONObject().put("id", "00000000-0000-0000-0000-000000000001").put("text", "我喜欢喝冰美式咖啡").put("status", "confirmed"))
+            .put(JSONObject().put("id", "00000000-0000-0000-0000-000000000002").put("text", "喜欢喝浓缩咖啡").put("status", "pending"))
+            .put(JSONObject().put("id", "00000000-0000-0000-0000-000000000003").put("text", "我喜欢蓝色").put("status", "confirmed"))
+        val engine = CompanionMemoryEngine({ rows }, { })
+        fun search(query: String) = JSONObject(engine.execute(JSONObject().put("op", "search").put("query", query).toString()))
+        val related = search("我平时喜欢喝什么咖啡")
+        assertEquals("related", related.getString("matchMode"))
+        assertEquals(1, related.getJSONArray("items").length())
+        assertEquals("我喜欢喝冰美式咖啡", related.getJSONArray("items").getJSONObject(0).getString("text"))
+        assertEquals("exact", search("蓝色").getString("matchMode"))
+        assertEquals("none", search("什么颜色").getString("matchMode"))
+        assertEquals(0, search("什么颜色").getJSONArray("items").length())
+        assertEquals("recent", search("").getString("matchMode"))
+        assertEquals(2, search("").getJSONArray("items").length())
+    }
+    @Test fun exactResultsTakePriorityAndAreLimitedToTen() {
+        val rows = JSONArray()
+        for (index in 0 until 12) rows.put(JSONObject().put("id", "00000000-0000-0000-0000-${index.toString().padStart(12, '0')}").put("text", "咖啡 $index").put("status", "confirmed"))
+        rows.put(JSONObject().put("id", "00000000-0000-0000-0000-000000000099").put("text", "喜欢喝咖啡").put("status", "pending"))
+        val result = JSONObject(CompanionMemoryEngine({ rows }, { }).execute("{\"op\":\"search\",\"query\":\"咖啡\"}"))
+        assertEquals("exact", result.getString("matchMode"))
+        assertEquals(12, result.getInt("total"))
+        assertEquals(10, result.getJSONArray("items").length())
+        assertEquals("咖啡 11", result.getJSONArray("items").getJSONObject(0).getString("text"))
+    }
     @Test fun readsLegacyMemoryWithoutSource() {
         val legacy = JSONArray().put(JSONObject().put("id", "00000000-0000-0000-0000-000000000001").put("text", "旧偏好"))
         val engine = CompanionMemoryEngine({ legacy }, { })
