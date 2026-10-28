@@ -33,6 +33,27 @@ describe('应用外层插件管理', () => {
       await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: 'catalog-example' }))
     } finally { mock.mockRestore() }
   })
+  it('目录安装失败时在目录内显示原生兼容检查结果', async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '目录示例', npm: 'catalog-example' }] }))
+    let done = false
+    const mock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, body: { getReader: () => ({
+      read: () => Promise.resolve(done ? { done: true } : (done = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+    }) } } as unknown as Response)
+    try {
+      const failure = Object.assign(new Error('catalog-example dsh=0.2.1'), { code: 'PLUGIN_ENGINE_SCAN_INCOMPLETE' })
+      const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(failure) }
+      render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
+      await screen.findByText('example-plugin')
+      fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+      await screen.findByText('目录示例')
+      fireEvent.click(screen.getByRole('button', { name: '安装' }))
+      fireEvent.click(screen.getByRole('button', { name: '确认安装' }))
+      const market = screen.getByRole('region', { name: '手机插件目录' })
+      const error = await within(market).findByRole('alert')
+      expect(error).toHaveTextContent('仍有旧版本未检查')
+      expect(error).toHaveTextContent('catalog-example dsh=0.2.1')
+    } finally { mock.mockRestore() }
+  })
   it('商店请求需确认，并且安装成功后才清除', async () => {
     const proposal = { id: '00000000-0000-0000-0000-000000000001', packageName: 'example-market-plugin', createdAt: 1000, kind: 'install' as const, suggestedVersion: null }
     const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValue(catalog), stopRuntime: vi.fn(),

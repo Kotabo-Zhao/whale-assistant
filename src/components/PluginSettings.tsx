@@ -14,7 +14,8 @@ const errorMessages: Record<string, string> = {
   PLUGIN_PROTECTED: '此核心组件受保护，随运行时更新',
   PLUGIN_UPDATE_FAILED: '插件更新失败，已保留原版本。请检查网络后重试。',
   PLUGIN_DEPENDENCY_UNSUPPORTED: '新版插件的依赖与当前运行时不兼容，已保留原版本',
-  PLUGIN_ENGINE_UNSUPPORTED: '该插件没有与当前运行环境（dsh 版本）兼容的版本，已保留原版本。请升级运行环境后重试。',
+  PLUGIN_ENGINE_UNSUPPORTED: '已检查的插件版本与当前运行环境不兼容；已有版本未被替换。',
+  PLUGIN_ENGINE_SCAN_INCOMPLETE: '最近检查的插件版本与当前运行环境不兼容，仍有旧版本未检查；已有版本未被替换。',
   PLUGIN_NATIVE_UNSUPPORTED: '插件或依赖包含移动端受限的原生扩展，已保留原版本',
   PLUGIN_PLATFORM_UNSUPPORTED: '插件声明不支持当前运行环境的平台或处理器，已保留原版本',
   PLUGIN_METADATA_UNAVAILABLE: '无法核对插件版本元数据，请检查网络后重试，已保留原版本',
@@ -144,6 +145,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const [proposalBusy, setProposalBusy] = useState(false)
   const [proposalError, setProposalError] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [marketAttempt, setMarketAttempt] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   /** 受控详情（包名与版本差异），与 notice 分开保存：notice 要能被 t() 整条查表翻译。 */
   const [noticeDetail, setNoticeDetail] = useState('')
@@ -157,8 +159,9 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const [query, setQuery] = useState('')
   const active = useRef(true)
   const pending = useRef(false)
-  const run = useCallback(async (request: PluginRequest): Promise<boolean> => {
+  const run = useCallback(async (request: PluginRequest, marketPackage?: string): Promise<boolean> => {
     if (pending.current) return false
+    setMarketAttempt(marketPackage ?? null)
     pending.current = true
     setBusy(true); setNotice(''); setNoticeDetail(''); setFailed(false)
     try {
@@ -209,7 +212,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   useEffect(() => { setStopped(false) }, [runtime.phase])
   const stop = async (): Promise<void> => {
     if (pending.current) return
-    pending.current = true; setBusy(true); setNotice(''); setNoticeDetail('')
+    pending.current = true; setMarketAttempt(null); setBusy(true); setNotice(''); setNoticeDetail('')
     try {
       await bridge.stopRuntime()
       if (active.current) { setStopped(true); setNotice('运行环境已停止，可以管理插件'); setFailed(false) }
@@ -269,7 +272,8 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         <button className="button button-primary compact-button" type="button" disabled={proposalBusy || locked} onClick={() => { void handleProposal(true) }}>{t(proposal.kind === 'update' ? '确认更新请求' : '确认安装请求')}</button>
       </div>}
     </section>
-    <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }) }} />
+    <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }, name) }}
+      installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail } : null} />
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
     <section className="plugin-import" aria-labelledby="plugin-import-title">
       <h2 id="plugin-import-title">{t('通过 npm 包名或链接导入')}</h2>

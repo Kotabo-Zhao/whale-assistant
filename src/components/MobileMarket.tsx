@@ -3,7 +3,8 @@ import { t, useLanguage } from '../i18n'
 
 import { fetchCatalog, type Entry } from './marketCatalog'
 
-export function MobileMarket({ locked, onInstall }: { locked: boolean; onInstall: (name: string) => void }) {
+type InstallState = { name: string; busy: boolean; failed: boolean; notice: string; detail: string }
+export function MobileMarket({ locked, onInstall, installState = null }: { locked: boolean; onInstall: (name: string) => void; installState?: InstallState | null }) {
   useLanguage()
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [query, setQuery] = useState('')
@@ -41,6 +42,11 @@ export function MobileMarket({ locked, onInstall }: { locked: boolean; onInstall
       {status === 'loading' ? t('正在获取目录…') : entries ? t('刷新目录') : t('加载插件目录')}
     </button>
     {status === 'failed' && <p role="alert">{t('目录获取失败，请检查网络后重试。')}</p>}
+    {installState && <div className={`mobile-market-result ${installState.failed ? 'mobile-market-result-error' : ''}`}
+      role={installState.failed ? 'alert' : 'status'} aria-live={installState.failed ? 'assertive' : 'polite'}>
+      <strong>{t('插件安装')} · <code>{installState.name}</code></strong>
+      <p>{installState.busy ? t('正在检查并安装，请稍候。') : t(installState.notice)}{!installState.busy && installState.detail && `（${installState.detail}）`}</p>
+    </div>}
     {review && <div ref={reviewRegion} tabIndex={-1} className="mobile-market-review" role="region" aria-labelledby="mobile-market-review-title">
       <h3 id="mobile-market-review-title">{t('确认安装插件')}</h3>
       <p><strong>{review.name}</strong><br /><code>{review.npm}</code></p>

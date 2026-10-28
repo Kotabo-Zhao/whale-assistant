@@ -335,7 +335,7 @@ function satisfiesRange(version, range) {
  */
 function selectNewestCompatible(versions, runtimeDsh, rangeOf, maxProbes = 6) {
   if (!parseVersion(runtimeDsh) || !Array.isArray(versions)) return null
-  const parsed = versions
+  const parsed = [...new Set(versions)]
     .filter(item => typeof item === 'string' && VERSION.test(item))
     .map(item => ({ text: item, parsed: parseVersion(item) }))
     .filter(item => item.parsed !== null)
@@ -359,6 +359,11 @@ function selectNewestCompatible(versions, runtimeDsh, rangeOf, maxProbes = 6) {
     if (satisfiesRange(runtimeDsh, range)) return { version: candidate.text, range }
   }
   return null
+}
+
+function engineScanIncomplete(versions, probed) {
+  const valid = new Set(versions.filter(v => typeof v === 'string' && VERSION.test(v) && parseVersion(v) !== null))
+  return probed < valid.size
 }
 
 function within(base, value) {
@@ -1804,7 +1809,11 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     const cache = new Map()
     const selection = selectNewestCompatible(versions, runtimeDsh,
       candidate => engineRangeOf(npm, id, candidate, common, environment, cache))
-    if (selection === null) fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
+    if (selection === null) {
+      // The bounded scan is not proof that every historical version is incompatible.
+      if (engineScanIncomplete(versions, cache.size)) fail('PLUGIN_ENGINE_SCAN_INCOMPLETE', `${id} dsh=${runtimeDsh}`)
+      fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
+    }
     // The already verified selected-version response is reused: no second metadata request.
     installAfterMetadata(() => cache.get(selection.version), install, id, selection.version, process.platform, process.arch)
   }
@@ -2166,6 +2175,7 @@ module.exports = {
   compareVersions,
   satisfiesRange,
   selectNewestCompatible,
+  engineScanIncomplete,
   // 供单测直接覆盖导入来源校验（决定哪些地址能进 npm/git）。
   validateImportSource,
   // 供单测直接覆盖 git 探测的三态判定（可用 / 确实没有 / 探测不了）。

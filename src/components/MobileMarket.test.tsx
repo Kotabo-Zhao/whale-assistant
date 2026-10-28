@@ -65,3 +65,11 @@ it('取消确认或运行环境锁定不会触发安装', async () => {
   expect(screen.getByRole('button', { name: '确认安装' })).toBeDisabled()
   expect(install).not.toHaveBeenCalled()
 })
+
+it('在插件目录内就地显示检查、版本扫描不完整和结果详情', () => {
+  const view = render(<MobileMarket locked onInstall={vi.fn()} installState={{ name: 'example-plugin', busy: true, failed: false, notice: '', detail: '' }} />)
+  expect(screen.getByRole('status')).toHaveTextContent('正在检查并安装')
+  view.rerender(<MobileMarket locked={false} onInstall={vi.fn()} installState={{ name: 'example-plugin', busy: false, failed: true, notice: '最近检查的插件版本与当前运行环境不兼容，仍有旧版本未检查；已有版本未被替换。', detail: 'example-plugin dsh=0.2.1' }} />)
+  expect(screen.getByRole('alert')).toHaveTextContent('仍有旧版本未检查')
+  expect(screen.getByRole('alert')).toHaveTextContent('example-plugin dsh=0.2.1')
+})

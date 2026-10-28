@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const { createManager, npmMetadataCheck, readRegistryMetadata, declaredDshRange, installAfterMetadata, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
+const { createManager, npmMetadataCheck, readRegistryMetadata, declaredDshRange, installAfterMetadata, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, engineScanIncomplete, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
   require('../android/app/src/main/assets/support/plugin-manager.cjs')
 
 test('npm 元数据预检区分平台不兼容、原生扩展和无法核验', () => {
@@ -216,6 +216,16 @@ test('探测次数有上限，避免版本很多的包把更新时间拖爆', ()
   }, 4)
   assert.equal(result, null)
   assert.equal(probes, 4)
+})
+
+test('版本探测上限不能伪装成全部历史版本不兼容，重复版本不重复探测', () => {
+  const versions = ['2.0.0', '2.0.0', '1.0.0', '0.9.0', 'invalid']
+  let probes = 0
+  assert.equal(selectNewestCompatible(versions, '0.2.0', () => { probes++; return '>=9.0.0' }, 2), null)
+  assert.equal(probes, 2)
+  assert.equal(engineScanIncomplete(versions, probes), true)
+  assert.equal(engineScanIncomplete(versions, 3), false)
+  assert.equal(engineScanIncomplete(['2.0.0', '2.0.0', 'bad'], 1), false)
 })
 
 test('范围匹配严格对齐 npm 语义（含预发布与插入符）', () => {
