@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AutomationTask, AutomationTaskStep, RuntimeBridge } from '../platform/types'
 import { AutomationTaskCard } from './AutomationTaskCard'
@@ -201,6 +201,32 @@ describe('自动化任务卡片', () => {
     await findRow('目标应用：com.example.chat · 正在执行')
     expect(read).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('刷新期间仍可停止，迟到的旧刷新不能覆盖停止结果', async () => {
+    let finishRead!: (value: { connected: boolean; task: AutomationTask | null }) => void
+    const delayed = new Promise<{ connected: boolean; task: AutomationTask | null }>(resolve => { finishRead = resolve })
+    const bridge = {
+      getAutomationTaskState: vi.fn().mockResolvedValueOnce({ connected: true, task: task() }).mockReturnValueOnce(delayed),
+      cancelAutomationTask: vi.fn().mockResolvedValue({ connected: true, task: task({ status: 'cancelled', pendingSteps: 0 }) }),
+    }
+    card(bridge)
+    await findRow('目标应用：com.example.chat · 正在执行')
+    fireEvent.click(screen.getByRole('button', { name: '重新读取' }))
+    expect(screen.getByRole('button', { name: '停止这个任务' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: '停止这个任务' }))
+    await findRow('目标应用：com.example.chat · 已经停止')
+    await act(async () => { finishRead({ connected: true, task: task() }); await delayed })
+    row('目标应用：com.example.chat · 已经停止')
+  })
+
+  it('取消回执没有确认停止时不报告已经停止', async () => {
+    card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: task() }),
+      cancelAutomationTask: vi.fn().mockResolvedValue({ connected: true, task: task() }) })
+    await findRow('目标应用：com.example.chat · 正在执行')
+    fireEvent.click(screen.getByRole('button', { name: '停止这个任务' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('未确认任务已停止')
+    expect(screen.queryByText('已经停止，剩下的步骤都标成了跳过。')).toBeNull()
   })
 
   it('「重新读取」会再读一次，任务状态跟着变', async () => {

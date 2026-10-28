@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ListChecks } from 'lucide-react'
 import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
@@ -41,6 +41,7 @@ const ACTION_LABELS: Record<string, string> = {
 const CANCEL_FAILURE_NOTES: Record<string, string> = {
   ACCESSIBILITY_SERVICE_DISABLED: '无障碍服务没有连上，现在叫不停它',
   AUTOMATION_TASK_NOT_PLANNED: '现在没有任务可停止',
+  STOP_UNCONFIRMED: '未确认任务已停止，请重新读取状态',
 }
 
 /** 受控码从错误里取出来；取不到就给 `UNKNOWN`，不假装知道原因。 */
@@ -68,26 +69,41 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
   const [stopFailed, setStopFailed] = useState<string | null>(null)
   const [stopped, setStopped] = useState(false)
   const [ackFailed, setAckFailed] = useState(false)
-
+  const [refreshing, setRefreshing] = useState(false)
+  const revision = useRef(0)
   const refresh = useCallback(async () => {
-    setLoaded(false); setFailed(false)
-    try { setState(await bridge.getAutomationTaskState()); setLoaded(true) }
-    catch { setFailed(true) }
+    const current = ++revision.current
+    setRefreshing(true); setFailed(false); setStopped(false); setStopFailed(null); setAckFailed(false)
+    try {
+      const result = await bridge.getAutomationTaskState()
+      if (revision.current === current) { setState(result); setLoaded(true) }
+    } catch { if (revision.current === current) setFailed(true) }
+    finally { if (revision.current === current) setRefreshing(false) }
   }, [bridge])
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => { const generation = revision; void refresh(); return () => { generation.current++ } }, [refresh])
 
   const stop = useCallback(async () => {
-    setBusy(true); setStopFailed(null)
-    try { setState(await bridge.cancelAutomationTask()); setStopped(true) }
-    catch (error) { setStopFailed(failureCode(error)) }
-    finally { setBusy(false) }
+    const current = ++revision.current
+    setRefreshing(false); setBusy(true); setStopFailed(null); setStopped(false)
+    try {
+      const result = await bridge.cancelAutomationTask()
+      if (revision.current === current) {
+        setState(result); setLoaded(true); setFailed(false)
+        if (result.task?.status === 'cancelled') setStopped(true)
+        else if (result.task !== null || !result.connected) setStopFailed('STOP_UNCONFIRMED')
+      }
+    } catch (error) { if (revision.current === current) setStopFailed(failureCode(error)) }
+    finally { if (revision.current === current) setBusy(false) }
   }, [bridge])
 
   const acknowledge = useCallback(async () => {
-    setBusy(true); setAckFailed(false)
-    try { setState(await bridge.acknowledgeInterruptedTask()) }
-    catch { setAckFailed(true) }
-    finally { setBusy(false) }
+    const current = ++revision.current
+    setRefreshing(false); setBusy(true); setAckFailed(false); setStopped(false); setStopFailed(null)
+    try {
+      const result = await bridge.acknowledgeInterruptedTask()
+      if (revision.current === current) { setState(result); setLoaded(true); setFailed(false) }
+    } catch { if (revision.current === current) setAckFailed(true) }
+    finally { if (revision.current === current) setBusy(false) }
   }, [bridge])
 
   const ready = loaded && !failed && state !== null
@@ -98,7 +114,7 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
       <div><h3 id="automation-task">{t('自动化任务')}</h3>
         <p>{t('AI 按步骤执行时的当前任务；读不到就读不到，这里也是你随时叫停它的地方。')}</p></div>
     </div>
-    {!loaded && !failed && <p className="settings-note">{t('正在读取当前任务…')}</p>}
+    {refreshing && <p className="settings-note" role="status">{t(loaded ? '正在刷新，下方是上次读取的状态，可能已变化。' : '正在读取当前任务…')}</p>}
     {ready && state.interrupted === true && <div role="alert" className="settings-note">
       <p>{t('之前的任务可能中断，已发出的操作可能生效。请先检查目标应用，确认后才能开始新任务。')}</p>
       <button className="button button-secondary" type="button" disabled={busy} onClick={() => { void acknowledge() }}>{t('已检查现场，清除中断提示')}</button>
@@ -132,9 +148,9 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
     {stopFailed !== null && <p role="alert">
       {CANCEL_FAILURE_NOTES[stopFailed] !== undefined ? t(CANCEL_FAILURE_NOTES[stopFailed]) : t('停止失败（{0}）', stopFailed)}
       {' '}
-      <button className="button button-quiet" type="button" onClick={() => { void stop() }}>{t('重试')}</button>
+      <button className="button button-quiet" type="button" disabled={busy || refreshing} onClick={() => { void stop() }}>{t('重试')}</button>
     </p>}
-    {ready && <button className="button button-secondary" type="button" onClick={() => { void refresh() }}>{t('重新读取')}</button>}
+    {ready && <button className="button button-secondary" type="button" disabled={busy || refreshing} onClick={() => { void refresh() }}>{t('重新读取')}</button>}
     {failed && <p role="alert">{t('无法读取当前任务')} <button className="button button-quiet" type="button" onClick={() => { void refresh() }}>{t('重试')}</button></p>}
   </div>
 }
