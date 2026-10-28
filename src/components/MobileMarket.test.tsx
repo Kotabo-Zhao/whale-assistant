@@ -120,7 +120,7 @@ it('插件目录分页可访问全部结果，搜索后回到第一页', async (
 
 
 it('按需读取指定 npm 版本声明，校验包身份且不将声明当作兼容结论', async () => {
-  const manifest = { name: '@example/plugin', version: '1.2.3', os: ['linux'], cpu: ['arm64'], engines: { node: '>=20' }, dependencies: { example: '^1' }, scripts: { install: 'do not display' } }
+  const manifest = { name: '@example/plugin', version: '1.2.3', os: ['linux'], cpu: ['arm64'], engines: { node: '>=20' }, dsh: { engines: { dsh: '^0.2.1' } }, dependencies: { example: '^1' }, optionalDependencies: { helper: '~2' }, peerDependencies: { host: '>=3' }, scripts: { install: 'do not display' } }
   const bytes = new TextEncoder().encode(JSON.stringify(manifest))
   let done = false
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({
@@ -129,15 +129,18 @@ it('按需读取指定 npm 版本声明，校验包身份且不将声明当作�
   vi.stubGlobal('fetch', fetchMock)
   const preview = await fetchPackagePreview('@example/plugin', '1.2.3', new AbortController().signal)
   expect(fetchMock.mock.calls[0][0]).toBe('https://registry.npmjs.org/%40example%2Fplugin/1.2.3')
-  expect(preview).toMatchObject({ version: '1.2.3', os: 'linux', cpu: 'arm64', engines: 'node: >=20', dependencies: 'example', scripts: 'install' })
+  expect(preview).toMatchObject({ version: '1.2.3', os: 'linux', cpu: 'arm64', engines: 'node: >=20', harness: '^0.2.1', dependencies: 'example: ^1', optionalDependencies: 'helper: ~2', peerDependencies: 'host: >=3', scripts: 'install' })
   expect(JSON.stringify(preview)).not.toContain('do not display')
   expect(() => parsePackagePreview({ ...manifest, name: 'other' }, '@example/plugin', '1.2.3')).toThrow()
   expect(() => parsePackagePreview(manifest, '@example/plugin', '1.2.4')).toThrow()
+  expect(parsePackagePreview({ ...manifest, dsh: { engines: 'invalid' } }, '@example/plugin', '1.2.3').harness).toBe('声明格式无法识别')
+  expect(parsePackagePreview({ ...manifest, dsh: undefined }, '@example/plugin', '1.2.3').harness).toBe('未声明')
+  expect(parsePackagePreview({ ...manifest, optionalDependencies: { broken: 1 } }, '@example/plugin', '1.2.3').optionalDependencies).toBe('声明格式无法识别')
 })
 
 it('更改版本后旧包声明不再显示', async () => {
   const catalog = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '示例', npm: 'example-plugin' }] }))
-  const pkg = new TextEncoder().encode(JSON.stringify({ name: 'example-plugin', version: '1.0.0', os: ['linux'] }))
+  const pkg = new TextEncoder().encode(JSON.stringify({ name: 'example-plugin', version: '1.0.0', os: ['linux'], dsh: { engines: { dsh: '^0.2.1' } }, dependencies: { 'demo-dependency': '^3' } }))
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     let done = false
     const bytes = url.includes('registry.npmjs.org') ? pkg : catalog
@@ -149,6 +152,8 @@ it('更改版本后旧包声明不再显示', async () => {
   fireEvent.click(screen.getByRole('button', { name: '查看 npm 包声明' }))
   expect(await screen.findByText('1.0.0')).toBeVisible()
   expect(screen.getByText(/并非安全或安卓兼容认证/)).toBeVisible()
+  expect(screen.getByText(/Harness 版本要求.*\^0\.2\.1/)).toBeVisible()
+  expect(screen.getByText(/demo-dependency: \^3/)).toBeVisible()
   fireEvent.change(screen.getByRole('textbox', { name: '指定版本（可选）' }), { target: { value: '1.2.3' } })
   expect(screen.queryByText('1.0.0')).not.toBeInTheDocument()
 })

@@ -46,7 +46,7 @@ export async function fetchCatalog(signal: AbortSignal): Promise<Entry[]> {
 }
 
 
-export type PackagePreview = { version: string; os: string; cpu: string; engines: string; dependencies: string; scripts: string }
+export type PackagePreview = { version: string; os: string; cpu: string; engines: string; harness: string; dependencies: string; optionalDependencies: string; peerDependencies: string; scripts: string }
 
 /** Untrusted registry declarations for display only. Missing fields are not proof of compatibility. */
 export function parsePackagePreview(value: unknown, name: string, requestedVersion: string): PackagePreview {
@@ -71,7 +71,26 @@ export function parsePackagePreview(value: unknown, name: string, requestedVersi
     if (entries.some(([key, value]) => key.length > 80 || typeof value !== 'string' || value.length > 160)) return '声明格式无法识别'
     return entries.length ? entries.slice(0, 12).map(([key, value]) => `${key}: ${String(value)}`).join(', ') + (entries.length > 12 ? ` 等 ${entries.length} 项` : '') : '无'
   })()
-  return { version: row.version, os: list(row.os), cpu: list(row.cpu), engines, dependencies: map(row.dependencies), scripts: map(row.scripts) }
+  const ranges = (item: unknown) => {
+    if (item === undefined) return '未声明'
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return '声明格式无法识别'
+    const entries = Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
+    if (entries.some(([key, value]) => key.length > 214 || typeof value !== 'string' || value.length > 256)) return '声明格式无法识别'
+    return entries.length ? entries.slice(0, 12).map(([key, value]) => `${key}: ${String(value)}`).join(', ') + (entries.length > 12 ? ` 等 ${entries.length} 项` : '') : '无'
+  }
+  const harness = (() => {
+    if (row.dsh === undefined) return '未声明'
+    if (!row.dsh || typeof row.dsh !== 'object' || Array.isArray(row.dsh)) return '声明格式无法识别'
+    const pluginEngines = (row.dsh as Record<string, unknown>).engines
+    if (pluginEngines === undefined) return '未声明'
+    if (!pluginEngines || typeof pluginEngines !== 'object' || Array.isArray(pluginEngines)) return '声明格式无法识别'
+    const range = (pluginEngines as Record<string, unknown>).dsh
+    if (range === undefined) return '未声明'
+    return typeof range === 'string' && range.length > 0 && range.length <= 256 ? range : '声明格式无法识别'
+  })()
+  return { version: row.version, os: list(row.os), cpu: list(row.cpu), engines, harness,
+    dependencies: ranges(row.dependencies), optionalDependencies: ranges(row.optionalDependencies),
+    peerDependencies: ranges(row.peerDependencies), scripts: map(row.scripts) }
 }
 
 export async function fetchPackagePreview(name: string, version: string, signal: AbortSignal): Promise<PackagePreview> {

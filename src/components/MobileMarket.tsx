@@ -5,6 +5,7 @@ import { fetchCatalog, fetchPackagePreview, type Entry, type PackagePreview } fr
 import { validatePluginRequest } from '../platform/plugins'
 
 const PAGE_SIZE = 30
+const declaration = (value: string) => ['未声明', '声明格式无法识别', '无'].includes(value) ? t(value) : value
 
 type InstallState = { name: string; busy: boolean; failed: boolean; notice: string; detail: string }
 export function MobileMarket({ locked, onInstall, installState = null }: { locked: boolean; onInstall: (name: string) => void; installState?: InstallState | null }) {
@@ -100,10 +101,13 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
       {previewStatus === 'failed' && <p role="alert">{t('无法读取包声明，请检查网络或版本后重试；仍可交给手机管理器检查。')}</p>}
       {preview && <div className="plugin-hint" role="status">
         <p>{t('npm 声明版本')}：<code>{preview.version}</code>{!version.trim() && ` · ${t('最新版本，自动安装可能选择其他版本')}`}</p>
-        <p>OS: {preview.os} · CPU: {preview.cpu}</p>
-        <p>{t('引擎声明')}：{preview.engines}</p>
-        <p>{t('直接依赖名称')}：{preview.dependencies}</p>
-        <p>{t('脚本名称')}：{preview.scripts}</p>
+        <p>OS: {declaration(preview.os)} · CPU: {declaration(preview.cpu)}</p>
+        <p>{t('Harness 版本要求')}：{declaration(preview.harness)}</p>
+        <p>{t('引擎声明')}：{declaration(preview.engines)}</p>
+        <p>{t('直接依赖')}：{declaration(preview.dependencies)}</p>
+        <p>{t('可选依赖')}：{declaration(preview.optionalDependencies)}</p>
+        <p>{t('同伴依赖')}：{declaration(preview.peerDependencies)}</p>
+        <p>{t('脚本名称')}：{declaration(preview.scripts)}</p>
         <p>{t('以上只是包作者声明，并非安全或安卓兼容认证；安装时会再次检查，不运行安装脚本。')}</p>
       </div>}
       {locked && <p role="status">{t('请先停止运行环境再安装。')}</p>}
