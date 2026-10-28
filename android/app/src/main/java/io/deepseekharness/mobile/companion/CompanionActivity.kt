@@ -219,6 +219,13 @@ class CompanionActivity : AppCompatActivity() {
         heading("本地通知记录")
         paragraph("简报使用本地规则分类，可能漏判或分类错误，不代表已检查所有信息。")
         paragraph("日历只在打开简报时临时读取当天可见日历，不保存，也不会自动发送给模型；是否显示取决于系统授权。")
+        toggle("允许助手对话访问今日日历", store.calendarModelAccess) { enabled ->
+            if (!enabled) { store.calendarModelAccess = false; render() }
+            else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许助手读取日历？")
+                .setMessage("助手在你询问日程时可读取当天可见日历的标题与时间，内容可能发送给当前模型服务。系统日历权限仍需单独授权，可随时关闭此开关。")
+                .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.calendarModelAccess = true; render() }.show()
+        }
+        paragraph("对话日历访问默认关闭，独立于本地简报；开启后标题和时间可能发送给当前模型服务。")
         button("授权读取日历") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("读取日历用于简报")
                 .setMessage("授权后，仅在你打开简报时读取当天可见日历；不会修改日程或自动发送给模型。可随时在系统设置撤销。")

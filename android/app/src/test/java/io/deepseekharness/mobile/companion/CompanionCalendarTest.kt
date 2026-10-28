@@ -32,4 +32,26 @@ class CompanionCalendarTest {
         assertEquals(20, snapshot.events.size); assertTrue(snapshot.truncated)
         assertEquals("事件 0", snapshot.events.first().title)
     }
+    @Test fun modelRequiresSeparateConsentAndPermissionAndReportsSnapshot() {
+        val zone = TimeZone.getTimeZone("Asia/Shanghai")
+        var called = false
+        val denied = org.junit.Assert.assertThrows(io.deepseekharness.mobile.runtime.RuntimeFailure::class.java) {
+            CompanionCalendarModel.execute(false, "", 1000L, zone) { called = true; CompanionCalendar.Snapshot(CompanionCalendar.State.OK) }
+        }
+        assertEquals("CALENDAR_MODEL_DISABLED", denied.code); assertFalse(called)
+        val noPermission = org.junit.Assert.assertThrows(io.deepseekharness.mobile.runtime.RuntimeFailure::class.java) {
+            CompanionCalendarModel.execute(true, "", 1000L, zone) { CompanionCalendar.Snapshot(CompanionCalendar.State.NO_PERMISSION) }
+        }
+        assertEquals("CALENDAR_PERMISSION_REQUIRED", noPermission.code)
+        val unavailable = org.junit.Assert.assertThrows(io.deepseekharness.mobile.runtime.RuntimeFailure::class.java) {
+            CompanionCalendarModel.execute(true, "", 1000L, zone) { CompanionCalendar.Snapshot(CompanionCalendar.State.UNAVAILABLE) }
+        }
+        assertEquals("CALENDAR_UNAVAILABLE", unavailable.code)
+        val result = org.json.JSONObject(CompanionCalendarModel.execute(true, "", 1000L, zone) {
+            CompanionCalendar.Snapshot(CompanionCalendar.State.OK, listOf(CompanionCalendar.Event("会议", 1000L, 2000L, false)), true)
+        })
+        assertEquals("Asia/Shanghai", result.getString("timeZone")); assertTrue(result.getBoolean("truncated"))
+        assertEquals("会议", result.getJSONArray("events").getJSONObject(0).getString("title"))
+        assertThrows(io.deepseekharness.mobile.runtime.RuntimeFailure::class.java) { CompanionCalendarModel.execute(true, "unexpected", 1000L, zone) { error("must not read") } }
+    }
 }

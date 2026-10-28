@@ -43,6 +43,14 @@ test('手机提醒工具通过授权桥传递明确时间并拒绝不合法参�
   await assert.rejects(f.tools.get('mobile_reminder_delete').execute({ id: '../bad' }, {}), /REMINDER_INPUT_INVALID/)
 })
 
+test('日历工具通过只读本机桥查询，使用空参数', async t => {
+  const f = fixture(t, () => ok('{"events":[],"truncated":false}'))
+  const tool = f.tools.get('mobile_calendar_today')
+  assert.ok(tool)
+  await tool.execute({}, {})
+  assert.deepEqual(f.requests.map(r => [r.command, r.param]), [['companionCalendar', '']])
+})
+
 test('长期记忆工具通过本机桥保存、检索和删除，并验证输入', async t => {
   const f = fixture(t, () => ok('{"items":[]}'))
   await f.tools.get('mobile_memory_save').execute({ text: '喜欢蓝色' }, {})

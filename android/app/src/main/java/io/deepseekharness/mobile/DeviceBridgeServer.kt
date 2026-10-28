@@ -230,6 +230,16 @@ class DeviceBridgeServer(
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
                         return
                     }
+                    if (commandName == "companionCalendar") {
+                        val context = appContext ?: throw RuntimeFailure("CALENDAR_UNAVAILABLE", "日历服务不可用")
+                        val zone = java.util.TimeZone.getDefault()
+                        val now = System.currentTimeMillis()
+                        val result = io.deepseekharness.mobile.companion.CompanionCalendarModel.execute(
+                            io.deepseekharness.mobile.companion.CompanionStore(context).calendarModelAccess, param, now, zone
+                        ) { io.deepseekharness.mobile.companion.CompanionCalendar.read(context, now, zone) }
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                        return
+                    }
                     if (commandName == "companionMemory") {
                         if (param.length > 4096) throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数过长")
                         val context = appContext ?: throw RuntimeFailure("MEMORY_UNAVAILABLE", "记忆服务不可用")

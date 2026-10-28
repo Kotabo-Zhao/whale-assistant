@@ -11,6 +11,10 @@ class CompanionStore(context: Context) {
     var notificationCapture: Boolean
         get() = prefs.getBoolean("capture", false)
         set(value) { prefs.edit().putBoolean("capture", value).apply() }
+    /** Explicit separate consent for sharing calendar titles with the configured model. */
+    var calendarModelAccess: Boolean
+        get() = prefs.getBoolean("calendar_model_access", false)
+        set(value) { prefs.edit().putBoolean("calendar_model_access", value).apply() }
     var reminders: Boolean
         get() = prefs.getBoolean("reminders", false)
         set(value) { prefs.edit().putBoolean("reminders", value).apply() }
