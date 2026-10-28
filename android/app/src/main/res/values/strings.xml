@@ -7,6 +7,9 @@
     <string name="harness_voice_prompt">语音识别服务可能联网，请说出要交给助手的内容</string>
     <string name="harness_voice_review">核对语音识别结果</string>
     <string name="harness_voice_notice">识别服务可能联网。确认后仅填入对话输入框，不会自动发送。</string>
+    <string name="harness_voice_draft_limit">请填写不超过 2000 字的内容后再填入。</string>
+    <string name="harness_voice_copy_limit">请填写不超过 10000 字的内容后再复制。</string>
+    <string name="harness_voice_copy_unavailable">无法访问剪贴板，请重试。</string>
     <string name="harness_voice_insert">填入对话</string>
     <string name="harness_voice_unavailable">语音识别或对话输入框不可用，请使用文字输入。</string>
     <string name="harness_voice_copy_notice">无法自动填入，确认后可复制识别结果并自行粘贴。</string>

@@ -7,6 +7,9 @@
     <string name="harness_voice_prompt">The speech service may use the network. Speak your message.</string>
     <string name="harness_voice_review">Review recognized speech</string>
     <string name="harness_voice_notice">The speech service may use the network. Confirm to fill the input; it will not send automatically.</string>
+    <string name="harness_voice_draft_limit">Enter up to 2000 characters before inserting.</string>
+    <string name="harness_voice_copy_limit">Enter up to 10000 characters before copying.</string>
+    <string name="harness_voice_copy_unavailable">Clipboard unavailable; please retry.</string>
     <string name="harness_voice_insert">Insert into chat</string>
     <string name="harness_voice_unavailable">Speech recognition or the chat input is unavailable. Please type instead.</string>
     <string name="harness_voice_copy_notice">Could not insert automatically. You can copy the recognized text and paste it yourself.</string>

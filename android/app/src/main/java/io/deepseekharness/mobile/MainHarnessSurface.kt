@@ -267,10 +267,27 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     }
 
     private fun reviewVoice(text: String, expected: HarnessPageLoadGate, expectedPage: String) {
-        val edit = android.widget.EditText(activity).apply { setText(text); setSelection(length()) }
-        AlertDialog.Builder(activity).setTitle(R.string.harness_voice_review).setMessage(R.string.harness_voice_notice)
+        val edit = android.widget.EditText(activity).apply { setText(text); setSelection(length()); minLines = 2; maxLines = 8 }
+        val dialog = AlertDialog.Builder(activity).setTitle(R.string.harness_voice_review).setMessage(R.string.harness_voice_notice)
             .setView(edit).setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.harness_voice_insert) { _, _ -> insertVoice(edit.text.toString(), expected, expectedPage) }.show()
+            .setNeutralButton(R.string.harness_voice_copy, null).setPositiveButton(R.string.harness_voice_insert, null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = edit.text.toString()
+                if (!HarnessVoiceResultPolicy.canInsert(value)) { edit.error = activity.getString(R.string.harness_voice_draft_limit); return@setOnClickListener }
+                dialog.dismiss()
+                insertVoice(value, expected, expectedPage)
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                val value = edit.text.toString()
+                if (!HarnessVoiceResultPolicy.canCopy(value)) { edit.error = activity.getString(R.string.harness_voice_copy_limit); return@setOnClickListener }
+                val clipboard = activity.getSystemService(android.content.ClipboardManager::class.java)
+                if (clipboard == null) { edit.error = activity.getString(R.string.harness_voice_copy_unavailable); return@setOnClickListener }
+                val copied = runCatching { clipboard.setPrimaryClip(android.content.ClipData.newPlainText("语音输入", value)) }.isSuccess
+                if (copied) dialog.dismiss() else edit.error = activity.getString(R.string.harness_voice_copy_unavailable)
+            }
+        }
+        dialog.show()
     }
 
     private fun insertVoice(message: String, expected: HarnessPageLoadGate, expectedPage: String, fallback: (String) -> Unit = ::voiceCopyFallback) {
@@ -278,8 +295,8 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         val currentOrigin = origin
         val page = target?.url?.let { runCatching { Uri.parse(it) }.getOrNull() }
         if (!current(expected) || !visible() || target == null || target.url != expectedPage || currentOrigin == null || page == null ||
-            !currentOrigin.allows(page) || message.isBlank() || message.length > 2000) {
-            if (message.isNotBlank() && message.length <= 2000) fallback(message) else voiceUnavailable()
+            !currentOrigin.allows(page) || !HarnessVoiceResultPolicy.canInsert(message)) {
+            if (HarnessVoiceResultPolicy.canCopy(message)) fallback(message) else voiceUnavailable()
             return
         }
         val template = runCatching { activity.assets.open("support/harness-voice-insert.js").bufferedReader(Charsets.UTF_8).use { it.readText() } }.getOrNull()
