@@ -230,6 +230,18 @@ class DeviceBridgeServer(
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
                         return
                     }
+                    if (commandName == "companionNotifications") {
+                        if (param.length > 1024) throw RuntimeFailure("NOTIFICATIONS_INPUT_INVALID", "通知查询参数过长")
+                        val context = appContext ?: throw RuntimeFailure("NOTIFICATIONS_UNAVAILABLE", "通知服务不可用")
+                        val store = io.deepseekharness.mobile.companion.CompanionStore(context)
+                        val authorized = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+                        val result = io.deepseekharness.mobile.companion.CompanionNotificationModel.execute(
+                            store.notificationModelAccess, param, System.currentTimeMillis(), store.notificationCapture, authorized,
+                            io.deepseekharness.mobile.companion.CompanionNotificationService.isConnected(), store.excludedPackages()
+                        ) { store.read() }
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                        return
+                    }
                     if (commandName == "companionCalendar") {
                         val context = appContext ?: throw RuntimeFailure("CALENDAR_UNAVAILABLE", "日历服务不可用")
                         val zone = java.util.TimeZone.getDefault()

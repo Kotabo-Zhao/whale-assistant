@@ -12,6 +12,7 @@ class CompanionNotificationService : NotificationListenerService() {
 
     companion object {
         @Volatile private var current: CompanionNotificationService? = null
+        internal fun isConnected(): Boolean = current != null
 
         /** Only called after a foreground user action. Never stores or reconstructs a PendingIntent. */
         internal fun openOriginal(candidate: CompanionBrief.Candidate): Boolean {

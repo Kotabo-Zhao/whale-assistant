@@ -51,6 +51,17 @@ test('任务返回工具通过受限无障碍桥发送空参数', async t => {
   assert.deepEqual(f.requests.map(r => [r.command, r.param]), [['accessibilityBack', '']])
 })
 
+test('通知工具只传合法筛选并保留原始响应', async t => {
+  const f = fixture(t, () => ok('{"items":[],"listenerConnected":false}'))
+  const tool = f.tools.get('mobile_notification_search')
+  assert.ok(tool)
+  await tool.execute({ query: '消息', packageName: 'com.example.chat', limit: 2 }, {})
+  assert.equal(f.requests[0].command, 'companionNotifications')
+  assert.deepEqual(JSON.parse(f.requests[0].param), { query: '消息', packageName: 'com.example.chat', limit: 2 })
+  await assert.rejects(tool.execute({ limit: 11 }, {}), /NOTIFICATIONS_INPUT_INVALID/)
+  await assert.rejects(tool.execute({ packageName: '../bad' }, {}), /NOTIFICATIONS_INPUT_INVALID/)
+})
+
 test('日历工具通过只读本机桥查询，使用空参数', async t => {
   const f = fixture(t, () => ok('{"events":[],"truncated":false}'))
   const tool = f.tools.get('mobile_calendar_today')

@@ -205,6 +205,13 @@ class CompanionActivity : AppCompatActivity() {
                     runCatching { memory.clearForUser() }.onSuccess { render() }.onFailure { paragraph("无法清空记忆，原数据已保留。") }
                 }.show()
         }
+        toggle("允许助手对话访问通知摘要", store.notificationModelAccess) { enabled ->
+            if (!enabled) { store.notificationModelAccess = false; render() }
+            else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许助手读取通知摘要？")
+                .setMessage("助手可按需读取已保存通知的来源、标题和正文，这些内容可能发送给当前模型服务。敏感信息过滤不保证完整，可随时关闭。")
+                .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.notificationModelAccess = true; render() }.show()
+        }
+        paragraph("对话通知访问默认关闭，与本地采集和系统权限分别控制；开启后内容可能发送给当前模型服务。")
         toggle("收集通知摘要", store.notificationCapture) { store.notificationCapture = it; render() }
         paragraph("开启后记录通知来源、标题和正文，最多 50 条；只在读取或新增时清理超过 7 天的记录。验证码与密码使用简单规则过滤，不能保证识别所有敏感内容。")
         val notificationAllowed = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
