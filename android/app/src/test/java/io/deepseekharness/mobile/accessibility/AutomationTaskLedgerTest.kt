@@ -143,10 +143,10 @@ class AutomationTaskLedgerTest {
         val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
         ledger.gate("s1", facts(), 1000L)
         val state = ledger.snapshot()
-        val receipt = AutomationTaskEvidence.rateLimited(state, "com.example.app", "click", "com.example.app:id/ok", 1100L)!!
+        val receipt = AutomationTaskEvidence.rejected(state, "com.example.app", "click", "com.example.app:id/ok", 1100L, "ACCESSIBILITY_RATE_LIMITED")!!
         assertEquals(AutomationTaskCodes.BUSY, AutomationTaskActionPolicy.refusal(state, "com.example.app", "click", "com.example.app:id/ok", 1150L, receipt))
-        assertNull(AutomationTaskEvidence.rateLimited(state, "com.other.app", "click", "com.example.app:id/ok", 1100L))
-        assertNull(AutomationTaskEvidence.rateLimited(state, "com.example.app", "click", "wrong", 1100L))
+        assertNull(AutomationTaskEvidence.rejected(state, "com.other.app", "click", "com.example.app:id/ok", 1100L, "ACCESSIBILITY_RATE_LIMITED"))
+        assertNull(AutomationTaskEvidence.rejected(state, "com.example.app", "click", "wrong", 1100L, "ACCESSIBILITY_RATE_LIMITED"))
         val outcome = AutomationTaskEvidence.constrain(state.taskId, state.steps[0], AutomationTaskStepOutcome(ok = true, verified = true), "d2", receipt, 1200L)
         assertFalse(outcome.ok); assertEquals("ACCESSIBILITY_RATE_LIMITED", outcome.code)
         assertEquals(AutomationTaskStepStatus.FAILED, ledger.record("s1", 1, outcome, 1200L).steps[0].status)
@@ -155,6 +155,19 @@ class AutomationTaskLedgerTest {
         val stale = AutomationTaskEvidence.constrain(next.taskId, next.steps[0], AutomationTaskStepOutcome(ok = false, code = "ACCESSIBILITY_RATE_LIMITED"), "d1", receipt, 1400L)
         assertEquals(AutomationTaskCodes.NEEDS_CHECK, stale.code)
         assertEquals(AutomationTaskStepStatus.UNKNOWN, ledger.record("s1", 2, stale, 1400L).steps[0].status)
+    }
+
+    @Test
+    fun `目标未找到的设备回执可重试但不接受任意拒绝代码`() {
+        val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        val state = ledger.snapshot()
+        assertNull(AutomationTaskEvidence.rejected(state, "com.example.app", "click", "com.example.app:id/ok", 1100L, "AUTOMATION_CLICK_FAILED"))
+        val receipt = AutomationTaskEvidence.rejected(state, "com.example.app", "click", "com.example.app:id/ok", 1100L, "ACCESSIBILITY_NODE_NOT_FOUND")!!
+        val result = AutomationTaskEvidence.constrain(state.taskId, state.steps[0], AutomationTaskStepOutcome(ok = false), "d1", receipt, 1200L)
+        assertEquals("ACCESSIBILITY_NODE_NOT_FOUND", result.code)
+        assertEquals(AutomationTaskStepStatus.FAILED, ledger.record("s1", 1, result, 1200L).steps[0].status)
+        assertEquals(2, ledger.gate("s1", facts(), 1300L).attempt())
     }
 
     @Test

@@ -151,6 +151,7 @@ internal object AutomationTaskRetry {
         "AUTOMATION_KEY_FAILED",
         "ACCESSIBILITY_WINDOW_UNAVAILABLE",
         "ACCESSIBILITY_RATE_LIMITED",
+        "ACCESSIBILITY_NODE_NOT_FOUND",
     )
 
     /**
@@ -227,17 +228,18 @@ internal object AutomationTaskEvidence {
         return AutomationTaskActionReceipt(snapshot.taskId, step.id, step.attemptsUsed, nowMs,
             if (action == AutomationTaskActions.SET_TEXT) textDigest(text) else null)
     }
-    /** A device-generated rejection is permitted only for the pre-dispatch rate limit. */
-    fun rateLimited(snapshot: AutomationTaskSnapshot, packageName: String, action: String, viewId: String, nowMs: Long): AutomationTaskActionReceipt? =
-        receipt(snapshot, packageName, action, viewId, nowMs)?.copy(rejectedCode = "ACCESSIBILITY_RATE_LIMITED")
+    private val preDispatchCodes = setOf("ACCESSIBILITY_RATE_LIMITED", "ACCESSIBILITY_NODE_NOT_FOUND")
+    /** Device-generated evidence is restricted to known pre-dispatch checks. */
+    fun rejected(snapshot: AutomationTaskSnapshot, packageName: String, action: String, viewId: String, nowMs: Long, code: String): AutomationTaskActionReceipt? =
+        if (code in preDispatchCodes) receipt(snapshot, packageName, action, viewId, nowMs)?.copy(rejectedCode = code) else null
     fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long, targetPresent: Boolean? = null, observedTextDigest: String? = null, expectedPackage: String? = null, observedPackage: String? = null): AutomationTaskStepOutcome {
         if (step == null) return outcome
         val started = step.startedAtMs
         val matched = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
             receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs
-        // Only a matching native pre-dispatch rate-limit receipt proves the action was not sent.
+        // Only a matching native pre-dispatch rejection proves the action was not sent.
         // Its result overrides any caller claim, including a false success claim.
-        if (matched && receipt?.rejectedCode == "ACCESSIBILITY_RATE_LIMITED") {
+        if (matched && receipt?.rejectedCode in preDispatchCodes) {
             return outcome.copy(ok = false, verified = true, timedOut = false, code = receipt.rejectedCode)
         }
         if (!outcome.ok && step.action in setOf(AutomationTaskActions.CLICK, AutomationTaskActions.SET_TEXT, AutomationTaskActions.SCROLL, AutomationTaskActions.BACK)) {

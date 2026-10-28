@@ -148,6 +148,9 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         if (isLockedOrScreenOff()) return failure("ACCESSIBILITY_DEVICE_LOCKED", "设备已锁定或屏幕未交互")
         if (now - lastActionAt < ACTION_INTERVAL_MS && command in setOf("accessibilityAction", "accessibilityBack", "tap", "inputText")) {
+            if (command == "accessibilityAction") {
+                AccessibilityAutomationPolicy.parseAction(param)?.let { notePreDispatchRejection(it, "ACCESSIBILITY_RATE_LIMITED", now) }
+            }
             return failure("ACCESSIBILITY_RATE_LIMITED", "无障碍动作过于频繁，请稍后再试")
         }
         if (command in setOf("accessibilityAction", "accessibilityBack", "tap", "inputText") &&
@@ -270,8 +273,10 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         if (request.packageName != packageName) return failure("ACCESSIBILITY_PACKAGE_DENIED", "动作目标不是当前前台应用")
         val taskRefusal = AutomationTaskActionPolicy.refusal(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, SystemClock.elapsedRealtime(), automationTaskReceipt)
         if (taskRefusal != null) return failure(taskRefusal, "当前任务未放行此动作，请检查步骤或任务状态")
-        val node = findByViewId(root, request.viewId)
-            ?: return failure("ACCESSIBILITY_NODE_NOT_FOUND", "未找到唯一的目标节点")
+        val node = findByViewId(root, request.viewId) ?: run {
+            notePreDispatchRejection(request, "ACCESSIBILITY_NODE_NOT_FOUND", SystemClock.elapsedRealtime())
+            return failure("ACCESSIBILITY_NODE_NOT_FOUND", "未找到唯一的目标节点")
+        }
         if (node.packageName?.toString() != packageName || node.isPassword ||
             AccessibilityAutomationPolicy.containsSensitiveText(node.viewIdResourceName)
         ) return failure("ACCESSIBILITY_ACTION_REJECTED", "目标节点不允许此操作")
@@ -436,13 +441,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         if (isLockedOrScreenOff()) return failure("ACCESSIBILITY_DEVICE_LOCKED", "设备已锁定或屏幕未交互")
         if (now - lastActionAt < ACTION_INTERVAL_MS) {
-            synchronized(automationTaskLedger) {
-                val snapshot = automationTaskLedger.snapshot()
-                val refusal = AutomationTaskActionPolicy.refusal(snapshot, request.packageName, request.action, request.viewId, now, automationTaskReceipt)
-                if (snapshot.status == AutomationTaskStatus.RUNNING && refusal == null) {
-                    automationTaskReceipt = AutomationTaskEvidence.rateLimited(snapshot, request.packageName, request.action, request.viewId, now)
-                }
-            }
+            notePreDispatchRejection(request, "ACCESSIBILITY_RATE_LIMITED", now)
             return failure("ACCESSIBILITY_RATE_LIMITED", "无障碍动作过于频繁，请稍后再试")
         }
         val root = rootInActiveWindow ?: return failure("ACCESSIBILITY_WINDOW_UNAVAILABLE", "当前没有可读取的应用窗口")
@@ -451,8 +450,10 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             return failure("ACCESSIBILITY_PACKAGE_DENIED", "确认后前台应用已变化")
         }
         if (containsSensitiveWindow(root)) return failure("ACCESSIBILITY_SENSITIVE_WINDOW", "确认后检测到敏感窗口")
-        val node = findByViewId(root, request.viewId)
-            ?: return failure("ACCESSIBILITY_NODE_NOT_FOUND", "确认后未找到唯一的目标节点")
+        val node = findByViewId(root, request.viewId) ?: run {
+            notePreDispatchRejection(request, "ACCESSIBILITY_NODE_NOT_FOUND", SystemClock.elapsedRealtime())
+            return failure("ACCESSIBILITY_NODE_NOT_FOUND", "确认后未找到唯一的目标节点")
+        }
         if (node.packageName?.toString() != packageName || node.isPassword ||
             AccessibilityAutomationPolicy.containsSensitiveText(node.viewIdResourceName)
         ) return failure("ACCESSIBILITY_ACTION_REJECTED", "确认后目标节点不允许此操作")
@@ -480,6 +481,17 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             automationTaskReceipt = AutomationTaskEvidence.receipt(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, dispatchAt, request.text)
             DeviceCommandResult(true, 0, "操作已执行", false, null)
         } else failure("ACCESSIBILITY_ACTION_REJECTED", "目标节点不允许此操作")
+        }
+    }
+
+    /** Serializes a pre-dispatch rejection with task cancellation and actual dispatch. */
+    private fun notePreDispatchRejection(request: AccessibilityAutomationPolicy.ActionRequest, code: String, now: Long) {
+        synchronized(automationTaskLedger) {
+            val snapshot = automationTaskLedger.snapshot()
+            val refusal = AutomationTaskActionPolicy.refusal(snapshot, request.packageName, request.action, request.viewId, now, automationTaskReceipt)
+            if (snapshot.status == AutomationTaskStatus.RUNNING && refusal == null) {
+                automationTaskReceipt = AutomationTaskEvidence.rejected(snapshot, request.packageName, request.action, request.viewId, now, code)
+            }
         }
     }
 
