@@ -266,8 +266,8 @@ class CompanionActivity : AppCompatActivity() {
             intent?.removeExtra("open_notification_list")
             scroll.post {
                 if (!isFinishing && !isDestroyed) {
-                    val section = content.findViewWithTag<View>("section:notifications")
-                    if (section != null) { scroll.smoothScrollTo(0, section.top); section.announceForAccessibility("已定位到通知") }
+                    val section = content.findViewWithTag<View>("records")
+                    if (section != null) { scroll.smoothScrollTo(0, section.top); section.announceForAccessibility("已定位到本地通知记录") }
                 }
             }
         } else if (intent?.getBooleanExtra("open_notification_candidates", false) == true) {
