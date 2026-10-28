@@ -69,6 +69,20 @@ class CompanionKnowledgeStoreTest {
         assertEquals("text_file", JSONArray(plan.additions).getJSONObject(0).getString("source"))
         assertThrows(Exception::class.java) { CompanionKnowledgeData.add(rows, "bad", 2, "other") }
     }
+    @Test fun storedDataUsesStrictUtf8AndRejectsLossyWrites() {
+        val rows = JSONArray()
+        CompanionKnowledgeData.add(rows, "你好 🐋", 1)
+        val encoded = CompanionKnowledgeData.utf8(JSONObject().put("version", 1).put("items", rows).toString())
+        assertEquals("你好 🐋", CompanionKnowledgeData.parseBytes(encoded).getJSONObject(0).getString("text"))
+        val prefix = "{\"version\":1,\"items\":[{\"id\":\"00000000-0000-0000-0000-000000000001\",\"text\":\"".toByteArray()
+        val suffix = "\",\"source\":\"shared_text\",\"createdAt\":1}]}".toByteArray()
+        assertThrows(Exception::class.java) { CompanionKnowledgeData.parseBytes(prefix + byteArrayOf(0xc3.toByte(), 0x28) + suffix) }
+        assertThrows(Exception::class.java) { CompanionKnowledgeData.utf8("invalid \uD800") }
+        val invalid = JSONArray(rows.toString()); invalid.getJSONObject(0).put("text", "invalid \uD800")
+        assertThrows(Exception::class.java) { CompanionKnowledgeBackup.encode(invalid) }
+        assertThrows(Exception::class.java) { CompanionKnowledgeData.parseBytes(ByteArray(CompanionKnowledgeData.MAX_BYTES + 1)) }
+        assertThrows(Exception::class.java) { CompanionKnowledgeData.parse("{\"version\":\"1\",\"items\":[]}") }
+    }
     @Test fun invalidAndOversizedDataIsRejected() {
         assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.add(JSONArray(), "x".repeat(8001), 1) }
         assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.search(JSONArray(), "x".repeat(201)) }

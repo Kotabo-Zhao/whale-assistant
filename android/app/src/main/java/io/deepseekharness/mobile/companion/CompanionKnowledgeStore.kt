@@ -44,13 +44,13 @@ internal class CompanionKnowledgeStore(context: Context) {
     private fun load(): JSONArray {
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return JSONArray()
         val bytes = file.readFully()
-        require(bytes.size <= CompanionKnowledgeData.MAX_BYTES) { "资料库超过大小限制，原文件已保留" }
-        return CompanionKnowledgeData.parse(String(bytes, Charsets.UTF_8))
+        return CompanionKnowledgeData.parseBytes(bytes)
     }
     private fun write(rows: JSONArray) {
         CompanionKnowledgeBackup.encode(rows) // Keep every newly written state exportable.
-        val bytes = JSONObject().put("version", 1).put("items", rows).toString().toByteArray(Charsets.UTF_8)
+        val bytes = CompanionKnowledgeData.utf8(JSONObject().put("version", 1).put("items", rows).toString())
         require(bytes.size <= CompanionKnowledgeData.MAX_BYTES) { "资料库已满，请先删除部分资料" }
+        CompanionKnowledgeData.parseBytes(bytes) // Validate before starting an atomic write.
         var stream: java.io.FileOutputStream? = null
         try { stream = file.startWrite(); stream.write(bytes); file.finishWrite(stream) }
         catch (e: Exception) { if (stream != null) file.failWrite(stream); throw e }
@@ -63,9 +63,22 @@ internal object CompanionKnowledgeData {
     const val MAX_BYTES = 512_000
     const val MAX_TEXT = 8_000
     const val MAX_ITEMS = 100
+    fun utf8(value: String): ByteArray {
+        val encoder = Charsets.UTF_8.newEncoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        val buffer = encoder.encode(java.nio.CharBuffer.wrap(value))
+        return ByteArray(buffer.remaining()).also { buffer.get(it) }
+    }
+    fun parseBytes(bytes: ByteArray): JSONArray {
+        require(bytes.size <= MAX_BYTES) { "资料库超过大小限制，原文件已保留" }
+        val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        return parse(decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString())
+    }
     fun parse(raw: String): JSONArray {
         val root = JSONObject(raw)
-        require(root.getInt("version") == 1) { "资料库版本不支持" }
+        val version = root.opt("version")
+        require((version is Int || version is Long) && (version as Number).toLong() == 1L) { "资料库版本不支持" }
         val rows = root.getJSONArray("items")
         require(rows.length() <= MAX_ITEMS) { "资料过多" }
         val ids = mutableSetOf<String>()
@@ -121,7 +134,7 @@ internal data class KnowledgeImportPlan(val original: String, val additions: Str
 internal object CompanionKnowledgeBackup {
     private const val FORMAT = "whale-knowledge-backup"
     fun encode(rows: JSONArray): ByteArray {
-        val bytes = JSONObject().put("format", FORMAT).put("version", 1).put("items", rows).toString().toByteArray(Charsets.UTF_8)
+        val bytes = CompanionKnowledgeData.utf8(JSONObject().put("format", FORMAT).put("version", 1).put("items", rows).toString())
         require(bytes.size <= CompanionKnowledgeData.MAX_BYTES) { "资料备份超过大小上限" }
         return bytes
     }
