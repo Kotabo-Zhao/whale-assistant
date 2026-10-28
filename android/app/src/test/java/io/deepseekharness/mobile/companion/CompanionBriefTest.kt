@@ -48,6 +48,17 @@ class CompanionBriefTest {
         assertFalse(CompanionCandidateNotifications.due(1000L, 2000L))
         assertTrue(CompanionCandidateNotifications.due(1801000L, 1000L))
     }
+    @Test fun clockRollbackRestartsCooldownInsteadOfSuppressingAlertsUntilOldTime() {
+        val previous = 10_000_000L
+        val now = 1_000L
+        val rebased = CompanionCandidateNotifications.rebaseAfterClockRollback(now, previous)
+        assertEquals(now, rebased)
+        assertFalse(CompanionCandidateNotifications.due(now, rebased))
+        assertFalse(CompanionCandidateNotifications.due(now + 1_799_999L, rebased))
+        assertTrue(CompanionCandidateNotifications.due(now + 1_800_000L, rebased))
+        assertEquals(previous, CompanionCandidateNotifications.rebaseAfterClockRollback(previous + 1, previous))
+        assertEquals(previous, CompanionCandidateNotifications.rebaseAfterClockRollback(0, previous))
+    }
     @Test fun suggestsOnlyOneUnambiguousFutureExplicitLocalTime() {
         val zone = java.time.ZoneId.of("Asia/Shanghai")
         val now = java.time.Instant.parse("2026-01-01T00:00:00Z").toEpochMilli()

@@ -18,6 +18,9 @@ internal object CompanionCandidateNotifications {
     private const val INTERVAL = 30L * 60 * 1000
     private val lock = Any()
     fun due(now: Long, previous: Long): Boolean = now > 0 && (previous <= 0 || (previous <= now && now - previous >= INTERVAL))
+    /** A clock rollback starts a fresh cooldown instead of suppressing alerts until the old wall time. */
+    fun rebaseAfterClockRollback(now: Long, previous: Long): Long =
+        if (now > 0 && previous > now) now else previous
     fun show(context: Context, quiet: Boolean) = synchronized(lock) {
         if (quiet || !CompanionStore(context).candidateNotifications) return@synchronized
         val permission = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -25,7 +28,10 @@ internal object CompanionCandidateNotifications {
         if (!permission || !manager.areNotificationsEnabled()) return@synchronized
         val prefs = context.getSharedPreferences("companion_candidate_alert_v1", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        if (!due(now, prefs.getLong("last_sent", 0))) return@synchronized
+        val previous = prefs.getLong("last_sent", 0)
+        val rebased = rebaseAfterClockRollback(now, previous)
+        if (rebased != previous) prefs.edit().putLong("last_sent", rebased).apply()
+        if (!due(now, rebased)) return@synchronized
         runCatching {
             manager.createNotificationChannel(NotificationChannel(CHANNEL, "鲸鱼娘候选事项", NotificationManager.IMPORTANCE_DEFAULT))
             if (manager.getNotificationChannel(CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE) return@runCatching
