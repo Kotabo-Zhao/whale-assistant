@@ -254,6 +254,10 @@ function compareVersions(left, right) {
 }
 
 function expandRangeClause(clause) {
+  // npm's full-version hyphen ranges are inclusive at both ends. Partial
+  // endpoints are intentionally left untouched until their semantics are supported.
+  clause = clause.replace(/^(\S+)\s+-\s+(\S+)$/, (match, lower, upper) =>
+    parseVersion(lower) && parseVersion(upper) ? `>=${lower} <=${upper}` : match)
   const expanded = []
   for (const part of clause.split(/\s+/).filter(Boolean)) {
     const partialComparison = /^(>=|<=|>|<|=)(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/.exec(part)

@@ -62,11 +62,12 @@ test('指定版本仍在下载前检查引擎和平台，并只安装指定版�
   const install = value => { calls.push(value); return { status: 0 } }
   const response = extra => ({ status: 0, stdout: JSON.stringify({ name: 'demo', version: '1.2.3', ...extra }) })
   assert.throws(() => installExplicitVersion(response({ dsh: { engines: { dsh: '>=9.0.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_ENGINE_UNSUPPORTED/)
-  assert.throws(() => installExplicitVersion(response({ dsh: { engines: { dsh: '0.1.0 - 0.3.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => installExplicitVersion(response({ dsh: { engines: { dsh: '0.1 - 0.3' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_METADATA_UNAVAILABLE/)
   assert.throws(() => installExplicitVersion(response({ cpu: ['x64'] }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_PLATFORM_UNSUPPORTED/)
   assert.deepEqual(calls, [])
   installExplicitVersion(response({ dsh: { engines: { dsh: '>=0.1.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64')
-  assert.deepEqual(calls, ['demo@1.2.3'])
+  installExplicitVersion(response({ dsh: { engines: { dsh: '0.1.0 - 0.3.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64')
+  assert.deepEqual(calls, ['demo@1.2.3', 'demo@1.2.3'])
 })
 
 test('裸导入抽取只认包名，路径与内建模块一律忽略', () => {
@@ -278,7 +279,7 @@ test('批量元数据可发现六个新版本以外的兼容版本，身份或�
   payload.versions['1.0.2'].name = 'demo'
   payload.versions['1.0.2'].dsh.engines.dsh = 42
   assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
-  payload.versions['1.0.2'].dsh.engines.dsh = '0.1.0 - 0.3.0'
+  payload.versions['1.0.2'].dsh.engines.dsh = '0.1 - 0.3'
   assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
 })
 
@@ -288,6 +289,8 @@ test('批量元数据确认所有版本不兼容，以及未声明要求的版�
   assert.equal(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64').selection, null)
   payload.versions['1.0.0'] = make('1.0.0', null)
   assert.equal(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64').selection.version, '1.0.0')
+  payload.versions['1.0.1'] = make('1.0.1', '0.1.0 - 0.3.0')
+  assert.equal(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64').selection.version, '1.0.1')
   assert.deepEqual(selectFromPackument({ name: 'demo', versions: {} }, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
 })
 
@@ -332,6 +335,20 @@ test('范围匹配严格对齐 npm 语义（含预发布与插入符）', () => 
   assert.equal(satisfiesRange('0.1.5', '*'), true)
   assert.equal(satisfiesRange('0.1.5', ''), false)
   assert.equal(satisfiesRange('0.1.5', 'a'.repeat(300)), false)
+})
+
+test('完整版本连字符范围包含端点，并保留 npm 预发布语义', () => {
+  for (const [version, range, expected] of [
+    ['0.0.9', '0.1.0 - 0.3.0', false], ['0.1.0', '0.1.0 - 0.3.0', true],
+    ['0.3.0', '0.1.0 - 0.3.0', true], ['0.3.1', '0.1.0 - 0.3.0', false],
+    ['0.3.0-rc.1', '0.1.0 - 0.3.0', false],
+    ['0.3.0-rc.1', '0.1.0 - 0.3.0-rc.2', true],
+    ['0.2.0-beta.1', '0.1.0 - 0.3.0-rc.2', false],
+    ['0.2.0', '0.1.0 - 0.3.0 <0.2.0', false],
+    ['1.0.0', '0.1.0 - 0.3.0 || 1.0.0', true],
+  ]) assert.equal(satisfiesRange(version, range), expected, `${version} ${range}`)
+  assert.equal(declaredDshRange({ dsh: { engines: { dsh: '0.1.0 - 0.3.0' } } }, 'demo'), '0.1.0 - 0.3.0')
+  assert.throws(() => declaredDshRange({ dsh: { engines: { dsh: '0.1 - 0.3' } } }, 'demo'), /PLUGIN_METADATA_UNAVAILABLE/)
 })
 
 test('版本比较遵循 semver 的预发布优先级', () => {
@@ -520,13 +537,26 @@ test('下载包的未知引擎范围不被误报为不兼容且保留原版本',
     installer(id, directory)
     const file = path.join(directory, 'node_modules', id, 'package.json')
     const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
-    pkg.dsh.engines = { dsh: '0.1.0 - 0.3.0' }
+    pkg.dsh.engines = { dsh: '0.1 - 0.3' }
     fs.writeFileSync(file, JSON.stringify(pkg))
   })
   write('opt/dsh/node_modules/@deepseek-ai/dsh/package.json', { name: '@deepseek-ai/dsh', version: '0.2.0' })
   assert.throws(() => manager.update('test-plugin'), /PLUGIN_METADATA_UNAVAILABLE/)
   assert.equal(manager.list().plugins.find(p => p.id === 'test-plugin').version, '1.0.0')
   assert.deepEqual(fs.readdirSync(path.join(root, 'root/.dsh-mobile/plugin-manager/versions')), [])
+})
+
+test('下载包声明完整版本连字符范围时可安装兼容版本', t => {
+  const { manager, write } = fixture(t, (id, directory) => {
+    installer(id, directory)
+    const file = path.join(directory, 'node_modules', id, 'package.json')
+    const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
+    pkg.dsh.engines = { dsh: '0.1.0 - 0.3.0' }
+    fs.writeFileSync(file, JSON.stringify(pkg))
+  })
+  write('opt/dsh/node_modules/@deepseek-ai/dsh/package.json', { name: '@deepseek-ai/dsh', version: '0.2.0' })
+  manager.update('test-plugin')
+  assert.equal(manager.list().plugins.find(p => p.id === 'test-plugin').version, '2.0.0')
 })
 
 test('声明引擎范围但运行时版本不可读时不切换旧版本', t => {
