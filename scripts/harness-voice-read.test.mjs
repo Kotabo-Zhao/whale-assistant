@@ -7,11 +7,12 @@ const template = await readFile(new URL('../android/app/src/main/assets/support/
 const marker = '/*__VOICE_PAGE__*/null'
 const address = 'http://127.0.0.1:3080/'
 
-function page(html, expected = address, select = null) {
+function page(html, expected = address, select = null, selectElement = false) {
   const dom = new JSDOM(html, { runScripts: 'outside-only', url: address })
   for (const element of dom.window.document.querySelectorAll('[data-chat-flow-kind]')) element.getClientRects = () => [{}]
   if (select) {
-    const node = dom.window.document.querySelector(select).firstChild
+    const element = dom.window.document.querySelector(select)
+    const node = selectElement ? element : element.firstChild
     const range = dom.window.document.createRange()
     range.selectNodeContents(node)
     dom.window.getSelection().addRange(range)
@@ -25,6 +26,12 @@ test('只读取最后一条明确标记的助手回复并排除按钮与隐藏�
     '<div data-chat-flow-kind="assistant-step" data-chat-group-part="response">第一条</div>' +
     '<div data-chat-flow-kind="assistant-step" data-chat-group-part="response">最后回复<button>复制</button><span hidden>隐藏</span></div>'
   assert.deepEqual(page(html), { status: 'ok', text: '最后回复', truncated: false })
+})
+
+test('直接选中助手回复元素时朗读选区，不误读后面的回复', () => {
+  const html = '<div id="selected" data-chat-flow-kind="assistant-step" data-chat-group-part="response">选中的回复</div>' +
+    '<div data-chat-flow-kind="assistant-step" data-chat-group-part="response">后面的回复</div>'
+  assert.deepEqual(page(html, address, '#selected', true), { status: 'ok', text: '选中的回复', truncated: false })
 })
 
 test('用户可选择助手文本，其他页面、流式回复和无目标都不会猜测', () => {

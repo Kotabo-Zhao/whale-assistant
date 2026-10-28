@@ -4,8 +4,9 @@
   const selection = window.getSelection();
   let text = '';
   if (selection && !selection.isCollapsed && selection.anchorNode && selection.focusNode) {
-    const anchor = selection.anchorNode.parentElement?.closest('[data-chat-flow-kind="assistant-step"]');
-    const focus = selection.focusNode.parentElement?.closest('[data-chat-flow-kind="assistant-step"]');
+    const parent = node => node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    const anchor = parent(selection.anchorNode)?.closest('[data-chat-flow-kind="assistant-step"]');
+    const focus = parent(selection.focusNode)?.closest('[data-chat-flow-kind="assistant-step"]');
     if (anchor && anchor === focus && anchor.getClientRects().length > 0) text = selection.toString().trim();
   }
   if (!text) {
