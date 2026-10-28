@@ -197,7 +197,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     if (!proposal || proposalBusy || busy) return
     setProposalBusy(true)
     try {
-      if (install && !await run({ operation: 'import', source: proposal.packageName })) return
+      if (install && !await run(proposal.kind === 'update' ? { operation: 'update', id: proposal.packageName } : { operation: 'import', source: proposal.packageName })) return
       await bridge.dismissMarketProposal(proposal.id)
       await refreshProposal()
     } catch { if (active.current) setProposalError(true) }
@@ -258,12 +258,12 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     </section>
     <section className="plugin-import" aria-label={t('商店待处理请求')}>
       <h2>{t('商店待处理请求')}</h2>
-      <p>{t('商店请求只暂存包名，需停止运行环境并由你确认后才会安装。来源与安卓兼容性仍需核对。')}</p>
+      <p>{t('商店请求需停止运行环境并由你确认后才会执行。来源与安卓兼容性仍需核对。')}</p>
       <button className="button button-secondary compact-button" type="button" disabled={proposalBusy} onClick={() => { void refreshProposal() }}>{t('刷新请求')}</button>
       {proposalError && <p role="alert">{t('无法读取或清除安装请求，请稍后重试。')}</p>}
-      {proposal && <div><p><strong>{t('待确认包名')}：</strong><code>{proposal.packageName}</code></p>
+      {proposal && <div>{proposal.kind === 'update' && <p>{t('更新请求：手机会重新选择兼容版本，可能与商店建议版本不同。')}{proposal.suggestedVersion && <> {t('商店建议版本')}：<code>{proposal.suggestedVersion}</code></>}</p>}<p><strong>{t('待确认包名')}：</strong><code>{proposal.packageName}</code></p>
         <button className="button button-secondary compact-button" type="button" disabled={proposalBusy || busy} onClick={() => { void handleProposal(false) }}>{t('忽略请求')}</button>{' '}
-        <button className="button button-primary compact-button" type="button" disabled={proposalBusy || locked} onClick={() => { void handleProposal(true) }}>{t('确认安装请求')}</button>
+        <button className="button button-primary compact-button" type="button" disabled={proposalBusy || locked} onClick={() => { void handleProposal(true) }}>{t(proposal.kind === 'update' ? '确认更新请求' : '确认安装请求')}</button>
       </div>}
     </section>
     <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }) }} />

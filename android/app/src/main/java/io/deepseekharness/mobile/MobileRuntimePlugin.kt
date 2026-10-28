@@ -759,7 +759,8 @@ class MobileRuntimePlugin : Plugin() {
                 "get" -> {
                     val proposal = store.get()
                     JSObject().put("proposal", if (proposal == null) JSONObject.NULL else JSObject()
-                        .put("id", proposal.id).put("packageName", proposal.packageName).put("createdAt", proposal.createdAt))
+                        .put("id", proposal.id).put("packageName", proposal.packageName).put("createdAt", proposal.createdAt)
+                        .put("kind", proposal.kind).put("suggestedVersion", proposal.suggestedVersion ?: JSONObject.NULL))
                 }
                 "dismiss" -> JSObject().put("removed", store.dismiss(call.getString("id").orEmpty()))
                 else -> throw RuntimeFailure("MARKET_PROPOSAL_INVALID", "安装请求操作无效")

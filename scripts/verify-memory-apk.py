@@ -14,7 +14,7 @@ with zipfile.ZipFile(sys.argv[1]) as apk:
         digest = hashlib.file_digest(f, "sha256").hexdigest()
     if digest != manifest["rootfs"]["sha256"] or info.file_size != manifest["rootfs"]["compressedBytes"]:
         raise SystemExit("runtime bundle does not match manifest")
-    if manifest["version"] not in ("0.3.7-whale-memory1", "0.3.8-whale-market1", "0.3.9-whale-reminder1", "0.3.10-whale-memory2", "0.3.11-whale-market2"):
+    if manifest["version"] not in ("0.3.7-whale-memory1", "0.3.8-whale-market1", "0.3.9-whale-reminder1", "0.3.10-whale-memory2", "0.3.11-whale-market2", "0.3.12-whale-market3"):
         raise SystemExit("unexpected runtime version")
     with apk.open(info) as f, tarfile.open(fileobj=f, mode="r|gz") as tar:
         found_memory = False
@@ -29,6 +29,6 @@ with zipfile.ZipFile(sys.argv[1]) as apk:
                 found_memory = True
             if entry.name == "opt/dsh/plugins/dshmarket/package.json":
                 found_market = json.load(tar.extractfile(entry)).get("version") == "1.73.1"
-        if not found_memory or (manifest["version"] != "0.3.7-whale-memory1" and not found_market) or (manifest["version"] in ("0.3.9-whale-reminder1", "0.3.10-whale-memory2", "0.3.11-whale-market2") and not found_reminder):
+        if not found_memory or (manifest["version"] != "0.3.7-whale-memory1" and not found_market) or (manifest["version"] in ("0.3.9-whale-reminder1", "0.3.10-whale-memory2", "0.3.11-whale-market2", "0.3.12-whale-market3") and not found_reminder):
             raise SystemExit("runtime plugin missing")
     print("runtime verified:", manifest["version"], digest, "memory tools present; market:", found_market)

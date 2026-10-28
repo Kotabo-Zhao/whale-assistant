@@ -34,7 +34,7 @@ describe('应用外层插件管理', () => {
     } finally { mock.mockRestore() }
   })
   it('商店请求需确认，并且安装成功后才清除', async () => {
-    const proposal = { id: '00000000-0000-0000-0000-000000000001', packageName: 'example-market-plugin', createdAt: 1000 }
+    const proposal = { id: '00000000-0000-0000-0000-000000000001', packageName: 'example-market-plugin', createdAt: 1000, kind: 'install' as const, suggestedVersion: null }
     const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValue(catalog), stopRuntime: vi.fn(),
       getMarketProposal: vi.fn().mockResolvedValueOnce(proposal).mockResolvedValue(null), dismissMarketProposal: vi.fn().mockResolvedValue(true) }
     render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
@@ -44,8 +44,30 @@ describe('应用外层插件管理', () => {
     await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: proposal.packageName }))
     await waitFor(() => expect(bridge.dismissMarketProposal).toHaveBeenCalledWith(proposal.id))
   })
+  it('商店更新需确认并显示建议版本，调用受控更新', async () => {
+    const proposal = { id: '00000000-0000-0000-0000-000000000003', packageName: 'example-plugin', createdAt: 1000, kind: 'update' as const, suggestedVersion: '1.2.3' }
+    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValue(catalog), getMarketProposal: vi.fn().mockResolvedValueOnce(proposal).mockResolvedValue(null), dismissMarketProposal: vi.fn().mockResolvedValue(true) }
+    render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
+    expect(await screen.findByText('1.2.3')).toBeInTheDocument()
+    expect(screen.getByText(/可能与商店建议版本不同/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '确认更新请求' }))
+    await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'update', id: 'example-plugin' }))
+    await waitFor(() => expect(bridge.dismissMarketProposal).toHaveBeenCalledWith(proposal.id))
+  })
+  it('运行中不能确认更新，更新失败时保留请求', async () => {
+    const proposal = { id: '00000000-0000-0000-0000-000000000004', packageName: 'example-plugin', createdAt: 1000, kind: 'update' as const, suggestedVersion: null }
+    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(new Error('failed')), stopRuntime: vi.fn().mockResolvedValue({ ...runtime, phase: 'ready' }), getMarketProposal: vi.fn().mockResolvedValue(proposal), dismissMarketProposal: vi.fn() }
+    render(<PluginSettings bridge={bridge} runtime={{ ...runtime, phase: 'running' }} onBack={() => {}} />)
+    const confirm = await screen.findByRole('button', { name: '确认更新请求' })
+    expect(confirm).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '停止运行环境' }))
+    await waitFor(() => expect(confirm).toBeEnabled())
+    fireEvent.click(confirm)
+    await screen.findByRole('alert')
+    expect(bridge.dismissMarketProposal).not.toHaveBeenCalled()
+  })
   it('安装失败时保留商店请求', async () => {
-    const proposal = { id: '00000000-0000-0000-0000-000000000002', packageName: 'example-market-plugin', createdAt: 1000 }
+    const proposal = { id: '00000000-0000-0000-0000-000000000002', packageName: 'example-market-plugin', createdAt: 1000, kind: 'install' as const, suggestedVersion: null }
     const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(new Error('failed')),
       getMarketProposal: vi.fn().mockResolvedValue(proposal), dismissMarketProposal: vi.fn() }
     render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)

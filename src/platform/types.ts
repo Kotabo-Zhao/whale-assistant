@@ -1577,7 +1577,7 @@ export interface RuntimeWorkspaceFileList {
   truncated: boolean
 }
 
-export interface MarketProposal { id: string; packageName: string; createdAt: number }
+export interface MarketProposal { id: string; packageName: string; createdAt: number; kind: 'install' | 'update'; suggestedVersion: string | null }
 
 export interface RuntimeBridge {
   listHarnessReleases: () => Promise<HarnessReleaseList>

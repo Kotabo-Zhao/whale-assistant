@@ -317,7 +317,10 @@ function createNativeBridge(): RuntimeBridge {
           typeof proposal.id !== 'string' || !/^[a-f0-9-]{36}$/.test(proposal.id) || typeof proposal.packageName !== 'string' ||
           proposal.packageName.length > 214 || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(proposal.packageName) ||
           proposal.packageName.includes('..') || typeof proposal.createdAt !== 'number' || !Number.isSafeInteger(proposal.createdAt) || proposal.createdAt <= 0) throw new Error('无效安装请求')
-      return { id: proposal.id, packageName: proposal.packageName, createdAt: proposal.createdAt }
+      const kind = 'kind' in proposal ? proposal.kind : 'install'
+      const suggestedVersion = 'suggestedVersion' in proposal ? proposal.suggestedVersion : null
+      if ((kind !== 'install' && kind !== 'update') || (suggestedVersion !== null && (kind !== 'update' || typeof suggestedVersion !== 'string' || suggestedVersion.length > 64 || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(suggestedVersion)))) throw new Error('无效商店请求')
+      return { id: proposal.id, packageName: proposal.packageName, createdAt: proposal.createdAt, kind, suggestedVersion }
     }),
     dismissMarketProposal: id => {
       if (!/^[a-f0-9-]{36}$/.test(id)) return Promise.reject(new Error('无效安装请求'))

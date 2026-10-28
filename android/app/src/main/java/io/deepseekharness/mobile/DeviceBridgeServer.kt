@@ -214,6 +214,16 @@ class DeviceBridgeServer(
                     if (commandName.length > 32 || param.length > DeviceFilePolicy.MAX_PARAM_CHARS) {
                         throw RuntimeFailure("DEVICE_COMMAND_INVALID", "设备参数过长")
                     }
+                    if (commandName == "pluginMarketUpdateProposal") {
+                        val context = appContext ?: throw RuntimeFailure("MARKET_PROPOSAL_UNAVAILABLE", "更新请求服务不可用")
+                        val proposal = JSONObject(param)
+                        val name = proposal.opt("name") as? String ?: throw RuntimeFailure("MARKET_PROPOSAL_INVALID", "插件包名无效")
+                        val version = if (!proposal.has("suggestedVersion") || proposal.isNull("suggestedVersion")) null else proposal.opt("suggestedVersion") as? String
+                            ?: throw RuntimeFailure("MARKET_PROPOSAL_INVALID", "建议版本无效")
+                        io.deepseekharness.mobile.runtime.MarketProposalStore(context).propose(name, "update", version)
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
+                        return
+                    }
                     if (commandName == "pluginMarketProposal") {
                         val context = appContext ?: throw RuntimeFailure("MARKET_PROPOSAL_UNAVAILABLE", "安装请求服务不可用")
                         io.deepseekharness.mobile.runtime.MarketProposalStore(context).propose(param)
