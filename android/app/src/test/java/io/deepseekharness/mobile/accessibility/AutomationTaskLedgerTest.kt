@@ -139,6 +139,23 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `调用方声称可重试失败不能覆盖动作回执或证明未派发`() {
+        for (hasReceipt in listOf(false, true)) {
+            val ledger = ledger(spec("s1", action = AutomationTaskActions.CLICK, verify = AutomationTaskActions.VERIFY_NONE, maxAttempts = 2), spec("s2"))
+            ledger.gate("s1", facts(), 1000L)
+            val state = ledger.snapshot()
+            val receipt = if (hasReceipt) AutomationTaskEvidence.receipt(state, "com.example.app", "click", "com.example.app:id/ok", 1100L) else null
+            val claim = AutomationTaskStepOutcome(ok = false, code = "AUTOMATION_CLICK_FAILED", verified = true)
+            val outcome = AutomationTaskEvidence.constrain(state.taskId, state.steps[0], claim, "d1", receipt, 1200L)
+            val recorded = ledger.record("s1", 1, outcome, 1200L)
+            assertEquals(AutomationTaskStepStatus.UNKNOWN, recorded.steps[0].status)
+            assertEquals(AutomationTaskCodes.NEEDS_CHECK, recorded.steps[0].code)
+            assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s1", facts(), 1300L).refusedCode())
+            assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s2", facts(), 1300L).refusedCode())
+        }
+    }
+
+    @Test
     fun `未要求画面验证的动作仍需实际回执且不宣称已验证`() {
         val ledger = ledger(spec("s1", action = AutomationTaskActions.SCROLL, verify = AutomationTaskActions.VERIFY_NONE), spec("s2"))
         ledger.gate("s1", facts(), 1000L)

@@ -228,7 +228,14 @@ internal object AutomationTaskEvidence {
             if (action == AutomationTaskActions.SET_TEXT) textDigest(text) else null)
     }
     fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long, targetPresent: Boolean? = null, observedTextDigest: String? = null, expectedPackage: String? = null, observedPackage: String? = null): AutomationTaskStepOutcome {
-        if (step == null || !outcome.ok) return outcome
+        if (step == null) return outcome
+        // The caller's failure code is not device evidence. A reported retryable error can
+        // contradict a successful dispatch (or hide an action whose result was lost).
+        // Until negative dispatch receipts are captured, mutating actions must be reviewed.
+        if (!outcome.ok && step.action in setOf(AutomationTaskActions.CLICK, AutomationTaskActions.SET_TEXT, AutomationTaskActions.SCROLL, AutomationTaskActions.BACK)) {
+            return outcome.copy(verified = false, code = AutomationTaskCodes.NEEDS_CHECK)
+        }
+        if (!outcome.ok) return outcome
         val started = step.startedAtMs
         val matched = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
             receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs
