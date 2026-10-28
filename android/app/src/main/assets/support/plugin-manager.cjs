@@ -1873,30 +1873,40 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     const id = spec.kind === 'npm'
       ? (stagedNames.includes(spec.name) ? spec.name : fail('PLUGIN_UPDATE_FAILED'))
       : deriveImportedName(stageModules, stagedNames, spec.hint)
-    function checkNativeAddons(pkgDir) {
-      try {
-        const pkg = read(path.join(pkgDir, 'package.json'))
-        if (pkg.gypfile === true) return true
-        if (pkg.binary && typeof pkg.binary === 'object') return true
-      } catch {}
-      let found = false
-      const scan = (dir, depth = 0) => {
-        if (found || depth > 3) return
-        let items
-        try { items = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
-        for (const item of items) {
-          if (item.name === 'node_modules' || item.name.startsWith('.')) continue
-          if (item.isFile() && (item.name.endsWith('.node') || item.name === 'binding.gyp')) {
-            found = true
-            return
-          }
-          if (item.isDirectory()) scan(path.join(dir, item.name), depth + 1)
+    // 检查整个暂存依赖树，而不仅是主包。安装脚本虽被禁用，依赖仍可能携带
+    // 预编译扩展或需要编译；不能将其登记为可在当前移动运行时使用。
+    // 遇到无法检查的目录、链接或超限时拒绝事务，而不是默默跳过。
+    const stack = [{ directory: stageModules, depth: 0 }]
+    let scanned = 0
+    while (stack.length) {
+      const { directory: current, depth } = stack.pop()
+      if (depth > 40) fail('PLUGIN_SCAN_UNAVAILABLE', id)
+      let items
+      try { items = fs.readdirSync(current, { withFileTypes: true }) } catch { fail('PLUGIN_SCAN_UNAVAILABLE', id) }
+      for (const item of items) {
+        if (++scanned > 100000) fail('PLUGIN_SCAN_UNAVAILABLE', id)
+        const location = path.join(current, item.name)
+        if (item.isSymbolicLink()) {
+          // 已由 reconcileRuntimePackages 核验的宿主单例允许引用；其余链接不跟随。
+          let resolved
+          try { resolved = fs.realpathSync(location) } catch { fail('PLUGIN_SCAN_UNAVAILABLE', id) }
+          const relative = path.relative(stageModules, location).split(path.sep).join('/')
+          const match = relative.match(/(?:^|\/node_modules\/)(@deepseek-ai\/[a-z0-9._-]+)$/)
+          const name = match?.[1] ?? ''
+          const runtime = name && protectedPackage(name) ? resolvePackage(name) : null
+          if (!runtime || resolved !== runtime) fail('PLUGIN_SCAN_UNAVAILABLE', id)
+          continue
+        }
+        if (item.isDirectory()) { stack.push({ directory: location, depth: depth + 1 }); continue }
+        if (!item.isFile()) fail('PLUGIN_SCAN_UNAVAILABLE', id)
+        if (item.name.toLowerCase().endsWith('.node') || item.name === 'binding.gyp') fail('PLUGIN_NATIVE_UNSUPPORTED', id)
+        if (item.name === 'package.json') {
+          let pkg
+          try { pkg = read(location) } catch { fail('PLUGIN_SCAN_UNAVAILABLE', id) }
+          if (pkg.gypfile === true || (pkg.binary && typeof pkg.binary === 'object')) fail('PLUGIN_NATIVE_UNSUPPORTED', id)
         }
       }
-      scan(pkgDir)
-      return found
     }
-    if (checkNativeAddons(path.join(stageModules, id))) fail('PLUGIN_NATIVE_UNSUPPORTED', id)
     const selected = read(path.join(stageModules, id, 'package.json'))
     const declared = bundlePatchFiles(selected)
     if (selected.name !== id || !VERSION.test(selected.version ?? '') || declared === null) fail('PLUGIN_UPDATE_FAILED')

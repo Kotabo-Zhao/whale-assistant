@@ -626,11 +626,31 @@ test('安装后消重不跟随指向 staging 之外的链接', t => {
   })
   const outside = stagedPackage(path.join(root, 'tmp-outside/nested/node_modules'), '@deepseek-ai/dsh-tools', '1.0.0')
 
-  const result = manager.update('test-plugin')
-  assert.equal(result.plugins[1].version, '2.0.0')
-  assert.deepEqual(result.runtimeDedupe, { scanned: 0, linked: 0, unchanged: 0, versionMismatch: 0, failed: 0, refused: 0 })
+  assert.throws(() => manager.update('test-plugin'), /PLUGIN_SCAN_UNAVAILABLE/)
   assert.equal(fs.lstatSync(outside).isSymbolicLink(), false)
   assert.equal(JSON.parse(fs.readFileSync(path.join(outside, 'package.json'), 'utf8')).version, '1.0.0')
+})
+
+test('嵌套依赖的原生扩展被拒绝，旧插件和配置保持原样', t => {
+  const { manager, root } = fixture(t, (id, directory) => {
+    installer(id, directory)
+    const dep = stagedPackage(path.join(directory, 'node_modules/test-plugin/node_modules'), 'native-dep', '1.0.0')
+    fs.mkdirSync(path.join(dep, 'prebuilds/android/arm64'), { recursive: true })
+    fs.writeFileSync(path.join(dep, 'prebuilds/android/arm64/addon.node'), 'not an addon')
+  })
+  const before = manager.list()
+  assert.throws(() => manager.update('test-plugin'), /PLUGIN_NATIVE_UNSUPPORTED/)
+  assert.deepEqual(manager.list().plugins, before.plugins)
+  assert.equal(fs.existsSync(path.join(root, 'root/.dsh-mobile/plugin-manager/journal.json')), false)
+})
+
+test('依赖中声明原生构建时拒绝安装', t => {
+  const { manager } = fixture(t, (id, directory) => {
+    installer(id, directory)
+    const dep = stagedPackage(path.join(directory, 'node_modules'), 'native-dep', '1.0.0')
+    fs.writeFileSync(path.join(dep, 'package.json'), JSON.stringify({ name: 'native-dep', version: '1.0.0', gypfile: true }))
+  })
+  assert.throws(() => manager.update('test-plugin'), /PLUGIN_NATIVE_UNSUPPORTED/)
 })
 
 // ---------------------------------------------------------------------------
