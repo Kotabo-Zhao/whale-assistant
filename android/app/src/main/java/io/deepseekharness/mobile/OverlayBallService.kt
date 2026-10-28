@@ -412,29 +412,45 @@ class OverlayBallService : Service() {
         if (getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return false
         val now = SystemClock.elapsedRealtime()
         if (lastHintAt != 0L && now - lastHintAt < 120_000) return false
-        val density = resources.displayMetrics.density
-        val width = (220 * density).toInt().coerceAtMost(resources.displayMetrics.widthPixels)
+        val metrics = resources.displayMetrics
+        val density = metrics.density
+        val screenWidth = metrics.widthPixels.coerceAtLeast(1)
+        val screenHeight = metrics.heightPixels.coerceAtLeast(1)
+        val width = (220 * density).toInt().coerceIn(1, screenWidth)
+        val margin = (24 * density).toInt().coerceAtLeast(0)
         val bubble = TextView(overlayPalette()).apply {
             text = message
             textSize = 14f
             setTextColor(overlayColor(R.color.overlay_panel_foreground))
             setPadding((14 * density).toInt(), (10 * density).toInt(), (14 * density).toInt(), (10 * density).toInt())
+            minHeight = (48 * density).toInt().coerceAtMost(screenHeight)
+            gravity = Gravity.CENTER_VERTICAL
+            contentDescription = message + if (onTap == null) "，点击关闭" else "，点击查看"
             background = overlayPalette().getDrawable(R.drawable.bg_overlay_action)
             setOnClickListener { removeCompanionHint(); onTap?.invoke() }
         }
+        bubble.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(screenHeight, View.MeasureSpec.AT_MOST))
+        val position = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(screenWidth, screenHeight,
+            layoutParams.x, layoutParams.y, layoutParams.width, layoutParams.height,
+            width, bubble.measuredHeight.coerceIn(1, screenHeight), margin, (8 * density).toInt().coerceAtLeast(0))
         val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = (layoutParams.x - width + layoutParams.width).coerceIn(0, (resources.displayMetrics.widthPixels - width).coerceAtLeast(0))
-            y = (layoutParams.y - (64 * density).toInt()).coerceAtLeast((24 * density).toInt())
+            x = position.x
+            y = position.y
         }
         removeCompanionHint()
         if (runCatching { windowManager.addView(bubble, params) }.isSuccess) {
             hintView = bubble
             lastHintAt = now
-            hintHandler.postDelayed({ if (hintView === bubble) removeCompanionHint() }, 7000)
+            val accessibility = getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+            val timeout = if (android.os.Build.VERSION.SDK_INT >= 29 && accessibility != null)
+                accessibility.getRecommendedTimeoutMillis(7000, android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT or android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS).toLong()
+            else 7000L
+            hintHandler.postDelayed({ if (hintView === bubble) removeCompanionHint() }, timeout.coerceAtLeast(7000L))
             return true
         }
         return false
