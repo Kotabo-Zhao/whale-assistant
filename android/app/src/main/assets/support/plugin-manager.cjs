@@ -410,6 +410,37 @@ function gitAvailability() {
 }
 
 // 管理器只解析包清单，不导入插件，不启动 Harness；插件启动失败时仍可恢复配置。
+/** Bounded npm metadata checks. Absence of platform fields is unknown, not proof of compatibility. */
+function npmMetadataCheck(payload, id, version, platform, arch) {
+  const meta = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta) || meta.name !== id || meta.version !== version) return 'PLUGIN_METADATA_UNAVAILABLE'
+  function allows(value, list) {
+    if (list === undefined) return true
+    const values = typeof list === 'string' ? [list] : list
+    if (!Array.isArray(values) || values.length > 32 || values.some(x => typeof x !== 'string' || !/^!?[a-z0-9_-]{1,32}$/.test(x))) return null
+    if (values.length === 1 && values[0] === 'any') return true
+    if (values.includes('!' + value)) return false
+    const positive = values.filter(x => !x.startsWith('!'))
+    return positive.length === 0 || positive.includes(value)
+  }
+  const os = allows(platform, meta.os); const cpu = allows(arch, meta.cpu)
+  if (os === null || cpu === null) return 'PLUGIN_METADATA_UNAVAILABLE'
+  if (!os || !cpu) return 'PLUGIN_PLATFORM_UNSUPPORTED'
+  if (meta.gypfile === true || (meta.binary && typeof meta.binary === 'object')) return 'PLUGIN_NATIVE_UNSUPPORTED'
+  return null
+}
+
+/** No package download may begin until the selected registry version passes metadata checks. */
+function installAfterMetadata(probe, install, id, version, platform, arch) {
+  const reply = probe()
+  if (!reply || reply.status !== 0) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+  let metadata
+  try { metadata = JSON.parse(reply.stdout) } catch { fail('PLUGIN_METADATA_UNAVAILABLE', id) }
+  const error = npmMetadataCheck(metadata, id, version, platform, arch)
+  if (error) fail(error, id)
+  if (install(id + '@' + version).status !== 0) fail('PLUGIN_UPDATE_FAILED')
+}
+
 function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
   const root = fs.realpathSync(rootDirectory)
   const profile = path.join(root, 'root/.dsh/profiles/web/package.json')
@@ -1777,7 +1808,13 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
       if (selection === null) fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
       version = selection.version
     }
-    if (install(id + '@' + version).status !== 0) fail('PLUGIN_UPDATE_FAILED')
+    // 查询固定版本元数据，先拒绝明确不支持当前 Linux/CPU 的包，再下载依赖。
+    // 元数据没有声明不等于兼容；下载后仍对完整依赖树执行原生模块检查。
+    installAfterMetadata(
+      () => spawnSync(process.execPath, [npm, 'view', id + '@' + version, '--json', '--fetch-retries=1', '--fetch-timeout=15000', ...common],
+        { env: environment, encoding: 'utf8', timeout: 25000, maxBuffer: 2 * 1024 * 1024 }),
+      install, id, version, process.platform, process.arch,
+    )
   }
   /** 解析闭包补全：详见 updateInternal 里的调用点说明。 */
   function linkUnresolvedRuntimeDependencies(stageModules, stagedNames) {
@@ -2119,6 +2156,8 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
 
 module.exports = {
   createManager,
+  npmMetadataCheck,
+  installAfterMetadata,
   validName,
   within,
   // 供单测直接覆盖版本选择语义（无网络、无 npm）。

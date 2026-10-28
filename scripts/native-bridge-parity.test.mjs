@@ -201,3 +201,16 @@ test('自动化规则标识正则在原生与前端两侧一致', async () => {
   assert.equal(kotlinRuleId, '^[A-Za-z0-9._-]{1,64}$', '原生规则 ID 必须是 1~64 位标识符')
   assert.equal(tsMatch, '/^[A-Za-z0-9._-]{1,64}$/', '前端规则 ID 必须与原生 1~64 位标识符完全一致')
 })
+
+// A real scan failure previously fell through to a generic message because this allowlist missed its code.
+test('插件安装器受控错误码能够经过原生桥', async () => {
+  const guest = await readFile(resolve(appRoot, MANAGER), 'utf8')
+  const host = await readFile(resolve(appRoot, 'android/app/src/main/java/io/deepseekharness/mobile/runtime/RuntimePluginManager.kt'), 'utf8')
+  const block = /val ERROR_CODES = setOf\(([^)]*)\)/u.exec(host)?.[1]
+  assert.ok(block, 'native plugin error allowlist missing')
+  const allowed = new Set([...block.matchAll(/"(PLUGIN_[A-Z_]+)"/gu)].map(m => m[1]))
+  const emitted = new Set([...guest.matchAll(/fail\('(PLUGIN_[A-Z_]+)'/gu)].map(m => m[1]))
+  assert.ok(emitted.size > 10)
+  assert.deepEqual([...emitted].filter(code => !allowed.has(code)), [])
+  for (const code of ['PLUGIN_SCAN_UNAVAILABLE', 'PLUGIN_PLATFORM_UNSUPPORTED', 'PLUGIN_METADATA_UNAVAILABLE']) assert.ok(allowed.has(code))
+})

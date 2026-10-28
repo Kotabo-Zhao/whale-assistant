@@ -5,8 +5,38 @@ import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const { createManager, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
+const { createManager, npmMetadataCheck, installAfterMetadata, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
   require('../android/app/src/main/assets/support/plugin-manager.cjs')
+
+test('npm 元数据预检区分平台不兼容、原生扩展和无法核验', () => {
+  const base = { name: 'test-plugin', version: '1.2.3' }
+  const check = (extra, platform = 'linux', arch = 'arm64') => npmMetadataCheck({ ...base, ...extra }, 'test-plugin', '1.2.3', platform, arch)
+  assert.equal(check({}), null)
+  assert.equal(check({ os: ['linux', '!win32'], cpu: ['arm64'] }), null)
+  assert.equal(check({ os: ['any'], cpu: ['!x64'] }), null)
+  assert.equal(check({ os: ['!linux'] }), 'PLUGIN_PLATFORM_UNSUPPORTED')
+  assert.equal(check({ cpu: ['x64'] }), 'PLUGIN_PLATFORM_UNSUPPORTED')
+  assert.equal(check({ os: ['linux', '!linux'] }), 'PLUGIN_PLATFORM_UNSUPPORTED')
+  assert.equal(check({ gypfile: true }), 'PLUGIN_NATIVE_UNSUPPORTED')
+  assert.equal(check({ binary: { module_name: 'native' } }), 'PLUGIN_NATIVE_UNSUPPORTED')
+  assert.equal(check({ os: [7] }), 'PLUGIN_METADATA_UNAVAILABLE')
+  assert.equal(check({ name: 'other' }), 'PLUGIN_METADATA_UNAVAILABLE')
+  assert.equal(check({ version: '2.0.0' }), 'PLUGIN_METADATA_UNAVAILABLE')
+  assert.equal(npmMetadataCheck([base], 'test-plugin', '1.2.3', 'linux', 'arm64'), null)
+  assert.equal(npmMetadataCheck([base, base], 'test-plugin', '1.2.3', 'linux', 'arm64'), 'PLUGIN_METADATA_UNAVAILABLE')
+})
+
+test('无法核验或平台不支持时不下载插件', () => {
+  const calls = []
+  const install = spec => { calls.push(spec); return { status: 0 } }
+  const check = metadata => installAfterMetadata(() => metadata, install, 'test-plugin', '1.2.3', 'linux', 'arm64')
+  assert.throws(() => check({ status: 1 }), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => check({ status: 0, stdout: '{bad' }), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => check({ status: 0, stdout: JSON.stringify({ name: 'test-plugin', version: '1.2.3', cpu: ['x64'] }) }), /PLUGIN_PLATFORM_UNSUPPORTED/)
+  assert.deepEqual(calls, [])
+  check({ status: 0, stdout: JSON.stringify({ name: 'test-plugin', version: '1.2.3', cpu: ['arm64'] }) })
+  assert.deepEqual(calls, ['test-plugin@1.2.3'])
+})
 
 test('裸导入抽取只认包名，路径与内建模块一律忽略', () => {
   assert.equal(packageNameOf('react'), 'react')

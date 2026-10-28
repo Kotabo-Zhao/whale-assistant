@@ -1975,4 +1975,6 @@ export const english: Readonly<Record<string, string>> = {
   "可选：设备 Shell 与插件": "Optional: device shell and plugins",
   "Shizuku 让「设备 Shell」以 shell 权限执行系统命令，不影响 Ubuntu 终端；插件统一在设置的「插件管理」里管理。": "Shizuku lets the device shell run system commands with shell privileges and does not affect the Ubuntu terminal; plugins are managed in Settings → Plugins.",
   "配置成功后这里会出现「打开 Harness」按钮；": "Once a credential is saved, the “Open Harness” button appears here;",
+  "插件声明不支持当前运行环境的平台或处理器，已保留原版本": "The plugin does not support this runtime platform or processor; the previous version was preserved.",
+  "无法核对插件版本元数据，请检查网络后重试，已保留原版本": "Could not verify plugin version metadata; check your connection and retry. The previous version was preserved.",
 }
