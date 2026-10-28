@@ -3,6 +3,7 @@ import { ArrowLeft, ChevronDown, Package, RefreshCw, X } from 'lucide-react'
 import { t, useLanguage } from '../i18n'
 import type { PluginCatalog, PluginRecoveryState, PluginRequest, RuntimeBridge, RuntimeState } from '../platform/types'
 import './PluginSettings.css'
+import { MobileMarket } from './MobileMarket'
 
 /** 原生侧在无法给出更精确信息时使用的通用文案：与它相同时不重复展示。 */
 const GENERIC_PLUGIN_FAILURE = '插件操作失败，请检查运行时状态后重试'
@@ -234,6 +235,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       </div>
       <button className="button button-primary compact-button" type="button" disabled={locked || !catalog || marketplaceInstalled} onClick={() => { void run({ operation: 'import', source: 'dshmarket' }) }}>{marketplaceInstalled ? t('插件市场已安装') : t('安装插件市场')}</button>
     </section>
+    <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }) }} />
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
     <section className="plugin-import" aria-labelledby="plugin-import-title">
       <h2 id="plugin-import-title">{t('通过 npm 包名或链接导入')}</h2>

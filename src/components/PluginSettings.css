@@ -61,6 +61,18 @@
 .plugin-tab:hover { color: var(--card-ink, var(--ink)); background: color-mix(in srgb, var(--card-color, var(--surface-hover)) var(--card-opacity, 100%), transparent); }
 .plugin-tab-active { background: var(--blue-soft); color: var(--blue); border-color: var(--blue); font-weight: 600; }
 
+.mobile-market { margin: 16px 0; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface); }
+.mobile-market h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.mobile-market > p { color: var(--muted); line-height: 1.55; }
+.mobile-market-search { display: grid; gap: 6px; margin-top: 16px; font-weight: 600; }
+.mobile-market-search input { width: 100%; min-width: 0; }
+.mobile-market-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 12px 0 0; }
+.mobile-market-list li { display: flex; gap: 12px; justify-content: space-between; align-items: start; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-inner); }
+.mobile-market-list li > div { min-width: 0; }
+.mobile-market-list code { display: block; overflow-wrap: anywhere; color: var(--muted); margin-top: 4px; }
+.mobile-market-list p { margin: 6px 0 0; color: var(--muted); overflow-wrap: anywhere; font-size: .85rem; }
+.mobile-market-list button { flex-shrink: 0; }
+
 /* 插件卡片分层状态与错误高亮 */
 .plugin-dual-status { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .plugin-status-badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 0.6875rem; font-weight: 500; line-height: 1.4; }

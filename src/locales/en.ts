@@ -1,5 +1,16 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "手机插件目录": "Mobile plugin catalog",
+  "浏览社区目录中的 npm 插件。安装由手机插件管理器处理，不运行安装脚本；是否能在安卓正常使用仍需验证。": "Browse npm plugins in the community catalog. The mobile plugin manager installs them without running install scripts; Android compatibility still needs verification.",
+  "正在获取目录…": "Loading catalog…",
+  "刷新目录": "Refresh catalog",
+  "加载插件目录": "Load plugin catalog",
+  "目录获取失败，请检查网络后重试。": "Could not load the catalog. Check your connection and try again.",
+  "搜索目录": "Search catalog",
+  "搜索插件名称或包名": "Search plugin names or packages",
+  "目录中有 {0} 个 npm 插件，最多显示前 30 个结果。": "The catalog has {0} npm plugins. Showing up to 30 results.",
+  "请先停止运行环境再安装。": "Stop the runtime before installing.",
+  "没有匹配的插件。": "No matching plugins.",
   "鲸鱼娘助手设置": "Whale assistant settings",
   "无法打开助手设置，请在安卓应用中重试": "Could not open assistant settings. Try again in the Android app.",
   "发现插件": "Discover plugins",

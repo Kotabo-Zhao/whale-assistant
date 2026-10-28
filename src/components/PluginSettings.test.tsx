@@ -17,6 +17,21 @@ function setup(state = runtime, groups: PluginCatalog = catalog) {
 }
 beforeEach(() => { saveLanguage('zh-CN') })
 describe('应用外层插件管理', () => {
+  it('手机目录安装经原生插件管理入口执行', async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '目录示例', npm: 'catalog-example' }] }))
+    let done = false
+    const mock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, body: { getReader: () => ({
+      read: () => Promise.resolve(done ? { done: true } : (done = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+    }) } } as unknown as Response)
+    try {
+      const bridge = setup()
+      await screen.findByText('example-plugin')
+      fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+      await screen.findByText('目录示例')
+      fireEvent.click(screen.getByRole('button', { name: '安装' }))
+      await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: 'catalog-example' }))
+    } finally { mock.mockRestore() }
+  })
   it('Harness 错误状态下仍可展开文件和禁用子插件', async () => {
     const bridge = setup()
     const summary = await screen.findByText('example-plugin')
