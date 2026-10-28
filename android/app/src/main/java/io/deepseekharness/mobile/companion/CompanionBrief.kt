@@ -72,7 +72,9 @@ internal object CompanionNotificationTimeSuggestion {
     fun find(text: String, now: Long, zone: java.time.ZoneId, notificationTime: Long? = null): Long? {
         val matches = explicit.findAll(text).take(2).toList()
         if (matches.isEmpty()) return findRelative(text, now, zone, notificationTime)
-        if (matches.size != 1 || relativeDay.containsMatchIn(text) || clock.findAll(text).take(2).count() != 1 || otherClock.containsMatchIn(text)) return null
+        if (matches.size != 1 || relativeDay.containsMatchIn(text) || clock.findAll(text).take(2).count() != 1 ||
+            otherClock.containsMatchIn(text) || anyDate.findAll(text).take(2).count() != 1 ||
+            ambiguousSuffix(text, matches.single().range.last)) return null
         return try {
             val values = matches.single().groupValues.drop(1).map(String::toInt)
             val local = java.time.LocalDateTime.of(values[0], values[1], values[2], values[3], values[4])
@@ -90,8 +92,7 @@ internal object CompanionNotificationTimeSuggestion {
         if (relativeDay.findAll(text).take(2).count() != 1 || clock.findAll(text).take(2).count() + otherClock.findAll(text).take(2).count() != 1 || anyDate.containsMatchIn(text)) return null
         val chinese = relativeChinese.find(text)
         val match = chinese ?: relative.find(text) ?: return null
-        val suffix = text.substring(match.range.last + 1).trimStart()
-        if (listOf("多", "左右", "之后", "之前", "以后", "以前", "至", "到", "-", "~", "～").any(suffix::startsWith)) return null
+        if (ambiguousSuffix(text, match.range.last)) return null
         return try {
             val rawHour = number(match.groupValues[3]) ?: return null
             val minute = if (chinese == null) match.groupValues[4].toInt() else when (val part = match.groupValues[4]) {
@@ -115,6 +116,11 @@ internal object CompanionNotificationTimeSuggestion {
             val millis = local.toInstant(offsets.single()).toEpochMilli()
             millis.takeIf { it > now && it - now > 10_000 }
         } catch (_: Exception) { null }
+    }
+
+    private fun ambiguousSuffix(text: String, lastIndex: Int): Boolean {
+        val suffix = text.substring(lastIndex + 1).trimStart()
+        return listOf("多", "左右", "之后", "之前", "以后", "以前", "后", "前", "至", "到", "-", "~", "～").any(suffix::startsWith)
     }
 
     private fun number(raw: String): Int? {
