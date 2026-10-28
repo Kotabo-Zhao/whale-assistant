@@ -216,9 +216,9 @@ class MainActivity : BridgeActivity() {
         if (bytes == null) { showImportToast("分享文字为空或超过大小限制。") ; return }
         val text = String(bytes, Charsets.UTF_8)
         val preview = text.take(600) + if (text.length > 600) "\n…（预览已截断，保存的是完整内容）" else ""
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("保存分享的文字？")
-            .setMessage("$preview\n\n确认后保存到本机收件箱，运行环境及当前或后续对话可能读取并发送给模型；保存本身不会启动对话。请检查内容后再保存。")
-            .setNegativeButton("取消", null).setPositiveButton("保存") { _, _ ->
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("处理分享的文字")
+            .setMessage("$preview\n\n保存到本机收件箱后，运行环境及当前或后续对话可能读取并发送给模型。放入草稿后请核对，再自行发送。")
+            .setNegativeButton("取消", null).setPositiveButton("保存到收件箱") { _, _ ->
                 try {
                     importExecutor.execute {
                         val status = runCatching {
@@ -239,7 +239,12 @@ class MainActivity : BridgeActivity() {
                         }
                     }
                 } catch (_: Exception) { showImportToast("导入任务无法启动，请重试。") }
-            }.show()
+            }
+        if (SharedTextImport.canInsertDraft(text)) dialog.setNeutralButton("放入对话草稿") { _, _ ->
+            harnessSurface.showIfOwned()
+            if (!harnessSurface.insertSharedText(text)) harnessSurface.sharedTextCopyFallback(text)
+        }
+        dialog.show()
     }
 
     private fun enqueueFileImport(uris: List<Uri>, allowPermissionFallback: Boolean) {

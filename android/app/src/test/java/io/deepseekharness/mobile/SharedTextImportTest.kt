@@ -4,6 +4,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SharedTextImportTest {
+    @Test fun draftInsertionRequiresNonemptyTextWithinTheEditorLimit() {
+        assertFalse(SharedTextImport.canInsertDraft("  "))
+        assertTrue(SharedTextImport.canInsertDraft("鲸".repeat(2000)))
+        assertFalse(SharedTextImport.canInsertDraft("鲸".repeat(2001)))
+    }
     @Test fun preservesTextAndRejectsEmptyOrOversizedInput() {
         val original = "  网页标题\nhttps://example.com/a?x=1  "
         assertEquals(original, String(SharedTextImport.encode(original)!!, Charsets.UTF_8))

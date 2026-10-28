@@ -257,13 +257,13 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
             .setPositiveButton(R.string.harness_voice_insert) { _, _ -> insertVoice(edit.text.toString(), expected, expectedPage) }.show()
     }
 
-    private fun insertVoice(message: String, expected: HarnessPageLoadGate, expectedPage: String) {
+    private fun insertVoice(message: String, expected: HarnessPageLoadGate, expectedPage: String, fallback: (String) -> Unit = ::voiceCopyFallback) {
         val target = web
         val currentOrigin = origin
         val page = target?.url?.let { runCatching { Uri.parse(it) }.getOrNull() }
         if (!current(expected) || !visible() || target == null || target.url != expectedPage || currentOrigin == null || page == null ||
             !currentOrigin.allows(page) || message.isBlank() || message.length > 2000) {
-            if (message.isNotBlank() && message.length <= 2000) voiceCopyFallback(message) else voiceUnavailable()
+            if (message.isNotBlank() && message.length <= 2000) fallback(message) else voiceUnavailable()
             return
         }
         val template = runCatching { activity.assets.open("support/harness-voice-insert.js").bufferedReader(Charsets.UTF_8).use { it.readText() } }.getOrNull()
@@ -271,7 +271,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         val pageMarker = "/*__VOICE_PAGE__*/null"
         if (template == null || template.indexOf(marker) < 0 || template.indexOf(marker) != template.lastIndexOf(marker) ||
             template.indexOf(pageMarker) < template.indexOf(marker) + marker.length || template.indexOf(pageMarker) != template.lastIndexOf(pageMarker)) {
-            voiceCopyFallback(message)
+            fallback(message)
             return
         }
         runCatching {
@@ -281,9 +281,29 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
                 template.substring(textAt + marker.length, pageAt) + JSONObject.quote(expectedPage) +
                 template.substring(pageAt + pageMarker.length)
             target.evaluateJavascript(script) { result ->
-                if (result != "\"inserted\"" && !activity.isFinishing && !activity.isDestroyed) voiceCopyFallback(message)
+                if (result != "\"inserted\"" && !activity.isFinishing && !activity.isDestroyed) fallback(message)
             }
-        }.onFailure { if (!activity.isFinishing && !activity.isDestroyed) voiceCopyFallback(message) }
+        }.onFailure { if (!activity.isFinishing && !activity.isDestroyed) fallback(message) }
+    }
+
+    /** Caller has explicitly reviewed shared text; never submits the draft. */
+    internal fun insertSharedText(message: String): Boolean {
+        val page = web?.url ?: return false
+        val currentOrigin = origin ?: return false
+        val parsed = runCatching { Uri.parse(page) }.getOrNull() ?: return false
+        if (!SharedTextImport.canInsertDraft(message) || !visible() || !authorized() || !currentOrigin.allows(parsed)) return false
+        insertVoice(message, gate, page, ::sharedTextCopyFallback)
+        return true
+    }
+
+    internal fun sharedTextCopyFallback(text: String) {
+        AlertDialog.Builder(activity).setTitle("无法放入对话草稿")
+            .setMessage("对话未就绪、已切换或输入框不可用。你可以自行复制后粘贴；内容不会自动发送。\n\n$text")
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton("复制") { _, _ ->
+                activity.getSystemService(android.content.ClipboardManager::class.java)
+                    ?.setPrimaryClip(android.content.ClipData.newPlainText("分享文字", text))
+            }.show()
     }
 
     private fun stageVoice(text: String): Boolean {
