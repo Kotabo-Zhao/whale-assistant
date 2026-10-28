@@ -22,6 +22,16 @@ class RuntimeUpdatePolicyTest {
         assertFalse(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.4.0", "a".repeat(64), runtimeId, "0.3.9-whale-reminder1", "b".repeat(64)))
     }
 
+    @Test fun memoryPaginationRuntimeUpgradesKnowledgeVersionOnlyWhenAppropriate() {
+        val previousHash = "3a442b514e0ad9e58a920fe24265ca964c6d38d39b1a701b555ce37b68c06965"
+        val paginationHash = "6a02a148be9f9e1387b9d8e37dde2d3a882ae26d431791151d65f2e9090906ff"
+        val version = "0.3.19-whale-memorypage1"
+        assertTrue(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.3.18-whale-knowledge1", previousHash, runtimeId, version, paginationHash))
+        assertFalse(RuntimeUpdatePolicy.isAvailable(runtimeId, version, paginationHash, runtimeId, version, paginationHash))
+        assertFalse(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.4.0", previousHash, runtimeId, version, paginationHash))
+        assertFalse(RuntimeUpdatePolicy.isAvailable("other-runtime", "0.3.18", previousHash, runtimeId, version, paginationHash))
+    }
+
     @Test
     fun detectsNewerBundledReleaseOfTheSameRuntime() {
         assertTrue(
