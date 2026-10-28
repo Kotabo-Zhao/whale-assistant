@@ -436,11 +436,10 @@ internal class AutomationTaskLedger {
         if (facts.foregroundPackage != packageName) {
             return block(AutomationTaskCodes.TARGET_LEFT, "前台已不是 $packageName（现在是 ${facts.foregroundPackage}）")
         }
-        // 计划做好之后、第一步真正发出去之前，界面就变了 —— 这份计划是按旧界面写的，不能用。
-        val planned = digest
-        val started = steps.any { it.attemptsUsed > 0 }
-        if (!started && planned != null && facts.windowDigest != planned) {
-            return block(AutomationTaskCodes.TARGET_STALE, "计划做好之后界面已经变化：请重新读取节点树，再用新的指纹恢复任务")
+        // Every step must begin from the last recorded observation, not only the first step.
+        val observed = digest
+        if (observed != null && (facts.windowDigest.isBlank() || facts.windowDigest != observed)) {
+            return block(AutomationTaskCodes.TARGET_STALE, "上次观察后界面已变化：请重新读取节点树，再决定是否恢复任务")
         }
         if (step.status == AutomationTaskStepStatus.FAILED) {
             if (!AutomationTaskRetry.mayRetry(step.code, step.attemptsUsed, step.maxAttempts)) {
@@ -503,7 +502,7 @@ internal class AutomationTaskLedger {
      * 把新结果覆盖掉。服务桥必须使用这个重载，省略代次的重载只为兼容旧的本地调用方。
      */
     @Synchronized
-    fun record(stepId: String, attempt: Int, outcome: AutomationTaskStepOutcome, nowMs: Long): AutomationTaskSnapshot {
+    fun record(stepId: String, attempt: Int, outcome: AutomationTaskStepOutcome, nowMs: Long, observedDigest: String? = null): AutomationTaskSnapshot {
         if (status == AutomationTaskStatus.BLOCKED || automationTaskSettled(status)) {
             return snapshot().copy(
                 lastCode = AutomationTaskCodes.RECORD_INVALID,
@@ -531,6 +530,7 @@ internal class AutomationTaskLedger {
         val settled = classify(step, outcome.copy(timedOut = outcome.timedOut || elapsed >= step.timeoutMs))
             .copy(elapsedMs = elapsed, startedAtMs = null)
         steps[index] = settled
+        if (settled.status == AutomationTaskStepStatus.OK && !observedDigest.isNullOrBlank()) digest = observedDigest
         val blocked = status == AutomationTaskStatus.BLOCKED
         if (!blocked) {
             lastCode = settled.code

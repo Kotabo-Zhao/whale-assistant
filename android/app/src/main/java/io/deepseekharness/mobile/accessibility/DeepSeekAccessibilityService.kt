@@ -1459,7 +1459,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                     }.getOrNull()
                 } else null
                 val outcome = AutomationTaskEvidence.constrain(current.taskId, step, request.outcome, digest, automationTaskReceipt, now, targetPresent, observedTextDigest, current.packageName, packageName)
-                ledger.record(request.stepId, request.attempt, outcome, now).let { snapshot ->
+                ledger.record(request.stepId, request.attempt, outcome, now, digest).let { snapshot ->
                     if (snapshot.lastCode == AutomationTaskCodes.RECORD_INVALID) {
                         taskFailure(
                             AutomationTaskCodes.RECORD_INVALID,

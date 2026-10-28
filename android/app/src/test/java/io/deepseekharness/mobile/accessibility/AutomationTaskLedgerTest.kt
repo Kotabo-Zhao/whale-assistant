@@ -353,6 +353,19 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `下一步必须从上一步记账时的观察开始`() {
+        val ledger = ledger(spec("s1"), spec("s2"))
+        ledger.gate("s1", facts(digest = "d1"), 1000L)
+        ledger.record("s1", 1, AutomationTaskStepOutcome(ok = true, verified = true), 1100L, "d2")
+        assertEquals(AutomationTaskCodes.TARGET_STALE, ledger.gate("s2", facts(digest = "d3"), 1200L).refusedCode())
+        val other = ledger(spec("s1"), spec("s2"))
+        other.gate("s1", facts(digest = "d1"), 1000L)
+        other.record("s1", 1, AutomationTaskStepOutcome(ok = true, verified = true), 1100L, "d2")
+        assertEquals(AutomationTaskCodes.RECORD_INVALID, other.record("s1", 1, AutomationTaskStepOutcome(ok = true, verified = true), 1150L, "d3").lastCode)
+        assertEquals(1, other.gate("s2", facts(digest = "d2"), 1200L).attempt())
+    }
+
+    @Test
     fun `任务结果不确定后不能绕开台账直接重发`() {
         val ledger = ledger(spec("s1"))
         ledger.gate("s1", facts(), 1000L)
