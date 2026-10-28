@@ -195,6 +195,8 @@ internal data class AutomationTaskStepState(
     /** 这一步**开始时**的窗口指纹：重试前拿它与当前指纹比对，不相同就说明「失败时的现场已经不是现在这个」。 */
     val startedDigest: String? = null,
     val elapsedMs: Long = 0,
+    /** Internal plan target for matching actual actions; omitted from wire snapshots. */
+    val target: String = "",
 )
 
 /** 一次动作回来的结果（由服务侧填，台账只做分类）。 */
@@ -205,13 +207,22 @@ internal data class AutomationTaskStepOutcome(
     val timedOut: Boolean = false,
 )
 
-/** Device-side evidence can reject an unsupported window-change claim; it cannot prove causality. */
+/** A successful action matches a task only if its actual app, action and view ID equal the in-flight step. */
+internal data class AutomationTaskActionReceipt(val taskId: String, val stepId: String, val attempt: Int, val atMs: Long)
+
 internal object AutomationTaskEvidence {
-    fun constrain(step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, actionAtMs: Long, nowMs: Long): AutomationTaskStepOutcome {
+    fun receipt(snapshot: AutomationTaskSnapshot, packageName: String, action: String, viewId: String, nowMs: Long): AutomationTaskActionReceipt? {
+        if (snapshot.status != AutomationTaskStatus.RUNNING || snapshot.packageName != packageName) return null
+        val step = snapshot.steps.singleOrNull { it.status == AutomationTaskStepStatus.PENDING && it.startedAtMs != null } ?: return null
+        if (step.action != action || step.target != viewId || nowMs < step.startedAtMs!!) return null
+        return AutomationTaskActionReceipt(snapshot.taskId, step.id, step.attemptsUsed, nowMs)
+    }
+    fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long): AutomationTaskStepOutcome {
         if (step?.verify != AutomationTaskActions.VERIFY_WINDOW_CHANGED || !outcome.ok) return outcome
         val started = step.startedAtMs
         val baseline = step.startedDigest
-        val observed = started != null && actionAtMs > 0 && actionAtMs >= started && actionAtMs <= nowMs &&
+        val observed = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
+            receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs &&
             baseline != null && observedDigest.isNotEmpty() && baseline != observedDigest
         return outcome.copy(verified = outcome.verified && observed)
     }
@@ -304,7 +315,7 @@ internal class AutomationTaskLedger {
         this.taskId = taskId
         this.packageName = packageName
         this.digest = windowDigest
-        this.steps = specs.map { AutomationTaskStepState(it.id, it.action, it.verify, it.timeoutMs, it.maxAttempts) }.toMutableList()
+        this.steps = specs.map { AutomationTaskStepState(it.id, it.action, it.verify, it.timeoutMs, it.maxAttempts, target = it.target) }.toMutableList()
         this.status = AutomationTaskStatus.PLANNED
         this.lastCode = null
         this.lastMessage = null

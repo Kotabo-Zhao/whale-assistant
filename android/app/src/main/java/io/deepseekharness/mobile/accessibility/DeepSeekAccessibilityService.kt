@@ -53,6 +53,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     private var lastActionAt = 0L
     /** 只记录任务台账动作的成功时间，避免把无关动作误当成任务现场的稳定期。 */
     @Volatile private var automationTaskActionAt = 0L
+    @Volatile private var automationTaskReceipt: AutomationTaskActionReceipt? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val pendingConfirmation = AtomicReference<PendingConfirmation?>(null)
 
@@ -411,6 +412,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         return if (success) {
             lastActionAt = now
             noteAutomationTaskAction(now)
+            automationTaskReceipt = AutomationTaskEvidence.receipt(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, now)
             DeviceCommandResult(true, 0, "操作已执行", false, null)
         } else failure("ACCESSIBILITY_ACTION_REJECTED", "目标节点不允许此操作")
     }
@@ -1313,14 +1315,18 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                 }
             is AutomationTaskRequest.Gate ->
                 when (val gate = ledger.gate(request.stepId, facts, SystemClock.elapsedRealtime())) {
-                    is AutomationTaskGate.Proceed -> taskAccepted(gate, ledger.snapshot())
+                    is AutomationTaskGate.Proceed -> {
+                        automationTaskReceipt = null
+                        taskAccepted(gate, ledger.snapshot())
+                    }
                     is AutomationTaskGate.Refused ->
                         taskFailure(gate.code, gate.message, ledger.snapshot(), gate.retryable)
                 }
             is AutomationTaskRequest.Record -> {
                 val now = SystemClock.elapsedRealtime()
-                val step = ledger.snapshot().steps.firstOrNull { it.id == request.stepId }
-                val outcome = AutomationTaskEvidence.constrain(step, request.outcome, digest, automationTaskActionAt, now)
+                val current = ledger.snapshot()
+                val step = current.steps.firstOrNull { it.id == request.stepId }
+                val outcome = AutomationTaskEvidence.constrain(current.taskId, step, request.outcome, digest, automationTaskReceipt, now)
                 ledger.record(request.stepId, request.attempt, outcome, now).let { snapshot ->
                     if (snapshot.lastCode == AutomationTaskCodes.RECORD_INVALID) {
                         taskFailure(
