@@ -39,6 +39,7 @@ class CompanionActivity : AppCompatActivity() {
     private val memoryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val memoryHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var memoryBusy = false
+    private var notificationVisible = CompanionNotificationPaging.PAGE_SIZE
     @Volatile private var memoryCountGeneration = 0L
     private val briefExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-brief").apply { isDaemon = true } }
     private var briefBusy = false
@@ -318,7 +319,7 @@ class CompanionActivity : AppCompatActivity() {
         button("复制通知习惯摘要") { copyNotificationSummary() }
         button("从通知整理记忆") { chooseNotificationForMemory() }
         paragraph("选择一条本地通知作为参考，自行填写并确认要记住的事实；不会自动保存通知原文。")
-        button("刷新通知记录") { renderRecords() }
+        button("刷新通知记录") { notificationVisible = CompanionNotificationPaging.PAGE_SIZE; renderRecords() }
         button("清除全部本地通知记录") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清除全部通知记录？")
                 .setMessage("此操作无法撤销，包括可能损坏的记录。")
@@ -538,12 +539,17 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun renderRecords() {
+        val previousScroll = scroll.scrollY
         // Rebuild to avoid appending duplicate lists on repeated refresh.
         if (content.findViewWithTag<LinearLayout>("records") != null) content.removeView(content.findViewWithTag("records"))
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "records" }
         val records = recordsOrNull() ?: return
         if (records.length() == 0) list.addView(TextView(this).apply { text = "暂无记录"; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(8)) })
-        for (index in records.length() - 1 downTo 0) {
+        val page = CompanionNotificationPaging.indices(records.length(), notificationVisible)
+        if (records.length() > 0) list.addView(TextView(this).apply {
+            text = "显示 ${page.size} / ${records.length()} 条，最新在前"; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(8))
+        })
+        for (index in page) {
             val row = records.optJSONObject(index) ?: continue
             val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.optLong("time")))
             list.addView(TextView(this).apply {
@@ -551,8 +557,16 @@ class CompanionActivity : AppCompatActivity() {
                 setTextColor(ink); setPadding(dp(14), dp(12), dp(14), dp(12)); background = surface(if (dark) "#172B40" else "#FFFFFF")
             }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         }
+        if (page.size < records.length()) list.addView(Button(this).apply {
+            text = "显示更多通知"
+            setOnClickListener {
+                notificationVisible = CompanionNotificationPaging.next(notificationVisible)
+                renderRecords()
+            }
+        })
         val returnButton = content.childCount - 1
         content.addView(list, if (returnButton >= 0 && content.getChildAt(returnButton) is Button && (content.getChildAt(returnButton) as Button).text == "返回") returnButton else content.childCount)
+        scroll.post { if (!isFinishing && !isDestroyed) scroll.scrollTo(0, previousScroll) }
     }
 
     private fun showNotificationSummary() {
