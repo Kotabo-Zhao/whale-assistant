@@ -20,4 +20,13 @@ class CompanionStoreTest {
             org.junit.Assert.assertThrows(Exception::class.java) { CompanionNotificationRecords.parse(invalid) }
         }
     }
+    @Test fun shortcutsRequireValidPackagesAndExplicitCapacity() {
+        var items = emptySet<String>()
+        for (index in 1..6) items = CompanionShortcutPolicy.add(items, "com.example.app$index")
+        org.junit.Assert.assertEquals(6, items.size)
+        org.junit.Assert.assertEquals(items, CompanionShortcutPolicy.add(items, "com.example.app1"))
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { CompanionShortcutPolicy.add(items, "com.example.extra") }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { CompanionShortcutPolicy.add(emptySet(), "../bad") }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { CompanionShortcutPolicy.add(setOf("bad package"), "com.example.app") }
+    }
 }

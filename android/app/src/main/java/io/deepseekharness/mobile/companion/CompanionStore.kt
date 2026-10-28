@@ -29,6 +29,16 @@ class CompanionStore(context: Context) {
         CompanionQuietHours.contains(quietHoursEnabled, quietHoursStart, quietHoursEnd,
             now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE))
 
+    fun shortcuts(): Set<String> = prefs.getStringSet("app_shortcuts", emptySet())?.toSet() ?: emptySet()
+    fun addShortcut(packageName: String) = synchronized(lock) {
+        val next = CompanionShortcutPolicy.add(shortcuts(), packageName)
+        prefs.edit().putStringSet("app_shortcuts", next).apply()
+    }
+    fun removeShortcut(packageName: String) = synchronized(lock) {
+        val next = shortcuts().toMutableSet().apply { remove(packageName) }
+        prefs.edit().putStringSet("app_shortcuts", next).apply()
+    }
+
     fun excludedPackages(): Set<String> = prefs.getStringSet("excluded_packages", emptySet())?.toSet() ?: emptySet()
     fun setExcludedPackages(packages: Set<String>) { prefs.edit().putStringSet("excluded_packages", packages.toSet()).apply() }
 
@@ -89,5 +99,15 @@ internal object CompanionNotificationRecords {
             require(row.opt("package") is String && row.opt("title") is String && row.opt("text") is String && row.opt("time") is Number) { "通知记录格式无效" }
         }
         return rows
+    }
+}
+
+internal object CompanionShortcutPolicy {
+    const val MAX_SHORTCUTS = 6
+    fun add(existing: Set<String>, packageName: String): Set<String> {
+        require(existing.size <= MAX_SHORTCUTS && existing.all(CompanionSourcePolicy::validPackage)) { "快捷方式数据无效" }
+        require(CompanionSourcePolicy.validPackage(packageName)) { "应用包名无效" }
+        require(packageName in existing || existing.size < MAX_SHORTCUTS) { "最多保留 6 个快捷方式" }
+        return existing + packageName
     }
 }

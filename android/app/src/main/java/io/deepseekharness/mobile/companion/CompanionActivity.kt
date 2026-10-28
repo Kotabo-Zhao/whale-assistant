@@ -187,8 +187,17 @@ class CompanionActivity : AppCompatActivity() {
         paragraph("手动设置一次性提醒；需要通知权限。系统省电可能导致延迟，重启后会恢复未来提醒，错过的不会自动补发。")
         button("新建提醒") { createReminder() }
         button("查看和删除提醒") { showReminders() }
+        heading("常用应用")
+        val shortcuts = runCatching { store.shortcuts().sorted() }.getOrNull()
+        if (shortcuts == null) paragraph("无法读取快捷方式，原数据已保留。")
+        else if (shortcuts.isEmpty()) paragraph("还没有快捷方式；可从使用情况中手动选择。")
+        shortcuts.orEmpty().forEach { pkg ->
+            val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+            button("打开 · $label") { openNotificationSource(pkg) }
+        }
+        if (!shortcuts.isNullOrEmpty()) button("管理常用应用") { manageShortcuts() }
         heading("手机使用情况")
-        paragraph("只在点击时读取系统最近 7 天的应用使用时长；需要在系统中单独授予使用情况访问权限。")
+        paragraph("只在点击时读取系统提供的最近 7 天应用使用时长，数据可能不完整；需要在系统中单独授予使用情况访问权限。可手动选择应用加入快捷方式，不保存使用时长。")
         button("打开使用情况访问授权") { openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS) }
         button("查看最近 7 天使用情况") { showUsage() }
         heading("本地通知记录")
@@ -265,10 +274,41 @@ class CompanionActivity : AppCompatActivity() {
         val totals = data.groupBy { it.packageName }.mapValues { entry -> entry.value.sumOf { it.totalTimeInForeground } }
             .filterValues { it > 0 }.entries.sortedByDescending { it.value }.take(10)
         if (totals.isEmpty()) { paragraph("系统没有返回可用的使用记录。"); return }
-        totals.forEach { (pkg, millis) ->
+        val entries = totals.toList()
+        val labels = entries.map { (pkg, millis) ->
             val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
-            paragraph("$label · ${millis / 60000} 分钟")
-        }
+            "$label · ${millis / 60000} 分钟\n$pkg"
+        }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("使用情况（选择应用加入快捷方式）")
+            .setItems(labels) { _, index ->
+                val pkg = entries[index].key
+                val launch = runCatching { packageManager.getLaunchIntentForPackage(pkg) }.getOrNull()
+                if (!CompanionSourcePolicy.matchesResolved(pkg, launch?.component?.packageName)) {
+                    paragraph("这个应用没有可用的启动入口。")
+                } else {
+                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle("加入常用应用？").setMessage(labels[index])
+                        .setNegativeButton("取消", null).setPositiveButton("加入") { _, _ ->
+                            runCatching { store.addShortcut(pkg) }.onSuccess { render() }
+                                .onFailure { paragraph("无法添加快捷方式，请检查是否已达到 6 个上限。") }
+                        }.show()
+                }
+            }.setNegativeButton("关闭", null).show()
+    }
+
+    private fun manageShortcuts() {
+        val shortcuts = runCatching { store.shortcuts().sorted() }.getOrElse { paragraph("无法读取快捷方式。") ; return }
+        if (shortcuts.isEmpty()) { paragraph("没有快捷方式。") ; return }
+        val labels = shortcuts.map { pkg ->
+            val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+            "$label\n$pkg"
+        }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择要移除的快捷方式")
+            .setItems(labels) { _, index ->
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("移除快捷方式？").setMessage(labels[index])
+                    .setNegativeButton("取消", null).setPositiveButton("移除") { _, _ ->
+                        runCatching { store.removeShortcut(shortcuts[index]) }.onSuccess { render() }.onFailure { paragraph("无法移除快捷方式。") }
+                    }.show()
+            }.setNegativeButton("关闭", null).show()
     }
 
     private fun startVoiceInput() {
