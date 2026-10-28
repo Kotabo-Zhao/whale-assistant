@@ -61,17 +61,19 @@
 .plugin-tab:hover { color: var(--card-ink, var(--ink)); background: color-mix(in srgb, var(--card-color, var(--surface-hover)) var(--card-opacity, 100%), transparent); }
 .plugin-tab-active { background: var(--blue-soft); color: var(--blue); border-color: var(--blue); font-weight: 600; }
 
-.mobile-market { margin: 16px 0; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface); }
-.mobile-market h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.mobile-market { margin: 16px 0; padding: 20px; border: 1px solid color-mix(in srgb, var(--blue) 18%, var(--line)); border-radius: var(--radius-card); background: linear-gradient(155deg, var(--blue-soft), var(--surface) 38%); color: var(--ink); box-shadow: var(--shadow-card); }
+.mobile-market h2 { margin: 0 0 8px; font-size: 1.1rem; letter-spacing: .01em; }
 .mobile-market > p { color: var(--muted); line-height: 1.55; }
-.mobile-market-search { display: grid; gap: 6px; margin-top: 16px; font-weight: 600; }
-.mobile-market-search input { width: 100%; min-width: 0; }
-.mobile-market-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 12px 0 0; }
-.mobile-market-list li { display: flex; gap: 12px; justify-content: space-between; align-items: start; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-inner); }
+.mobile-market > .plugin-hint { padding: 0; margin: 8px 0 14px; }
+.mobile-market-search { display: grid; gap: 8px; margin-top: 20px; font-size: .875rem; font-weight: 650; }
+.mobile-market-search input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 46px; padding: 10px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 400; }
+.mobile-market-search input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mobile-market-list { display: grid; gap: 10px; list-style: none; padding: 0; margin: 12px 0 0; }
+.mobile-market-list li { display: flex; gap: 12px; justify-content: space-between; align-items: start; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .mobile-market-list li > div { min-width: 0; }
 .mobile-market-list code { display: block; overflow-wrap: anywhere; color: var(--muted); margin-top: 4px; }
 .mobile-market-list p { margin: 6px 0 0; color: var(--muted); overflow-wrap: anywhere; font-size: .85rem; }
-.mobile-market-list button { flex-shrink: 0; }
+.mobile-market-list button { flex-shrink: 0; min-width: 52px; min-height: 44px; }
 .mobile-market-result { margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--blue-soft); overflow-wrap: anywhere; }
 .mobile-market-result p { margin: 6px 0 0; line-height: 1.5; }
 .mobile-market-result-error { border-color: var(--red-text); background: var(--red-soft); color: var(--red-text); }
@@ -99,6 +101,7 @@
 .plugin-relink-banner .button { flex-shrink: 0; }
 
 @media (max-width: 620px) {
+  .mobile-market { padding: 16px; }
   .plugin-market { flex-wrap: wrap; padding: 16px; }
   .plugin-market .button { width: 100%; }
   .plugin-screen { padding-right: 10px; padding-left: 10px; }
