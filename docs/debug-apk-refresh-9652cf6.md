@@ -9,3 +9,5 @@
 - 使用 `verify-refreshed-debug-apk.py` 比对非前端条目、当前 DEX 和插件管理脚本；使用 `verify-public-apk.py` 比对前端；使用 `verify-memory-apk.py` 检查内置运行环境。另通过 Android `apksigner verify --verbose` 和 `zipalign -c -P 16 4`。
 
 `refresh-debug-apk.py` 只接受上述指定哈希的基础包，但并不能自动证明未来的源码、资源、依赖或 DEX 映射仍然兼容。任何后续使用都必须重新核对这些前提，并重新执行全部内容、签名和对齐检查。最终包需要在目标手机上安装、启动及实际操作测试；本次未进行真机测试。
+
+后续刷新工具还要求明确提供当前 `harness-voice-read.js`：生成时的参数依次为基础包、DEX 映射、构建目录、前端 `dist`、插件管理脚本、语音朗读脚本、输出路径；验证工具依次接收基础包、DEX 映射、构建目录、插件管理脚本、语音朗读脚本、待验证 APK。前端内容仍须单独用 `verify-public-apk.py` 核对。上述新增参数用于后续包，本记录中的 `9652cf6` 包本身没有因此发生变化。

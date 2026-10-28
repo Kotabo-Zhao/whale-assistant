@@ -12,7 +12,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-base, mapping_file, build, dist, plugin, output = map(Path, sys.argv[1:7])
+base, mapping_file, build, dist, plugin, voice_read, output = map(Path, sys.argv[1:8])
 BASE_SHA = '3ae33e6c63efe7da890d3ac52bd8e356e8b30528298f24be72f6e02190c08c01'
 with base.open('rb') as stream:
     if hashlib.file_digest(stream, 'sha256').hexdigest() != BASE_SHA: raise SystemExit('base APK hash mismatch')
@@ -30,6 +30,8 @@ actual_dex = {p.resolve() for p in (build / 'intermediates/dex/debug').rglob('cl
 if actual_dex != set(replacements.values()) or len(actual_dex) != len(replacements): raise SystemExit('DEX set changed')
 if not plugin.is_file() or plugin.is_symlink(): raise SystemExit('plugin asset missing')
 replacements['assets/support/plugin-manager.cjs'] = plugin
+if not voice_read.is_file() or voice_read.is_symlink(): raise SystemExit('voice asset missing')
+replacements['assets/support/harness-voice-read.js'] = voice_read
 if not (dist / 'index.html').is_file(): raise SystemExit('frontend index missing')
 replacements['assets/public/index.html'] = dist / 'index.html'
 assets = dist / 'assets'
@@ -37,7 +39,7 @@ if not assets.is_dir(): raise SystemExit('frontend assets missing')
 for item in assets.iterdir():
     if not item.is_file() or item.is_symlink(): raise SystemExit('invalid frontend asset')
     replacements['assets/public/assets/' + item.name] = item
-if len(replacements) <= len(manifest['dex']) + 2: raise SystemExit('empty frontend assets')
+if len(replacements) <= len(manifest['dex']) + 3: raise SystemExit('empty frontend assets')
 
 def signature(name):
     upper = name.upper()
@@ -50,7 +52,7 @@ try:
         if len(old_names) != len(set(old_names)): raise ValueError('duplicate base entry')
         old_dex = {n for n in old_names if n.startswith('classes') and n.endswith('.dex')}
         if old_dex != set(manifest['dex']): raise ValueError('base DEX entries changed')
-        if not {'assets/public/index.html', 'assets/support/plugin-manager.cjs'} <= set(old_names): raise ValueError('base assets missing')
+        if not {'assets/public/index.html', 'assets/support/plugin-manager.cjs', 'assets/support/harness-voice-read.js'} <= set(old_names): raise ValueError('base assets missing')
         with output.open('xb') as destination:
             created = True
             with zipfile.ZipFile(destination, 'w', allowZip64=True) as new:
