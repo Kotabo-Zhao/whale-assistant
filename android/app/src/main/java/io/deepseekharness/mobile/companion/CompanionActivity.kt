@@ -147,6 +147,11 @@ class CompanionActivity : AppCompatActivity() {
         heading("长期记忆")
         toggle("允许助手使用长期记忆", memory.enabled) { memory.enabled = it }
         paragraph("助手提出的记忆先等待你确认；已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。记忆保存在应用私有存储，运行环境更新不会清空；卸载应用会删除。")
+        val pendingCount = runCatching { memory.listForUser() }.getOrNull()?.let { rows ->
+            (0 until rows.length()).count { rows.optJSONObject(it)?.optString("status") == "pending" }
+        }
+        if (pendingCount == null) paragraph("无法读取长期记忆，原数据已保留。")
+        else if (pendingCount > 0) paragraph("有 $pendingCount 条记忆等待确认。")
         button("查看、确认和管理长期记忆") { showMemories() }
         button("导出长期记忆") { if (!memoryBusy) memoryExport.launch("whale-memory.json") else paragraph("记忆文件操作正在进行，请稍候。") }
         button("从文件导入记忆") { if (!memoryBusy) memoryImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("记忆文件操作正在进行，请稍候。") }

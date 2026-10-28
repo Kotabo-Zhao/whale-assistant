@@ -118,7 +118,8 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                     val row = rows.getJSONObject(index)
                     if (row.optString("status") != "pending" && (query.isEmpty() || row.getString("text").contains(query, ignoreCase = true)) && results.length() < 10) results.put(row)
                 }
-                JSONObject().put("items", results).put("total", rows.length()).toString()
+                val confirmed = (0 until rows.length()).count { rows.getJSONObject(it).optString("status") != "pending" }
+                JSONObject().put("items", results).put("total", confirmed).toString()
             }
             "delete" -> {
                 val id = request.opt("id") as? String ?: throw invalid()
@@ -196,4 +197,13 @@ internal object CompanionMemoryApproval {
         row.put("status", "confirmed").put("confirmedAt", now)
         return true
     }
+}
+
+/** Only a newly persisted candidate warrants a generic, content-free overlay hint. */
+internal object CompanionMemoryHint {
+    fun shouldNotify(request: String, result: String): Boolean = try {
+        val input = JSONObject(request)
+        val output = JSONObject(result)
+        input.optString("op") == "save" && output.optBoolean("pending", false) && !output.optBoolean("alreadyExists", true)
+    } catch (_: Exception) { false }
 }

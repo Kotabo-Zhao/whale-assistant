@@ -21,7 +21,9 @@ class CompanionMemoryEngineTest {
             assertTrue(duplicate.getBoolean("pending"))
             assertEquals(id, duplicate.getString("id"))
             assertTrue(saved.getBoolean("pending"))
-            assertEquals(0, JSONObject(engine().execute(JSONObject().put("op", "search").put("query", "蓝色").toString())).getJSONArray("items").length())
+            val hidden = JSONObject(engine().execute(JSONObject().put("op", "search").put("query", "蓝色").toString()))
+            assertEquals(0, hidden.getJSONArray("items").length())
+            assertEquals(0, hidden.getInt("total"))
             val pending = JSONArray(path.toFile().readText())
             assertFalse(CompanionMemoryApproval.approve(pending, "missing", 123))
             assertTrue(CompanionMemoryApproval.approve(pending, id, 123))
@@ -86,5 +88,13 @@ class CompanionMemoryEngineTest {
         assertThrows(Exception::class.java) { CompanionMemoryImport.plan(ByteArray(256_001), JSONArray()) }
         assertThrows(Exception::class.java) { CompanionMemoryImport.plan("{\"version\":2,\"items\":[]}".toByteArray(), JSONArray()) }
         assertThrows(Exception::class.java) { CompanionMemoryImport.plan(byteArrayOf(0xc3.toByte(), 0x28), JSONArray()) }
+    }
+    @Test fun onlyNewPendingSaveProducesGenericHint() {
+        val request = "{\"op\":\"save\",\"text\":\"private\"}"
+        assertTrue(CompanionMemoryHint.shouldNotify(request, "{\"pending\":true,\"alreadyExists\":false}"))
+        assertFalse(CompanionMemoryHint.shouldNotify(request, "{\"pending\":true,\"alreadyExists\":true}"))
+        assertFalse(CompanionMemoryHint.shouldNotify(request, "{\"pending\":false,\"alreadyExists\":false}"))
+        assertFalse(CompanionMemoryHint.shouldNotify("{\"op\":\"search\"}", "{\"pending\":true,\"alreadyExists\":false}"))
+        assertFalse(CompanionMemoryHint.shouldNotify(request, "not json"))
     }
 }
