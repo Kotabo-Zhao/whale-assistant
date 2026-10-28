@@ -17,6 +17,11 @@ class RuntimeUpdatePolicyTest {
         assertFalse(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.4.0", "a".repeat(64), runtimeId, "0.3.8-whale-market1", "b".repeat(64)))
     }
 
+    @Test fun reminderRuntimeUpgradesMarketWithoutDowngradingNewerVersions() {
+        assertTrue(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.3.8-whale-market1", "a".repeat(64), runtimeId, "0.3.9-whale-reminder1", "b".repeat(64)))
+        assertFalse(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.4.0", "a".repeat(64), runtimeId, "0.3.9-whale-reminder1", "b".repeat(64)))
+    }
+
     @Test
     fun detectsNewerBundledReleaseOfTheSameRuntime() {
         assertTrue(

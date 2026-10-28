@@ -221,6 +221,12 @@ class DeviceBridgeServer(
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return
                     }
+                    if (commandName == "companionReminder") {
+                        val context = appContext ?: throw RuntimeFailure("REMINDER_UNAVAILABLE", "提醒服务不可用")
+                        val result = io.deepseekharness.mobile.companion.CompanionReminderBridge(context).execute(param)
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                        return
+                    }
                     // 自动化授权与设备能力都不经过 Shell；能力判定复用原生统一策略，不在 AI 插件里另算一套。
                     if (commandName == "automationPolicy") {
                         if (param.isNotEmpty()) throw RuntimeFailure("DEVICE_COMMAND_INVALID", "能力查询不接受参数")
