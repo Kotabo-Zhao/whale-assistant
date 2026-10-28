@@ -140,4 +140,17 @@ class AccessibilityAutomationPolicyTest {
         assertEquals("scroll", AccessibilityAutomationPolicy.parseAction(value)?.action)
         assertNull(AccessibilityAutomationPolicy.parseAction(value.replace("forward", "up")))
     }
+    @Test fun highImpactClicksRequireConfirmationAndGuardRejectsChanges() {
+        assertTrue(AccessibilityConfirmationPolicy.requires("click", "com.example.app:id/send", null, null))
+        assertTrue(AccessibilityConfirmationPolicy.requires("click", "com.example.app:id/action", "发 送", null))
+        assertTrue(AccessibilityConfirmationPolicy.requires("click", "com.example.app:id/action", null, "Delete item"))
+        assertFalse(AccessibilityConfirmationPolicy.requires("click", "com.example.app:id/close", "关闭", null))
+        assertFalse(AccessibilityConfirmationPolicy.requires("setText", "com.example.app:id/send", "发送", null))
+        val original = AccessibilityConfirmationPolicy.Guard("window", "target", "input", "text-digest")
+        assertTrue(AccessibilityConfirmationPolicy.unchanged(original, original.copy()))
+        assertFalse(AccessibilityConfirmationPolicy.unchanged(original, original.copy(window = "new-window")))
+        assertFalse(AccessibilityConfirmationPolicy.unchanged(original, original.copy(target = "new-label")))
+        assertFalse(AccessibilityConfirmationPolicy.unchanged(original, original.copy(focusText = "new-text")))
+        assertFalse(AccessibilityConfirmationPolicy.unchanged(original, null))
+    }
 }

@@ -106,3 +106,12 @@ internal object AccessibilityAutomationPolicy {
         }
     }
 }
+
+/** Conservative keyword recognition for irreversible clicks; unlabeled or misleading controls may be missed. */
+internal object AccessibilityConfirmationPolicy {
+    private val risky = Regex("发送|发出|发布|发表|提交|删除|移除|清空|撤回|分享|转发|下单|购买|确认订单|send|publish|delete|remove|submit|share|forward|purchase|checkout", RegexOption.IGNORE_CASE)
+    fun requires(action: String, viewId: String, label: String?, description: String?): Boolean =
+        action == "click" && listOf(viewId, label.orEmpty(), description.orEmpty()).any { risky.containsMatchIn(it.replace(Regex("[\\s\\u200B\\u200C\\u200D\\u2060\\uFEFF]"), "")) }
+    data class Guard(val window: String, val target: String, val focusId: String?, val focusText: String?)
+    fun unchanged(before: Guard, after: Guard?): Boolean = after != null && before == after
+}

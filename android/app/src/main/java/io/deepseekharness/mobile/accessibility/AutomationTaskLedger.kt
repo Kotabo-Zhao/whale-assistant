@@ -197,6 +197,7 @@ internal data class AutomationTaskStepState(
     val elapsedMs: Long = 0,
     /** Internal plan target for matching actual actions; omitted from wire snapshots. */
     val target: String = "",
+    val confirmationWaitMs: Long = 0,
 )
 
 /** 一次动作回来的结果（由服务侧填，台账只做分类）。 */
@@ -427,6 +428,21 @@ internal class AutomationTaskLedger {
         lastCode = null
         lastMessage = null
         return AutomationTaskGate.Proceed(stepId, attempt)
+    }
+
+    /** Pause the step timeout only for a successful, bounded user confirmation of the same active attempt. */
+    @Synchronized
+    fun allowConfirmationWait(expectedTaskId: String, stepId: String, attempt: Int, fromMs: Long, toMs: Long): Boolean {
+        if (taskId != expectedTaskId || status != AutomationTaskStatus.RUNNING || toMs < fromMs) return false
+        val index = steps.indexOfFirst { it.id == stepId }
+        if (index < 0) return false
+        val step = steps[index]
+        val started = step.startedAtMs ?: return false
+        val waited = toMs - fromMs
+        if (step.status != AutomationTaskStepStatus.PENDING || step.attemptsUsed != attempt || fromMs < started ||
+            fromMs - started >= step.timeoutMs || waited > 30_000L || step.confirmationWaitMs + waited > 30_000L) return false
+        steps[index] = step.copy(timeoutMs = step.timeoutMs + waited, confirmationWaitMs = step.confirmationWaitMs + waited)
+        return true
     }
 
     /**

@@ -201,6 +201,17 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `用户确认等待不消耗执行超时且不得跨任务或取消`() {
+        val ledger = ledger(spec("s1"))
+        ledger.gate("s1", facts(), 1000L)
+        assertFalse(ledger.allowConfirmationWait("other", "s1", 1, 1100L, 9000L))
+        assertTrue(ledger.allowConfirmationWait("task-1", "s1", 1, 1100L, 9000L))
+        assertNull(AutomationTaskActionPolicy.refusal(ledger.snapshot(), "com.example.app", "click", "com.example.app:id/ok", 9100L, null))
+        ledger.cancel()
+        assertFalse(ledger.allowConfirmationWait("task-1", "s1", 1, 9100L, 9200L))
+    }
+
+    @Test
     fun `前一步可重试失败时不能跳过直接执行下一步`() {
         val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
         ledger.gate("s1", facts(), 1000L)

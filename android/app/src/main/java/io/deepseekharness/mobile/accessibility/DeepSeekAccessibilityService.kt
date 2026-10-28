@@ -251,14 +251,32 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         if (node.packageName?.toString() != packageName || node.isPassword ||
             AccessibilityAutomationPolicy.containsSensitiveText(node.viewIdResourceName)
         ) return failure("ACCESSIBILITY_ACTION_REJECTED", "目标节点不允许此操作")
-        // 用户已在系统设置中开启无障碍服务，并将目标应用加入 DSH 白名单；
-        // 在这个授权边界内允许连续操作，用于自动跳过开屏广告。
-        return executeConfirmedAction(request)
+        val requiresConfirmation = AccessibilityConfirmationPolicy.requires(request.action, request.viewId, node.text?.toString(), node.contentDescription?.toString())
+        val guard = if (requiresConfirmation) confirmationGuard(root, node) ?: return failure("ACCESSIBILITY_CONFIRM_STALE", "无法核对当前页面，请由用户操作") else null
+        if (requiresConfirmation) {
+            if (Looper.myLooper() == Looper.getMainLooper()) return failure("ACCESSIBILITY_CONFIRM_CANCELLED", "无法在主线程等待用户确认")
+            val label = (node.text?.toString()?.takeIf { it.isNotBlank() } ?: node.contentDescription?.toString().orEmpty()).take(MAX_TEXT_CHARS)
+            val taskBefore = automationTaskLedger.snapshot()
+            val stepBefore = taskBefore.steps.singleOrNull { it.status == AutomationTaskStepStatus.PENDING && it.startedAtMs != null }
+            val confirmationStart = SystemClock.elapsedRealtime()
+            when (requestConfirmation(request, label)) {
+                ConfirmationOutcome.APPROVED -> {
+                    if (taskBefore.status == AutomationTaskStatus.RUNNING && (stepBefore == null || !automationTaskLedger.allowConfirmationWait(
+                            taskBefore.taskId, stepBefore.id, stepBefore.attemptsUsed, confirmationStart, SystemClock.elapsedRealtime()))) {
+                        return failure("ACCESSIBILITY_CONFIRM_STALE", "确认期间任务状态已变化，请重新核对")
+                    }
+                }
+                ConfirmationOutcome.REJECTED -> return failure("ACCESSIBILITY_CONFIRM_REJECTED", "用户拒绝执行")
+                ConfirmationOutcome.TIMEOUT -> return failure("ACCESSIBILITY_CONFIRM_TIMEOUT", "确认超时，未执行")
+                ConfirmationOutcome.CANCELLED -> return failure("ACCESSIBILITY_CONFIRM_CANCELLED", "确认已取消")
+            }
+        }
+        return executeConfirmedAction(request, guard)
     }
 
     /** 在无障碍覆盖层中显示一次性确认，等待发生在设备桥工作线程。 */
-    private fun requestConfirmation(request: AccessibilityAutomationPolicy.ActionRequest): ConfirmationOutcome {
-        val confirmation = PendingConfirmation(request)
+    private fun requestConfirmation(request: AccessibilityAutomationPolicy.ActionRequest, label: String): ConfirmationOutcome {
+        val confirmation = PendingConfirmation(request, label)
         if (!pendingConfirmation.compareAndSet(null, confirmation)) return ConfirmationOutcome.CANCELLED
         mainHandler.post { showConfirmation(confirmation) }
         return try {
@@ -303,8 +321,8 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             setTextColor(foreground)
         }
         val details = TextView(ui).apply {
-            val input = confirmation.request.text?.length?.toString() ?: "0"
-            text = "应用：${confirmation.request.packageName}\n动作：${confirmation.request.action}\nviewId：${confirmation.request.viewId}\n输入长度：$input"
+            val label = confirmation.label.ifBlank { "未提供文字标签" }
+            text = "应用：${confirmation.request.packageName}\n控件：$label\n标识：${confirmation.request.viewId}\n请核对下方应用中的目标、接收对象和内容，再决定是否执行。"
             textSize = 14f
             setTextColor(muted)
             setPadding(0, 16, 0, 18)
@@ -367,13 +385,13 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     }
 
     /** 确认后重新获取当前窗口并在无障碍主线程执行节点动作。 */
-    private fun executeConfirmedAction(request: AccessibilityAutomationPolicy.ActionRequest): DeviceCommandResult {
-        if (Looper.myLooper() == Looper.getMainLooper()) return performConfirmedAction(request)
+    private fun executeConfirmedAction(request: AccessibilityAutomationPolicy.ActionRequest, guard: AccessibilityConfirmationPolicy.Guard? = null): DeviceCommandResult {
+        if (Looper.myLooper() == Looper.getMainLooper()) return performConfirmedAction(request, guard)
         val latch = CountDownLatch(1)
         val result = AtomicReference<DeviceCommandResult>()
         val expired = java.util.concurrent.atomic.AtomicBoolean(false)
         mainHandler.post {
-            if (!expired.get()) result.set(performConfirmedAction(request))
+            if (!expired.get()) result.set(performConfirmedAction(request, guard))
             latch.countDown()
         }
         return try {
@@ -390,7 +408,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun performConfirmedAction(request: AccessibilityAutomationPolicy.ActionRequest): DeviceCommandResult {
+    private fun performConfirmedAction(request: AccessibilityAutomationPolicy.ActionRequest, guard: AccessibilityConfirmationPolicy.Guard?): DeviceCommandResult {
         val now = SystemClock.elapsedRealtime()
         if (isLockedOrScreenOff()) return failure("ACCESSIBILITY_DEVICE_LOCKED", "设备已锁定或屏幕未交互")
         if (now - lastActionAt < ACTION_INTERVAL_MS) return failure("ACCESSIBILITY_RATE_LIMITED", "无障碍动作过于频繁，请稍后再试")
@@ -405,6 +423,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         if (node.packageName?.toString() != packageName || node.isPassword ||
             AccessibilityAutomationPolicy.containsSensitiveText(node.viewIdResourceName)
         ) return failure("ACCESSIBILITY_ACTION_REJECTED", "确认后目标节点不允许此操作")
+        if (guard != null && !AccessibilityConfirmationPolicy.unchanged(guard, confirmationGuard(root, node))) return failure("ACCESSIBILITY_CONFIRM_STALE", "页面或输入内容已变化，请重新核对")
         // Serialize the last gate check with cancel/plan so no action is dispatched after cancellation wins.
         return synchronized(automationTaskLedger) {
         val dispatchAt = SystemClock.elapsedRealtime()
@@ -439,6 +458,18 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             automationTaskActionAt = nowMs
         }
     }
+
+    /** Short-lived in-memory fingerprints prevent a confirmation from being reused after a visible context change. */
+    private fun confirmationGuard(root: AccessibilityNodeInfo, node: AccessibilityNodeInfo): AccessibilityConfirmationPolicy.Guard? = runCatching {
+        val targetText = node.text?.toString().orEmpty()
+        val targetDescription = node.contentDescription?.toString().orEmpty()
+        val target = AutomationTaskEvidence.textDigest("${targetText.length}:$targetText$targetDescription") ?: return@runCatching null
+        val focus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        if (focus?.isPassword == true) return@runCatching null
+        val focusedText = focus?.text?.toString()
+        val focusHash = if (focusedText != null) AutomationTaskEvidence.textDigest(focusedText) ?: return@runCatching null else null
+        AccessibilityConfirmationPolicy.Guard(windowDigest(root), target, focus?.viewIdResourceName, focusHash)
+    }.getOrNull()
 
     private fun findByViewId(root: AccessibilityNodeInfo?, viewId: String): AccessibilityNodeInfo? {
         val matches = root?.findAccessibilityNodeInfosByViewId(viewId).orEmpty()
@@ -1471,7 +1502,10 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     internal fun currentAutomationTask(): AutomationTaskSnapshot = automationTaskLedger.snapshot()
 
     /** 取消当前任务：未收口的步骤记 `skipped` + `AUTOMATION_TASK_CANCELLED`，动作本身不再发出。 */
-    internal fun cancelAutomationTask(): AutomationTaskSnapshot = automationTaskLedger.cancel()
+    internal fun cancelAutomationTask(): AutomationTaskSnapshot {
+        cancelPendingConfirmation()
+        return automationTaskLedger.cancel()
+    }
 
     /** 运行记录的只读快照：最新在前，`packageName` 为 null 表示所有包按时间合并。 */
     internal fun automationRunSnapshot(packageName: String?, limit: Int): List<AutomationRunRecord> =
@@ -1836,6 +1870,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
 
     private class PendingConfirmation(
         val request: AccessibilityAutomationPolicy.ActionRequest,
+        val label: String,
     ) {
         val latch = OpenCountDownLatch()
         val approved = AtomicBoolean(false)
