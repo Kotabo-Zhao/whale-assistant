@@ -949,8 +949,11 @@ class CompanionActivity : AppCompatActivity() {
         android.widget.Toast.makeText(this, "正在读取本地简报…", android.widget.Toast.LENGTH_SHORT).show()
         val app = applicationContext
         briefExecutor.execute {
-            val calendar = CompanionCalendar.read(app)
             val checkedAt = System.currentTimeMillis()
+            val zone = java.util.TimeZone.getDefault()
+            val calendar = CompanionCalendar.read(app, checkedAt, zone)
+            val once = runCatching { CompanionBriefReminders.read(CompanionReminder(app).list(), false, checkedAt, zone.toZoneId()) }
+            val repeating = runCatching { CompanionBriefReminders.read(CompanionRecurringReminder(app).list(), true, checkedAt, zone.toZoneId()) }
             memoryHandler.post {
                 briefBusy = false
                 if (isFinishing || isDestroyed) return@post
@@ -958,19 +961,37 @@ class CompanionActivity : AppCompatActivity() {
                     CompanionCalendar.State.NO_PERMISSION -> "日历未授权；可在助手设置中授权。"
                     CompanionCalendar.State.UNAVAILABLE -> "日历读取失败或系统日历不可用。"
                     CompanionCalendar.State.OK -> if (calendar.events.isEmpty()) "当天可见日历没有日程。" else {
-                        val dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                        val dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }
                         calendar.events.joinToString("\n") { event ->
                             val time = if (event.allDay) "全天" else dateFormat.format(Date(event.start))
                             "$time · ${event.title}"
                         } + if (calendar.truncated) "\n仅显示前 ${CompanionCalendar.MAX_EVENTS} 条。" else ""
                     }
                 }
+                val onceText = briefReminderText(once, zone)
+                val repeatingText = briefReminderText(repeating, zone)
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地简报")
-                    .setMessage("今天的可见日历（${java.util.TimeZone.getDefault().id}，读取于 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(checkedAt))}）：\n$calendarText\n\n$notifications\n\n通知分类由本地规则生成，可能遗漏重要事项。天气尚未接入。")
+                    .setMessage("今天的可见日历（${zone.id}，读取开始于 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }.format(Date(checkedAt))}）：\n$calendarText\n\n今天的一次性提醒：\n$onceText\n\n今天的重复提醒（仅显示下一次）：\n$repeatingText\n\n$notifications\n\n已交给系统不保证送达；通知分类可能遗漏重要事项。天气尚未接入。")
+                    .setNeutralButton("管理提醒") { _, _ ->
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择提醒类型")
+                            .setItems(arrayOf("一次性提醒", "重复提醒")) { _, choice -> if (choice == 0) showReminders() else showRecurringReminders() }
+                            .setNegativeButton("取消", null).show()
+                    }
                     .setPositiveButton("关闭", null).show()
             }
         }
     }
+
+    private fun briefReminderText(result: Result<CompanionBriefReminders.Snapshot>, zone: java.util.TimeZone): String = result.fold(
+        { snapshot ->
+            if (snapshot.items.isEmpty()) "没有当天记录。" else {
+                val formatter = DateFormat.getTimeInstance(DateFormat.SHORT).apply { timeZone = zone }
+                snapshot.items.joinToString("\n") { "${formatter.format(Date(it.at))} · ${it.text} · ${it.state}" } +
+                    if (snapshot.truncated) "\n仅显示前 ${CompanionBriefReminders.MAX_ITEMS} 条。" else ""
+            }
+        },
+        { "无法读取提醒记录，请在提醒管理中检查。" },
+    )
 
     private fun showNotificationCandidates() {
         val records = recordsOrNull() ?: return
