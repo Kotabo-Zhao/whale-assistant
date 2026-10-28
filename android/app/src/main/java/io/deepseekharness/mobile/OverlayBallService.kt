@@ -1852,6 +1852,17 @@ class OverlayBallService : Service() {
                 }
             }
         }
+        /** Opens only the local notification list on an explicit bubble tap. */
+        internal fun companionNotificationHint() {
+            Handler(Looper.getMainLooper()).post {
+                activeService?.let { service ->
+                    service.showCompanionHint("有一条新通知，点击查看。") {
+                        runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
+                            .putExtra("open_notification_list", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
+                }
+            }
+        }
         internal fun companionCandidateHint() {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->

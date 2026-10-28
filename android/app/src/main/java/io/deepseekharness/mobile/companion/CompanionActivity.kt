@@ -262,6 +262,14 @@ class CompanionActivity : AppCompatActivity() {
         } else if (intent?.getBooleanExtra("open_memory_suggestions", false) == true) {
             intent?.removeExtra("open_memory_suggestions")
             showMemorySuggestions()
+        } else if (intent?.getBooleanExtra("open_notification_list", false) == true) {
+            intent?.removeExtra("open_notification_list")
+            scroll.post {
+                if (!isFinishing && !isDestroyed) {
+                    val section = content.findViewWithTag<View>("section:notifications")
+                    if (section != null) { scroll.smoothScrollTo(0, section.top); section.announceForAccessibility("已定位到通知") }
+                }
+            }
         } else if (intent?.getBooleanExtra("open_notification_candidates", false) == true) {
             intent?.removeExtra("open_notification_candidates")
             showNotificationCandidates()

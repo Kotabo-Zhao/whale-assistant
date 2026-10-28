@@ -47,7 +47,7 @@ class CompanionNotificationService : NotificationListenerService() {
             if (store.notificationBubbles) {
                 if (store.notificationMemorySuggestions && CompanionMemorySuggestions.extract(text) != null) OverlayBallService.companionMemorySuggestionHint()
                 else if (candidate) OverlayBallService.companionCandidateHint()
-                else OverlayBallService.companionHint("有一条新通知，可以在助手设置中查看。")
+                else OverlayBallService.companionNotificationHint()
             }
             if (candidate && store.candidateNotifications) runCatching { CompanionCandidateNotifications.show(this, store.inQuietHours()) }
         }
