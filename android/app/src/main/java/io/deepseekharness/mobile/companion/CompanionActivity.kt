@@ -682,10 +682,13 @@ class CompanionActivity : AppCompatActivity() {
                     .setMessage(text).setNegativeButton("关闭", null)
                     .setNeutralButton("使用资料") { _, _ ->
                         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择操作")
-                            .setItems(arrayOf("放入对话草稿", "复制资料")) { _, choice ->
-                                if (choice == 0) prepareKnowledgeForChat(text)
-                                else getSystemService(android.content.ClipboardManager::class.java)
-                                    ?.setPrimaryClip(android.content.ClipData.newPlainText("本地资料", text))
+                            .setItems(arrayOf("放入对话草稿", "复制资料", "编辑本地资料")) { _, choice ->
+                                when (choice) {
+                                    0 -> prepareKnowledgeForChat(text)
+                                    1 -> getSystemService(android.content.ClipboardManager::class.java)
+                                        ?.setPrimaryClip(android.content.ClipData.newPlainText("本地资料", text))
+                                    2 -> editKnowledge(id, text)
+                                }
                             }.setNegativeButton("取消", null).show()
                     }
                     .setPositiveButton("删除") { _, _ ->
@@ -699,6 +702,40 @@ class CompanionActivity : AppCompatActivity() {
                             }.show()
                     }.show()
             }.setNegativeButton("关闭", null).show()
+    }
+
+    private fun editKnowledge(id: String, original: String) {
+        val input = android.widget.EditText(this).apply { setText(original); minLines = 3; maxLines = 10 }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("编辑本地资料")
+            .setMessage("最多 8000 字；保存后使用新内容，已导出的备份不会改变。")
+            .setView(input).setNegativeButton("取消", null).setPositiveButton("保存", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = input.text.toString()
+                if (value.isBlank() || value.length > CompanionKnowledgeData.MAX_TEXT || '\u0000' in value) {
+                    input.error = "请填写不超过 8000 字的有效文字。"
+                    return@setOnClickListener
+                }
+                if (memoryBusy) {
+                    android.widget.Toast.makeText(this, "资料操作正在进行，请稍候。", android.widget.Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val save = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                save.isEnabled = false
+                input.isEnabled = false
+                runMemoryIo("正在保存资料…", { CompanionKnowledgeStore(this).edit(id, original, value) }) { result ->
+                    save.isEnabled = true
+                    input.isEnabled = true
+                    val message = result.fold(
+                        { if (it) "资料已更新。" else "资料已变化或不存在，请复制修改内容后重新查看。" },
+                        { "无法保存资料，可能内容重复或资料库已满。" },
+                    )
+                    if (result.getOrNull() == true) dialog.dismiss()
+                    android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun prepareKnowledgeForChat(text: String) {

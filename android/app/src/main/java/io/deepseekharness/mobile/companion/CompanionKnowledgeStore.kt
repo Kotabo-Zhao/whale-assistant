@@ -29,6 +29,12 @@ internal class CompanionKnowledgeStore(context: Context) {
         write(rows)
         true
     }
+    fun edit(id: String, expectedText: String, newText: String): Boolean = synchronized(lock) {
+        val rows = load()
+        val updated = CompanionKnowledgeData.edit(rows, id, expectedText, newText) ?: return@synchronized false
+        write(updated)
+        true
+    }
     fun remove(id: String, expectedText: String): Boolean = synchronized(lock) {
         val rows = load()
         val kept = CompanionKnowledgeData.remove(rows, id, expectedText) ?: return@synchronized false
@@ -89,6 +95,16 @@ internal object CompanionKnowledgeData {
             if (query.isBlank() || row.getString("text").contains(query.trim(), ignoreCase = true)) result.put(row)
         }
         return result
+    }
+    /** Return a copy; reject stale edits and duplicate text without mutating the input. */
+    fun edit(rows: JSONArray, id: String, expectedText: String, newText: String): JSONArray? {
+        require(newText.isNotBlank() && newText.length <= MAX_TEXT && '\u0000' !in newText) { "文字为空、包含无效字符或超过 8000 字" }
+        val index = (0 until rows.length()).firstOrNull { rows.getJSONObject(it).getString("id") == id } ?: return null
+        if (rows.getJSONObject(index).getString("text") != expectedText) return null
+        require((0 until rows.length()).none { it != index && rows.getJSONObject(it).getString("text") == newText }) { "已有相同资料" }
+        val updated = JSONArray(rows.toString())
+        updated.getJSONObject(index).put("text", newText)
+        return updated
     }
     fun remove(rows: JSONArray, id: String, expectedText: String): JSONArray? {
         val found = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("id") == id } ?: return null

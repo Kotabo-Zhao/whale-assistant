@@ -22,6 +22,24 @@ class CompanionKnowledgeStoreTest {
         assertEquals(2, rows.length())
         assertEquals(2, CompanionKnowledgeData.parse(JSONObject().put("version", 1).put("items", rows).toString()).length())
     }
+    @Test fun editPreservesIdentityAndRejectsStaleOrDuplicateValues() {
+        val rows = JSONArray()
+        CompanionKnowledgeData.add(rows, "原内容", 1, "text_file")
+        CompanionKnowledgeData.add(rows, "另一条", 2)
+        val id = rows.getJSONObject(0).getString("id")
+        assertNull(CompanionKnowledgeData.edit(rows, id, "旧内容", "新内容"))
+        assertNull(CompanionKnowledgeData.edit(rows, "missing", "原内容", "新内容"))
+        assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.edit(rows, id, "原内容", "另一条") }
+        assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.edit(rows, id, "原内容", "x".repeat(8001)) }
+        val updated = CompanionKnowledgeData.edit(rows, id, "原内容", "新内容")!!
+        assertEquals("原内容", rows.getJSONObject(0).getString("text"))
+        assertEquals("新内容", updated.getJSONObject(0).getString("text"))
+        assertEquals(id, updated.getJSONObject(0).getString("id"))
+        assertEquals("text_file", updated.getJSONObject(0).getString("source"))
+        assertEquals(1L, updated.getJSONObject(0).getLong("createdAt"))
+        assertEquals(1, CompanionKnowledgeData.search(updated, "新内容").length())
+        assertEquals("新内容", JSONArray(CompanionKnowledgeBackup.plan(CompanionKnowledgeBackup.encode(updated), JSONArray()).additions).getJSONObject(0).getString("text"))
+    }
     @Test fun backupPreviewMergesWithoutOverwritingExistingContent() {
         val existing = JSONArray()
         CompanionKnowledgeData.add(existing, "已有", 1)
