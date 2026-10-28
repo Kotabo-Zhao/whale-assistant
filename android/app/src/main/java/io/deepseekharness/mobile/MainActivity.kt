@@ -218,7 +218,35 @@ class MainActivity : BridgeActivity() {
         val preview = text.take(600) + if (text.length > 600) "\n…（预览已截断，保存的是完整内容）" else ""
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("处理分享的文字")
             .setMessage("$preview\n\n保存到本机收件箱后，运行环境及当前或后续对话可能读取并发送给模型。放入草稿后请核对，再自行发送。")
-            .setNegativeButton("取消", null).setPositiveButton("保存到收件箱") { _, _ ->
+            .setNegativeButton("取消", null).setPositiveButton("保存…") { _, _ ->
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择保存位置")
+                    .setMessage("本地资料库仅保存你选定的文字，最多 8000 字；当前不自动提供给模型。收件箱可供运行环境读取。")
+                    .setItems(arrayOf("保存到本地资料库", "保存到收件箱")) { _, choice ->
+                        if (choice == 0) saveSharedKnowledge(text) else saveSharedTextToInbox(bytes)
+                    }.setNegativeButton("取消", null).show()
+            }
+        if (SharedTextImport.canInsertDraft(text)) dialog.setNeutralButton("放入对话草稿") { _, _ ->
+            harnessSurface.showIfOwned()
+            if (!harnessSurface.insertSharedText(text)) harnessSurface.sharedTextCopyFallback(text)
+        }
+        dialog.show()
+    }
+
+    private fun saveSharedKnowledge(text: String) {
+        try {
+            importExecutor.execute {
+                val result = runCatching { io.deepseekharness.mobile.companion.CompanionKnowledgeStore(applicationContext).add(text) }
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) showImportToast(result.fold(
+                        { if (it) "已保存到本地资料库，可在助手设置中查看。" else "资料库中已有相同内容。" },
+                        { "无法保存资料：${it.message ?: "请检查资料库"}" },
+                    ))
+                }
+            }
+        } catch (_: Exception) { showImportToast("保存任务无法启动，请重试。") }
+    }
+
+    private fun saveSharedTextToInbox(bytes: ByteArray) {
                 try {
                     importExecutor.execute {
                         val status = runCatching {
@@ -239,12 +267,6 @@ class MainActivity : BridgeActivity() {
                         }
                     }
                 } catch (_: Exception) { showImportToast("导入任务无法启动，请重试。") }
-            }
-        if (SharedTextImport.canInsertDraft(text)) dialog.setNeutralButton("放入对话草稿") { _, _ ->
-            harnessSurface.showIfOwned()
-            if (!harnessSurface.insertSharedText(text)) harnessSurface.sharedTextCopyFallback(text)
-        }
-        dialog.show()
     }
 
     private fun enqueueFileImport(uris: List<Uri>, allowPermissionFallback: Boolean) {

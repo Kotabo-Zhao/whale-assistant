@@ -252,6 +252,9 @@ class CompanionActivity : AppCompatActivity() {
                     runCatching { memory.clearForUser() }.onSuccess { render() }.onFailure { paragraph("无法清空记忆，原数据已保留。") }
                 }.show()
         }
+        heading("本地资料", "knowledge")
+        paragraph("在其他应用分享文字到鲸鱼娘并选择本地资料库后，可在这里查看、搜索和删除。资料不会自动提供给模型。")
+        button("查看或搜索资料") { searchKnowledge() }
         heading("通知与隐私", "notifications")
         toggle("允许助手对话访问通知摘要", store.notificationModelAccess) { enabled ->
             if (!enabled) { store.notificationModelAccess = false; render() }
@@ -547,6 +550,54 @@ class CompanionActivity : AppCompatActivity() {
                         }
                     }.show()
             }.setNegativeButton("取消", null).show()
+    }
+
+    private fun searchKnowledge() {
+        val input = android.widget.EditText(this).apply {
+            hint = "搜索文字，留空查看全部"
+            setSingleLine(true)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(200))
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("搜索本地资料")
+            .setView(input).setNegativeButton("取消", null).setPositiveButton("搜索") { _, _ ->
+                val query = input.text.toString()
+                runMemoryIo("正在读取本地资料…", { CompanionKnowledgeStore(this).search(query) }) { result ->
+                    result.onSuccess { rows -> showKnowledgeResults(rows) }
+                        .onFailure { paragraph("资料库无法读取，原数据已保留。") }
+                }
+            }.show()
+    }
+
+    private fun showKnowledgeResults(rows: org.json.JSONArray) {
+        if (rows.length() == 0) { paragraph("没有匹配的本地资料。") ; return }
+        val labels = Array(rows.length()) { index ->
+            val row = rows.getJSONObject(index)
+            val date = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.getLong("createdAt")))
+            val excerpt = row.getString("text").replace('\n', ' ').take(100)
+            "$date · 分享文字\n$excerpt"
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地资料（${rows.length()} 条）")
+            .setItems(labels) { _, index ->
+                val row = rows.getJSONObject(index)
+                val text = row.getString("text")
+                val id = row.getString("id")
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("资料内容")
+                    .setMessage(text).setNegativeButton("关闭", null)
+                    .setNeutralButton("复制") { _, _ ->
+                        getSystemService(android.content.ClipboardManager::class.java)
+                            ?.setPrimaryClip(android.content.ClipData.newPlainText("本地资料", text))
+                    }
+                    .setPositiveButton("删除") { _, _ ->
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除这条本地资料？")
+                            .setMessage("删除不可撤销；已复制或另存的内容不会随之删除。")
+                            .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                                runMemoryIo("正在删除资料…", { CompanionKnowledgeStore(this).remove(id, text) }) { result ->
+                                    result.onSuccess { removed -> paragraph(if (removed) "资料已删除。" else "资料已变化或不存在，请重新查看。") }
+                                        .onFailure { paragraph("无法确认删除结果，请重新查看。") }
+                                }
+                            }.show()
+                    }.show()
+            }.setNegativeButton("关闭", null).show()
     }
 
     private fun selectExcludedApps() {
@@ -986,7 +1037,7 @@ class CompanionActivity : AppCompatActivity() {
         content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
     }
     private fun sectionNavigation(): android.widget.HorizontalScrollView {
-        val items = listOf("status" to "状态", "voice" to "语音", "memory" to "记忆", "notifications" to "通知", "reminders" to "提醒", "apps" to "常用", "brief" to "日历与简报")
+        val items = listOf("status" to "状态", "voice" to "语音", "memory" to "记忆", "knowledge" to "资料", "notifications" to "通知", "reminders" to "提醒", "apps" to "常用", "brief" to "日历与简报")
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(14), dp(8), dp(14), dp(8)) }
         for ((id, label) in items) {
             val item = Button(this).apply {
