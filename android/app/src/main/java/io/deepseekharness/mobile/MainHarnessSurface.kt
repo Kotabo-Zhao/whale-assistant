@@ -43,7 +43,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     private var chooser: ValueCallback<Array<Uri>>? = null
     private var voiceGate: HarnessPageLoadGate? = null
     private var voicePage: String? = null
-    private data class VoiceHandoff(val text: String, val page: String, val gate: HarnessPageLoadGate, val at: Long)
+    private data class VoiceHandoff(val text: String, val page: String, val gate: HarnessPageLoadGate, val at: Long, val shared: Boolean)
     private var pendingVoice: VoiceHandoff? = null
     private var speaker: TextToSpeech? = null
     private var speechPending = false
@@ -156,7 +156,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         if (web != null && !AppAuthenticationState.ownsHarnessAccess(owner)) {
             val pending = pendingVoice
             destroyView()
-            if (pending != null) voiceCopyFallback(pending.text)
+            if (pending != null) handoffFallback(pending)
         } else {
             web?.let(HarnessThemeBridge::apply)
             deliverPendingVoice()
@@ -306,12 +306,12 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
             }.show()
     }
 
-    private fun stageVoice(text: String): Boolean {
+    private fun stageVoice(text: String, shared: Boolean = false): Boolean {
         val page = web?.url ?: return false
         val targetOrigin = origin ?: return false
         val parsed = runCatching { Uri.parse(page) }.getOrNull() ?: return false
         if (!visible() || !authorized() || !targetOrigin.allows(parsed) || text.isBlank() || text.length > 2000 || pendingVoice != null) return false
-        pendingVoice = VoiceHandoff(text, page, gate, android.os.SystemClock.elapsedRealtime())
+        pendingVoice = VoiceHandoff(text, page, gate, android.os.SystemClock.elapsedRealtime(), shared)
         return true
     }
 
@@ -320,10 +320,14 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         pendingVoice = null
         val age = android.os.SystemClock.elapsedRealtime() - pending.at
         if (!HarnessVoiceHandoffPolicy.canDeliver(visible(), authorized(), gate === pending.gate, web?.url == pending.page, age)) {
-            voiceCopyFallback(pending.text)
+            handoffFallback(pending)
             return
         }
-        insertVoice(pending.text, pending.gate, pending.page)
+        insertVoice(pending.text, pending.gate, pending.page, if (pending.shared) ::sharedTextCopyFallback else ::voiceCopyFallback)
+    }
+
+    private fun handoffFallback(pending: VoiceHandoff) {
+        if (pending.shared) sharedTextCopyFallback(pending.text) else voiceCopyFallback(pending.text)
     }
 
     private fun voiceUnavailable() = Toast.makeText(activity, R.string.harness_voice_unavailable, Toast.LENGTH_LONG).show()
@@ -475,6 +479,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
             Thread(runnable, "dsh-embedded-auth-db").apply { isDaemon = true }
         }
         internal fun stageCompanionVoice(text: String): Boolean = active?.get()?.stageVoice(text) == true
+        internal fun stageCompanionKnowledge(text: String): Boolean = active?.get()?.stageVoice(text, shared = true) == true
         internal fun cancelCompanionVoice() { active?.get()?.pendingVoice = null }
         fun hasOwnedSurface(): Boolean = active?.get()?.let {
             val access = it.boundAccess

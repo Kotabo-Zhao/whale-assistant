@@ -629,9 +629,13 @@ class CompanionActivity : AppCompatActivity() {
                 val id = row.getString("id")
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("资料内容")
                     .setMessage(text).setNegativeButton("关闭", null)
-                    .setNeutralButton("复制") { _, _ ->
-                        getSystemService(android.content.ClipboardManager::class.java)
-                            ?.setPrimaryClip(android.content.ClipData.newPlainText("本地资料", text))
+                    .setNeutralButton("使用资料") { _, _ ->
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择操作")
+                            .setItems(arrayOf("放入对话草稿", "复制资料")) { _, choice ->
+                                if (choice == 0) prepareKnowledgeForChat(text)
+                                else getSystemService(android.content.ClipboardManager::class.java)
+                                    ?.setPrimaryClip(android.content.ClipData.newPlainText("本地资料", text))
+                            }.setNegativeButton("取消", null).show()
                     }
                     .setPositiveButton("删除") { _, _ ->
                         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除这条本地资料？")
@@ -644,6 +648,48 @@ class CompanionActivity : AppCompatActivity() {
                             }.show()
                     }.show()
             }.setNegativeButton("关闭", null).show()
+    }
+
+    private fun prepareKnowledgeForChat(text: String) {
+        val edit = android.widget.EditText(this).apply {
+            setText(text)
+            minLines = 3
+            maxLines = 8
+        }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对要交给助手的资料")
+            .setMessage("内容放入当前对话草稿，不会自动发送；发送后可能由所选模型服务处理。最多 2000 字，较长内容请自行删改。")
+            .setView(edit).setNegativeButton("取消", null).setPositiveButton("放入草稿", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = edit.text.toString()
+                if (!io.deepseekharness.mobile.SharedTextImport.canInsertDraft(value)) {
+                    edit.error = "请填写内容并控制在 2000 字以内。"
+                    return@setOnClickListener
+                }
+                if (!io.deepseekharness.mobile.MainHarnessSurface.stageCompanionKnowledge(value)) {
+                    dialog.dismiss()
+                    offerKnowledgeCopy(value)
+                } else {
+                    val opened = runCatching {
+                        startActivity(Intent(this, io.deepseekharness.mobile.MainActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        finish()
+                    }.isSuccess
+                    dialog.dismiss()
+                    if (!opened) { io.deepseekharness.mobile.MainHarnessSurface.cancelCompanionVoice(); offerKnowledgeCopy(value) }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun offerKnowledgeCopy(text: String) {
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("当前对话不可用")
+            .setMessage("你可以复制内容后自行粘贴；不会自动发送。")
+            .setNegativeButton("取消", null).setPositiveButton("复制") { _, _ ->
+                getSystemService(android.content.ClipboardManager::class.java)
+                    ?.setPrimaryClip(android.content.ClipData.newPlainText("本地资料", text))
+            }.show()
     }
 
     private fun selectExcludedApps() {
