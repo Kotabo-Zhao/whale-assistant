@@ -127,6 +127,49 @@ class CompanionActivity : AppCompatActivity() {
         }
     }
 
+    private val knowledgeImport = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runMemoryIo("正在读取资料备份…", {
+            val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                val output = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (count == 0) error("无法读取文件")
+                    require(output.size() + count <= CompanionKnowledgeData.MAX_BYTES) { "备份超过大小上限" }
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            } ?: error("无法读取文件")
+            CompanionKnowledgeStore(this).previewImport(bytes)
+        }) { result ->
+            result.onSuccess { plan ->
+                val additions = org.json.JSONArray(plan.additions)
+                val preview = (0 until minOf(additions.length(), 10)).joinToString("\n\n") { index ->
+                    "${index + 1}. " + additions.getJSONObject(index).getString("text").replace('\n', ' ').take(120)
+                }
+                val suffix = if (additions.length() > 10) "\n仅预览前 10 条；确认将导入全部新增资料。" else ""
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对资料备份")
+                    .setMessage("将新增 ${additions.length()} 条，跳过 ${plan.skipped} 条重复标识或内容；现有资料不会被覆盖。\n\n$preview$suffix")
+                    .setNegativeButton("取消", null).setPositiveButton("确认合并") { _, _ ->
+                        runMemoryIo("正在合并资料…", { CompanionKnowledgeStore(this).applyImport(plan) }) { outcome ->
+                            android.widget.Toast.makeText(this, outcome.fold({ "已导入 $it 条资料。" }, { "导入失败或资料已变化，请重新选择文件核对。" }), android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }.show()
+            }.onFailure { android.widget.Toast.makeText(this, "无法读取或验证资料备份，原资料已保留。", android.widget.Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    private val knowledgeExport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) runMemoryIo("正在导出资料…", {
+            val bytes = CompanionKnowledgeStore(this).exportForUser()
+            val stream = contentResolver.openOutputStream(uri, "wt") ?: error("无法打开文件")
+            stream.use { it.write(bytes); it.flush() }
+        }) { result ->
+            android.widget.Toast.makeText(this, if (result.isSuccess) "资料备份已导出。" else "导出失败，请检查保存位置；原资料未改变。", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     private val voiceInput = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
@@ -255,6 +298,9 @@ class CompanionActivity : AppCompatActivity() {
         heading("本地资料", "knowledge")
         paragraph("在其他应用分享文字到鲸鱼娘并选择本地资料库后，可在这里查看、搜索和删除。资料不会自动提供给模型。")
         button("查看或搜索资料") { searchKnowledge() }
+        button("导出资料备份") { if (!memoryBusy) knowledgeExport.launch("whale-knowledge.json") else paragraph("文件操作正在进行，请稍候。") }
+        button("导入资料备份") { if (!memoryBusy) knowledgeImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("文件操作正在进行，请稍候。") }
+        paragraph("资料备份为未加密 JSON，包含完整文字；云盘可能同步。导入前可核对，确认后合并，不覆盖已有资料。")
         heading("通知与隐私", "notifications")
         toggle("允许助手对话访问通知摘要", store.notificationModelAccess) { enabled ->
             if (!enabled) { store.notificationModelAccess = false; render() }

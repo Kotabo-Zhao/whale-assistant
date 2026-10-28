@@ -12,6 +12,17 @@ internal class CompanionKnowledgeStore(context: Context) {
     private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "companion-knowledge-v1.json"))
 
     fun search(query: String): JSONArray = synchronized(lock) { CompanionKnowledgeData.search(load(), query) }
+    fun exportForUser(): ByteArray = synchronized(lock) { CompanionKnowledgeBackup.encode(load()) }
+    fun previewImport(bytes: ByteArray): KnowledgeImportPlan = synchronized(lock) { CompanionKnowledgeBackup.plan(bytes, load()) }
+    fun applyImport(plan: KnowledgeImportPlan): Int = synchronized(lock) {
+        val current = load()
+        require(current.toString() == plan.original) { "资料已变化，请重新选择文件" }
+        val additions = JSONArray(plan.additions)
+        for (i in 0 until additions.length()) current.put(additions.getJSONObject(i))
+        CompanionKnowledgeBackup.encode(current) // Check aggregate size before modifying disk.
+        if (additions.length() > 0) write(current)
+        additions.length()
+    }
     fun add(text: String): Boolean = synchronized(lock) {
         val rows = load()
         if (!CompanionKnowledgeData.add(rows, text, System.currentTimeMillis())) return@synchronized false
@@ -31,6 +42,7 @@ internal class CompanionKnowledgeStore(context: Context) {
         return CompanionKnowledgeData.parse(String(bytes, Charsets.UTF_8))
     }
     private fun write(rows: JSONArray) {
+        CompanionKnowledgeBackup.encode(rows) // Keep every newly written state exportable.
         val bytes = JSONObject().put("version", 1).put("items", rows).toString().toByteArray(Charsets.UTF_8)
         require(bytes.size <= CompanionKnowledgeData.MAX_BYTES) { "资料库已满，请先删除部分资料" }
         var stream: java.io.FileOutputStream? = null
@@ -83,5 +95,45 @@ internal object CompanionKnowledgeData {
         val kept = JSONArray()
         for (i in 0 until rows.length()) if (rows.getJSONObject(i).getString("id") != id) kept.put(rows.getJSONObject(i))
         return kept
+    }
+}
+
+internal data class KnowledgeImportPlan(val original: String, val additions: String, val skipped: Int)
+
+/** Explicit user backup: versioned, bounded, and merged only if the preview is still current. */
+internal object CompanionKnowledgeBackup {
+    private const val FORMAT = "whale-knowledge-backup"
+    fun encode(rows: JSONArray): ByteArray {
+        val bytes = JSONObject().put("format", FORMAT).put("version", 1).put("items", rows).toString().toByteArray(Charsets.UTF_8)
+        require(bytes.size <= CompanionKnowledgeData.MAX_BYTES) { "资料备份超过大小上限" }
+        return bytes
+    }
+    fun plan(bytes: ByteArray, current: JSONArray): KnowledgeImportPlan {
+        require(bytes.size <= CompanionKnowledgeData.MAX_BYTES) { "备份超过大小上限" }
+        val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        val raw = decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+        val root = JSONObject(raw)
+        require(root.opt("format") == FORMAT) { "不是资料库备份" }
+        val incoming = CompanionKnowledgeData.parse(raw)
+        val ids = mutableSetOf<String>()
+        val texts = mutableSetOf<String>()
+        for (i in 0 until current.length()) {
+            val row = current.getJSONObject(i)
+            ids.add(row.getString("id")); texts.add(row.getString("text"))
+        }
+        val additions = JSONArray()
+        var skipped = 0
+        for (i in 0 until incoming.length()) {
+            val row = incoming.getJSONObject(i)
+            val id = row.getString("id"); val text = row.getString("text")
+            if (id in ids || text in texts) { skipped++; continue }
+            ids.add(id); texts.add(text); additions.put(row)
+        }
+        require(current.length() + additions.length() <= CompanionKnowledgeData.MAX_ITEMS) { "合并后资料超过 100 条" }
+        val merged = JSONArray(current.toString())
+        for (i in 0 until additions.length()) merged.put(additions.getJSONObject(i))
+        encode(merged)
+        return KnowledgeImportPlan(current.toString(), additions.toString(), skipped)
     }
 }

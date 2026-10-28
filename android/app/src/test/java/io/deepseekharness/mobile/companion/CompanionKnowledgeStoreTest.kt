@@ -22,6 +22,23 @@ class CompanionKnowledgeStoreTest {
         assertEquals(2, rows.length())
         assertEquals(2, CompanionKnowledgeData.parse(JSONObject().put("version", 1).put("items", rows).toString()).length())
     }
+    @Test fun backupPreviewMergesWithoutOverwritingExistingContent() {
+        val existing = JSONArray()
+        CompanionKnowledgeData.add(existing, "已有", 1)
+        val incoming = JSONArray(existing.toString())
+        CompanionKnowledgeData.add(incoming, "新资料", 2)
+        val bytes = CompanionKnowledgeBackup.encode(incoming)
+        val plan = CompanionKnowledgeBackup.plan(bytes, existing)
+        assertEquals(1, plan.skipped)
+        assertEquals(1, JSONArray(plan.additions).length())
+        assertEquals("新资料", JSONArray(plan.additions).getJSONObject(0).getString("text"))
+        assertEquals(1, existing.length())
+        val badId = JSONArray(existing.toString()).put(JSONObject().put("id", existing.getJSONObject(0).getString("id"))
+            .put("text", "冲突").put("source", "shared_text").put("createdAt", 3))
+        assertThrows(Exception::class.java) { CompanionKnowledgeBackup.plan(CompanionKnowledgeBackup.encode(badId), JSONArray()) }
+        assertThrows(Exception::class.java) { CompanionKnowledgeBackup.plan(byteArrayOf(0xc3.toByte(), 0x28), existing) }
+        assertThrows(Exception::class.java) { CompanionKnowledgeBackup.plan("{\"version\":1,\"items\":[]}".toByteArray(), existing) }
+    }
     @Test fun invalidAndOversizedDataIsRejected() {
         assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.add(JSONArray(), "x".repeat(8001), 1) }
         assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.search(JSONArray(), "x".repeat(201)) }
