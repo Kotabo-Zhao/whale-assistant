@@ -5,6 +5,10 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.provider.Settings
 import android.view.Gravity
 import android.widget.Button
@@ -22,6 +26,14 @@ import java.util.Calendar
 class CompanionActivity : AppCompatActivity() {
     private lateinit var store: CompanionStore
     private lateinit var content: LinearLayout
+    private val dark: Boolean get() = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    private val ink: Int get() = Color.parseColor(if (dark) "#E8F3FF" else "#173454")
+    private val muted: Int get() = Color.parseColor(if (dark) "#ADC4D9" else "#526B82")
+    private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
+    private fun surface(color: String, stroke: String? = null) = GradientDrawable().apply {
+        setColor(Color.parseColor(color)); cornerRadius = dp(16).toFloat()
+        if (stroke != null) setStroke(dp(1), Color.parseColor(stroke))
+    }
     private val voiceInput = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
@@ -40,8 +52,9 @@ class CompanionActivity : AppCompatActivity() {
         store = CompanionStore(this)
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            val pad = (20 * resources.displayMetrics.density).toInt()
+            val pad = dp(20)
             setPadding(pad, pad, pad, pad)
+            setBackgroundColor(Color.parseColor(if (dark) "#0D1A2A" else "#F1F7FC"))
         }
         setContentView(ScrollView(this).apply { addView(content) })
     }
@@ -50,7 +63,7 @@ class CompanionActivity : AppCompatActivity() {
 
     private fun render() {
         content.removeAllViews()
-        heading("鲸鱼娘助手")
+        hero()
         paragraph("通知与使用数据只在本机处理，不会自动发送给模型。系统和应用可能限制读取；锁屏或敏感内容不会显示在桌面气泡。")
         button("语音输入任务") { startVoiceInput() }
         paragraph("使用手机提供的语音识别服务；识别结果需自行确认并粘贴到对话，服务可能联网。")
@@ -176,11 +189,14 @@ class CompanionActivity : AppCompatActivity() {
         if (content.findViewWithTag<LinearLayout>("records") != null) content.removeView(content.findViewWithTag("records"))
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "records" }
         val records = store.read()
-        if (records.length() == 0) list.addView(TextView(this).apply { text = "暂无记录" })
+        if (records.length() == 0) list.addView(TextView(this).apply { text = "暂无记录"; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(8)) })
         for (index in records.length() - 1 downTo 0) {
             val row = records.optJSONObject(index) ?: continue
             val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.optLong("time")))
-            list.addView(TextView(this).apply { text = "$time · ${row.optString("package")}\n${row.optString("title")}\n${row.optString("text")}"; setPadding(0, 12, 0, 12) })
+            list.addView(TextView(this).apply {
+                text = "$time · ${row.optString("package")}\n${row.optString("title")}\n${row.optString("text")}"
+                setTextColor(ink); setPadding(dp(14), dp(12), dp(14), dp(12)); background = surface(if (dark) "#172B40" else "#FFFFFF")
+            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         }
         val returnButton = content.childCount - 1
         content.addView(list, if (returnButton >= 0 && content.getChildAt(returnButton) is Button && (content.getChildAt(returnButton) as Button).text == "返回") returnButton else content.childCount)
@@ -269,12 +285,36 @@ class CompanionActivity : AppCompatActivity() {
         android.widget.Toast.makeText(this, "摘要已复制，可自行粘贴到对话；可能由所选模型服务处理。", android.widget.Toast.LENGTH_LONG).show()
     }
 
-    private fun heading(value: String) { content.addView(TextView(this).apply { text = value; textSize = 22f; setPadding(0, 18, 0, 8) }) }
-    private fun paragraph(value: String) { content.addView(TextView(this).apply { text = value; textSize = 14f; setPadding(0, 6, 0, 8) }) }
+    private fun hero() {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(20), dp(20), dp(18))
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.parseColor("#174F8D"), Color.parseColor("#357CB2"))).apply { cornerRadius = dp(22).toFloat() }
+        }
+        card.addView(TextView(this).apply { text = "WHALE COMPANION"; textSize = 11f; letterSpacing = 0.12f; setTextColor(Color.parseColor("#D4EEFF")) })
+        card.addView(TextView(this).apply { text = "鲸鱼娘助手"; textSize = 25f; setTypeface(typeface, Typeface.BOLD); setTextColor(Color.WHITE); setPadding(0, dp(6), 0, dp(4)) })
+        card.addView(TextView(this).apply { text = "记住重要的事，陪你从容处理每一天。"; textSize = 14f; setTextColor(Color.parseColor("#E3F3FF")) })
+        content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+    }
+    private fun heading(value: String) { content.addView(TextView(this).apply {
+        text = value; textSize = 19f; setTypeface(typeface, Typeface.BOLD); setTextColor(ink); setPadding(0, dp(24), 0, dp(10))
+    }) }
+    private fun paragraph(value: String) { content.addView(TextView(this).apply {
+        text = value; textSize = 14f; setTextColor(muted); setLineSpacing(dp(3).toFloat(), 1f); setPadding(dp(2), dp(6), dp(2), dp(8))
+    }) }
     @Suppress("DEPRECATION")
     private fun toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-        content.addView(Switch(this).apply { text = label; isChecked = checked; setPadding(0, 10, 0, 10); setOnCheckedChangeListener { _, value -> onChange(value) } })
+        content.addView(Switch(this).apply {
+            text = label; textSize = 15f; setTextColor(ink); isChecked = checked; minHeight = dp(56)
+            setPadding(dp(14), dp(8), dp(14), dp(8)); background = surface(if (dark) "#172B40" else "#FFFFFF")
+            setOnCheckedChangeListener { _, value -> onChange(value) }
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6); bottomMargin = dp(6) })
     }
-    private fun button(label: String, onClick: () -> Unit) { content.addView(Button(this).apply { text = label; gravity = Gravity.CENTER; setOnClickListener { onClick() } }) }
+    private fun button(label: String, onClick: () -> Unit) { content.addView(Button(this).apply {
+        text = label; textSize = 15f; isAllCaps = false; gravity = Gravity.CENTER_VERTICAL or Gravity.START
+        setTextColor(ink); minHeight = dp(52); setPadding(dp(16), dp(8), dp(16), dp(8)); elevation = 0f
+        background = surface(if (dark) "#172B40" else "#FFFFFF", if (dark) "#294660" else "#DCEAF5")
+        setOnClickListener { onClick() }
+    }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4); bottomMargin = dp(4) }) }
     private fun openSettings(action: String) { runCatching { startActivity(Intent(action)) }.onFailure { paragraph("无法打开系统设置，请手动前往系统设置。") } }
 }
