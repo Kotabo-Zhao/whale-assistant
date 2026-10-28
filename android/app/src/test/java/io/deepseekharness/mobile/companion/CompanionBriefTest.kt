@@ -2,7 +2,7 @@ package io.deepseekharness.mobile.companion
 
 import org.json.JSONArray
 import org.json.JSONObject
-import org.junit.Assert.assertEquals
+import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionBriefTest {
@@ -39,6 +39,14 @@ class CompanionBriefTest {
         assertEquals(content, candidate.notificationContentHash)
         rows.getJSONObject(0).put("notificationKeyHash", "invalid")
         assertEquals(null, CompanionBrief.candidates(rows).single().notificationKeyHash)
+    }
+    @Test fun candidateHintsAreRulesNotAssertionsAndAlertsAreRateLimited() {
+        assertEquals("可能需要取件", CompanionBrief.candidateReason("包裹", "请取件"))
+        assertEquals(null, CompanionBrief.candidateReason("天气", "晴"))
+        assertTrue(CompanionCandidateNotifications.due(1L, 0L))
+        assertFalse(CompanionCandidateNotifications.due(1000L, 999L))
+        assertFalse(CompanionCandidateNotifications.due(1000L, 2000L))
+        assertTrue(CompanionCandidateNotifications.due(1801000L, 1000L))
     }
     @Test fun sourceAppMustBeAValidPackageAndMatchResolvedLauncher() {
         org.junit.Assert.assertTrue(CompanionSourcePolicy.matchesResolved("com.example.reader", "com.example.reader"))

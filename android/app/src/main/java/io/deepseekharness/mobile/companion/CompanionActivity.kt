@@ -176,6 +176,9 @@ class CompanionActivity : AppCompatActivity() {
         } else if (intent?.getBooleanExtra("open_usage_suggestions", false) == true) {
             intent?.removeExtra("open_usage_suggestions")
             showUsageSuggestions()
+        } else if (intent?.getBooleanExtra("open_notification_candidates", false) == true) {
+            intent?.removeExtra("open_notification_candidates")
+            showNotificationCandidates()
         }
     }
 
@@ -237,6 +240,9 @@ class CompanionActivity : AppCompatActivity() {
                 .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.notificationModelAccess = true; render() }.show()
         }
         paragraph("对话通知访问默认关闭，与本地采集和系统权限分别控制；开启后内容可能发送给当前模型服务。")
+        toggle("通知到达时显示桌面气泡", store.notificationBubbles) { store.notificationBubbles = it }
+        toggle("候选事项发送系统通知", store.candidateNotifications) { store.candidateNotifications = it }
+        paragraph("本地规则识别可能的日程、取件或待回复，只显示通用提示；规则可能误判或遗漏。系统通知最多 30 分钟一次，需要通知权限，并遵守免打扰；不会自动回复或创建事项。")
         toggle("收集通知摘要", store.notificationCapture) { store.notificationCapture = it; render() }
         paragraph("开启后记录通知来源、标题和正文，最多 50 条；只在读取或新增时清理超过 7 天的记录。验证码与密码使用简单规则过滤，不能保证识别所有敏感内容。")
         val notificationAllowed = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)

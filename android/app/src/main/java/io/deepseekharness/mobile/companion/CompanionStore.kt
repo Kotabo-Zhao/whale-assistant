@@ -8,6 +8,12 @@ import org.json.JSONObject
 class CompanionStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("companion_private_v1", Context.MODE_PRIVATE)
 
+    var notificationBubbles: Boolean
+        get() = prefs.getBoolean("notification_bubbles", true)
+        set(value) { prefs.edit().putBoolean("notification_bubbles", value).apply() }
+    var candidateNotifications: Boolean
+        get() = prefs.getBoolean("candidate_notifications", false)
+        set(value) { prefs.edit().putBoolean("candidate_notifications", value).apply() }
     var notificationCapture: Boolean
         get() = prefs.getBoolean("capture", false)
         set(value) { prefs.edit().putBoolean("capture", value).apply() }

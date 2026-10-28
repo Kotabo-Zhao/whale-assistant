@@ -42,6 +42,13 @@ class CompanionNotificationService : NotificationListenerService() {
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
         if (title.isBlank() && text.isBlank()) return
         if (CompanionStore.sensitive("$title $text")) return
-        if (runCatching { store.record(sbn.packageName, title, text, notificationKey = sbn.key) }.getOrDefault(false)) OverlayBallService.companionHint("有一条新通知，可以在助手设置中查看。")
+        if (runCatching { store.record(sbn.packageName, title, text, notificationKey = sbn.key) }.getOrDefault(false)) {
+            val candidate = CompanionBrief.candidateReason(title, text) != null
+            if (store.notificationBubbles) {
+                if (candidate) OverlayBallService.companionCandidateHint()
+                else OverlayBallService.companionHint("有一条新通知，可以在助手设置中查看。")
+            }
+            if (candidate && store.candidateNotifications) runCatching { CompanionCandidateNotifications.show(this, store.inQuietHours()) }
+        }
     }
 }

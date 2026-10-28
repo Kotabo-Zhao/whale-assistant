@@ -21,6 +21,8 @@ internal object CompanionBrief {
         "可能需要取件" to Regex("取件|待取|领取快递|pickup|pick up|parcel ready", RegexOption.IGNORE_CASE),
         "可能需要回复" to Regex("待回复|请回复|请回电|reply requested|please reply", RegexOption.IGNORE_CASE),
     )
+    fun candidateReason(title: String, text: String): String? =
+        candidateRules.firstOrNull { it.second.containsMatchIn("$title $text") }?.first
     /** Suggestions only: keep their original source and time; never infer due dates or create reminders. */
     fun candidates(records: JSONArray): List<Candidate> {
         val output = mutableListOf<Candidate>()
@@ -31,7 +33,7 @@ internal object CompanionBrief {
             val source = row.optString("package")
             val time = row.optLong("time", 0)
             if (source.isBlank() || time <= 0 || (title.isBlank() && text.isBlank()) || CompanionStore.sensitive("$title $text")) continue
-            val reason = candidateRules.firstOrNull { it.second.containsMatchIn("$title $text") }?.first ?: continue
+            val reason = candidateReason(title, text) ?: continue
             output.add(Candidate(source, time, title, text, reason,
                 row.optString("notificationKeyHash").takeIf(CompanionNotificationTarget::validDigest),
                 row.optString("notificationContentHash").takeIf(CompanionNotificationTarget::validDigest)))

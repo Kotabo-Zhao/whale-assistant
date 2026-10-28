@@ -1781,6 +1781,16 @@ class OverlayBallService : Service() {
 
     companion object {
         @Volatile private var activeService: OverlayBallService? = null
+        internal fun companionCandidateHint() {
+            Handler(Looper.getMainLooper()).post {
+                activeService?.let { service ->
+                    service.showCompanionHint("可能有待处理事项，点击查看。") {
+                        runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
+                            .putExtra("open_notification_candidates", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
+                }
+            }
+        }
         internal fun companionHint(message: String) {
             Handler(Looper.getMainLooper()).post { activeService?.showCompanionHint(message) }
         }
