@@ -40,3 +40,18 @@ test('长回复有明确截断标记', () => {
   assert.equal(result.text.length, 2000)
   assert.equal(result.truncated, true)
 })
+
+test('朗读截断不会拆开表情，选中文本也遵守相同边界', () => {
+  const text = `${'a'.repeat(1999)}🐋后续文字`
+  const response = page(`<div data-chat-flow-kind="assistant-step" data-chat-group-part="response">${text}</div>`)
+  const selected = page(`<div data-chat-flow-kind="assistant-step"><span id="selected">${text}</span></div>`, address, '#selected')
+  for (const result of [response, selected]) {
+    assert.equal(result.text, 'a'.repeat(1999))
+    assert.equal(result.truncated, true)
+    assert.equal(result.text.isWellFormed(), true)
+  }
+  const fits = page(`<div data-chat-flow-kind="assistant-step" data-chat-group-part="response">${'a'.repeat(1998)}🐋</div>`)
+  assert.equal(fits.text.length, 2000)
+  assert.equal(fits.text.endsWith('🐋'), true)
+  assert.equal(fits.truncated, false)
+})

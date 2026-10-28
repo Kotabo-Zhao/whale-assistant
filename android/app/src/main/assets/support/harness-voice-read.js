@@ -19,5 +19,8 @@
   }
   if (!text) return JSON.stringify({ status: 'unavailable' });
   const limit = 2000;
-  return JSON.stringify({ status: 'ok', text: text.slice(0, limit), truncated: text.length > limit });
+  let end = Math.min(text.length, limit);
+  // Keep UTF-16 surrogate pairs intact when an emoji straddles the limit.
+  if (end < text.length && end > 0 && /[\uD800-\uDBFF]/.test(text[end - 1]) && /[\uDC00-\uDFFF]/.test(text[end])) end--;
+  return JSON.stringify({ status: 'ok', text: text.slice(0, end), truncated: text.length > end });
 })(/*__VOICE_PAGE__*/null)
