@@ -12,7 +12,9 @@ import sys
 import zipfile
 from pathlib import Path
 
+if len(sys.argv) not in (8, 10): raise SystemExit('expected base mapping build dist plugin voice output [runtime manifest]')
 base, mapping_file, build, dist, plugin, voice_read, output = map(Path, sys.argv[1:8])
+runtime_pair = tuple(map(Path, sys.argv[8:10]))
 BASE_SHA = '3ae33e6c63efe7da890d3ac52bd8e356e8b30528298f24be72f6e02190c08c01'
 with base.open('rb') as stream:
     if hashlib.file_digest(stream, 'sha256').hexdigest() != BASE_SHA: raise SystemExit('base APK hash mismatch')
@@ -32,6 +34,15 @@ if not plugin.is_file() or plugin.is_symlink(): raise SystemExit('plugin asset m
 replacements['assets/support/plugin-manager.cjs'] = plugin
 if not voice_read.is_file() or voice_read.is_symlink(): raise SystemExit('voice asset missing')
 replacements['assets/support/harness-voice-read.js'] = voice_read
+if runtime_pair:
+    bundle, runtime_manifest = runtime_pair
+    if not bundle.is_file() or bundle.is_symlink() or not runtime_manifest.is_file() or runtime_manifest.is_symlink(): raise SystemExit('runtime files missing')
+    metadata = json.loads(runtime_manifest.read_text(encoding='utf-8'))
+    if metadata.get('version') != '0.3.19-whale-memorypage1' or metadata['rootfs']['compressedBytes'] != bundle.stat().st_size: raise SystemExit('runtime manifest mismatch')
+    with bundle.open('rb') as f:
+        if hashlib.file_digest(f, 'sha256').hexdigest() != metadata['rootfs']['sha256']: raise SystemExit('runtime hash mismatch')
+    replacements['assets/runtime/rootfs.bundle'] = bundle
+    replacements['assets/runtime/runtime-manifest.json'] = runtime_manifest
 if not (dist / 'index.html').is_file(): raise SystemExit('frontend index missing')
 replacements['assets/public/index.html'] = dist / 'index.html'
 assets = dist / 'assets'
@@ -39,7 +50,7 @@ if not assets.is_dir(): raise SystemExit('frontend assets missing')
 for item in assets.iterdir():
     if not item.is_file() or item.is_symlink(): raise SystemExit('invalid frontend asset')
     replacements['assets/public/assets/' + item.name] = item
-if len(replacements) <= len(manifest['dex']) + 3: raise SystemExit('empty frontend assets')
+if not any(name.startswith('assets/public/assets/') for name in replacements): raise SystemExit('empty frontend assets')
 
 def signature(name):
     upper = name.upper()
@@ -53,6 +64,7 @@ try:
         old_dex = {n for n in old_names if n.startswith('classes') and n.endswith('.dex')}
         if old_dex != set(manifest['dex']): raise ValueError('base DEX entries changed')
         if not {'assets/public/index.html', 'assets/support/plugin-manager.cjs', 'assets/support/harness-voice-read.js'} <= set(old_names): raise ValueError('base assets missing')
+        if runtime_pair and (not {'assets/runtime/rootfs.bundle', 'assets/runtime/runtime-manifest.json'} <= set(old_names) or old.getinfo('assets/runtime/rootfs.bundle').compress_type != zipfile.ZIP_STORED): raise ValueError('base runtime missing or compressed')
         with output.open('xb') as destination:
             created = True
             with zipfile.ZipFile(destination, 'w', allowZip64=True) as new:

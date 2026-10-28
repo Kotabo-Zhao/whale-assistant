@@ -21,6 +21,7 @@ class RefreshTests(unittest.TestCase):
                     'classes.dex': b'old dex', 'assets/support/plugin-manager.cjs': b'old plugin',
                     'assets/support/harness-voice-read.js': b'old voice', 'assets/public/index.html': b'old html',
                     'assets/public/assets/old.js': b'old frontend', 'assets/runtime.bundle': b'untouched runtime',
+                    'assets/runtime/rootfs.bundle': b'old runtime', 'assets/runtime/runtime-manifest.json': b'old manifest',
                 }.items(): archive.writestr(name, value)
             build = root / 'build'
             dex = build / 'intermediates/dex/debug/mergeProjectDexDebug/0/classes.dex'
@@ -53,6 +54,21 @@ class RefreshTests(unittest.TestCase):
             voice.write_bytes(b'changed after packaging')
             self.assertNotEqual(subprocess.run(verify, capture_output=True).returncode, 0)
             self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)  # never overwrite
+            voice.write_bytes(b'new voice')
+            runtime = root / 'runtime.bundle'
+            runtime.write_bytes(b'new runtime')
+            manifest = root / 'runtime.json'
+            manifest.write_text(json.dumps({'version': '0.3.19-whale-memorypage1', 'rootfs': {
+                'compressedBytes': runtime.stat().st_size, 'sha256': hashlib.sha256(runtime.read_bytes()).hexdigest()}}))
+            updated = root / 'updated.apk'
+            subprocess.run(command[:-1] + [str(updated), str(runtime), str(manifest)], check=True, capture_output=True)
+            verified = verify[:-1] + [str(updated), str(runtime), str(manifest)]
+            subprocess.run(verified, check=True, capture_output=True)
+            with zipfile.ZipFile(updated) as actual:
+                self.assertEqual(actual.read('assets/runtime/rootfs.bundle'), b'new runtime')
+                self.assertEqual(actual.getinfo('assets/runtime/rootfs.bundle').compress_type, zipfile.ZIP_STORED)
+            runtime.write_bytes(b'bad runtime')
+            self.assertNotEqual(subprocess.run(verified, capture_output=True).returncode, 0)
 
 
 if __name__ == '__main__':
