@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { MobileMarket } from './MobileMarket'
-import { parseMarketCatalog } from './marketCatalog'
+import { fetchPackagePreview, parseMarketCatalog, parsePackagePreview } from './marketCatalog'
 
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -116,4 +116,39 @@ it('插件目录分页可访问全部结果，搜索后回到第一页', async (
   expect(screen.getByText('插件 01')).toBeVisible()
   expect(screen.queryByText('插件 64')).not.toBeInTheDocument()
   expect(screen.queryByRole('navigation', { name: '插件目录分页' })).not.toBeInTheDocument()
+})
+
+
+it('按需读取指定 npm 版本声明，校验包身份且不将声明当作兼容结论', async () => {
+  const manifest = { name: '@example/plugin', version: '1.2.3', os: ['linux'], cpu: ['arm64'], engines: { node: '>=20' }, dependencies: { example: '^1' }, scripts: { install: 'do not display' } }
+  const bytes = new TextEncoder().encode(JSON.stringify(manifest))
+  let done = false
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({
+    read: () => Promise.resolve(done ? { done: true } : (done = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+  }) } })
+  vi.stubGlobal('fetch', fetchMock)
+  const preview = await fetchPackagePreview('@example/plugin', '1.2.3', new AbortController().signal)
+  expect(fetchMock.mock.calls[0][0]).toBe('https://registry.npmjs.org/%40example%2Fplugin/1.2.3')
+  expect(preview).toMatchObject({ version: '1.2.3', os: 'linux', cpu: 'arm64', engines: 'node: >=20', dependencies: 'example', scripts: 'install' })
+  expect(JSON.stringify(preview)).not.toContain('do not display')
+  expect(() => parsePackagePreview({ ...manifest, name: 'other' }, '@example/plugin', '1.2.3')).toThrow()
+  expect(() => parsePackagePreview(manifest, '@example/plugin', '1.2.4')).toThrow()
+})
+
+it('更改版本后旧包声明不再显示', async () => {
+  const catalog = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '示例', npm: 'example-plugin' }] }))
+  const pkg = new TextEncoder().encode(JSON.stringify({ name: 'example-plugin', version: '1.0.0', os: ['linux'] }))
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+    let done = false
+    const bytes = url.includes('registry.npmjs.org') ? pkg : catalog
+    return Promise.resolve({ ok: true, body: { getReader: () => ({ read: () => Promise.resolve(done ? { done: true } : (done = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {} }) } })
+  }))
+  render(<MobileMarket locked={false} onInstall={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+  fireEvent.click(await screen.findByRole('button', { name: '安装' }))
+  fireEvent.click(screen.getByRole('button', { name: '查看 npm 包声明' }))
+  expect(await screen.findByText('1.0.0')).toBeVisible()
+  expect(screen.getByText(/并非安全或安卓兼容认证/)).toBeVisible()
+  fireEvent.change(screen.getByRole('textbox', { name: '指定版本（可选）' }), { target: { value: '1.2.3' } })
+  expect(screen.queryByText('1.0.0')).not.toBeInTheDocument()
 })

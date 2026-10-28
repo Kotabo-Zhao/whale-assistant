@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { t, useLanguage } from '../i18n'
 
-import { fetchCatalog, type Entry } from './marketCatalog'
+import { fetchCatalog, fetchPackagePreview, type Entry, type PackagePreview } from './marketCatalog'
 import { validatePluginRequest } from '../platform/plugins'
 
 const PAGE_SIZE = 30
@@ -14,6 +14,9 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
   const [page, setPage] = useState(0)
   const [review, setReview] = useState<Entry | null>(null)
   const [version, setVersion] = useState('')
+  const [preview, setPreview] = useState<PackagePreview | null>(null)
+  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'failed'>('idle')
+  const previewRequest = useRef<AbortController | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
   const request = useRef<AbortController | null>(null)
   const reviewRegion = useRef<HTMLDivElement | null>(null)
@@ -21,7 +24,8 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
   useEffect(() => {
     if (review) { reviewRegion.current?.scrollIntoView?.({ block: 'nearest' }); reviewRegion.current?.focus() }
   }, [review])
-  useEffect(() => () => { request.current?.abort(); request.current = null }, [])
+  useEffect(() => () => { request.current?.abort(); request.current = null; previewRequest.current?.abort(); previewRequest.current = null }, [])
+  useEffect(() => { previewRequest.current?.abort(); previewRequest.current = null; setPreview(null); setPreviewStatus('idle') }, [review, version])
   const matches = useMemo(() => {
     const term = query.trim().toLowerCase()
     return (entries ?? []).filter(item => !term || `${item.name} ${item.npm} ${item.description}`.toLowerCase().includes(term))
@@ -38,6 +42,19 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
   const versionValid = !review || !version.trim() || (() => {
     try { validatePluginRequest({ operation: 'import', source: `${review.npm}@${version.trim()}` }); return true } catch { return false }
   })()
+  const inspect = async () => {
+    if (!review || !versionValid) return
+    previewRequest.current?.abort()
+    const controller = new AbortController()
+    previewRequest.current = controller
+    setPreview(null); setPreviewStatus('loading')
+    const timeout = window.setTimeout(() => controller.abort(), 15000)
+    try {
+      const result = await fetchPackagePreview(review.npm, version.trim(), controller.signal)
+      if (previewRequest.current === controller) { setPreview(result); setPreviewStatus('idle') }
+    } catch { if (previewRequest.current === controller) setPreviewStatus('failed') }
+    finally { window.clearTimeout(timeout) }
+  }
   const load = async () => {
     request.current?.abort()
     const controller = new AbortController()
@@ -77,6 +94,18 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
       </label>
       <p className="plugin-hint">{t('留空自动选择；填写已知精确版本可尝试较旧版本，仍会检查兼容性。')}</p>
       {!versionValid && <p role="alert">{t('请输入完整版本号，例如 1.2.3。')}</p>}
+      <button className="button button-secondary compact-button" type="button" disabled={!versionValid || previewStatus === 'loading'} onClick={() => { void inspect() }}>
+        {previewStatus === 'loading' ? t('正在读取包信息…') : t('查看 npm 包声明')}
+      </button>
+      {previewStatus === 'failed' && <p role="alert">{t('无法读取包声明，请检查网络或版本后重试；仍可交给手机管理器检查。')}</p>}
+      {preview && <div className="plugin-hint" role="status">
+        <p>{t('npm 声明版本')}：<code>{preview.version}</code>{!version.trim() && ` · ${t('最新版本，自动安装可能选择其他版本')}`}</p>
+        <p>OS: {preview.os} · CPU: {preview.cpu}</p>
+        <p>{t('引擎声明')}：{preview.engines}</p>
+        <p>{t('直接依赖名称')}：{preview.dependencies}</p>
+        <p>{t('脚本名称')}：{preview.scripts}</p>
+        <p>{t('以上只是包作者声明，并非安全或安卓兼容认证；安装时会再次检查，不运行安装脚本。')}</p>
+      </div>}
       {locked && <p role="status">{t('请先停止运行环境再安装。')}</p>}
       <div className="mobile-market-review-actions">
         <button className="button button-secondary compact-button" type="button" onClick={() => setReview(null)}>{t('取消')}</button>
