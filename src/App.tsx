@@ -3,20 +3,14 @@ import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
 import { TaskStarter } from './components/TaskStarter'
 import { CompanionSettingsButton } from './components/CompanionSettingsButton'
-import { ApplicationPicker } from './components/ApplicationPicker'
-import { VirtualScreenSettings } from './components/VirtualScreenSettings'
-import { AutomationRuleForm } from './components/AutomationRuleForm'
 import type { AutomationRuleDefaults } from './components/AutomationRuleForm'
-import { AutomationAppConfigForm } from './components/AutomationAppConfigForm'
 import { AutomationDisclaimer } from './components/AutomationDisclaimer'
 import { AutomationTaskCard } from './components/AutomationTaskCard'
 import { AppBackground } from './components/AppBackground'
 import { LanguageSettings } from './components/LanguageSettings'
-import { AppearanceSettings } from './components/AppearanceSettings'
 import { SessionManager } from './components/SessionManager'
 import { DiagnosticLogPanel, HarnessLogPanel } from './ui/logs'
 import type { FilesRoot } from './screens/FilesScreen'
-import { RuntimeSelfCheckPanel } from './screens/RuntimeSelfCheckPanel'
 import { PermissionGuideDialog, ResetDialog, UpdateDialog } from './screens/Dialogs'
 import { keepAliveGuideResolved, overlayFailureGuide, overlayGuideResolved, type PermissionGuide } from './ui/permissionGuide'
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
@@ -84,10 +78,7 @@ import {
 import { Onboarding, ONBOARDING_STORAGE_KEY } from './components/Onboarding'
 import { hasConfiguredModelCredential, MODEL_PROVIDERS } from './modelProviders'
 import { firstCatalogModelId, isValidModelId } from './platform/modelCatalog'
-import { CustomProviders } from './components/CustomProviders'
 import { ApiKeyInput } from './components/ApiKeyInput'
-import { DeviceCapabilityCard } from './components/DeviceCapabilityCard'
-import { RootEngineCard } from './components/RootEngineCard'
 import { AppUpdateReminderDialog } from './components/AppUpdateReminderDialog'
 import { useAppUpdateReminder } from './appUpdateReminder'
 import { runtimeBridge } from './platform/native'
@@ -148,6 +139,15 @@ import {
   DIAGNOSTIC_RETENTION_MIN,
 } from './platform/types'
 
+const ApplicationPicker = lazy(() => import('./components/ApplicationPicker').then(module => ({ default: module.ApplicationPicker })))
+const VirtualScreenSettings = lazy(() => import('./components/VirtualScreenSettings').then(module => ({ default: module.VirtualScreenSettings })))
+const AutomationRuleForm = lazy(() => import('./components/AutomationRuleForm').then(module => ({ default: module.AutomationRuleForm })))
+const AutomationAppConfigForm = lazy(() => import('./components/AutomationAppConfigForm').then(module => ({ default: module.AutomationAppConfigForm })))
+const AppearanceSettings = lazy(() => import('./components/AppearanceSettings').then(module => ({ default: module.AppearanceSettings })))
+const RuntimeSelfCheckPanel = lazy(() => import('./screens/RuntimeSelfCheckPanel').then(module => ({ default: module.RuntimeSelfCheckPanel })))
+const CustomProviders = lazy(() => import('./components/CustomProviders').then(module => ({ default: module.CustomProviders })))
+const DeviceCapabilityCard = lazy(() => import('./components/DeviceCapabilityCard').then(module => ({ default: module.DeviceCapabilityCard })))
+const RootEngineCard = lazy(() => import('./components/RootEngineCard').then(module => ({ default: module.RootEngineCard })))
 const TerminalPanel = lazy(() => import('./components/TerminalPanel').then(module => ({ default: module.TerminalPanel })))
 const PluginSettings = lazy(() => import('./components/PluginSettings').then(module => ({ default: module.PluginSettings })))
 const FilesScreen = lazy(() => import('./screens/FilesScreen').then(module => ({ default: module.FilesScreen })))
