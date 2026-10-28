@@ -32,6 +32,15 @@ internal object CompanionRecurringPolicy {
         }
         error("无法计算下次提醒")
     }
+    /** Require the whole record to match the reviewed snapshot before preparing a new schedule. */
+    fun edit(row: JSONObject, expected: String, text: String, hour: Int, minute: Int, weekday: Int, now: Long, zone: ZoneId): JSONObject? {
+        if (row.toString() != expected) return null
+        val content = text.trim()
+        require(content.isNotBlank() && content.length <= 200 && !CompanionStore.sensitive(content)) { "内容为空、过长或可能含敏感信息" }
+        val following = next(now, hour, minute, weekday, zone)
+        return JSONObject(row.toString()).put("text", content).put("hour", hour).put("minute", minute).put("weekday", weekday)
+            .put("nextAt", following).put("state", "scheduled").put("schedulePending", true)
+    }
     /** Only a due, scheduled occurrence may be claimed; the next time makes duplicate delivery a no-op. */
     fun claim(row: JSONObject, now: Long, zone: ZoneId): Boolean {
         if (row.optString("state") != "scheduled" || row.getLong("nextAt") > now) return false
@@ -63,6 +72,18 @@ internal class CompanionRecurringReminder(context: Context) {
         rows.put(row); save(rows)
         try { schedule(row); row.put("schedulePending", false); save(rows) }
         catch (e: Exception) { row.put("state", "failed").put("schedulePending", false); save(rows); throw e }
+    }
+    fun edit(id: String, expected: String, text: String, hour: Int, minute: Int, weekday: Int): Boolean = synchronized(lock) {
+        val rows = read()
+        val index = (0 until rows.length()).firstOrNull { rows.getJSONObject(it).getString("id") == id } ?: return@synchronized false
+        val updated = CompanionRecurringPolicy.edit(rows.getJSONObject(index), expected, text, hour, minute, weekday,
+            System.currentTimeMillis(), ZoneId.systemDefault()) ?: return@synchronized false
+        rows.put(index, updated)
+        // A crash before scheduling leaves an explicit marker for the existing recovery path.
+        save(rows)
+        try { schedule(updated); updated.put("schedulePending", false); save(rows) }
+        catch (e: Exception) { updated.put("state", "failed").put("schedulePending", false); save(rows); throw e }
+        true
     }
     fun remove(id: String) = synchronized(lock) {
         val rows = read(); val kept = JSONArray(); var found = false

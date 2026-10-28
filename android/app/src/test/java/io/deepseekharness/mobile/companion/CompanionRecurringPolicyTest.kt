@@ -28,6 +28,21 @@ class CompanionRecurringPolicyTest {
         row.put("state", "failed").put("nextAt", due)
         assertFalse(CompanionRecurringPolicy.claim(row, due, zone))
     }
+    @Test fun editPreservesHistoryAndRejectsStaleSnapshot() {
+        val zone = ZoneId.of("Asia/Shanghai")
+        val now = ZonedDateTime.of(2026, 10, 29, 10, 0, 0, 0, zone).toInstant().toEpochMilli()
+        val row = org.json.JSONObject().put("id", "123").put("text", "原提醒").put("state", "scheduled").put("nextAt", now + 5000)
+            .put("hour", 10).put("minute", 5).put("weekday", 0).put("last", "submitted").put("schedulePending", false)
+        val expected = row.toString()
+        val edited = CompanionRecurringPolicy.edit(row, expected, "新提醒", 11, 30, 4, now, zone)!!
+        assertEquals("原提醒", row.getString("text"))
+        assertEquals("123", edited.getString("id")); assertEquals("submitted", edited.getString("last"))
+        assertEquals("新提醒", edited.getString("text")); assertTrue(edited.getBoolean("schedulePending"))
+        assertEquals("2026-10-29T11:30+08:00[Asia/Shanghai]", java.time.Instant.ofEpochMilli(edited.getLong("nextAt")).atZone(zone).toString())
+        row.put("last", "failed")
+        assertNull(CompanionRecurringPolicy.edit(row, expected, "新提醒", 11, 30, 4, now, zone))
+        assertThrows(Exception::class.java) { CompanionRecurringPolicy.edit(row, row.toString(), "", 11, 30, 4, now, zone) }
+    }
     @Test fun interruptedSchedulingIsRecoveredWithoutReplayingAnOverdueOccurrence() {
         val zone = ZoneId.of("Asia/Shanghai")
         val now = ZonedDateTime.of(2026, 10, 29, 10, 0, 0, 0, zone).toInstant().toEpochMilli()

@@ -859,6 +859,7 @@ class CompanionActivity : AppCompatActivity() {
             val state = when {
                 row.optString("state") != "scheduled" -> "安排失败"
                 row.optBoolean("schedulePending", false) -> "等待恢复安排"
+                row.getLong("nextAt") <= System.currentTimeMillis() -> "计划时间已过，状态待核对"
                 else -> "已安排"
             }
             val last = when (row.optString("last")) { "submitted" -> "上次已交给系统"; "failed" -> "上次投递失败"; "missed" -> "上次已错过"; "pending" -> "上次状态未确认"; else -> "尚无记录" }
@@ -875,14 +876,41 @@ class CompanionActivity : AppCompatActivity() {
                 }
             dialog.setNeutralButton("更多操作") { _, _ ->
                 val failed = rows.getJSONObject(index).optString("state") == "failed"
-                val options = if (failed) arrayOf("稍后再提醒一次", "重新安排重复提醒") else arrayOf("稍后再提醒一次")
+                val options = if (failed) arrayOf("稍后再提醒一次", "编辑重复提醒", "重新安排重复提醒") else arrayOf("稍后再提醒一次", "编辑重复提醒")
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择操作").setItems(options) { _, choice ->
-                    if (choice == 0) chooseSnooze(rows.getJSONObject(index).getString("text"))
-                    else runCatching { reminders.retry(id) }.onSuccess { paragraph("已重新安排下一次提醒。") }.onFailure { paragraph("重新安排失败，请检查系统设置。") }
+                    when (choice) {
+                        0 -> chooseSnooze(rows.getJSONObject(index).getString("text"))
+                        1 -> editRecurringReminder(rows.getJSONObject(index))
+                        2 -> runCatching { reminders.retry(id) }.onSuccess { paragraph("已重新安排下一次提醒。") }.onFailure { paragraph("重新安排失败，请检查系统设置。") }
+                    }
                 }.setNegativeButton("取消", null).show()
             }
             dialog.show()
         }.setNegativeButton("关闭", null).show()
+    }
+
+    private fun editRecurringReminder(row: org.json.JSONObject) {
+        val id = row.getString("id")
+        val expected = row.toString()
+        val input = android.widget.EditText(this).apply { setText(row.getString("text")); setSingleLine(true); filters = arrayOf(android.text.InputFilter.LengthFilter(200)) }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("编辑重复提醒").setView(input)
+            .setNegativeButton("取消", null).setPositiveButton("选择重复方式") { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isBlank() || CompanionStore.sensitive(text)) { android.widget.Toast.makeText(this, "提醒内容为空或可能含敏感信息。", android.widget.Toast.LENGTH_LONG).show(); return@setPositiveButton }
+                val days = arrayOf("每天", "每周一", "每周二", "每周三", "每周四", "每周五", "每周六", "每周日")
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择重复方式")
+                    .setItems(days) { _, weekday ->
+                        android.app.TimePickerDialog(this, { _, hour, minute ->
+                            runMemoryIo("正在更新重复提醒…", { CompanionRecurringReminder(this).edit(id, expected, text, hour, minute, weekday) }) { result ->
+                                val message = result.fold(
+                                    { if (it) "重复提醒已更新；系统可能延迟。" else "提醒已变化或不存在，请重新查看。" },
+                                    { "未能确认更新结果，请查看提醒列表再操作。" },
+                                )
+                                android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }, row.getInt("hour"), row.getInt("minute"), true).show()
+                    }.setNegativeButton("取消", null).show()
+            }.show()
     }
 
     private fun showReminders() {
