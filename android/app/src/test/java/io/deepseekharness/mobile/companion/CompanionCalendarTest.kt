@@ -75,4 +75,21 @@ class CompanionCalendarTest {
         assertEquals(saved, CompanionCalendarHintPolicy.parse(org.json.JSONArray(saved).toString()))
         assertThrows(Exception::class.java) { CompanionCalendarHintPolicy.parse("[\"bad\"]") }
     }
+
+    @Test fun allDayModelDatesUseUtcAndInvalidBoundariesAreNotGuessed() {
+        val start = java.time.Instant.parse("2026-02-03T00:00:00Z").toEpochMilli()
+        val end = java.time.Instant.parse("2026-02-05T00:00:00Z").toEpochMilli()
+        val events = listOf(CompanionCalendar.Event("全天", start, end, true), CompanionCalendar.Event("异常", start + 1, end, true))
+        for (zone in listOf("Asia/Shanghai", "America/Los_Angeles")) {
+            val result = org.json.JSONObject(CompanionCalendarModel.execute(true, "", start, TimeZone.getTimeZone(zone)) {
+                CompanionCalendar.Snapshot(CompanionCalendar.State.OK, events)
+            })
+            val rows = result.getJSONArray("events")
+            assertEquals("2026-02-03", rows.getJSONObject(0).getString("startDate"))
+            assertEquals("2026-02-05", rows.getJSONObject(0).getString("endDateExclusive"))
+            assertEquals("unavailable", rows.getJSONObject(1).getString("dateStatus"))
+            assertFalse(rows.getJSONObject(1).has("startDate"))
+            assertTrue(result.getString("notice").contains("不可信"))
+        }
+    }
 }
