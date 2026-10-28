@@ -171,7 +171,10 @@ class CompanionActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume(); render()
-        if (intent?.getBooleanExtra("open_calendar_brief", false) == true) {
+        if (intent?.getBooleanExtra("open_voice_input", false) == true) {
+            intent?.removeExtra("open_voice_input")
+            startVoiceInput()
+        } else if (intent?.getBooleanExtra("open_calendar_brief", false) == true) {
             intent?.removeExtra("open_calendar_brief")
             showBrief()
         } else if (intent?.getBooleanExtra("open_usage_suggestions", false) == true) {

@@ -158,6 +158,9 @@ object OverlayBallSecondaryPolicy {
         /** 打开 Harness 对话小窗。 */
         CONVERSATION,
 
+        /** 在用户点击后启动系统语音识别，结果需要人工核对。 */
+        VOICE_INPUT,
+
         /** 打开目标应用副屏悬浮窗；副屏没在运行时由服务给出提示。 */
         VIRTUAL_SCREEN,
 
@@ -174,6 +177,7 @@ object OverlayBallSecondaryPolicy {
     /** 二级球从内到外的固定顺序。 */
     val CHOICE_ORDER: List<Choice> = listOf(
         Choice.CONVERSATION,
+        Choice.VOICE_INPUT,
         Choice.VIRTUAL_SCREEN,
         Choice.RETURN_TO_APP,
         Choice.HIDE_BALL,

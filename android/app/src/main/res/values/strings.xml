@@ -64,6 +64,8 @@
       与可见文字分开写，是为了让 TalkBack 在按钮上没有文字时（或文字被截断时）仍然说明这个
       按钮会做什么。
     -->
+    <string name="overlay_ball_secondary_voice_description">语音输入任务，核对后填入对话</string>
+    <string name="overlay_ball_secondary_voice_unavailable">无法打开语音输入，请回到助手设置重试。</string>
     <string name="overlay_ball_secondary_conversation_description">打开 Harness AI 对话小窗</string>
     <string name="overlay_ball_secondary_virtual_screen_description">打开目标应用副屏悬浮窗</string>
     <string name="overlay_ball_secondary_virtual_screen_unavailable_toast">副屏尚未运行，请先在 Harness 里打开「目标应用副屏」</string>

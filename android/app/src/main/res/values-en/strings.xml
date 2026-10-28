@@ -58,6 +58,8 @@
     <string name="overlay_ball_notification_text">Tap to open the shortcut menu: chat or virtual screen</string>
     <string name="overlay_ball_menu_return">Return to app</string>
     <string name="overlay_ball_menu_hide">Hide floating ball</string>
+    <string name="overlay_ball_secondary_voice_description">Speak a task and review it before adding it to chat</string>
+    <string name="overlay_ball_secondary_voice_unavailable">Could not open voice input. Try again from assistant settings.</string>
     <string name="overlay_ball_secondary_conversation_description">Open the small Harness AI chat window</string>
     <string name="overlay_ball_secondary_virtual_screen_description">Open the target-app virtual screen overlay</string>
     <string name="overlay_ball_secondary_virtual_screen_unavailable_toast">The virtual screen is not running yet. Open “Target-app virtual screen” in Harness first.</string>
