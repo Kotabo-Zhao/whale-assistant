@@ -151,8 +151,25 @@ class CompanionMemoryEngineTest {
         val result = JSONObject(CompanionMemoryEngine({ rows }, { }).execute("{\"op\":\"search\",\"query\":\"咖啡\"}"))
         assertEquals("exact", result.getString("matchMode"))
         assertEquals(12, result.getInt("total"))
+        assertEquals(12, result.getInt("matchedCount")); assertTrue(result.getBoolean("truncated"))
         assertEquals(10, result.getJSONArray("items").length())
         assertEquals("咖啡 11", result.getJSONArray("items").getJSONObject(0).getString("text"))
+    }
+    @Test fun modelSearchReturnsOnlyReviewedFieldsAndHonestCounts() {
+        val rows = JSONArray()
+        rows.put(JSONObject().put("id", "00000000-0000-0000-0000-000000000001").put("text", "喜欢咖啡")
+            .put("source", "user_notification").put("createdAt", 42).put("extraPrivate", "must-not-leave"))
+        rows.put(JSONObject().put("id", "00000000-0000-0000-0000-000000000002").put("text", "喜欢茶").put("source", "legacy-unknown"))
+        rows.put(JSONObject().put("id", "00000000-0000-0000-0000-000000000003").put("text", "咖啡候选").put("status", "pending"))
+        val engine = CompanionMemoryEngine({ rows }, {})
+        val result = JSONObject(engine.execute("{\"op\":\"search\",\"query\":\"咖啡\"}"))
+        assertEquals(2, result.getInt("total")); assertEquals(1, result.getInt("matchedCount")); assertFalse(result.getBoolean("truncated"))
+        val item = result.getJSONArray("items").getJSONObject(0)
+        assertEquals("user_notification", item.getString("source")); assertEquals("confirmed", item.getString("status")); assertEquals(42L, item.getLong("createdAt"))
+        assertFalse(item.has("extraPrivate")); assertFalse(result.toString().contains("咖啡候选"))
+        val unknown = JSONObject(engine.execute("{\"op\":\"search\",\"query\":\"喜欢茶\"}"))
+        assertEquals("unknown", unknown.getJSONArray("items").getJSONObject(0).getString("source"))
+        assertTrue(result.getString("notice").contains("不可信"))
     }
     @Test fun readsLegacyMemoryWithoutSource() {
         val legacy = JSONArray().put(JSONObject().put("id", "00000000-0000-0000-0000-000000000001").put("text", "旧偏好"))
