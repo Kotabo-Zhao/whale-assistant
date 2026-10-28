@@ -126,10 +126,21 @@ class CompanionActivity : AppCompatActivity() {
         if (text.isBlank()) { paragraph("没有识别到语音，请重试或输入文字。"); return@registerForActivityResult }
         val edit = android.widget.EditText(this).apply { setText(text) }
         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("识别结果")
-            .setMessage("请检查结果；复制后可粘贴到助手对话。语音识别服务可能联网。")
-            .setView(edit).setNegativeButton("取消", null).setPositiveButton("复制") { _, _ ->
-                val clipboard = getSystemService(android.content.ClipboardManager::class.java)
-                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("语音任务", edit.text.toString()))
+            .setMessage("请核对结果；可填入当前对话草稿，不会自动发送。语音识别服务可能联网。")
+            .setView(edit).setNegativeButton("取消", null)
+            .setNeutralButton("复制") { _, _ -> copyVoice(edit.text.toString()) }
+            .setPositiveButton("填入对话") { _, _ ->
+                val value = edit.text.toString()
+                if (!io.deepseekharness.mobile.MainHarnessSurface.stageCompanionVoice(value)) {
+                    offerVoiceCopy(value)
+                } else {
+                    val opened = runCatching {
+                        startActivity(Intent(this, io.deepseekharness.mobile.MainActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        finish()
+                    }.isSuccess
+                    if (!opened) { io.deepseekharness.mobile.MainHarnessSurface.cancelCompanionVoice(); offerVoiceCopy(value) }
+                }
             }.show()
     }
 
@@ -159,7 +170,7 @@ class CompanionActivity : AppCompatActivity() {
         readinessCard()
         paragraph("通知与使用数据只在本机处理，不会自动发送给模型。系统和应用可能限制读取；锁屏或敏感内容不会显示在桌面气泡。")
         button("语音输入任务") { startVoiceInput() }
-        paragraph("使用手机提供的语音识别服务；识别结果需自行确认并粘贴到对话，服务可能联网。")
+        paragraph("使用手机提供的语音识别服务；核对后可填入已打开的对话草稿，不自动发送；服务可能联网。")
         val memory = CompanionMemoryStore(this)
         heading("长期记忆")
         toggle("允许助手使用长期记忆", memory.enabled) { memory.enabled = it }
@@ -354,6 +365,15 @@ class CompanionActivity : AppCompatActivity() {
                         runCatching { store.removeShortcut(shortcuts[index]) }.onSuccess { render() }.onFailure { paragraph("无法移除快捷方式。") }
                     }.show()
             }.setNegativeButton("关闭", null).show()
+    }
+
+    private fun copyVoice(text: String) {
+        getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("语音输入", text))
+    }
+    private fun offerVoiceCopy(text: String) {
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("无法填入对话")
+            .setMessage("当前没有可用的对话输入框；可以复制结果后自行粘贴。")
+            .setNegativeButton("取消", null).setPositiveButton("复制") { _, _ -> copyVoice(text) }.show()
     }
 
     private fun startVoiceInput() {

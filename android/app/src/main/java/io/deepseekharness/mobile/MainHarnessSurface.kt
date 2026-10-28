@@ -43,6 +43,8 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     private var chooser: ValueCallback<Array<Uri>>? = null
     private var voiceGate: HarnessPageLoadGate? = null
     private var voicePage: String? = null
+    private data class VoiceHandoff(val text: String, val page: String, val gate: HarnessPageLoadGate, val at: Long)
+    private var pendingVoice: VoiceHandoff? = null
     private var speaker: TextToSpeech? = null
     private var speechPending = false
     private var speechGeneration = 0L
@@ -147,8 +149,14 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
 
     fun resume() {
         claimIfUnowned()
-        if (web != null && !AppAuthenticationState.ownsHarnessAccess(owner)) destroyView()
-        else web?.let(HarnessThemeBridge::apply)
+        if (web != null && !AppAuthenticationState.ownsHarnessAccess(owner)) {
+            val pending = pendingVoice
+            destroyView()
+            if (pending != null) voiceCopyFallback(pending.text)
+        } else {
+            web?.let(HarnessThemeBridge::apply)
+            deliverPendingVoice()
+        }
     }
 
     fun destroy() {
@@ -191,6 +199,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
 
     private fun destroyView() {
         stopSpeech()
+        pendingVoice = null
         if (active?.get() === this) active = null
         gate.cancel()
         voiceGate = null
@@ -241,35 +250,56 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         val edit = android.widget.EditText(activity).apply { setText(text); setSelection(length()) }
         AlertDialog.Builder(activity).setTitle(R.string.harness_voice_review).setMessage(R.string.harness_voice_notice)
             .setView(edit).setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.harness_voice_insert) { _, _ ->
-                val message = edit.text.toString()
-                val target = web
-                val currentOrigin = origin
-                val page = target?.url?.let { runCatching { Uri.parse(it) }.getOrNull() }
-                if (!current(expected) || !visible() || target == null || target.url != expectedPage || currentOrigin == null || page == null ||
-                    !currentOrigin.allows(page) || message.isBlank() || message.length > 2000) {
-                    voiceUnavailable()
-                } else {
-                    val template = runCatching { activity.assets.open("support/harness-voice-insert.js").bufferedReader(Charsets.UTF_8).use { it.readText() } }.getOrNull()
-                    val marker = "/*__VOICE_INPUT__*/null"
-                    val pageMarker = "/*__VOICE_PAGE__*/null"
-                    if (template == null || template.indexOf(marker) < 0 || template.indexOf(marker) != template.lastIndexOf(marker) ||
-                        template.indexOf(pageMarker) < template.indexOf(marker) + marker.length || template.indexOf(pageMarker) != template.lastIndexOf(pageMarker)) {
-                        voiceCopyFallback(message)
-                    } else {
-                        runCatching {
-                            val textAt = template.indexOf(marker)
-                            val pageAt = template.indexOf(pageMarker)
-                            val script = template.substring(0, textAt) + JSONObject.quote(message) +
-                                template.substring(textAt + marker.length, pageAt) + JSONObject.quote(expectedPage) +
-                                template.substring(pageAt + pageMarker.length)
-                            target.evaluateJavascript(script) { result ->
-                                if (current(expected) && visible() && result != "\"inserted\"") voiceCopyFallback(message)
-                            }
-                        }.onFailure { if (current(expected) && visible()) voiceCopyFallback(message) }
-                    }
-                }
-            }.show()
+            .setPositiveButton(R.string.harness_voice_insert) { _, _ -> insertVoice(edit.text.toString(), expected, expectedPage) }.show()
+    }
+
+    private fun insertVoice(message: String, expected: HarnessPageLoadGate, expectedPage: String) {
+        val target = web
+        val currentOrigin = origin
+        val page = target?.url?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        if (!current(expected) || !visible() || target == null || target.url != expectedPage || currentOrigin == null || page == null ||
+            !currentOrigin.allows(page) || message.isBlank() || message.length > 2000) {
+            if (message.isNotBlank() && message.length <= 2000) voiceCopyFallback(message) else voiceUnavailable()
+            return
+        }
+        val template = runCatching { activity.assets.open("support/harness-voice-insert.js").bufferedReader(Charsets.UTF_8).use { it.readText() } }.getOrNull()
+        val marker = "/*__VOICE_INPUT__*/null"
+        val pageMarker = "/*__VOICE_PAGE__*/null"
+        if (template == null || template.indexOf(marker) < 0 || template.indexOf(marker) != template.lastIndexOf(marker) ||
+            template.indexOf(pageMarker) < template.indexOf(marker) + marker.length || template.indexOf(pageMarker) != template.lastIndexOf(pageMarker)) {
+            voiceCopyFallback(message)
+            return
+        }
+        runCatching {
+            val textAt = template.indexOf(marker)
+            val pageAt = template.indexOf(pageMarker)
+            val script = template.substring(0, textAt) + JSONObject.quote(message) +
+                template.substring(textAt + marker.length, pageAt) + JSONObject.quote(expectedPage) +
+                template.substring(pageAt + pageMarker.length)
+            target.evaluateJavascript(script) { result ->
+                if (result != "\"inserted\"" && !activity.isFinishing && !activity.isDestroyed) voiceCopyFallback(message)
+            }
+        }.onFailure { if (!activity.isFinishing && !activity.isDestroyed) voiceCopyFallback(message) }
+    }
+
+    private fun stageVoice(text: String): Boolean {
+        val page = web?.url ?: return false
+        val targetOrigin = origin ?: return false
+        val parsed = runCatching { Uri.parse(page) }.getOrNull() ?: return false
+        if (!visible() || !authorized() || !targetOrigin.allows(parsed) || text.isBlank() || text.length > 2000 || pendingVoice != null) return false
+        pendingVoice = VoiceHandoff(text, page, gate, android.os.SystemClock.elapsedRealtime())
+        return true
+    }
+
+    private fun deliverPendingVoice() {
+        val pending = pendingVoice ?: return
+        pendingVoice = null
+        val age = android.os.SystemClock.elapsedRealtime() - pending.at
+        if (!HarnessVoiceHandoffPolicy.canDeliver(visible(), authorized(), gate === pending.gate, web?.url == pending.page, age)) {
+            voiceCopyFallback(pending.text)
+            return
+        }
+        insertVoice(pending.text, pending.gate, pending.page)
     }
 
     private fun voiceUnavailable() = Toast.makeText(activity, R.string.harness_voice_unavailable, Toast.LENGTH_LONG).show()
@@ -420,6 +450,8 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         private val authCacheExecutor = Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "dsh-embedded-auth-db").apply { isDaemon = true }
         }
+        internal fun stageCompanionVoice(text: String): Boolean = active?.get()?.stageVoice(text) == true
+        internal fun cancelCompanionVoice() { active?.get()?.pendingVoice = null }
         fun hasOwnedSurface(): Boolean = active?.get()?.let {
             val access = it.boundAccess
             it.web != null && (it.authorized() || (access != null && AppAuthenticationState.isUnownedHarnessAccess(access)))
