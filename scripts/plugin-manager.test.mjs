@@ -22,7 +22,8 @@ test('npm 元数据预检区分平台不兼容、原生扩展和无法核验', (
   assert.equal(npmMetadataCheck({ ...base, engines: { node: '>=20.18.1' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '20.18.1'), null)
   assert.equal(npmMetadataCheck({ ...base, engines: { node: '>=20.18.1' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '18.20.0'), 'PLUGIN_NODE_UNSUPPORTED')
   assert.equal(npmMetadataCheck({ ...base, engines: { node: '>= 20' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '20.1.0'), null)
-  assert.equal(npmMetadataCheck({ ...base, engines: { node: '20 - 22' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '20.1.0'), 'PLUGIN_METADATA_UNAVAILABLE')
+  assert.equal(npmMetadataCheck({ ...base, engines: { node: '20 - 22' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '20.1.0'), null)
+  assert.equal(npmMetadataCheck({ ...base, engines: { node: '20 - 22' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '23.0.0'), 'PLUGIN_NODE_UNSUPPORTED')
   assert.equal(npmMetadataCheck({ ...base, engines: { node: 20 } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '20.1.0'), 'PLUGIN_METADATA_UNAVAILABLE')
   assert.equal(check({ os: [7] }), 'PLUGIN_METADATA_UNAVAILABLE')
   assert.equal(check({ name: 'other' }), 'PLUGIN_METADATA_UNAVAILABLE')
@@ -62,12 +63,13 @@ test('指定版本仍在下载前检查引擎和平台，并只安装指定版�
   const install = value => { calls.push(value); return { status: 0 } }
   const response = extra => ({ status: 0, stdout: JSON.stringify({ name: 'demo', version: '1.2.3', ...extra }) })
   assert.throws(() => installExplicitVersion(response({ dsh: { engines: { dsh: '>=9.0.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_ENGINE_UNSUPPORTED/)
-  assert.throws(() => installExplicitVersion(response({ dsh: { engines: { dsh: '0.1 - 0.3' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => installExplicitVersion(response({ dsh: { engines: { dsh: '0.x - 0.3' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_METADATA_UNAVAILABLE/)
   assert.throws(() => installExplicitVersion(response({ cpu: ['x64'] }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_PLATFORM_UNSUPPORTED/)
   assert.deepEqual(calls, [])
   installExplicitVersion(response({ dsh: { engines: { dsh: '>=0.1.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64')
   installExplicitVersion(response({ dsh: { engines: { dsh: '0.1.0 - 0.3.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64')
-  assert.deepEqual(calls, ['demo@1.2.3', 'demo@1.2.3'])
+  installExplicitVersion(response({ dsh: { engines: { dsh: '0.1 - 0.3' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64')
+  assert.deepEqual(calls, ['demo@1.2.3', 'demo@1.2.3', 'demo@1.2.3'])
 })
 
 test('裸导入抽取只认包名，路径与内建模块一律忽略', () => {
@@ -279,7 +281,7 @@ test('批量元数据可发现六个新版本以外的兼容版本，身份或�
   payload.versions['1.0.2'].name = 'demo'
   payload.versions['1.0.2'].dsh.engines.dsh = 42
   assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
-  payload.versions['1.0.2'].dsh.engines.dsh = '0.1 - 0.3'
+  payload.versions['1.0.2'].dsh.engines.dsh = '0.x - 0.3'
   assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
 })
 
@@ -348,7 +350,21 @@ test('完整版本连字符范围包含端点，并保留 npm 预发布语义', 
     ['1.0.0', '0.1.0 - 0.3.0 || 1.0.0', true],
   ]) assert.equal(satisfiesRange(version, range), expected, `${version} ${range}`)
   assert.equal(declaredDshRange({ dsh: { engines: { dsh: '0.1.0 - 0.3.0' } } }, 'demo'), '0.1.0 - 0.3.0')
-  assert.throws(() => declaredDshRange({ dsh: { engines: { dsh: '0.1 - 0.3' } } }, 'demo'), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => declaredDshRange({ dsh: { engines: { dsh: '0.x - 0.3' } } }, 'demo'), /PLUGIN_METADATA_UNAVAILABLE/)
+})
+
+test('简写连字符范围覆盖对应版本系列但不放行下一个系列', () => {
+  for (const [version, range, expected] of [
+    ['0.0.9', '0.1 - 0.3', false], ['0.1.0', '0.1 - 0.3', true],
+    ['0.3.99', '0.1 - 0.3', true], ['0.4.0', '0.1 - 0.3', false],
+    ['0.4.0-rc.1', '0.1 - 0.3', false], ['1.9.9', '1 - 2', true],
+    ['2.9.9', '1 - 2', true], ['3.0.0', '1 - 2', false],
+    ['1.2.3', '1.2.3 - 1.2', true], ['1.3.0', '1.2.3 - 1.2', false],
+  ]) assert.equal(satisfiesRange(version, range), expected, `${version} ${range}`)
+  assert.equal(declaredDshRange({ dsh: { engines: { dsh: '0.1 - 0.3' } } }, 'demo'), '0.1 - 0.3')
+  for (const range of ['01 - 2', '1.02 - 3', '9007199254740991 - 9007199254740991']) {
+    assert.throws(() => declaredDshRange({ dsh: { engines: { dsh: range } } }, 'demo'), /PLUGIN_METADATA_UNAVAILABLE/)
+  }
 })
 
 test('版本比较遵循 semver 的预发布优先级', () => {
@@ -537,7 +553,7 @@ test('下载包的未知引擎范围不被误报为不兼容且保留原版本',
     installer(id, directory)
     const file = path.join(directory, 'node_modules', id, 'package.json')
     const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
-    pkg.dsh.engines = { dsh: '0.1 - 0.3' }
+    pkg.dsh.engines = { dsh: '0.x - 0.3' }
     fs.writeFileSync(file, JSON.stringify(pkg))
   })
   write('opt/dsh/node_modules/@deepseek-ai/dsh/package.json', { name: '@deepseek-ai/dsh', version: '0.2.0' })
@@ -552,6 +568,19 @@ test('下载包声明完整版本连字符范围时可安装兼容版本', t => 
     const file = path.join(directory, 'node_modules', id, 'package.json')
     const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
     pkg.dsh.engines = { dsh: '0.1.0 - 0.3.0' }
+    fs.writeFileSync(file, JSON.stringify(pkg))
+  })
+  write('opt/dsh/node_modules/@deepseek-ai/dsh/package.json', { name: '@deepseek-ai/dsh', version: '0.2.0' })
+  manager.update('test-plugin')
+  assert.equal(manager.list().plugins.find(p => p.id === 'test-plugin').version, '2.0.0')
+})
+
+test('下载包声明简写版本连字符范围时可安装兼容版本', t => {
+  const { manager, write } = fixture(t, (id, directory) => {
+    installer(id, directory)
+    const file = path.join(directory, 'node_modules', id, 'package.json')
+    const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
+    pkg.dsh.engines = { dsh: '0.1 - 0.3' }
     fs.writeFileSync(file, JSON.stringify(pkg))
   })
   write('opt/dsh/node_modules/@deepseek-ai/dsh/package.json', { name: '@deepseek-ai/dsh', version: '0.2.0' })

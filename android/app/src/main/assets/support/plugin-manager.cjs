@@ -254,10 +254,23 @@ function compareVersions(left, right) {
 }
 
 function expandRangeClause(clause) {
-  // npm's full-version hyphen ranges are inclusive at both ends. Partial
-  // endpoints are intentionally left untouched until their semantics are supported.
-  clause = clause.replace(/^(\S+)\s+-\s+(\S+)$/, (match, lower, upper) =>
-    parseVersion(lower) && parseVersion(upper) ? `>=${lower} <=${upper}` : match)
+  // Full endpoints are inclusive; a partial upper endpoint extends through its
+  // entire major/minor series. Preserve unknown syntax for the validator.
+  clause = clause.replace(/^(\S+)\s+-\s+(\S+)$/, (match, lower, upper) => {
+    function endpoint(text, high) {
+      if (parseVersion(text)) return `${high ? '<=' : '>='}${text}`
+      const partial = /^(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/.exec(text)
+      if (!partial) return null
+      const major = Number(partial[1]); const minor = Number(partial[2] ?? 0)
+      if (!Number.isSafeInteger(major) || !Number.isSafeInteger(minor)) return null
+      if (!high) return `>=${major}.${minor}.0`
+      const incremented = (partial[2] === undefined ? major : minor) + 1
+      if (!Number.isSafeInteger(incremented)) return null
+      return partial[2] === undefined ? `<${incremented}.0.0-0` : `<${major}.${incremented}.0-0`
+    }
+    const left = endpoint(lower, false); const right = endpoint(upper, true)
+    return left && right ? `${left} ${right}` : match
+  })
   const expanded = []
   for (const part of clause.split(/\s+/).filter(Boolean)) {
     const partialComparison = /^(>=|<=|>|<|=)(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/.exec(part)
