@@ -1,6 +1,5 @@
 package io.deepseekharness.mobile
 
-import android.annotation.SuppressLint
 import android.content.ContentResolver
 import android.content.Intent
 import android.content.res.Configuration
@@ -15,10 +14,8 @@ import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.HttpAuthHandler
 import android.webkit.RenderProcessGoneDetail
-import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -40,7 +37,7 @@ import java.util.concurrent.Executors
 
 class HarnessActivity : AppCompatActivity() {
     private lateinit var webView: WebView
-    private lateinit var allowedOrigin: Origin
+    private lateinit var allowedOrigin: HarnessOrigin
     private var pageLoadGate = HarnessPageLoadGate()
     private val authenticationOwner = Any()
     private var boundAccess: HarnessAccess? = null
@@ -165,7 +162,6 @@ class HarnessActivity : AppCompatActivity() {
         null
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val access = AppAuthenticationState.harnessAccess() ?: run {
@@ -183,32 +179,7 @@ class HarnessActivity : AppCompatActivity() {
         applyNativeChrome()
 
         webView = findViewById(R.id.harness_web_view)
-        webView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            allowFileAccess = false
-            // 必须允许 content:// 访问，否则 <input type="file"> 选择结果（SAF 返回的都是
-            // content:// URI）无法被 WebView 读取，系统文件选择器等于白弹。
-            // 页面自身发起的 content:// 加载仍然被 RestrictedWebViewClient 拦成 403，
-            // 因此这里放开的是"读取用户在系统选择器里明确选中的文件"，而不是任意 provider 读取。
-            allowContentAccess = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            javaScriptCanOpenWindowsAutomatically = false
-            // DeepSeek account login opens an about:blank popup and assigns its location
-            // asynchronously.  Keep multiple-window support on so onCreateWindow can
-            // intercept that navigation without ever loading an external page in this WebView.
-            setSupportMultipleWindows(true)
-            // 默认不放行媒体自播；唯一的例外是「同步中的静音背景视频」，
-            // 由 HarnessThemeBridge.syncAutoplay 按背景状态逐次对齐，关掉背景就收回。
-            mediaPlaybackRequiresUserGesture = true
-            builtInZoomControls = false
-            displayZoomControls = false
-            safeBrowsingEnabled = true
-            // 控制台界面的字号跟随系统字号（登记册 5.6-I）：外壳 CSS 已全部 rem 化，
-            // 但 WebView 不会因为系统字号变化就改变 rem 基准，只有 textZoom 能带上这件事。
-            // fontScale 不在 configChanges 里，系统改字号会重建本 Activity，因此读一次即可。
-            textZoom = AppTextScale.percentOf(resources.configuration.fontScale)
-        }
+        HarnessWebViewPolicy.configure(webView.settings, resources.configuration.fontScale)
         // 没有 WebChromeClient 时 <input type="file"> 点了毫无反应：这是插件"从相册导入"
         // 这类入口在手机上完全不可用的根因（皮肤中心只能靠手填容器路径绕过）。
         webView.webChromeClient = HarnessWebChromeClient()
@@ -234,7 +205,7 @@ class HarnessActivity : AppCompatActivity() {
     }
 
     private fun bindHarnessAccess(access: HarnessAccess, sessionId: String?, clearHistory: Boolean = false) {
-        val origin = Origin.parse(access.url) ?: run {
+        val origin = HarnessOrigin.parse(access.url) ?: run {
             finish()
             return
         }
@@ -273,12 +244,20 @@ class HarnessActivity : AppCompatActivity() {
             HarnessCacheMode.NORMAL -> WebSettings.LOAD_DEFAULT
             HarnessCacheMode.BYPASS -> WebSettings.LOAD_NO_CACHE
         }
-        webView.webViewClient = RestrictedWebViewClient(
+        webView.webViewClient = HarnessRestrictedWebViewClient(
             origin, access.username, access.password,
             onDeepSeekAuthorization = ::openDeepSeekAuthorization,
             onMainFrameFailure = {
                 if (pageLoadGate === gate && AppAuthenticationState.ownsHarnessAccess(authenticationOwner)) {
                     handleMainFrameFailure()
+                }
+            },
+            onRendererGone = { view ->
+                if (!isFinishing && !isDestroyed) {
+                    rendererRecovery = true
+                    recreate()
+                } else {
+                    view?.destroy()
                 }
             },
             onMainFrameLoaded = { view ->
@@ -647,106 +626,7 @@ class HarnessActivity : AppCompatActivity() {
         Toast.makeText(this, R.string.harness_page_failed, Toast.LENGTH_SHORT).show()
     }
 
-    internal class Origin(val scheme: String, val host: String, val port: Int, val initialUrl: String) {
-        fun allows(uri: Uri): Boolean =
-            uri.scheme == scheme && uri.host == host && uri.port == port && uri.userInfo == null
 
-        companion object {
-            fun parse(raw: String?): Origin? {
-                val uri = HarnessPageUrl.parseEntryUrl(raw) ?: return null
-                return Origin(uri.scheme, uri.host, uri.port, uri.toASCIIString())
-            }
-        }
-    }
-
-    internal class RestrictedWebViewClient(
-        private val origin: Origin,
-        private val username: String,
-        private val password: String,
-        private val onDeepSeekAuthorization: (Uri) -> Boolean = { false },
-        private val onMainFrameFailure: () -> Unit,
-        private val onRendererGone: (WebView?) -> Unit = { view ->
-            view?.destroy()
-            (view?.context as? HarnessActivity)?.finish()
-        },
-        private val onMainFrameLoaded: (WebView) -> Unit = {},
-        private val onWorkspaceShare: (String) -> Unit = {},
-    ) : WebViewClient() {
-        override fun onPageFinished(view: WebView?, url: String?) {
-            if (view != null) onMainFrameLoaded(view)
-        }
-
-        override fun onReceivedHttpAuthRequest(
-            view: WebView?,
-            handler: HttpAuthHandler?,
-            host: String?,
-            realm: String?,
-        ) {
-            if (host == origin.host && realm == HarnessAccess.REALM) {
-                handler?.proceed(username, password)
-            } else {
-                handler?.cancel()
-            }
-        }
-
-        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-            val uri = request?.url ?: return true
-            // 预览面板的分享按钮：只认带用户手势的主框架 GET，且 scheme 必须是 dsh-share。
-            // 任何情况下都不让页面真的去加载这个地址（WebView 没有对应协议处理器）。
-            if (WorkspaceShareAddress.SCHEME.equals(uri.scheme, ignoreCase = true)) {
-                if (request.hasGesture() && request.method == "GET" && request.isForMainFrame) {
-                    onWorkspaceShare(uri.toString())
-                }
-                return true
-            }
-            if (origin.allows(uri)) return false
-            // A page must not be able to launch the external account chooser from a timer,
-            // redirect, or injected script.  Popup transport gets its own one-shot allowance
-            // from onCreateWindow after WebView has confirmed a real user gesture.
-            // Kotlin 不为 hasXxx() 生成合成属性（只有 get/is 前缀才生成），这里必须显式调用。
-            if (request.hasGesture() &&
-                isDeepSeekAuthorizationNavigation(uri.toString(), request.method, request.isForMainFrame)
-            ) {
-                onDeepSeekAuthorization(uri)
-            }
-            return true
-        }
-
-        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-            val uri = request?.url ?: return blockedResponse()
-            // 外壳同步的背景：由原生按同源路径供给，支持 Range，也不放开文件权限。
-            if (uri.path == HarnessThemeBridge.BACKGROUND_PATH) {
-                val context = view?.context ?: return blockedResponse()
-                return HarnessThemeBridge.serveBackground(context, request)
-            }
-            // 市场目录和缩略图由插件直接请求 HTTPS 资源站；交给 WebView 执行正常的 TLS/CORS 校验。
-            // 不添加本机 Authorization 或 Cookie，也不允许资源站替换会话主页面。
-            return if (origin.allows(uri) || HarnessPluginResources.allows(
-                    uri.toString(), request.method, request.isForMainFrame,
-                )) null else blockedResponse()
-        }
-
-        override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: android.net.http.SslError?) {
-            handler?.cancel()
-        }
-
-        override fun onReceivedError(
-            view: WebView?,
-            request: WebResourceRequest?,
-            error: WebResourceError?,
-        ) {
-            if (request?.isForMainFrame == true) onMainFrameFailure()
-        }
-
-        override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-            val activity = view?.context as? HarnessActivity
-            if (activity != null && !activity.isFinishing) {
-                activity.rendererRecovery = true
-                activity.recreate()
-            } else onRendererGone(view)
-            return true
-        }
-    }
 }
 
 internal fun blockedResponse(): WebResourceResponse = WebResourceResponse(

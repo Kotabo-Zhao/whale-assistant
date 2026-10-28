@@ -432,6 +432,9 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
   assert.deepEqual(
     registeredTools.map(tool => tool.name),
     [
+      'mobile_memory_search',
+      'mobile_memory_save',
+      'mobile_memory_delete',
       'mobile_device_capabilities',
       'mobile_virtual_screen_state',
       'mobile_virtual_screen_screenshot',
@@ -858,6 +861,14 @@ test('Harness WebView serves the system file chooser and keeps page-initiated lo
     appRoot,
     'android/app/src/main/java/io/deepseekharness/mobile/HarnessActivity.kt',
   ), 'utf8')
+  const webViewPolicy = await readFile(resolve(
+    appRoot,
+    'android/app/src/main/java/io/deepseekharness/mobile/HarnessWebViewPolicy.kt',
+  ), 'utf8')
+  const restrictedClient = await readFile(resolve(
+    appRoot,
+    'android/app/src/main/java/io/deepseekharness/mobile/HarnessRestrictedWebViewClient.kt',
+  ), 'utf8')
 
   // 没有 WebChromeClient 时 <input type="file"> 是死按钮：皮肤中心的"从相册导入"与官方
   // 附件上传都依赖这条链路。页面上任何"选择文件"入口都因此失效。
@@ -866,9 +877,11 @@ test('Harness WebView serves the system file chooser and keeps page-initiated lo
   assert.match(activity, /class HarnessWebChromeClient : WebChromeClient\(\)/)
 
   // content:// 访问必须放开，否则 SAF 选中的文件 WebView 读不到，选择器等于白弹。
-  assert.match(activity, /allowContentAccess = true/)
+  assert.match(activity, /HarnessWebViewPolicy\.configure\(webView\.settings/)
+  assert.match(webViewPolicy, /allowContentAccess = true/)
   // 但 file:// 仍然关闭：SAF 返回的不会是 file://，其余来源一律不接受。
-  assert.match(activity, /allowFileAccess = false/)
+  assert.match(webViewPolicy, /allowFileAccess = false/)
+  assert.match(webViewPolicy, /mixedContentMode = WebSettings\.MIXED_CONTENT_NEVER_ALLOW/)
   // 只用 SAF 契约，保证结果一定是 content://。
   assert.match(activity, /ActivityResultContracts\.OpenDocument\(\)/)
   assert.match(activity, /ActivityResultContracts\.OpenMultipleDocuments\(\)/)
@@ -888,8 +901,14 @@ test('Harness WebView serves the system file chooser and keeps page-initiated lo
   // 页面自身发起的非回环请求仍然被拦成 403：放开 content 访问不等于放开任意 provider 读取。
   // 自「修复插件市场皮肤资源加载」起，市场只读资源走了严格白名单，允许条件因此从单条回环
   // 判定扩展为「本机回环 或 白名单」，但兜底分支必须仍然是 blockedResponse()。
-  assert.match(activity, /return if \(origin\.allows\(uri\)[\s\S]{0,240}?\) null else blockedResponse\(\)/)
-  assert.match(activity, /HarnessPluginResources\.allows\(/)
+  assert.match(activity, /HarnessRestrictedWebViewClient\(/)
+  assert.match(restrictedClient, /return if \(origin\.allows\(uri\)[\s\S]{0,240}?\) null else blockedResponse\(\)/)
+  assert.match(restrictedClient, /HarnessPluginResources\.allows\(/)
+  assert.match(restrictedClient, /host == origin\.host && realm == HarnessAccess\.REALM/)
+  assert.match(restrictedClient, /handler\?\.cancel\(\)/)
+  assert.match(restrictedClient, /private val onRendererGone: \(WebView\?\) -> Unit/)
+  assert.match(activity, /onRendererGone = \{ view ->/)
+  assert.doesNotMatch(restrictedClient, /view\?\.context as\? HarnessActivity/)
 })
 
 test('插件市场只读资源必须落在严格主机白名单内', async () => {

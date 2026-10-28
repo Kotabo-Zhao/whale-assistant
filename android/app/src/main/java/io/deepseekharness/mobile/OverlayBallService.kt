@@ -741,7 +741,7 @@ class OverlayBallService : Service() {
 
         val body = FrameLayout(this)
         frame.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
-        val origin = HarnessActivity.Origin.parse(access?.url)
+        val origin = HarnessOrigin.parse(access?.url)
         val cookie = access?.password?.let { runCatching { HarnessSessionCookie.authenticated(it) }.getOrNull() }
         if (access == null || origin == null || cookie == null) {
             body.addView(TextView(this).apply {
@@ -791,7 +791,7 @@ class OverlayBallService : Service() {
             body.addView(error, FrameLayout.LayoutParams(-1, -1))
             conversationWebView = web
             conversationError = error
-            web.webViewClient = HarnessActivity.RestrictedWebViewClient(
+            web.webViewClient = HarnessRestrictedWebViewClient(
                 origin, access.username, access.password,
                 onDeepSeekAuthorization = ::openDeepSeekAuthorization,
                 onMainFrameFailure = { if (conversationWebView === web) error.visibility = View.VISIBLE },
@@ -1270,7 +1270,7 @@ class OverlayBallService : Service() {
         }
         // The full-page Activity owns its cookie; a standalone small window clears only its own.
         if (!AppAuthenticationState.isHarnessAuthenticated() && access != null) {
-            HarnessActivity.Origin.parse(access.url)?.let { origin ->
+            HarnessOrigin.parse(access.url)?.let { origin ->
                 val cookies = CookieManager.getInstance()
                 cookies.setCookie(HarnessSessionCookie.origin(origin.port), HarnessSessionCookie.expired()) {
                     cookies.flush()
