@@ -48,3 +48,10 @@ internal object CompanionBrief {
         return result
     }
 }
+
+/** Validate stored package identifiers before resolving an explicit app launcher. */
+internal object CompanionSourcePolicy {
+    private val packagePattern = Regex("^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*){1,12}$")
+    fun validPackage(value: String): Boolean = value.length <= 160 && packagePattern.matches(value)
+    fun matchesResolved(value: String, resolvedPackage: String?): Boolean = validPackage(value) && resolvedPackage == value
+}

@@ -28,4 +28,12 @@ class CompanionBriefTest {
         assertEquals(100L, candidates[1].time)
         assertEquals(emptyList<CompanionBrief.Candidate>(), CompanionBrief.candidates(JSONArray()))
     }
+    @Test fun sourceAppMustBeAValidPackageAndMatchResolvedLauncher() {
+        org.junit.Assert.assertTrue(CompanionSourcePolicy.matchesResolved("com.example.reader", "com.example.reader"))
+        org.junit.Assert.assertFalse(CompanionSourcePolicy.matchesResolved("com.example.reader", "com.other.app"))
+        org.junit.Assert.assertFalse(CompanionSourcePolicy.matchesResolved("com.example.reader", null))
+        org.junit.Assert.assertFalse(CompanionSourcePolicy.validPackage("com.example.reader;bad"))
+        org.junit.Assert.assertFalse(CompanionSourcePolicy.validPackage("../example"))
+        org.junit.Assert.assertFalse(CompanionSourcePolicy.validPackage("a".repeat(200)))
+    }
 }

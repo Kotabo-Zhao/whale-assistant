@@ -362,9 +362,22 @@ class CompanionActivity : AppCompatActivity() {
                 val item = candidates[index]
                 val content = listOf(item.title, item.text).filter { it.isNotBlank() }.joinToString(" · ")
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle(item.reason)
-                    .setMessage("${labels[index]}\n\n$content\n\n本地规则可能误判；时间是通知时间，不是截止时间。创建提醒时请核对内容并自行选择时间；提醒不保留与原通知的关联。")
-                    .setNegativeButton("关闭", null).setPositiveButton("创建提醒") { _, _ -> createReminder(content) }.show()
+                    .setMessage("${labels[index]}\n\n$content\n\n本地规则可能误判；时间是通知时间，不是截止时间。打开来源应用只会打开应用入口，不能保证跳转到原通知。创建提醒时请核对内容并自行选择时间；提醒不保留与原通知的关联。")
+                    .setNegativeButton("关闭", null)
+                    .setNeutralButton("打开来源应用") { _, _ -> openNotificationSource(item.packageName) }
+                    .setPositiveButton("创建提醒") { _, _ -> createReminder(content) }.show()
             }.setNegativeButton("关闭", null).show()
+    }
+
+    private fun openNotificationSource(packageName: String) {
+        val opened = runCatching {
+            require(CompanionSourcePolicy.validPackage(packageName))
+            val launch = packageManager.getLaunchIntentForPackage(packageName) ?: error("无启动入口")
+            require(CompanionSourcePolicy.matchesResolved(packageName, launch.component?.packageName))
+            launch.setPackage(packageName)
+            startActivity(launch)
+        }.isSuccess
+        if (!opened) android.widget.Toast.makeText(this, "无法打开来源应用，它可能已卸载或没有启动入口。", android.widget.Toast.LENGTH_LONG).show()
     }
 
     private fun showMemories() {
