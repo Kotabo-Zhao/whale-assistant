@@ -81,6 +81,8 @@ class CompanionActivity : AppCompatActivity() {
         }
         toggle("收集通知摘要", store.notificationCapture) { store.notificationCapture = it; render() }
         paragraph("开启后记录通知来源、标题和正文，最多 50 条；只在读取或新增时清理超过 7 天的记录。验证码与密码使用简单规则过滤，不能保证识别所有敏感内容。")
+        val notificationAllowed = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+        paragraph(if (notificationAllowed) "系统通知读取授权：已授予。系统可能停止服务或限制后台运行。" else "系统通知读取授权：未授予。开启采集后还需在系统设置中授权。")
         button("打开系统通知读取授权") { openSettings(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS) }
         button("设置不采集通知的应用") { selectExcludedApps() }
         paragraph("可从已记录过的应用中选择不再采集的来源；已有记录不会自动删除。")

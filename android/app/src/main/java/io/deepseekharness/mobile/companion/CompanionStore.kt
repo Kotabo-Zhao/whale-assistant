@@ -32,11 +32,23 @@ class CompanionStore(context: Context) {
     fun excludedPackages(): Set<String> = prefs.getStringSet("excluded_packages", emptySet())?.toSet() ?: emptySet()
     fun setExcludedPackages(packages: Set<String>) { prefs.edit().putStringSet("excluded_packages", packages.toSet()).apply() }
 
-    fun record(packageName: String, title: String, text: String, now: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
+    fun record(packageName: String, title: String, text: String, now: Long = System.currentTimeMillis(), notificationKey: String? = null): Boolean = synchronized(lock) {
         if (!notificationCapture || packageName in excludedPackages() || sensitive("$title $text")) return@synchronized false
         val records = read(now)
-        records.put(JSONObject().put("package", packageName.take(200)).put("title", title.take(160))
-            .put("text", text.take(400)).put("time", now))
+        val key = CompanionNotificationDedup.digest(notificationKey)
+        val contentHash = CompanionNotificationDedup.contentDigest(title, text)
+        val shortTitle = title.take(160)
+        val shortText = text.take(400)
+        for (index in 0 until records.length()) {
+            val prior = records.optJSONObject(index) ?: continue
+            if (prior.optString("package") == packageName.take(200) && CompanionNotificationDedup.isDuplicate(
+                    key, contentHash, now, prior.optString("notificationKeyHash").takeIf { it.isNotEmpty() },
+                    prior.optString("notificationContentHash").takeIf { it.isNotEmpty() }, prior.optLong("time", 0))) return@synchronized false
+        }
+        val entry = JSONObject().put("package", packageName.take(200)).put("title", shortTitle)
+            .put("text", shortText).put("time", now)
+        if (key != null) entry.put("notificationKeyHash", key).put("notificationContentHash", contentHash)
+        records.put(entry)
         val trimmed = JSONArray()
         for (index in maxOf(0, records.length() - MAX_RECORDS) until records.length()) trimmed.put(records.getJSONObject(index))
         prefs.edit().putString("records", trimmed.toString()).apply()
