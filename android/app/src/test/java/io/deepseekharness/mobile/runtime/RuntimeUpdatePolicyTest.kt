@@ -7,6 +7,16 @@ import org.junit.Test
 class RuntimeUpdatePolicyTest {
     private val runtimeId = "ubuntu-24.04-arm64-deepseek-harness"
 
+    @Test fun memoryRuntimeIsNewerThanPreviousWhaleRuntime() {
+        assertTrue(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.3.6-mobile-583", "a".repeat(64), runtimeId, "0.3.7-whale-memory1", "b".repeat(64)))
+        assertTrue(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.3.6", "a".repeat(64), runtimeId, "0.3.7-whale-memory1", "b".repeat(64)))
+    }
+
+    @Test fun bundledMarketRuntimeUpgradesTheMemoryVersion() {
+        assertTrue(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.3.7-whale-memory1", "a".repeat(64), runtimeId, "0.3.8-whale-market1", "b".repeat(64)))
+        assertFalse(RuntimeUpdatePolicy.isAvailable(runtimeId, "0.4.0", "a".repeat(64), runtimeId, "0.3.8-whale-market1", "b".repeat(64)))
+    }
+
     @Test
     fun detectsNewerBundledReleaseOfTheSameRuntime() {
         assertTrue(

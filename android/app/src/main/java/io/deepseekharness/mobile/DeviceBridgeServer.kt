@@ -58,6 +58,7 @@ class DeviceBridgeServer(
     private val token: String,
     port: Int = 0,
     private val shellEnabled: () -> Boolean = { false },
+    private val appContext: Context? = null,
 ) : RuntimeScopedResource {
     private val server = ServerSocket(port, 4, InetAddress.getByName("127.0.0.1"))
     private val executor = ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(4))
@@ -212,6 +213,13 @@ class DeviceBridgeServer(
                         ?: throw RuntimeFailure("DEVICE_COMMAND_INVALID", "设备参数格式无效")
                     if (commandName.length > 32 || param.length > DeviceFilePolicy.MAX_PARAM_CHARS) {
                         throw RuntimeFailure("DEVICE_COMMAND_INVALID", "设备参数过长")
+                    }
+                    if (commandName == "companionMemory") {
+                        if (param.length > 4096) throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数过长")
+                        val context = appContext ?: throw RuntimeFailure("MEMORY_UNAVAILABLE", "记忆服务不可用")
+                        val result = io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(param)
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                        return
                     }
                     // 自动化授权与设备能力都不经过 Shell；能力判定复用原生统一策略，不在 AI 插件里另算一套。
                     if (commandName == "automationPolicy") {

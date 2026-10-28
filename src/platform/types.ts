@@ -1864,6 +1864,7 @@ export interface RuntimeBridge {
   getOverlayBallState: () => Promise<OverlayBallState>
   /** 跳转到系统「显示在其他应用上层」设置页。该权限只能由用户手动开启。 */
   openOverlaySettings: () => Promise<void>
+  openCompanionSettings: () => Promise<void>
   /**
    * 外置投递区状态：用户可见路径、访客挂载点、可用性与 inbox 计数。
    *

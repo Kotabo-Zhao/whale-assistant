@@ -58,6 +58,7 @@ import io.deepseekharness.mobile.runtime.RuntimeStore
 import io.deepseekharness.mobile.runtime.RuntimeHost
 import io.deepseekharness.mobile.runtime.HarnessAccess
 import io.deepseekharness.mobile.virtualscreen.VirtualScreenService
+import io.deepseekharness.mobile.companion.CompanionStore
 import java.util.UUID
 
 /**
@@ -80,6 +81,23 @@ class OverlayBallService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var ballView: View? = null
+    private var companionAnimator: android.animation.ObjectAnimator? = null
+    private var hintView: View? = null
+    private val hintHandler = Handler(Looper.getMainLooper())
+    private var lastHintAt = 0L
+    private var lastRestAt = SystemClock.elapsedRealtime()
+    private val reminderTick = object : Runnable {
+        override fun run() {
+            if (CompanionStore(this@OverlayBallService).reminders) {
+                if (SystemClock.elapsedRealtime() - lastRestAt >= 90L * 60 * 1000) {
+                    showCompanionHint("休息一下，喝口水吧。")
+                    lastRestAt = SystemClock.elapsedRealtime()
+                }
+                notifyLowBattery()
+            }
+            hintHandler.postDelayed(this, 15L * 60 * 1000)
+        }
+    }
 
     /**
      * 球视图当前是否挂在 WindowManager 上。
@@ -131,6 +149,7 @@ class OverlayBallService : Service() {
     override fun onCreate() {
         super.onCreate()
         activeService = this
+        hintHandler.postDelayed(reminderTick, 15L * 60 * 1000)
         runCatching { ensureNotificationChannel() }
         windowManager = getSystemService(WindowManager::class.java)
     }
@@ -249,6 +268,8 @@ class OverlayBallService : Service() {
     }
 
     override fun onDestroy() {
+        hintHandler.removeCallbacksAndMessages(null)
+        removeCompanionHint()
         detachConversation()
         // 二级球必须先摘：它们的位置依赖 layoutParams，虽然在 onDestroy 里已经用不到，
         // 但顺序反过来会让「先摘主球、后摘二级球」出现一次以失效坐标重排的窗口调用。
@@ -270,6 +291,64 @@ class OverlayBallService : Service() {
 
     /** 仅以启动方式运行，不提供绑定接口。 */
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun removeCompanionHint() {
+        hintView?.let { runCatching { windowManager.removeView(it) } }
+        hintView = null
+    }
+
+    private fun notifyLowBattery() {
+        val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return
+        val level = battery.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale = battery.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+        val status = battery.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+        if (level < 0 || scale <= 0 || level * 100 / scale > 15 ||
+            status == android.os.BatteryManager.BATTERY_STATUS_CHARGING || status == android.os.BatteryManager.BATTERY_STATUS_FULL) return
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val prefs = getSharedPreferences("companion_private_v1", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong("battery_notified_at", 0) < 12L * 60 * 60 * 1000) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        manager.createNotificationChannel(NotificationChannel("companion_reminders", "鲸鱼娘提醒", NotificationManager.IMPORTANCE_DEFAULT))
+        val open = PendingIntent.getActivity(this, 0, Intent(this, io.deepseekharness.mobile.companion.CompanionActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification = NotificationCompat.Builder(this, "companion_reminders").setSmallIcon(R.drawable.ic_overlay_ball)
+            .setContentTitle("鲸鱼娘提醒").setContentText("电量较低，记得充电。")
+            .setContentIntent(open).setAutoCancel(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build()
+        runCatching { manager.notify(0x44534803, notification) }.onSuccess { prefs.edit().putLong("battery_notified_at", now).apply() }
+    }
+
+    private fun showCompanionHint(message: String) {
+        if (!ballAttached || ballView == null || stopIfOverlayPermissionRevoked()) return
+        if (getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false) return
+        if (getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return
+        val now = SystemClock.elapsedRealtime()
+        if (lastHintAt != 0L && now - lastHintAt < 120_000) return
+        val density = resources.displayMetrics.density
+        val width = (220 * density).toInt().coerceAtMost(resources.displayMetrics.widthPixels)
+        val bubble = TextView(overlayPalette()).apply {
+            text = message
+            textSize = 14f
+            setTextColor(overlayColor(R.color.overlay_panel_foreground))
+            setPadding((14 * density).toInt(), (10 * density).toInt(), (14 * density).toInt(), (10 * density).toInt())
+            background = overlayPalette().getDrawable(R.drawable.bg_overlay_action)
+            setOnClickListener { removeCompanionHint() }
+        }
+        val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = (layoutParams.x - width + layoutParams.width).coerceIn(0, (resources.displayMetrics.widthPixels - width).coerceAtLeast(0))
+            y = (layoutParams.y - (64 * density).toInt()).coerceAtLeast((24 * density).toInt())
+        }
+        removeCompanionHint()
+        if (runCatching { windowManager.addView(bubble, params) }.isSuccess) {
+            hintView = bubble
+            lastHintAt = now
+            hintHandler.postDelayed({ if (hintView === bubble) removeCompanionHint() }, 7000)
+        }
+    }
 
     /**
      * 运行期权限复查：悬浮窗权限已撤销时立即收尾，返回 true 表示调用方必须马上返回、
@@ -429,6 +508,12 @@ class OverlayBallService : Service() {
         }
         ballView = view
         layoutParams = params
+        companionAnimator = android.animation.ObjectAnimator.ofFloat(view, View.TRANSLATION_Y, 0f, -3f * metrics.density, 0f).apply {
+            duration = 3200
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            start()
+        }
         // 乐观置位：addView 返回时窗口已登记，首次遍历（附着回调）还没跑完，
         // 这一小段空窗期不能把刚挂上的球误判成陈旧视图。
         ballAttached = true
@@ -436,6 +521,8 @@ class OverlayBallService : Service() {
     }
 
     private fun detachBall() {
+        companionAnimator?.cancel()
+        companionAnimator = null
         ballView?.let { view ->
             ballAttached = false
             runCatching { windowManager.removeView(view) }
@@ -1029,7 +1116,6 @@ class OverlayBallService : Service() {
     /** 在原视图上刷新，不销毁 WebView、认证会话或尚未提交的对话输入。 */
     private fun refreshVisibleAppearance() {
         ballView?.apply {
-            background = overlayPalette().getDrawable(R.drawable.bg_overlay_ball)
             contentDescription = overlayString(R.string.overlay_ball_content_description)
         }
         (conversationView?.background as? GradientDrawable)?.setColor(overlayColor(R.color.overlay_panel_background))
@@ -1620,6 +1706,9 @@ class OverlayBallService : Service() {
 
     companion object {
         @Volatile private var activeService: OverlayBallService? = null
+        internal fun companionHint(message: String) {
+            Handler(Looper.getMainLooper()).post { activeService?.showCompanionHint(message) }
+        }
 
         internal fun refreshAppearance() {
             Handler(Looper.getMainLooper()).post { activeService?.refreshVisibleAppearance() }
@@ -1637,7 +1726,7 @@ class OverlayBallService : Service() {
 
         private const val CHANNEL_ID = "harness_overlay_ball"
         private const val NOTIFICATION_ID = 0x44534802
-        private const val BALL_SIZE_DP = 48
+        private const val BALL_SIZE_DP = 88
         private const val DEFAULT_MARGIN_DP = 12
         private const val MENU_TEXT_SIZE_SP = 15f
 

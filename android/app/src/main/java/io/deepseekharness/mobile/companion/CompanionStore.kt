@@ -1,0 +1,49 @@
+package io.deepseekharness.mobile.companion
+
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+
+/** 本地有界记录；不通过 Harness 或网络发送。 */
+class CompanionStore(context: Context) {
+    private val prefs = context.applicationContext.getSharedPreferences("companion_private_v1", Context.MODE_PRIVATE)
+
+    var notificationCapture: Boolean
+        get() = prefs.getBoolean("capture", false)
+        set(value) { prefs.edit().putBoolean("capture", value).apply() }
+    var reminders: Boolean
+        get() = prefs.getBoolean("reminders", false)
+        set(value) { prefs.edit().putBoolean("reminders", value).apply() }
+
+    fun record(packageName: String, title: String, text: String, now: Long = System.currentTimeMillis()) = synchronized(lock) {
+        if (!notificationCapture || sensitive("$title $text")) return
+        val records = read(now)
+        records.put(JSONObject().put("package", packageName.take(200)).put("title", title.take(160))
+            .put("text", text.take(400)).put("time", now))
+        val trimmed = JSONArray()
+        for (index in maxOf(0, records.length() - MAX_RECORDS) until records.length()) trimmed.put(records.getJSONObject(index))
+        prefs.edit().putString("records", trimmed.toString()).apply()
+    }
+
+    fun read(now: Long = System.currentTimeMillis()): JSONArray = synchronized(lock) {
+        val result = JSONArray()
+        val stored = runCatching { JSONArray(prefs.getString("records", "[]")) }.getOrDefault(JSONArray())
+        for (index in 0 until stored.length()) {
+            val item = stored.optJSONObject(index) ?: continue
+            val time = item.optLong("time", 0)
+            if (time in (now - RETENTION_MS)..now) result.put(item)
+        }
+        if (stored.length() != result.length()) prefs.edit().putString("records", result.toString()).apply()
+        result
+    }
+
+    fun clear() = synchronized(lock) { prefs.edit().remove("records").apply() }
+
+    companion object {
+        const val MAX_RECORDS = 50
+        private val lock = Any()
+        const val RETENTION_MS = 7L * 24 * 60 * 60 * 1000
+        private val sensitivePattern = Regex("(?i)验证码|校验码|动态码|密码|口令|密钥|令牌|verification code|one.time password|otp|password|passcode|api[ _-]?key|access[ _-]?token|\\bsk-[a-z0-9_-]{12,}|\\b\\d{4,8}\\b")
+        fun sensitive(value: String): Boolean = sensitivePattern.containsMatchIn(value)
+    }
+}

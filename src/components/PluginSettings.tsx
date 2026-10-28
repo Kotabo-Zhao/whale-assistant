@@ -198,6 +198,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const prune = useCallback(() => { void run({ operation: 'prune' }) }, [run])
   /** 已启用却在当前运行时里解析不到的插件包：升级抹掉链接后，列表就是这个样子。 */
   const unresolved = catalog?.plugins.filter(group => group.enabled && !group.installed && !group.official).length ?? 0
+  const marketplaceInstalled = catalog?.plugins.some(group => group.id === 'dshmarket' && group.installed) ?? false
 
   const matchesFilter = (group: PluginCatalog['plugins'][number]) => {
     if (filterTab === 'enabled' && !group.enabled) return false
@@ -223,6 +224,16 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     </div>
     <p className="plugin-description">{t('无需启动 Harness 即可管理插件：每个条目是一个插件包，展开后可调整其中的子插件。')}</p>
     <div className="plugin-stop"><span>{t('修改插件前请先停止 Harness 和 Ubuntu 终端；改动在下次启动时生效。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={busy} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
+    <section className="plugin-market" aria-labelledby="plugin-market-title">
+      <div className="plugin-market-icon" aria-hidden="true"><Package size={24} /></div>
+      <div className="plugin-market-copy">
+        <span className="plugin-market-kicker">DISCOVER</span>
+        <h2 id="plugin-market-title">{t('发现插件')}</h2>
+        <p>{t('安装社区插件市场，在对话中浏览和搜索扩展。插件由第三方提供，安装前请了解来源和权限。')}</p>
+        <small>{t('市场安装后重启对话生效；移动端兼容性取决于插件。')}</small>
+      </div>
+      <button className="button button-primary compact-button" type="button" disabled={locked || !catalog || marketplaceInstalled} onClick={() => { void run({ operation: 'import', source: 'dshmarket' }) }}>{marketplaceInstalled ? t('插件市场已安装') : t('安装插件市场')}</button>
+    </section>
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
     <section className="plugin-import" aria-labelledby="plugin-import-title">
       <h2 id="plugin-import-title">{t('通过 npm 包名或链接导入')}</h2>

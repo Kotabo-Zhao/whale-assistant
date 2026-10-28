@@ -1,4 +1,12 @@
 .plugin-screen { max-width: 920px; margin: 0 auto; }
+.plugin-market { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding: 20px; border-radius: var(--radius-card); border: 1px solid color-mix(in srgb, var(--blue) 25%, var(--line)); background: linear-gradient(135deg, var(--blue-soft), var(--surface)); color: var(--card-ink, var(--ink)); box-shadow: var(--shadow-card); }
+.plugin-market-icon { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 48px; border-radius: 16px; color: var(--blue); background: var(--surface); }
+.plugin-market-copy { flex: 1; min-width: 0; }
+.plugin-market-copy h2 { margin: 3px 0 5px; font-size: 1.05rem; }
+.plugin-market-copy p, .plugin-market-copy small { margin: 0; color: var(--card-muted, var(--muted)); line-height: 1.5; }
+.plugin-market-copy p { font-size: .85rem; }
+.plugin-market-copy small { display: block; margin-top: 6px; font-size: .75rem; }
+.plugin-market-kicker { color: var(--blue); font-size: .68rem; font-weight: 700; letter-spacing: .1em; }
 .plugin-description, .plugin-hint { color: var(--card-muted, var(--muted)); line-height: 1.6; }
 .plugin-stop { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; background: color-mix(in srgb, var(--card-color, var(--surface-muted)) var(--card-opacity, 100%), transparent); color: var(--card-ink, var(--ink)); backdrop-filter: blur(var(--card-blur, 0px)); border: 1px solid var(--line); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
 .plugin-stop .button { flex-shrink: 0; }
@@ -69,6 +77,8 @@
 .plugin-relink-banner .button { flex-shrink: 0; }
 
 @media (max-width: 620px) {
+  .plugin-market { flex-wrap: wrap; padding: 16px; }
+  .plugin-market .button { width: 100%; }
   .plugin-screen { padding-right: 10px; padding-left: 10px; }
   .plugin-stop, .plugin-file-actions { align-items: stretch; flex-direction: column; }
   .plugin-stop .button, .plugin-file-actions .button { width: 100%; }

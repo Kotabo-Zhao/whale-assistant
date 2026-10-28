@@ -2,6 +2,8 @@ import appMark from './assets/app-mark.png'
 import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
 import { PluginSettings } from './components/PluginSettings'
+import { TaskStarter } from './components/TaskStarter'
+import { CompanionSettingsButton } from './components/CompanionSettingsButton'
 import { ApplicationPicker } from './components/ApplicationPicker'
 import { VirtualScreenSettings } from './components/VirtualScreenSettings'
 import { AutomationRuleForm } from './components/AutomationRuleForm'
@@ -1037,6 +1039,8 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
           <div><strong>{t("缺少本机运行组件")}</strong><span>{t("请安装支持当前 arm64 设备的新版应用。")}</span></div>
         </div>
       )}
+      <TaskStarter />
+      {installed && <AutomationTaskCard />}
       {installed && !transitioning && !updateRequired && <SessionManager embedded disabled={busy !== null} onBack={() => undefined} onOpenHarness={onLaunch} />}
     </div>
   )
@@ -2738,6 +2742,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             />
           </label>
           {overlayBallReadFailed && <p className="status-text-error" role="alert">{t("无法读取悬浮球状态，正在重试")}</p>}
+          <CompanionSettingsButton disabled={busy !== null} />
           {overlayPermissionKnown && !overlayBall.canDrawOverlays && (
             <button className="button button-secondary" type="button" onClick={onOpenOverlaySettings} disabled={busy !== null}>
               <ExternalLink size={18} />{t("前往系统设置开启")}</button>

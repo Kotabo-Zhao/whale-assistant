@@ -63,6 +63,13 @@ describe('应用外层插件管理', () => {
   })
 })
 describe('插件导入与回滚', () => {
+  it('从发现入口安装市场时使用现有受控导入', async () => {
+    const bridge = setup()
+    const button = await screen.findByRole('button', { name: '安装插件市场' })
+    await waitFor(() => expect(button).toBeEnabled())
+    fireEvent.click(button)
+    await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: 'dshmarket' }))
+  })
   it('按包名导入：来源为空时按钮禁用，成功后提示并清空输入', async () => {
     const bridge = setup()
     const button = await screen.findByRole('button', { name: '导入' })

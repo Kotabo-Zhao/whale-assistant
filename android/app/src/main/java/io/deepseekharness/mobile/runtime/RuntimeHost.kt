@@ -197,6 +197,7 @@ object RuntimeHost {
                 runner = deviceCommands(),
                 token = token,
                 shellEnabled = { applicationContext?.let(io.deepseekharness.mobile.shizuku.DeviceShellAccess::enabled) == true },
+                appContext = applicationContext,
             )
             try {
                 bridge.start()

@@ -30,6 +30,18 @@ function fixture(t, answer, extras = {}) {
 const ok = text => ({ ok: true, exitCode: 0, text, truncated: false, errorCode: null })
 const virtualSession = '00000000-1111-2222-3333-444444444444'
 
+test('长期记忆工具通过本机桥保存、检索和删除，并验证输入', async t => {
+  const f = fixture(t, () => ok('{"items":[]}'))
+  await f.tools.get('mobile_memory_save').execute({ text: '喜欢蓝色' }, {})
+  await f.tools.get('mobile_memory_search').execute({ query: '蓝色' }, {})
+  await f.tools.get('mobile_memory_delete').execute({ id: virtualSession }, {})
+  assert.deepEqual(f.requests.map(r => [r.command, JSON.parse(r.param).op]), [
+    ['companionMemory', 'save'], ['companionMemory', 'search'], ['companionMemory', 'delete'],
+  ])
+  await assert.rejects(f.tools.get('mobile_memory_save').execute({ text: '' }, {}), /MEMORY_INPUT_INVALID/)
+  await assert.rejects(f.tools.get('mobile_memory_delete').execute({ id: '../bad' }, {}), /MEMORY_INPUT_INVALID/)
+})
+
 test('统一设备能力工具只读当前快照并透传受控桥命令', async t => {
   const payload = JSON.stringify({ atMs: 1700000000000, sdkInt: 34, capabilities: [] })
   const f = fixture(t, request => {

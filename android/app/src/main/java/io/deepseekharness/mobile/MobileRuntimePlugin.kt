@@ -3821,6 +3821,15 @@ class MobileRuntimePlugin : Plugin() {
      * 授权结果由界面在 onResume 后重新查询 [overlayBallState] 获得。
      */
     @PluginMethod
+    fun openCompanionSettings(call: PluginCall) {
+        execute(call) {
+            context.startActivity(Intent(context, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            null
+        }
+    }
+
+    @PluginMethod
     fun openOverlaySettings(call: PluginCall) {
         execute(call) {
             val intent = Intent(

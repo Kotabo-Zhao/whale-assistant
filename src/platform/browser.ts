@@ -575,6 +575,7 @@ export function createBrowserBridge(): RuntimeBridge {
     }),
     // 浏览器里没有可跳转的系统设置页；静默无操作，不抛错以免打断预览。
     openOverlaySettings: (): Promise<void> => Promise.resolve(),
+    openCompanionSettings: (): Promise<void> => Promise.reject(new Error('浏览器预览不支持助手设置')),
     /**
      * 浏览器预览没有 Android 的公共存储与 PRoot 访客：投递区**如实报不可用**。
      *
