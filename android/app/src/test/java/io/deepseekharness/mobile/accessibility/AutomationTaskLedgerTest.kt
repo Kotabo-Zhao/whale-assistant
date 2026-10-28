@@ -118,6 +118,31 @@ class AutomationTaskLedgerTest {
         ledger.record("s1", AutomationTaskStepOutcome(ok = true, verified = false), 1100L)
         assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s2", facts(), 1200L).refusedCode())
         assertEquals(0, ledger.snapshot().steps[1].attemptsUsed)
+        assertNull(ledger.snapshot().nextStepId)
+    }
+
+    @Test
+    fun `可重试失败时下一步仍是失败步骤而不是后续步骤`() {
+        val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
+        ledger.gate("s1", facts(), 1_000L)
+        val failed = ledger.record("s1", AutomationTaskStepOutcome(ok = false, code = "AUTOMATION_NODE_UNRESOLVED"), 1_100L)
+        assertEquals("s1", failed.nextStepId)
+        assertEquals(AutomationTaskCodes.STEP_OUT_OF_ORDER, ledger.gate("s2", facts(), 1_200L).refusedCode())
+        assertEquals(2, ledger.gate("s1", facts(), 1_300L).attempt())
+        val exhausted = ledger.record("s1", AutomationTaskStepOutcome(ok = false, code = "AUTOMATION_NODE_UNRESOLVED"), 1_400L)
+        assertNull(exhausted.nextStepId)
+    }
+
+    @Test
+    fun `暂停后恢复报告仍需重试的步骤`() {
+        val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
+        ledger.gate("s1", facts(), 1_000L)
+        ledger.record("s1", AutomationTaskStepOutcome(ok = false, code = "AUTOMATION_NODE_UNRESOLVED"), 1_100L)
+        ledger.markExternalChange()
+        val result = ledger.resume(listOf("s1", "s2"), facts())
+        assertTrue(result is AutomationTaskGate.Proceed)
+        assertEquals("s1", (result as AutomationTaskGate.Proceed).stepId)
+        assertEquals("s1", ledger.snapshot().nextStepId)
     }
 
     @Test

@@ -599,6 +599,8 @@ internal class AutomationTaskLedger {
         if (steps.any { it.status == AutomationTaskStepStatus.UNKNOWN }) {
             return refuse(AutomationTaskCodes.NEEDS_CHECK, "有步骤结果不确定：请检查现场，取消后重新规划，不要直接重发", false)
         }
+        val next = nextActionableStep()
+            ?: return refuse(AutomationTaskCodes.NEEDS_CHECK, "没有可继续的步骤：请检查现场并重新规划", false)
         if (!facts.packageAllowed) return block(AutomationTaskCodes.PACKAGE_NOT_ALLOWED, "当前应用不在无障碍自动化白名单中")
         if (!facts.serviceConnected) return block(AutomationTaskCodes.SERVICE_DISCONNECTED, "无障碍服务未连接")
         if (facts.locked) return block(AutomationTaskCodes.DEVICE_LOCKED, "设备已锁定或熄屏")
@@ -612,7 +614,7 @@ internal class AutomationTaskLedger {
         status = AutomationTaskStatus.RUNNING
         lastCode = null
         lastMessage = null
-        return AutomationTaskGate.Proceed(steps.firstOrNull { it.status == AutomationTaskStepStatus.PENDING }?.id ?: stepIds.last(), 0)
+        return AutomationTaskGate.Proceed(next.id, 0)
     }
 
     /** 兼容只传指纹的本地调用方；设备桥必须传完整现场事实。 */
@@ -627,10 +629,21 @@ internal class AutomationTaskLedger {
         status = status,
         packageName = packageName,
         steps = steps.toList(),
-        nextStepId = steps.firstOrNull { it.status == AutomationTaskStepStatus.PENDING }?.id,
+        nextStepId = if (status == AutomationTaskStatus.CANCELLED) null else nextActionableStep()?.id,
         lastCode = lastCode,
         lastMessage = lastMessage,
     )
+
+    /** Never advertise a later step when an earlier result still needs attention. */
+    private fun nextActionableStep(): AutomationTaskStepState? {
+        val step = steps.firstOrNull { it.status != AutomationTaskStepStatus.OK } ?: return null
+        return when {
+            step.status == AutomationTaskStepStatus.PENDING -> step
+            step.status == AutomationTaskStepStatus.FAILED &&
+                AutomationTaskRetry.mayRetry(step.code, step.attemptsUsed, step.maxAttempts) -> step
+            else -> null
+        }
+    }
 
     /** 阻塞：场景类拒绝把任务置 `blocked`，等 [resume]。 */
     private fun block(code: String, message: String): AutomationTaskGate {
