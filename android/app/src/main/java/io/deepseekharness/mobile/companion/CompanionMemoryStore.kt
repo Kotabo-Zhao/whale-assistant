@@ -38,6 +38,12 @@ class CompanionMemoryStore(context: Context) {
         if (additions.length() > 0) write(combined)
         additions.length()
     }
+    fun approveForUser(id: String): Boolean = synchronized(lock) {
+        val rows = load()
+        if (!CompanionMemoryApproval.approve(rows, id, System.currentTimeMillis())) return@synchronized false
+        write(rows)
+        true
+    }
     fun deleteForUser(id: String): Boolean = synchronized(lock) {
         val rows = load(); val kept = JSONArray(); var removed = false
         for (index in 0 until rows.length()) { val row = rows.getJSONObject(index); if (row.getString("id") == id) removed = true else kept.put(row) }
@@ -67,6 +73,7 @@ class CompanionMemoryStore(context: Context) {
             for (index in 0 until rows.length()) {
                 val row = rows.getJSONObject(index)
                 if (!row.getString("id").matches(Regex("[a-f0-9-]{36}")) || row.getString("text").length > 600) throw IllegalStateException("bad memory")
+                if (row.has("status") && row.optString("status") !in setOf("pending", "confirmed")) throw IllegalStateException("unknown memory status")
             }
             return rows
         } catch (e: Exception) {
@@ -94,12 +101,13 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                 if (text.isBlank() || text.length > 600 || CompanionStore.sensitive(text)) throw invalid()
                 val rows = load()
                 val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("text") == text }
-                if (existing != null) return JSONObject().put("id", existing.getString("id")).put("alreadyExists", true).toString()
+                if (existing != null) return JSONObject().put("id", existing.getString("id")).put("alreadyExists", true)
+                    .put("pending", existing.optString("status") == "pending").toString()
                 if (rows.length() >= 100) throw RuntimeFailure("MEMORY_FULL", "记忆已满，请先删除不需要的条目")
                 val row = JSONObject().put("id", UUID.randomUUID().toString()).put("text", text)
-                    .put("createdAt", System.currentTimeMillis()).put("source", "assistant_tool")
+                    .put("createdAt", System.currentTimeMillis()).put("source", "assistant_tool").put("status", "pending")
                 rows.put(row); write(rows)
-                JSONObject().put("id", row.getString("id")).put("alreadyExists", false).toString()
+                JSONObject().put("id", row.getString("id")).put("alreadyExists", false).put("pending", true).toString()
             }
             "search" -> {
                 val query = (request.opt("query") as? String)?.trim() ?: throw invalid()
@@ -108,7 +116,7 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                 val results = JSONArray()
                 for (index in rows.length() - 1 downTo 0) {
                     val row = rows.getJSONObject(index)
-                    if ((query.isEmpty() || row.getString("text").contains(query, ignoreCase = true)) && results.length() < 10) results.put(row)
+                    if (row.optString("status") != "pending" && (query.isEmpty() || row.getString("text").contains(query, ignoreCase = true)) && results.length() < 10) results.put(row)
                 }
                 JSONObject().put("items", results).put("total", rows.length()).toString()
             }
@@ -165,9 +173,12 @@ internal object CompanionMemoryImport {
             ids.add(id); texts.add(text)
             // Preserve only known bounded metadata; unknown fields are not imported.
             val copy = JSONObject().put("id", id).put("text", text)
+            val status = row.optString("status", "confirmed")
+            require(status in setOf("confirmed", "pending")) { "记忆状态无效" }
+            if (status == "pending") copy.put("status", "pending")
             val source = row.optString("source", "")
             if (source in setOf("assistant_tool", "user_edit")) copy.put("source", source)
-            for (key in listOf("createdAt", "updatedAt")) {
+            for (key in listOf("createdAt", "updatedAt", "confirmedAt")) {
                 val value = row.opt(key)
                 if (value is Number && value.toLong() >= 0) copy.put(key, value.toLong())
             }
@@ -175,5 +186,14 @@ internal object CompanionMemoryImport {
         }
         require(current.length() + additions.length() <= 100) { "合并后超过 100 条上限" }
         return MemoryImportPlan(current.toString(), additions.toString(), skipped)
+    }
+}
+
+internal object CompanionMemoryApproval {
+    fun approve(rows: JSONArray, id: String, now: Long): Boolean {
+        val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id } ?: return false
+        if (row.optString("status") != "pending") return false
+        row.put("status", "confirmed").put("confirmedAt", now)
+        return true
     }
 }

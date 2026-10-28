@@ -146,8 +146,8 @@ class CompanionActivity : AppCompatActivity() {
         val memory = CompanionMemoryStore(this)
         heading("长期记忆")
         toggle("允许助手使用长期记忆", memory.enabled) { memory.enabled = it }
-        paragraph("助手可保存和检索长期偏好；相关内容可能发送给当前模型服务。记忆保存在应用私有存储，运行环境更新不会清空；卸载应用会删除。")
-        button("查看、编辑和删除长期记忆") { showMemories() }
+        paragraph("助手提出的记忆先等待你确认；已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。记忆保存在应用私有存储，运行环境更新不会清空；卸载应用会删除。")
+        button("查看、确认和管理长期记忆") { showMemories() }
         button("导出长期记忆") { if (!memoryBusy) memoryExport.launch("whale-memory.json") else paragraph("记忆文件操作正在进行，请稍候。") }
         button("从文件导入记忆") { if (!memoryBusy) memoryImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("记忆文件操作正在进行，请稍候。") }
         paragraph("导出为未加密 JSON，包含所有记忆和来源；由你选择保存位置，云盘等服务可能同步文件。导入前会显示待新增内容，由你确认后合并。")
@@ -349,14 +349,20 @@ class CompanionActivity : AppCompatActivity() {
             val source = when (row.optString("source")) { "assistant_tool" -> "助手记忆工具"; "user_edit" -> "用户编辑"; else -> "来源未知" }
             val time = row.optLong("createdAt", 0)
             val date = if (time > 0) DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(time)) else "时间未知"
-            "${row.getString("text")}\n来源：$source · $date"
+            val status = if (row.optString("status") == "pending") "待确认" else "已确认"
+            "[$status] ${row.getString("text")}\n来源：$source · $date"
         }
         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择要编辑或删除的记忆")
             .setItems(labels) { _, index ->
                 val id = records.getJSONObject(index).getString("id")
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("管理记忆")
                     .setMessage(labels[index]).setNegativeButton("关闭", null)
-                    .setNeutralButton("编辑") { _, _ ->
+                    .setNeutralButton(if (records.getJSONObject(index).optString("status") == "pending") "确认记住" else "编辑") { _, _ ->
+                        if (records.getJSONObject(index).optString("status") == "pending") {
+                            runCatching { memory.approveForUser(id) }.onSuccess { if (it) paragraph("已确认记忆。") else paragraph("记忆已变化，请重新查看。") }
+                                .onFailure { paragraph("确认失败，原数据已保留。") }
+                        } else {
+
                         val edit = android.widget.EditText(this).apply { setText(records.getJSONObject(index).getString("text")) }
                         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("编辑记忆").setView(edit).setNegativeButton("取消", null)
                             .setPositiveButton("保存") { _, _ ->
@@ -364,6 +370,7 @@ class CompanionActivity : AppCompatActivity() {
                                     .onSuccess { if (!it) paragraph("记忆已不存在。") }
                                     .onFailure { paragraph("保存失败：${it.message}") }
                             }.show()
+                        }
                     }.setPositiveButton("删除") { _, _ ->
                         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除这条记忆？").setMessage(labels[index])
                             .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
