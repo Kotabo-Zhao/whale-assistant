@@ -244,6 +244,8 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         val request = AccessibilityAutomationPolicy.parseAction(param)
             ?: return failure("ACCESSIBILITY_ACTION_INVALID", "无障碍动作参数无效")
         if (request.packageName != packageName) return failure("ACCESSIBILITY_PACKAGE_DENIED", "动作目标不是当前前台应用")
+        val taskRefusal = AutomationTaskActionPolicy.refusal(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, SystemClock.elapsedRealtime(), automationTaskReceipt)
+        if (taskRefusal != null) return failure(taskRefusal, "当前任务未放行此动作，请检查步骤或任务状态")
         val node = findByViewId(root, request.viewId)
             ?: return failure("ACCESSIBILITY_NODE_NOT_FOUND", "未找到唯一的目标节点")
         if (node.packageName?.toString() != packageName || node.isPassword ||
@@ -369,15 +371,20 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         if (Looper.myLooper() == Looper.getMainLooper()) return performConfirmedAction(request)
         val latch = CountDownLatch(1)
         val result = AtomicReference<DeviceCommandResult>()
+        val expired = java.util.concurrent.atomic.AtomicBoolean(false)
         mainHandler.post {
-            result.set(performConfirmedAction(request))
+            if (!expired.get()) result.set(performConfirmedAction(request))
             latch.countDown()
         }
         return try {
             if (latch.await(CONFIRMATION_TIMEOUT_MS, TimeUnit.SECONDS)) {
                 result.get() ?: failure("ACCESSIBILITY_ACTION_CANCELLED", "无障碍动作未完成")
-            } else failure("ACCESSIBILITY_ACTION_TIMEOUT", "无障碍动作执行超时")
+            } else {
+                expired.set(true)
+                failure("ACCESSIBILITY_ACTION_TIMEOUT", "无障碍动作执行超时，已开始的动作结果需要核查")
+            }
         } catch (_: InterruptedException) {
+            expired.set(true)
             Thread.currentThread().interrupt()
             failure("ACCESSIBILITY_ACTION_CANCELLED", "无障碍动作已取消")
         }
@@ -398,6 +405,11 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         if (node.packageName?.toString() != packageName || node.isPassword ||
             AccessibilityAutomationPolicy.containsSensitiveText(node.viewIdResourceName)
         ) return failure("ACCESSIBILITY_ACTION_REJECTED", "确认后目标节点不允许此操作")
+        // Serialize the last gate check with cancel/plan so no action is dispatched after cancellation wins.
+        return synchronized(automationTaskLedger) {
+        val dispatchAt = SystemClock.elapsedRealtime()
+        val taskRefusal = AutomationTaskActionPolicy.refusal(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, dispatchAt, automationTaskReceipt)
+        if (taskRefusal != null) return@synchronized failure(taskRefusal, "任务状态已变化或未放行此动作")
         val success = when (request.action) {
             "click" -> node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             "setText" -> if (!node.isEditable || request.text == null || AccessibilityAutomationPolicy.containsSensitiveText(request.text)) false
@@ -410,12 +422,13 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             )
             else -> false
         }
-        return if (success) {
-            lastActionAt = now
-            noteAutomationTaskAction(now)
-            automationTaskReceipt = AutomationTaskEvidence.receipt(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, now, request.text)
+        if (success) {
+            lastActionAt = dispatchAt
+            noteAutomationTaskAction(dispatchAt)
+            automationTaskReceipt = AutomationTaskEvidence.receipt(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, dispatchAt, request.text)
             DeviceCommandResult(true, 0, "操作已执行", false, null)
         } else failure("ACCESSIBILITY_ACTION_REJECTED", "目标节点不允许此操作")
+        }
     }
 
     /**

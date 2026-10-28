@@ -173,6 +173,34 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `任务实际动作必须通过闸门并匹配当前步骤且不能重复执行`() {
+        val ledger = ledger(spec("s1"), spec("s2"))
+        fun check(packageName: String = "com.example.app", action: String = "click", target: String = "com.example.app:id/ok", at: Long = 1100L, receipt: AutomationTaskActionReceipt? = null) =
+            AutomationTaskActionPolicy.refusal(ledger.snapshot(), packageName, action, target, at, receipt)
+        assertEquals(AutomationTaskCodes.STEP_OUT_OF_ORDER, check())
+        ledger.gate("s1", facts(), 1000L)
+        assertNull(check())
+        assertEquals(AutomationTaskCodes.STEP_OUT_OF_ORDER, check(target = "com.example.app:id/other"))
+        assertEquals(AutomationTaskCodes.STEP_OUT_OF_ORDER, check(action = "setText"))
+        assertEquals(AutomationTaskCodes.STEP_OUT_OF_ORDER, check(packageName = "com.other.app"))
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, check(at = 6000L))
+        val receipt = AutomationTaskEvidence.receipt(ledger.snapshot(), "com.example.app", "click", "com.example.app:id/ok", 1100L)
+        assertEquals(AutomationTaskCodes.BUSY, check(receipt = receipt))
+        ledger.cancel()
+        assertEquals(AutomationTaskCodes.CANCELLED, check())
+        assertNull(AutomationTaskActionPolicy.refusal(AutomationTaskLedger().snapshot(), "com.example.app", "click", "x", 1100L, null))
+    }
+
+    @Test
+    fun `任务结果不确定后不能绕开台账直接重发`() {
+        val ledger = ledger(spec("s1"))
+        ledger.gate("s1", facts(), 1000L)
+        ledger.record("s1", AutomationTaskStepOutcome(ok = true, verified = false), 1100L)
+        assertEquals(AutomationTaskStatus.FAILED, ledger.snapshot().status)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, AutomationTaskActionPolicy.refusal(ledger.snapshot(), "com.example.app", "click", "com.example.app:id/ok", 1200L, null))
+    }
+
+    @Test
     fun `前一步可重试失败时不能跳过直接执行下一步`() {
         val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
         ledger.gate("s1", facts(), 1000L)

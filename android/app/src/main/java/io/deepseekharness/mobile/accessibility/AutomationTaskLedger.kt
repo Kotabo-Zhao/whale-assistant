@@ -237,6 +237,30 @@ internal object AutomationTaskEvidence {
     }
 }
 
+/** Bind accessibility actions to the active task gate; standalone use remains available without an active task. */
+internal object AutomationTaskActionPolicy {
+    fun refusal(snapshot: AutomationTaskSnapshot, packageName: String, action: String, viewId: String,
+                nowMs: Long, receipt: AutomationTaskActionReceipt?): String? {
+        if (snapshot.taskId.isEmpty()) return null
+        when (snapshot.status) {
+            AutomationTaskStatus.CANCELLED -> return AutomationTaskCodes.CANCELLED
+            AutomationTaskStatus.BLOCKED -> return AutomationTaskCodes.RESUME_REQUIRED
+            AutomationTaskStatus.PLANNED -> return AutomationTaskCodes.STEP_OUT_OF_ORDER
+            AutomationTaskStatus.FAILED -> return AutomationTaskCodes.NEEDS_CHECK
+            AutomationTaskStatus.DONE -> return null
+            AutomationTaskStatus.RUNNING -> Unit
+            else -> return AutomationTaskCodes.NEEDS_CHECK
+        }
+        val step = snapshot.steps.singleOrNull { it.status == AutomationTaskStepStatus.PENDING && it.startedAtMs != null }
+            ?: return AutomationTaskCodes.STEP_OUT_OF_ORDER
+        val started = step.startedAtMs ?: return AutomationTaskCodes.STEP_OUT_OF_ORDER
+        if (nowMs < started || nowMs - started >= step.timeoutMs) return AutomationTaskCodes.NEEDS_CHECK
+        if (snapshot.packageName != packageName || step.action != action || step.target != viewId) return AutomationTaskCodes.STEP_OUT_OF_ORDER
+        if (receipt != null && receipt.taskId == snapshot.taskId && receipt.stepId == step.id && receipt.attempt == step.attemptsUsed) return AutomationTaskCodes.BUSY
+        return null
+    }
+}
+
 /** 现场事实：闸门只看这几个，不猜。 */
 internal data class AutomationTaskFacts(
     val foregroundPackage: String,
