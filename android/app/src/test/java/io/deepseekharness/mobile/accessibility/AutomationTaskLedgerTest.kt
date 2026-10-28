@@ -116,6 +116,23 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `窗口变化验证需要设备观察和本次动作时间`() {
+        val ledger = ledger(spec("s1"), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        val step = ledger.snapshot().steps[0]
+        val claimed = AutomationTaskStepOutcome(ok = true, verified = true)
+        assertFalse(AutomationTaskEvidence.constrain(step, claimed, "d1", 1100L, 1200L).verified)
+        assertFalse(AutomationTaskEvidence.constrain(step, claimed, "d2", 900L, 1200L).verified)
+        assertFalse(AutomationTaskEvidence.constrain(step, claimed, "d2", 0L, 1200L).verified)
+        assertFalse(AutomationTaskEvidence.constrain(step, claimed, "d2", 1300L, 1200L).verified)
+        assertTrue(AutomationTaskEvidence.constrain(step, claimed, "d2", 1100L, 1200L).verified)
+        assertFalse(AutomationTaskEvidence.constrain(step, claimed.copy(verified = false), "d2", 1100L, 1200L).verified)
+        val constrained = AutomationTaskEvidence.constrain(step, claimed, "d1", 1100L, 1200L)
+        ledger.record("s1", 1, constrained, 1200L)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s2", facts(), 1300L).refusedCode())
+    }
+
+    @Test
     fun `前一步可重试失败时不能跳过直接执行下一步`() {
         val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
         ledger.gate("s1", facts(), 1000L)

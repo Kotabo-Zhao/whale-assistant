@@ -205,6 +205,18 @@ internal data class AutomationTaskStepOutcome(
     val timedOut: Boolean = false,
 )
 
+/** Device-side evidence can reject an unsupported window-change claim; it cannot prove causality. */
+internal object AutomationTaskEvidence {
+    fun constrain(step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, actionAtMs: Long, nowMs: Long): AutomationTaskStepOutcome {
+        if (step?.verify != AutomationTaskActions.VERIFY_WINDOW_CHANGED || !outcome.ok) return outcome
+        val started = step.startedAtMs
+        val baseline = step.startedDigest
+        val observed = started != null && actionAtMs > 0 && actionAtMs >= started && actionAtMs <= nowMs &&
+            baseline != null && observedDigest.isNotEmpty() && baseline != observedDigest
+        return outcome.copy(verified = outcome.verified && observed)
+    }
+}
+
 /** 现场事实：闸门只看这几个，不猜。 */
 internal data class AutomationTaskFacts(
     val foregroundPackage: String,

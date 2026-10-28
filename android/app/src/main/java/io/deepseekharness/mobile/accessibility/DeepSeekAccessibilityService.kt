@@ -1317,8 +1317,11 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                     is AutomationTaskGate.Refused ->
                         taskFailure(gate.code, gate.message, ledger.snapshot(), gate.retryable)
                 }
-            is AutomationTaskRequest.Record ->
-                ledger.record(request.stepId, request.attempt, request.outcome, SystemClock.elapsedRealtime()).let { snapshot ->
+            is AutomationTaskRequest.Record -> {
+                val now = SystemClock.elapsedRealtime()
+                val step = ledger.snapshot().steps.firstOrNull { it.id == request.stepId }
+                val outcome = AutomationTaskEvidence.constrain(step, request.outcome, digest, automationTaskActionAt, now)
+                ledger.record(request.stepId, request.attempt, outcome, now).let { snapshot ->
                     if (snapshot.lastCode == AutomationTaskCodes.RECORD_INVALID) {
                         taskFailure(
                             AutomationTaskCodes.RECORD_INVALID,
@@ -1330,6 +1333,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                         DeviceCommandResult(true, 0, AutomationTaskWire.done(snapshot), false, null)
                     }
                 }
+            }
             is AutomationTaskRequest.Resume ->
                 when (val gate = ledger.resume(request.stepIds, facts)) {
                     is AutomationTaskGate.Proceed -> {
