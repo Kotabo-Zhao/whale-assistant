@@ -8,6 +8,33 @@ import org.junit.Test
 import java.nio.file.Files
 
 class CompanionMemoryEngineTest {
+    @Test fun userAuthoredNotificationMemoryIsConfirmedAndDoesNotCopyNotificationMetadata() {
+        val rows = JSONArray()
+        assertEquals(UserMemoryResult.ADDED, CompanionUserMemory.add(rows, "  我偏好提前一天提醒  ", "user_notification", 123L))
+        val row = rows.getJSONObject(0)
+        assertEquals("我偏好提前一天提醒", row.getString("text"))
+        assertEquals("user_notification", row.getString("source"))
+        assertEquals("confirmed", row.getString("status"))
+        assertFalse(row.has("package"))
+        assertFalse(row.has("notification"))
+        val search = JSONObject(CompanionMemoryEngine({ rows }, {}).execute("{\"op\":\"search\",\"query\":\"提前一天\"}"))
+        assertEquals(1, search.getJSONArray("items").length())
+        val import = CompanionMemoryImport.plan(CompanionMemoryExport.encode(rows), JSONArray())
+        assertEquals("user_notification", JSONArray(import.additions).getJSONObject(0).getString("source"))
+    }
+
+    @Test fun manualMemoryDoesNotApproveDuplicatePendingOrOverwriteOnInvalidInput() {
+        val rows = JSONArray().put(JSONObject().put("id", "00000000-0000-0000-0000-000000000001").put("text", "已有候选").put("status", "pending"))
+        val before = rows.toString()
+        assertEquals(UserMemoryResult.EXISTING_PENDING, CompanionUserMemory.add(rows, "已有候选", "user_edit", 123L))
+        assertEquals(before, rows.toString())
+        for (value in listOf("", "密码 123456", "a".repeat(601))) {
+            assertThrows(Exception::class.java) { CompanionUserMemory.add(rows, value, "user_notification", 123L) }
+        }
+        assertThrows(Exception::class.java) { CompanionUserMemory.add(rows, "新内容", "assistant_tool", 123L) }
+        assertEquals(before, rows.toString())
+    }
+
     @Test fun savesRecallsAcrossInstancesDeduplicatesAndDeletes() {
         val path = Files.createTempFile("companion-memory-test", ".json")
         try {

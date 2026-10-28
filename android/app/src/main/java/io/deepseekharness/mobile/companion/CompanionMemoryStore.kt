@@ -51,6 +51,13 @@ class CompanionMemoryStore(context: Context) {
         removed
     }
     fun clearForUser() = synchronized(lock) { write(JSONArray()) }
+    /** Explicit user-authored memory; does not ingest notification text automatically. */
+    internal fun addForUser(text: String, source: String): UserMemoryResult = synchronized(lock) {
+        val rows = load()
+        val result = CompanionUserMemory.add(rows, text, source, System.currentTimeMillis())
+        if (result == UserMemoryResult.ADDED) write(rows)
+        result
+    }
     fun updateForUser(id: String, text: String): Boolean = synchronized(lock) {
         val value = text.trim()
         require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value)) { "内容为空、过长或可能含敏感信息" }
@@ -88,6 +95,23 @@ class CompanionMemoryStore(context: Context) {
         catch (e: Exception) { if (stream != null) file.failWrite(stream); throw RuntimeFailure("MEMORY_WRITE_FAILED", "记忆保存失败，原数据已保留", e) }
     }
     companion object { private val lock = Any() }
+}
+
+internal enum class UserMemoryResult { ADDED, EXISTING_PENDING, EXISTING_CONFIRMED }
+
+/** Manual confirmation is explicit; no notification metadata or content is copied implicitly. */
+internal object CompanionUserMemory {
+    fun add(rows: JSONArray, text: String, source: String, now: Long): UserMemoryResult {
+        val value = text.trim()
+        require(source in setOf("user_edit", "user_notification")) { "记忆来源无效" }
+        require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value)) { "内容为空、过长或可能含敏感信息" }
+        val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("text") == value }
+        if (existing != null) return if (existing.optString("status") == "pending") UserMemoryResult.EXISTING_PENDING else UserMemoryResult.EXISTING_CONFIRMED
+        require(rows.length() < 100) { "记忆已满，请先删除不需要的条目" }
+        rows.put(JSONObject().put("id", UUID.randomUUID().toString()).put("text", value)
+            .put("source", source).put("status", "confirmed").put("createdAt", now).put("confirmedAt", now))
+        return UserMemoryResult.ADDED
+    }
 }
 
 /** Pure operation layer; store serializes access and provides atomic persistence. */
@@ -214,7 +238,7 @@ internal object CompanionMemoryImport {
             require(status in setOf("confirmed", "pending")) { "记忆状态无效" }
             if (status == "pending") copy.put("status", "pending")
             val source = row.optString("source", "")
-            if (source in setOf("assistant_tool", "user_edit")) copy.put("source", source)
+            if (source in setOf("assistant_tool", "user_edit", "user_notification")) copy.put("source", source)
             for (key in listOf("createdAt", "updatedAt", "confirmedAt")) {
                 val value = row.opt(key)
                 if (value is Number && value.toLong() >= 0) copy.put(key, value.toLong())

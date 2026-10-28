@@ -211,6 +211,7 @@ class CompanionActivity : AppCompatActivity() {
                 }
             }
         }
+        button("手动添加长期记忆") { composeUserMemory(null) }
         button("查看、确认和管理长期记忆") { showMemories() }
         button("搜索长期记忆") {
             val input = android.widget.EditText(this).apply {
@@ -308,6 +309,8 @@ class CompanionActivity : AppCompatActivity() {
         paragraph("本地规则仅提供待核对的候选，不会自动安排提醒或发送回复。")
         button("查看通知习惯摘要") { showNotificationSummary() }
         button("复制通知习惯摘要") { copyNotificationSummary() }
+        button("从通知整理记忆") { chooseNotificationForMemory() }
+        paragraph("选择一条本地通知作为参考，自行填写并确认要记住的事实；不会自动保存通知原文。")
         button("刷新通知记录") { renderRecords() }
         button("清除全部本地通知记录") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清除全部通知记录？")
@@ -642,6 +645,62 @@ class CompanionActivity : AppCompatActivity() {
         if (!opened) android.widget.Toast.makeText(this, "无法打开应用，它可能已卸载或没有启动入口。", android.widget.Toast.LENGTH_LONG).show()
     }
 
+    private fun chooseNotificationForMemory() {
+        val rows = recordsOrNull() ?: return
+        if (rows.length() == 0) { paragraph("没有可用的本地通知记录。") ; return }
+        val items = (0 until rows.length()).reversed().map { rows.getJSONObject(it) }
+        val labels = items.map { row ->
+            val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.optLong("time")))
+            "$time · ${row.optString("package")}\n${row.optString("title").ifBlank { row.optString("text") }.take(120)}"
+        }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择参考通知")
+            .setItems(labels) { _, index ->
+                val row = items[index]
+                val reference = listOf(row.optString("title"), row.optString("text")).filter { it.isNotBlank() }.joinToString("\n")
+                composeUserMemory(reference)
+            }.setNegativeButton("取消", null).show()
+    }
+
+    private fun composeUserMemory(reference: String?) {
+        val edit = android.widget.EditText(this).apply {
+            hint = "写下你希望助手记住的事实或偏好"
+            minLines = 2
+            filters = arrayOf(android.text.InputFilter.LengthFilter(600))
+        }
+        val explanation = "仅保存你填写的内容；确认后可供助手检索，相关内容可能发送给当前模型服务。请核对事实，避免保存敏感信息。"
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("添加长期记忆")
+            .setMessage(if (reference == null) explanation else "参考通知：\n$reference\n\n$explanation")
+            .setView(edit).setNegativeButton("取消", null).setPositiveButton("确认记住", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = edit.text.toString().trim()
+                if (value.isEmpty() || CompanionStore.sensitive(value)) {
+                    edit.error = "请填写内容，并移除可能的敏感信息。"
+                    return@setOnClickListener
+                }
+                if (memoryBusy) {
+                    edit.error = "记忆文件操作正在进行，请稍候。"
+                    return@setOnClickListener
+                }
+                dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                runMemoryIo("正在保存记忆…", { CompanionMemoryStore(this).addForUser(value, if (reference == null) "user_edit" else "user_notification") }) { result ->
+                    dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
+                    result.onSuccess { outcome ->
+                        dialog.dismiss()
+                        val message = when (outcome) {
+                            UserMemoryResult.ADDED -> "已添加长期记忆。"
+                            UserMemoryResult.EXISTING_PENDING -> "相同内容已在待确认列表中，请先核对。"
+                            UserMemoryResult.EXISTING_CONFIRMED -> "相同内容已存在。"
+                        }
+                        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                        render()
+                    }.onFailure { edit.error = it.message ?: "保存失败，原数据已保留。" }
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun showMemories(query: String = "") {
         val memory = CompanionMemoryStore(this)
         val all = runCatching { memory.listForUser() }.getOrElse { paragraph("无法读取长期记忆，原数据已保留。"); return }
@@ -654,7 +713,7 @@ class CompanionActivity : AppCompatActivity() {
         if (records.length() == 0) { paragraph("没有匹配的记忆，请尝试其他关键词。"); return }
         val labels = Array(records.length()) {
             val row = records.getJSONObject(it)
-            val source = when (row.optString("source")) { "assistant_tool" -> "助手记忆工具"; "user_edit" -> "用户编辑"; else -> "来源未知" }
+            val source = when (row.optString("source")) { "assistant_tool" -> "助手记忆工具"; "user_edit" -> "用户编辑"; "user_notification" -> "用户根据通知整理"; else -> "来源未知" }
             val time = row.optLong("createdAt", 0)
             val date = if (time > 0) DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(time)) else "时间未知"
             val status = if (row.optString("status") == "pending") "待确认" else "已确认"
