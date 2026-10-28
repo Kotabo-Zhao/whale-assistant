@@ -87,6 +87,8 @@ class OverlayBallService : Service() {
     @Volatile private var avatarGeneration = 0L
     private var hintView: View? = null
     private var reminderHintVisible = false
+    private data class QueuedReminderHint(val message: String, val onTap: (() -> Unit)?)
+    private val reminderHints = io.deepseekharness.mobile.companion.CompanionHintQueue<QueuedReminderHint>()
     private val hintHandler = Handler(Looper.getMainLooper())
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
     private var calendarQueryRunning = false
@@ -286,6 +288,7 @@ class OverlayBallService : Service() {
 
     override fun onDestroy() {
         calendarServiceDestroyed = true
+        reminderHints.clear()
         avatarDestroyed = true
         avatarExecutor.shutdownNow()
         calendarExecutor.shutdownNow()
@@ -317,6 +320,13 @@ class OverlayBallService : Service() {
         hintView?.let { runCatching { windowManager.removeView(it) } }
         hintView = null
         reminderHintVisible = false
+        if (!calendarServiceDestroyed && reminderHints.isNotEmpty()) hintHandler.post {
+            if (!calendarServiceDestroyed && ballAttached && hintView == null) {
+                reminderHints.take(SystemClock.elapsedRealtime())?.let { pending ->
+                    if (!showCompanionHint(pending.message, reminder = true, onTap = pending.onTap) && hintView == null) reminderHints.clear()
+                }
+            }
+        }
     }
 
     private fun notifyLowBattery() {
@@ -418,6 +428,10 @@ class OverlayBallService : Service() {
         if (getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false) return false
         if (getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return false
         val now = SystemClock.elapsedRealtime()
+        if (reminder && reminderHintVisible) {
+            reminderHints.offer(QueuedReminderHint(message, onTap), now)
+            return false // Queued is not evidence that a bubble was displayed.
+        }
         if (!io.deepseekharness.mobile.companion.CompanionHintPolicy.mayShow(reminder, reminderHintVisible, now, lastHintAt)) return false
         val metrics = resources.displayMetrics
         val density = metrics.density
@@ -675,6 +689,7 @@ class OverlayBallService : Service() {
     }
 
     private fun detachBall() {
+        reminderHints.clear()
         avatarGeneration++
         companionAnimator?.cancel()
         companionAnimator = null
