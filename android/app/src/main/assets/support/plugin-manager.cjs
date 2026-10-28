@@ -256,6 +256,18 @@ function compareVersions(left, right) {
 function expandRangeClause(clause) {
   const expanded = []
   for (const part of clause.split(/\s+/).filter(Boolean)) {
+    const partialComparison = /^(>=|<=|>|<|=)(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/.exec(part)
+    if (partialComparison) {
+      const [, op, major, minor] = partialComparison
+      const base = `${major}.${minor ?? 0}.0`
+      const next = minor === undefined ? `${Number(major) + 1}.0.0` : `${major}.${Number(minor) + 1}.0`
+      const upper = `${next}-0`
+      if (op === '>') expanded.push(`>=${next}`)
+      else if (op === '<=') expanded.push(`<${upper}`)
+      else if (op === '=') expanded.push(`>=${base}`, `<${upper}`)
+      else expanded.push(`${op}${base}`)
+      continue
+    }
     const caret = /^\^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?$/.exec(part)
     if (caret) {
       if (caret.slice(1, 4).some(value => value !== undefined && value.length > 1 && value.startsWith('0'))) { expanded.push(part); continue }
@@ -318,7 +330,7 @@ function satisfiesRange(version, range) {
   return text.split('||').some(clause => {
     const trimmed = clause.trim()
     if (trimmed === '') return false
-    const comparators = expandRangeClause(trimmed).split(/\s+/).filter(Boolean).map(part => /^(>=|<=|>|<|=)?(.*)$/.exec(part))
+    const comparators = expandRangeClause(trimmed.replace(/(>=|<=|>|<|=)\s+(?=\d)/g, '$1')).split(/\s+/).filter(Boolean).map(part => /^(>=|<=|>|<|=)?(.*)$/.exec(part))
     if (comparators.length === 0 || comparators.some(match => !match || !satisfiesComparator(version, match[1] ?? '=', match[2]))) return false
     const target = parseVersion(version)
     if (target.prerelease.length === 0) return true
@@ -327,6 +339,21 @@ function satisfiesRange(version, range) {
     return comparators.some(match => {
       const operand = parseVersion(match[2])
       return operand && operand.prerelease.length > 0 && target.numbers.every((value, index) => value === operand.numbers[index])
+    })
+  })
+}
+
+/** Reject unsupported npm range syntax as unknown rather than claiming a mismatch. */
+function supportedRange(range) {
+  if (typeof range !== 'string' || range.length === 0 || range.length > 256) return false
+  return range.split('||').every(clause => {
+    const trimmed = clause.trim()
+    if (trimmed === '*') return true
+    if (!trimmed) return false
+    const parts = expandRangeClause(trimmed.replace(/(>=|<=|>|<|=)\s+(?=\d)/g, '$1')).split(/\s+/).filter(Boolean)
+    return parts.length > 0 && parts.every(part => {
+      const match = /^(?:>=|<=|>|<|=)?(.*)$/.exec(part)
+      return match && parseVersion(match[1]) !== null
     })
   })
 }
@@ -471,7 +498,7 @@ function gitAvailability() {
 
 // 管理器只解析包清单，不导入插件，不启动 Harness；插件启动失败时仍可恢复配置。
 /** Bounded npm metadata checks. Absence of platform fields is unknown, not proof of compatibility. */
-function npmMetadataCheck(payload, id, version, platform, arch) {
+function npmMetadataCheck(payload, id, version, platform, arch, nodeVersion = process.versions.node) {
   const meta = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload
   if (!meta || typeof meta !== 'object' || Array.isArray(meta) || meta.name !== id || meta.version !== version) return 'PLUGIN_METADATA_UNAVAILABLE'
   function allows(value, list) {
@@ -487,6 +514,13 @@ function npmMetadataCheck(payload, id, version, platform, arch) {
   if (os === null || cpu === null) return 'PLUGIN_METADATA_UNAVAILABLE'
   if (!os || !cpu) return 'PLUGIN_PLATFORM_UNSUPPORTED'
   if (meta.gypfile === true || (meta.binary && typeof meta.binary === 'object')) return 'PLUGIN_NATIVE_UNSUPPORTED'
+  if (meta.engines !== undefined) {
+    if (!meta.engines || typeof meta.engines !== 'object' || Array.isArray(meta.engines)) return 'PLUGIN_METADATA_UNAVAILABLE'
+    if (meta.engines.node !== undefined) {
+      if (!parseVersion(nodeVersion) || !supportedRange(meta.engines.node)) return 'PLUGIN_METADATA_UNAVAILABLE'
+      if (!satisfiesRange(nodeVersion, meta.engines.node)) return 'PLUGIN_NODE_UNSUPPORTED'
+    }
+  }
   return null
 }
 

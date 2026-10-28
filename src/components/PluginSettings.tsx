@@ -18,6 +18,7 @@ const errorMessages: Record<string, string> = {
   PLUGIN_ENGINE_SCAN_INCOMPLETE: '最近检查的插件版本与当前运行环境不兼容，仍有旧版本未检查；已有版本未被替换。',
   PLUGIN_NATIVE_UNSUPPORTED: '插件或依赖包含移动端受限的原生扩展，已保留原版本',
   PLUGIN_PLATFORM_UNSUPPORTED: '插件或依赖声明不支持当前运行环境的平台或处理器，已保留原版本',
+  PLUGIN_NODE_UNSUPPORTED: '插件或依赖要求的 Node 版本与当前运行环境不兼容，已保留原版本',
   PLUGIN_METADATA_UNAVAILABLE: '无法核对插件或依赖的版本与声明，请检查网络或包信息，已保留原版本',
   PLUGIN_RUNTIME_VERSION_UNAVAILABLE: '无法确认当前 Harness 版本，请修复运行环境后重试，已保留原版本',
   PLUGIN_SCAN_UNAVAILABLE: '无法完整检查插件依赖（可能包含链接或超过检查限制），已保留原版本',

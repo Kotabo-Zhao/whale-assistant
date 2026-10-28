@@ -264,6 +264,14 @@ describe('插件双状态呈现与补充链接', () => {
     fireEvent.click(update)
     expect(await screen.findByRole('alert')).toHaveTextContent('插件或依赖包含移动端受限的原生扩展')
   })
+  it('Node 版本不兼容时指出依赖要求并保留旧版本', async () => {
+    const bridge = setup()
+    fireEvent.click(await screen.findByText('example-plugin'))
+    bridge.managePlugins.mockRejectedValueOnce({ code: 'PLUGIN_NODE_UNSUPPORTED', message: 'new-node-dep' })
+    const update = screen.getAllByRole('button', { name: '更新所属插件包' }).find(button => !(button as HTMLButtonElement).disabled)!
+    fireEvent.click(update)
+    expect(await screen.findByRole('alert')).toHaveTextContent('插件或依赖要求的 Node 版本与当前运行环境不兼容')
+  })
   it('搜索与标签页过滤正确筛选条目', async () => {
     const customCatalog: PluginCatalog = {
       plugins: [

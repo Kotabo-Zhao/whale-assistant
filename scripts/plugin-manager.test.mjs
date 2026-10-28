@@ -19,6 +19,11 @@ test('npm 元数据预检区分平台不兼容、原生扩展和无法核验', (
   assert.equal(check({ os: ['linux', '!linux'] }), 'PLUGIN_PLATFORM_UNSUPPORTED')
   assert.equal(check({ gypfile: true }), 'PLUGIN_NATIVE_UNSUPPORTED')
   assert.equal(check({ binary: { module_name: 'native' } }), 'PLUGIN_NATIVE_UNSUPPORTED')
+  assert.equal(npmMetadataCheck({ ...base, engines: { node: '>=20.18.1' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '20.18.1'), null)
+  assert.equal(npmMetadataCheck({ ...base, engines: { node: '>=20.18.1' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '18.20.0'), 'PLUGIN_NODE_UNSUPPORTED')
+  assert.equal(npmMetadataCheck({ ...base, engines: { node: '>= 20' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '20.1.0'), null)
+  assert.equal(npmMetadataCheck({ ...base, engines: { node: '20 - 22' } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '20.1.0'), 'PLUGIN_METADATA_UNAVAILABLE')
+  assert.equal(npmMetadataCheck({ ...base, engines: { node: 20 } }, 'test-plugin', '1.2.3', 'linux', 'arm64', '20.1.0'), 'PLUGIN_METADATA_UNAVAILABLE')
   assert.equal(check({ os: [7] }), 'PLUGIN_METADATA_UNAVAILABLE')
   assert.equal(check({ name: 'other' }), 'PLUGIN_METADATA_UNAVAILABLE')
   assert.equal(check({ version: '2.0.0' }), 'PLUGIN_METADATA_UNAVAILABLE')
@@ -349,6 +354,11 @@ test('非法版本与范围不可被规范化放行，超大预发布数字排�
   assert.equal(compareVersions('1.2.3-9007199254740992', '1.2.3-9007199254740993'), -1)
   assert.equal(compareVersions('1.2.3-99999999999999999', '1.2.3-100000000000000000'), -1)
   assert.ok(parseVersion('1.2.3+build.01'))
+  assert.equal(satisfiesRange('20.1.0', '>= 20 <21'), true)
+  assert.equal(satisfiesRange('21.0.0', '<=20'), false)
+  assert.equal(satisfiesRange('21.0.0-rc.1', '>20'), false)
+  assert.equal(satisfiesRange('20.19.0', '>20.18'), true)
+  assert.equal(satisfiesRange('20.18.9', '>20.18'), false)
 })
 
 test('根目录路径校验兼容真实 Ubuntu 根路径', () => {
@@ -831,6 +841,17 @@ test('依赖中声明原生构建时拒绝安装', t => {
     fs.writeFileSync(path.join(dep, 'package.json'), JSON.stringify({ name: 'native-dep', version: '1.0.0', gypfile: true }))
   })
   assert.throws(() => manager.update('test-plugin'), /PLUGIN_NATIVE_UNSUPPORTED/)
+})
+
+test('嵌套依赖要求不兼容的 Node 版本时保留旧插件', t => {
+  const { manager } = fixture(t, (id, directory) => {
+    installer(id, directory)
+    const dep = stagedPackage(path.join(directory, 'node_modules/test-plugin/node_modules'), 'new-node-dep', '1.0.0')
+    fs.writeFileSync(path.join(dep, 'package.json'), JSON.stringify({ name: 'new-node-dep', version: '1.0.0', engines: { node: '>=999.0.0' } }))
+  })
+  const before = manager.list().plugins
+  assert.throws(() => manager.update('test-plugin'), /PLUGIN_NODE_UNSUPPORTED/)
+  assert.deepEqual(manager.list().plugins, before)
 })
 
 test('嵌套依赖的平台声明与实际包身份不符时拒绝替换旧插件', t => {
