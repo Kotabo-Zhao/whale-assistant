@@ -361,6 +361,39 @@ function selectNewestCompatible(versions, runtimeDsh, rangeOf, maxProbes = 6) {
   return null
 }
 
+/** Full registry metadata lets us scan more than six historical versions without one request per version. */
+function selectFromPackument(payload, id, runtimeDsh) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.name !== id ||
+      !payload.versions || typeof payload.versions !== 'object' || Array.isArray(payload.versions)) return { available: false }
+  const versions = Object.keys(payload.versions)
+  if (!versions.length || versions.length > 5000 || !parseVersion(runtimeDsh)) return { available: false }
+  const parsed = versions.filter(v => VERSION.test(v) && parseVersion(v))
+  if (!parsed.length) return { available: false }
+  for (const version of parsed) {
+    const meta = payload.versions[version]
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta) || meta.name !== id || meta.version !== version) return { available: false }
+    try { declaredDshRange(meta, id) } catch { return { available: false } }
+  }
+  const selection = selectNewestCompatible(parsed, runtimeDsh, version => declaredDshRange(payload.versions[version], id), 5000)
+  return { available: true, selection, checked: parsed.length }
+}
+
+/** A bounded, anonymous HTTPS child process. No user credentials or custom registries are inherited. */
+const PACKUMENT_FETCH_SCRIPT = `
+const https = require('node:https');
+const id = process.argv[1];
+const limit = 4 * 1024 * 1024;
+let size = 0; const chunks = [];
+const request = https.get('https://registry.npmjs.org/' + encodeURIComponent(id), { headers: { accept: 'application/json' }, timeout: 8000 }, response => {
+  if (response.statusCode !== 200) { response.resume(); process.exitCode = 1; return; }
+  response.on('data', chunk => { size += chunk.length; if (size > limit) { request.destroy(); return; } chunks.push(chunk); });
+  response.on('end', () => { if (size <= limit) process.stdout.write(Buffer.concat(chunks)); });
+  response.on('error', () => { process.exitCode = 1; });
+});
+request.on('timeout', () => request.destroy());
+request.on('error', () => { process.exitCode = 1; });
+`
+
 function engineScanIncomplete(versions, probed) {
   const valid = new Set(versions.filter(v => typeof v === 'string' && VERSION.test(v) && parseVersion(v) !== null))
   return probed < valid.size
@@ -1818,6 +1851,22 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
       installExplicitVersion(cache.get(explicitVersion), install, id, explicitVersion, runtimeDsh, process.platform, process.arch)
       return
     }
+    const batch = spawnSync(process.execPath, ['-e', PACKUMENT_FETCH_SCRIPT, id], {
+      env: environment, encoding: 'utf8', timeout: 10000, maxBuffer: 4 * 1024 * 1024 + 4096,
+    })
+    let batchSelection = { available: false }
+    if (batch.status === 0) {
+      try { batchSelection = selectFromPackument(JSON.parse(batch.stdout), id, runtimeDsh) } catch { /* use bounded npm fallback */ }
+    }
+    if (batchSelection.available) {
+      if (batchSelection.selection === null) fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
+      const version = batchSelection.selection.version
+      const cache = new Map()
+      const actualRange = engineRangeOf(npm, id, version, common, environment, cache)
+      if (actualRange !== null && !satisfiesRange(runtimeDsh, actualRange)) fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtimeDsh}`)
+      installAfterMetadata(() => cache.get(version), install, id, version, process.platform, process.arch)
+      return
+    }
     const listed = spawnSync(process.execPath, [npm, 'view', id, 'versions', '--json', ...common], { env: environment, encoding: 'utf8', timeout: 45000, maxBuffer: 1024 * 1024 })
     if (listed.status !== 0) fail('PLUGIN_METADATA_UNAVAILABLE', id)
     let versions
@@ -2196,6 +2245,8 @@ module.exports = {
   satisfiesRange,
   selectNewestCompatible,
   engineScanIncomplete,
+  selectFromPackument,
+  PACKUMENT_FETCH_SCRIPT,
   // 供单测直接覆盖导入来源校验（决定哪些地址能进 npm/git）。
   validateImportSource,
   // 供单测直接覆盖 git 探测的三态判定（可用 / 确实没有 / 探测不了）。

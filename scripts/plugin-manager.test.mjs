@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const { createManager, npmMetadataCheck, readRegistryMetadata, declaredDshRange, installAfterMetadata, installExplicitVersion, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, engineScanIncomplete, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
+const { createManager, npmMetadataCheck, readRegistryMetadata, declaredDshRange, installAfterMetadata, installExplicitVersion, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, engineScanIncomplete, selectFromPackument, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
   require('../android/app/src/main/assets/support/plugin-manager.cjs')
 
 test('npm 元数据预检区分平台不兼容、原生扩展和无法核验', () => {
@@ -237,6 +237,31 @@ test('版本探测上限不能伪装成全部历史版本不兼容，重复版�
   assert.equal(engineScanIncomplete(versions, probes), true)
   assert.equal(engineScanIncomplete(versions, 3), false)
   assert.equal(engineScanIncomplete(['2.0.0', '2.0.0', 'bad'], 1), false)
+})
+
+test('批量元数据可发现六个新版本以外的兼容版本，身份或元数据有问题时回退', () => {
+  const versions = {}
+  for (let i = 1; i <= 10; i++) versions[`1.0.${i}`] = { name: 'demo', version: `1.0.${i}`, dsh: { engines: { dsh: i <= 3 ? '>=0.1.0' : '>=9.0.0' } } }
+  const payload = { name: 'demo', versions }
+  const result = selectFromPackument(payload, 'demo', '0.2.0')
+  assert.equal(result.available, true)
+  assert.equal(result.selection.version, '1.0.3')
+  assert.equal(result.checked, 10)
+  assert.deepEqual(selectFromPackument(payload, 'wrong', '0.2.0'), { available: false })
+  payload.versions['1.0.2'].name = 'other'
+  assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0'), { available: false })
+  payload.versions['1.0.2'].name = 'demo'
+  payload.versions['1.0.2'].dsh.engines.dsh = 42
+  assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0'), { available: false })
+})
+
+test('批量元数据确认所有版本不兼容，以及未声明要求的版本', () => {
+  const make = (version, range) => ({ name: 'demo', version, ...(range === null ? {} : { dsh: { engines: { dsh: range } } }) })
+  const payload = { name: 'demo', versions: { '1.0.0': make('1.0.0', '>=9.0.0'), '1.0.1': make('1.0.1', '>=9.0.0') } }
+  assert.equal(selectFromPackument(payload, 'demo', '0.2.0').selection, null)
+  payload.versions['1.0.0'] = make('1.0.0', null)
+  assert.equal(selectFromPackument(payload, 'demo', '0.2.0').selection.version, '1.0.0')
+  assert.deepEqual(selectFromPackument({ name: 'demo', versions: {} }, 'demo', '0.2.0'), { available: false })
 })
 
 test('范围匹配严格对齐 npm 语义（含预发布与插入符）', () => {
