@@ -32,8 +32,8 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
     item, text: `${item.name} ${item.npm} ${item.description}`.toLowerCase(),
   })), [entries])
   const matches = useMemo(() => {
-    const term = deferredQuery.trim().toLowerCase()
-    return term ? searchIndex.filter(row => row.text.includes(term)).map(row => row.item) : (entries ?? [])
+    const terms = deferredQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    return terms.length ? searchIndex.filter(row => terms.every(term => row.text.includes(term))).map(row => row.item) : (entries ?? [])
   }, [entries, searchIndex, deferredQuery])
   const pageCount = Math.ceil(matches.length / PAGE_SIZE)
   const currentPage = Math.min(page, Math.max(0, pageCount - 1))

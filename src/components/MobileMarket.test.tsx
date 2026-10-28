@@ -118,6 +118,25 @@ it('插件目录分页可访问全部结果，搜索后回到第一页', async (
   expect(screen.queryByRole('navigation', { name: '插件目录分页' })).not.toBeInTheDocument()
 })
 
+it('多个搜索词可分别匹配名称、包名和介绍，且忽略大小写', async () => {
+  const plugins = [
+    { name: '日程助手', npm: 'whale-calendar', description: { zh: '每日提醒和待办' } },
+    { name: '日程看板', npm: 'other-calendar', description: { zh: '规划项目' } },
+  ]
+  const bytes = new TextEncoder().encode(JSON.stringify({ plugins }))
+  let complete = false
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({
+    read: () => Promise.resolve(complete ? { done: true } : (complete = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+  }) } }))
+  render(<MobileMarket locked={false} onInstall={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+  await screen.findByText('日程助手')
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索目录' }), { target: { value: '  日程   CALENDAR 提醒  ' } })
+  await waitFor(() => expect(screen.getByText('日程助手')).toBeVisible())
+  expect(screen.queryByText('日程看板')).not.toBeInTheDocument()
+  expect(screen.getByText('共 1 个结果，第 1/1 页。')).toBeVisible()
+})
+
 it('搜索名称、包名和描述时忽略大小写，刷新后不保留旧索引', async () => {
   let generation = 0
   vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
