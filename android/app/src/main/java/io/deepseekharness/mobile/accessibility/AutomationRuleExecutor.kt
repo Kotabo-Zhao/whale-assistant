@@ -55,6 +55,7 @@ internal object AutomationGateCodes {
      * 而「什么都没发生」正是用户会误判成「自动化坏了」的那种显示。
      */
     const val APP_PAUSED = "AUTOMATION_APP_PAUSED"
+    const val TASK_ACTIVE = "AUTOMATION_TASK_ACTIVE"
 
     // 第 1–4 层节流与指纹。
     const val EVENT_THROTTLED = "AUTOMATION_EVENT_THROTTLED"

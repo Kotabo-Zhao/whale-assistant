@@ -61,6 +61,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
      * 任务台账（`automationTask` 命令）。单槽位、只记状态、**不执行动作**——见 [AutomationTaskLedger]。
      */
     private val automationTaskLedger = AutomationTaskLedger()
+    private val automationRuleGesture = AutomationRuleGestureTracker()
 
     /**
      * 事件驱动自动化的闸门状态（四层节流 + 配额 + 节点指纹 + 连续失败计数）。
@@ -1239,7 +1240,8 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     ) {
         val snapshot = evaluation.tree
         val root = snapshot.tree ?: return
-        val report = AutomationRuleExecutor.execute(
+        val report = AutomationRuleTaskArbiter.runIfIdle({ AutomationTaskInterruptionStore(this).pending() }) {
+            AutomationRuleExecutor.execute(
             backend = AndroidAutomationNodeBackend(snapshot.packageName, snapshot.windowId),
             root = root,
             screen = automationWindows.screen(snapshot.packageName, snapshot.windowId),
@@ -1252,7 +1254,12 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             sensitiveWindow = evaluation.sensitiveWindow,
             apply = apply,
             eventSequence = eventSequence,
-        )
+            )
+        }
+        if (report == null) {
+            automationHistory.noteBlocked(snapshot.packageName, AutomationGateCodes.TASK_ACTIVE)
+            return
+        }
         handleAutomationReport(report, snapshot.packageName)
     }
 
@@ -1375,7 +1382,9 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             is AutomationTaskRequest.Invalid ->
                 taskFailure(request.code, request.message, null, false)
             is AutomationTaskRequest.Plan ->
-                if (AutomationTaskInterruptionStore.orphaned(interruption.pending(), ledger.snapshot())) {
+                if (automationRuleGesture.inFlight()) {
+                    taskFailure(AutomationTaskCodes.BUSY, "规则手势仍在执行，请等待结束并重新观察界面", ledger.snapshot(), true)
+                } else if (AutomationTaskInterruptionStore.orphaned(interruption.pending(), ledger.snapshot())) {
                     taskFailure(AutomationTaskCodes.INTERRUPTED, "之前的任务可能中断，请先检查现场并在任务卡片确认", ledger.snapshot(), false)
                 } else when (val gate = ledger.plan(request.taskId, request.packageName, digest, request.steps).also {
                     if (it is AutomationTaskGate.Proceed) { automationTaskActionAt = 0L; automationTaskReceipt = null }
@@ -1836,8 +1845,15 @@ class DeepSeekAccessibilityService : AccessibilityService() {
 
         /** 手势派发：`dispatchGesture` 返回 false 就说明这条路走不通（最常见的原因是服务没有声明手势能力）。 */
         private fun dispatch(gesture: GestureDescription): BackendOutcome {
-            val dispatched = runCatching { dispatchGesture(gesture, null, null) }.getOrDefault(false)
+            val token = automationRuleGesture.begin()
+                ?: return BackendOutcome.Refused("AUTOMATION_GESTURE_BUSY", "上一条规则手势尚未结束")
+            val callback = object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) { automationRuleGesture.finish(token) }
+                override fun onCancelled(gestureDescription: GestureDescription?) { automationRuleGesture.finish(token) }
+            }
+            val dispatched = runCatching { dispatchGesture(gesture, callback, mainHandler) }.getOrDefault(false)
             if (!dispatched) {
+                automationRuleGesture.finish(token)
                 return BackendOutcome.Refused(
                     "AUTOMATION_GESTURE_UNAVAILABLE",
                     "dispatchGesture 返回 false（服务当前声明里没有 canPerformGestures 能力，或系统拒绝了这次手势）",
