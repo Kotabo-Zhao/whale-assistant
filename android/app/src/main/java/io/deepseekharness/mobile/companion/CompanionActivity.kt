@@ -825,8 +825,13 @@ class CompanionActivity : AppCompatActivity() {
                             runCatching { reminders.remove(id) }.onSuccess { paragraph("重复提醒已删除。") }.onFailure { paragraph("删除失败，原记录已保留。") }
                         }.show()
                 }
-            if (rows.getJSONObject(index).optString("state") == "failed") dialog.setNeutralButton("重新安排") { _, _ ->
-                runCatching { reminders.retry(id) }.onSuccess { paragraph("已重新安排下一次提醒。") }.onFailure { paragraph("重新安排失败，请检查系统设置。") }
+            dialog.setNeutralButton("更多操作") { _, _ ->
+                val failed = rows.getJSONObject(index).optString("state") == "failed"
+                val options = if (failed) arrayOf("稍后再提醒一次", "重新安排重复提醒") else arrayOf("稍后再提醒一次")
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择操作").setItems(options) { _, choice ->
+                    if (choice == 0) chooseSnooze(rows.getJSONObject(index).getString("text"))
+                    else runCatching { reminders.retry(id) }.onSuccess { paragraph("已重新安排下一次提醒。") }.onFailure { paragraph("重新安排失败，请检查系统设置。") }
+                }.setNegativeButton("取消", null).show()
             }
             dialog.show()
         }.setNegativeButton("关闭", null).show()
@@ -839,15 +844,15 @@ class CompanionActivity : AppCompatActivity() {
         val labels = Array(rows.length()) { index ->
             val row = rows.getJSONObject(index)
             val date = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.optLong("at")))
-            val state = when (row.optString("state")) { "scheduled" -> "已安排"; "delivered" -> "已投递"; "missed" -> "已错过"; else -> "失败" }
+            val state = when (row.optString("state")) { "scheduled" -> "已安排"; "delivered" -> "已交给系统"; "missed" -> "已错过"; else -> "失败" }
             "${row.optString("text")} · $date · $state"
         }
         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择提醒").setItems(labels) { _, index ->
             val row = rows.getJSONObject(index)
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("管理提醒")
-                .setMessage(labels[index] + "\n\n重新安排会创建一条新提醒，保留原记录；请核对内容与时间。")
+                .setMessage(labels[index] + "\n\n再次提醒会创建一条新提醒，原记录仍保留；如原提醒仍在等待，可能收到两次。")
                 .setNegativeButton("关闭", null)
-                .setNeutralButton("重新安排") { _, _ -> createReminder(row.optString("text")) }
+                .setNeutralButton("再次提醒") { _, _ -> chooseSnooze(row.optString("text")) }
                 .setPositiveButton("删除") { _, _ ->
                     androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除提醒？").setMessage(labels[index])
                         .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
@@ -855,6 +860,27 @@ class CompanionActivity : AppCompatActivity() {
                         }.show()
                 }.show()
         }.setNegativeButton("关闭", null).show()
+    }
+
+    private fun chooseSnooze(text: String) {
+        val options = arrayOf("10 分钟后", "30 分钟后", "1 小时后", "选择其他时间")
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("新建一次性提醒，原计划不变")
+            .setItems(options) { _, choice ->
+                if (choice == 3) { createReminder(text); return@setItems }
+                val minutes = CompanionSnoozePolicy.minutes[choice]
+                runMemoryIo("正在安排提醒…", {
+                    val target = CompanionSnoozePolicy.target(System.currentTimeMillis(), minutes)
+                    CompanionReminder(this).add(text, target)
+                    target
+                }) { result ->
+                    result.onSuccess { target ->
+                        val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(target))
+                        val health = CompanionReminderHealth.read(this)
+                        paragraph(if (health == CompanionReminderHealth.State.READY) "已新建 $time 的提醒，系统可能延迟。"
+                            else "已新建 $time 的提醒，但通知状态未就绪，请检查系统设置。")
+                    }.onFailure { paragraph("未能确认提醒是否安排；请先查看提醒列表，避免重复创建。") }
+                }
+            }.setNegativeButton("取消", null).show()
     }
 
     private fun renderRecords() {
