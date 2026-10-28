@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { t, useLanguage } from '../i18n'
+import { runtimeBridge } from '../platform/native'
 import './TaskStarter.css'
 
 const tasks = [
@@ -14,6 +15,13 @@ export function TaskStarter() {
   const [selected, setSelected] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
+  const [inserting, setInserting] = useState(false)
+  const insertDraft = async () => {
+    setInserting(true); setCopyStatus('')
+    try { await runtimeBridge.insertTaskDraft(draft); setCopyStatus('已请求放入对话，请核对草稿') }
+    catch { setCopyStatus('对话不可用，请复制任务后粘贴') }
+    finally { setInserting(false) }
+  }
   const copyDraft = async () => {
     try {
       if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
@@ -25,7 +33,7 @@ export function TaskStarter() {
   }
   return <section className="task-starter" aria-labelledby="task-starter-title">
     <div className="task-starter-heading"><div><span>QUICK START</span><h2 id="task-starter-title">{t('试试这些任务')}</h2></div><p>{t('选择一个示例，补充细节后发给助手')}</p></div>
-    <div className="task-starter-grid">{tasks.map((task, index) => <button type="button" key={task.title} className={`task-starter-card ${selected === index ? 'selected' : ''}`} aria-pressed={selected === index} onClick={() => { setSelected(index); setDraft(t(task.prompt)); setCopyStatus('') }}><strong>{t(task.title)}</strong><small>{t(task.description)}</small></button>)}</div>
-    {selected !== null && <div className="task-starter-draft"><label htmlFor="task-starter-prompt">{t('任务示例：可编辑后复制到对话')}</label><textarea id="task-starter-prompt" value={draft} onChange={event => setDraft(event.target.value)} rows={4} /><div><button className="button button-secondary compact-button" type="button" disabled={draft.trim() === ''} onClick={() => { void copyDraft() }}>{t('复制任务')}</button> <span role="status">{t(copyStatus)}</span></div></div>}
+    <div className="task-starter-grid">{tasks.map((task, index) => <button type="button" key={task.title} disabled={inserting} className={`task-starter-card ${selected === index ? 'selected' : ''}`} aria-pressed={selected === index} onClick={() => { setSelected(index); setDraft(t(task.prompt)); setCopyStatus('') }}><strong>{t(task.title)}</strong><small>{t(task.description)}</small></button>)}</div>
+    {selected !== null && <div className="task-starter-draft"><label htmlFor="task-starter-prompt">{t('任务示例：编辑后放入对话')}</label><textarea id="task-starter-prompt" value={draft} maxLength={2000} disabled={inserting} onChange={event => setDraft(event.target.value)} rows={4} /><div className="task-starter-actions"><button className="button button-primary compact-button" type="button" disabled={inserting || draft.trim() === ''} onClick={() => { void insertDraft() }}>{t('放入对话草稿')}</button><button className="button button-secondary compact-button" type="button" disabled={inserting || draft.trim() === ''} onClick={() => { void copyDraft() }}>{t('复制任务')}</button><span role="status">{t(copyStatus)}</span></div><small>{t('仅放入草稿，不会自动发送。')}</small></div>}
   </section>
 }

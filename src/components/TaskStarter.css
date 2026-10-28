@@ -10,4 +10,5 @@
 .task-starter-card small { margin-top: 5px; color: var(--muted); line-height: 1.4; }
 .task-starter-draft { display: grid; gap: 8px; margin-top: 14px; font-size: .8rem; color: var(--muted); }
 .task-starter-draft textarea { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface-muted); color: var(--ink); font: inherit; line-height: 1.5; resize: vertical; }
+.task-starter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 @media (max-width: 480px) { .task-starter { padding: 15px; } .task-starter-heading { display: block; } .task-starter-heading p { margin-top: 5px; } }

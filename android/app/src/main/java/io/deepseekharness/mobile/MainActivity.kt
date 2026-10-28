@@ -133,6 +133,15 @@ class MainActivity : BridgeActivity() {
 
     internal fun discardHarnessSurface() { harnessSurface.discard() }
 
+    /** Called after a user edits and chooses a task in the local management UI. */
+    internal fun insertTaskDraft(text: String): Boolean {
+        if (!SharedTextImport.canInsertDraft(text) || isFinishing || isDestroyed) return false
+        harnessSurface.showIfOwned()
+        if (harnessSurface.insertSharedText(text)) return true
+        harnessSurface.sharedTextCopyFallback(text)
+        return false
+    }
+
     /**
      * 管理界面的字号跟随系统字号（登记册 5.6-I）。
      *

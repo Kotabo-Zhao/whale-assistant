@@ -229,6 +229,7 @@ interface NativeRuntimePlugin {
   overlayBallState(): Promise<unknown>
   openOverlaySettings(): Promise<void>
   openCompanionSettings(): Promise<void>
+  insertTaskDraft(options: { text: string }): Promise<void>
   mailboxState(): Promise<unknown>
   mailboxDirectory(options: { root: MailboxRoot; subdirectory?: string }): Promise<unknown>
   createMailboxFolder(options: { root: MailboxRoot; subdirectory: string }): Promise<unknown>
@@ -565,6 +566,7 @@ function createNativeBridge(): RuntimeBridge {
     getOverlayBallState: () => NativeRuntime.overlayBallState().then(validateOverlayBallState),
     openOverlaySettings: () => NativeRuntime.openOverlaySettings(),
     openCompanionSettings: () => NativeRuntime.openCompanionSettings(),
+    insertTaskDraft: text => NativeRuntime.insertTaskDraft({ text }),
     getMailboxState: () => NativeRuntime.mailboxState().then(validateMailboxState),
     getMailboxDirectory: (root, subdirectory) => NativeRuntime
       .mailboxDirectory({ root, ...(subdirectory === undefined ? {} : { subdirectory }) })

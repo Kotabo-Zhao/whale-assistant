@@ -3902,6 +3902,23 @@ class MobileRuntimePlugin : Plugin() {
      * 授权结果由界面在 onResume 后重新查询 [overlayBallState] 获得。
      */
     @PluginMethod
+    fun insertTaskDraft(call: PluginCall) {
+        if (destroying.get()) { rejectRuntimeClosed(call); return }
+        val text = call.getString("text")
+        if (text == null || !SharedTextImport.canInsertDraft(text)) {
+            call.reject("任务内容为空或超过 2000 字", "TASK_DRAFT_INVALID")
+            return
+        }
+        val owner = activity as? MainActivity
+        if (owner == null) { call.reject("对话不可用", "TASK_DRAFT_UNAVAILABLE"); return }
+        owner.runOnUiThread {
+            if (destroying.get()) { rejectRuntimeClosed(call); return@runOnUiThread }
+            if (owner.insertTaskDraft(text)) call.resolve()
+            else call.reject("对话未就绪，请复制后粘贴", "TASK_DRAFT_UNAVAILABLE")
+        }
+    }
+
+    @PluginMethod
     fun openCompanionSettings(call: PluginCall) {
         execute(call) {
             context.startActivity(Intent(context, io.deepseekharness.mobile.companion.CompanionActivity::class.java)

@@ -174,6 +174,7 @@ export const bridge = {
   getMarketProposal: vi.fn(),
   dismissMarketProposal: vi.fn(),
   openCompanionSettings: vi.fn(),
+  insertTaskDraft: vi.fn(),
   cancelAutomationTask: vi.fn(),
   clearRuntimeCache: vi.fn(),
   purgePluginData: vi.fn(),
