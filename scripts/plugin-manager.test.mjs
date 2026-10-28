@@ -185,6 +185,21 @@ test('只认 dist-tags.latest 会装错版本：必须按运行时 dsh 版本挑
   )
 })
 
+test('预发布范围按比较符集合判断，部分版本范围保持 npm 上界', () => {
+  assert.equal(satisfiesRange('0.2.1-rc.2', '>=0.2.1-rc.1 <0.3.0'), true)
+  assert.equal(satisfiesRange('0.2.1-rc.2', '^0.2.1-rc.1'), true)
+  assert.equal(satisfiesRange('0.2.2-rc.1', '>=0.2.1-rc.1 <0.3.0'), false)
+  assert.equal(satisfiesRange('0.2.1-rc.1', '>=0.2.0 <0.3.0'), false)
+  assert.equal(satisfiesRange('0.2.1-rc.2', '<0.2.1-rc.1 || >=0.2.1-rc.2 <0.3.0'), true)
+  assert.equal(satisfiesRange('0.9.0', '^0'), true)
+  assert.equal(satisfiesRange('0.0.8', '^0.0'), true)
+  assert.equal(satisfiesRange('0.1.0', '^0.0'), false)
+  assert.equal(satisfiesRange('1.9.0', '~1'), true)
+  assert.equal(satisfiesRange('2.0.0', '~1'), false)
+  assert.deepEqual(selectNewestCompatible(['2.0.0', '1.0.0'], '0.2.1-rc.2', v => v === '2.0.0' ? '>=0.2.1-rc.1 <0.3.0' : null),
+    { version: '2.0.0', range: '>=0.2.1-rc.1 <0.3.0' })
+})
+
 test('未声明 dsh 引擎范围的插件按兼容处理，直接取最高版本', () => {
   assert.deepEqual(
     selectNewestCompatible(['1.2.0', '1.1.0'], '0.1.5-alpha.1', () => null),

@@ -193,7 +193,7 @@ function fail(code, detail) {
 // 挑出最高兼容版本。
 //
 // 范围匹配只实现 npm 里实际会出现的写法，并且**严格对齐 npm 默认语义**（预发布
-// 版本只有在同 主.次.修订 元组且比较符自身带预发布时才参与匹配）：
+// 版本只有在比较符集合含有同 主.次.修订 元组的预发布条件时才参与匹配）：
 //   ||            或
 //   空格          与
 //   >= > <= < =   比较
@@ -259,8 +259,8 @@ function expandRangeClause(clause) {
       const minor = Number(caret[2] ?? 0)
       const patch = Number(caret[3] ?? 0)
       const base = `${major}.${minor}.${patch}${caret[4] ? '-' + caret[4] : ''}`
-      if (major > 0) expanded.push(`>=${base}`, `<${major + 1}.0.0-0`)
-      else if (minor > 0) expanded.push(`>=${base}`, `<0.${minor + 1}.0-0`)
+      if (major > 0 || caret[2] === undefined) expanded.push(`>=${base}`, `<${major + 1}.0.0-0`)
+      else if (minor > 0 || caret[3] === undefined) expanded.push(`>=${base}`, `<0.${minor + 1}.0-0`)
       else expanded.push(`>=${base}`, `<0.0.${patch + 1}-0`)
       continue
     }
@@ -269,7 +269,8 @@ function expandRangeClause(clause) {
       const major = Number(tilde[1])
       const minor = Number(tilde[2] ?? 0)
       const patch = Number(tilde[3] ?? 0)
-      expanded.push(`>=${major}.${minor}.${patch}${tilde[4] ? '-' + tilde[4] : ''}`, `<${major}.${minor + 1}.0-0`)
+      const upper = tilde[2] === undefined ? `<${major + 1}.0.0-0` : `<${major}.${minor + 1}.0-0`
+      expanded.push(`>=${major}.${minor}.${patch}${tilde[4] ? '-' + tilde[4] : ''}`, upper)
       continue
     }
     const partial = /^(\d+)(?:\.(\d+|x|\*))?(?:\.(\d+|x|\*))?$/.exec(part)
@@ -295,11 +296,6 @@ function satisfiesComparator(version, operator, operandText) {
   const target = parseVersion(version)
   const operand = parseVersion(operandText)
   if (!target || !operand) return false
-  if (target.prerelease.length > 0) {
-    // npm 默认语义：预发布版本只有在同一 主.次.修订 元组、且比较符自身带预发布时才参与匹配。
-    const sameTuple = target.numbers.every((value, index) => value === operand.numbers[index])
-    if (!sameTuple || operand.prerelease.length === 0) return false
-  }
   const order = compareParsed(target, operand)
   if (operator === '>') return order > 0
   if (operator === '>=') return order >= 0
@@ -316,10 +312,15 @@ function satisfiesRange(version, range) {
   return text.split('||').some(clause => {
     const trimmed = clause.trim()
     if (trimmed === '') return false
-    return expandRangeClause(trimmed).split(/\s+/).filter(Boolean).every(part => {
-      const match = /^(>=|<=|>|<|=)?(.*)$/.exec(part)
-      if (!match) return false
-      return satisfiesComparator(version, match[1] ?? '=', match[2])
+    const comparators = expandRangeClause(trimmed).split(/\s+/).filter(Boolean).map(part => /^(>=|<=|>|<|=)?(.*)$/.exec(part))
+    if (comparators.length === 0 || comparators.some(match => !match || !satisfiesComparator(version, match[1] ?? '=', match[2]))) return false
+    const target = parseVersion(version)
+    if (target.prerelease.length === 0) return true
+    // npm opts a prerelease into the entire comparator set when any comparator
+    // explicitly mentions a prerelease for the same major/minor/patch tuple.
+    return comparators.some(match => {
+      const operand = parseVersion(match[2])
+      return operand && operand.prerelease.length > 0 && target.numbers.every((value, index) => value === operand.numbers[index])
     })
   })
 }
