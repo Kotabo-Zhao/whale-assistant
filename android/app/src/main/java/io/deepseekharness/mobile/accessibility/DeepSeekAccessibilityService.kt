@@ -435,7 +435,16 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     private fun performConfirmedAction(request: AccessibilityAutomationPolicy.ActionRequest, guard: AccessibilityConfirmationPolicy.Guard?): DeviceCommandResult {
         val now = SystemClock.elapsedRealtime()
         if (isLockedOrScreenOff()) return failure("ACCESSIBILITY_DEVICE_LOCKED", "设备已锁定或屏幕未交互")
-        if (now - lastActionAt < ACTION_INTERVAL_MS) return failure("ACCESSIBILITY_RATE_LIMITED", "无障碍动作过于频繁，请稍后再试")
+        if (now - lastActionAt < ACTION_INTERVAL_MS) {
+            synchronized(automationTaskLedger) {
+                val snapshot = automationTaskLedger.snapshot()
+                val refusal = AutomationTaskActionPolicy.refusal(snapshot, request.packageName, request.action, request.viewId, now, automationTaskReceipt)
+                if (snapshot.status == AutomationTaskStatus.RUNNING && refusal == null) {
+                    automationTaskReceipt = AutomationTaskEvidence.rateLimited(snapshot, request.packageName, request.action, request.viewId, now)
+                }
+            }
+            return failure("ACCESSIBILITY_RATE_LIMITED", "无障碍动作过于频繁，请稍后再试")
+        }
         val root = rootInActiveWindow ?: return failure("ACCESSIBILITY_WINDOW_UNAVAILABLE", "当前没有可读取的应用窗口")
         val packageName = root.packageName?.toString().orEmpty()
         if (packageName != request.packageName || !AccessibilityAutomationStore.packageAllowed(this, packageName)) {

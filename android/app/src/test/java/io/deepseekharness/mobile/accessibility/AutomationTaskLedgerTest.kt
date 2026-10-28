@@ -139,6 +139,25 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `设备侧限频回执绑定尝试且可以安全重试`() {
+        val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        val state = ledger.snapshot()
+        val receipt = AutomationTaskEvidence.rateLimited(state, "com.example.app", "click", "com.example.app:id/ok", 1100L)!!
+        assertEquals(AutomationTaskCodes.BUSY, AutomationTaskActionPolicy.refusal(state, "com.example.app", "click", "com.example.app:id/ok", 1150L, receipt))
+        assertNull(AutomationTaskEvidence.rateLimited(state, "com.other.app", "click", "com.example.app:id/ok", 1100L))
+        assertNull(AutomationTaskEvidence.rateLimited(state, "com.example.app", "click", "wrong", 1100L))
+        val outcome = AutomationTaskEvidence.constrain(state.taskId, state.steps[0], AutomationTaskStepOutcome(ok = true, verified = true), "d2", receipt, 1200L)
+        assertFalse(outcome.ok); assertEquals("ACCESSIBILITY_RATE_LIMITED", outcome.code)
+        assertEquals(AutomationTaskStepStatus.FAILED, ledger.record("s1", 1, outcome, 1200L).steps[0].status)
+        assertEquals(2, ledger.gate("s1", facts(), 1300L).attempt())
+        val next = ledger.snapshot()
+        val stale = AutomationTaskEvidence.constrain(next.taskId, next.steps[0], AutomationTaskStepOutcome(ok = false, code = "ACCESSIBILITY_RATE_LIMITED"), "d1", receipt, 1400L)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, stale.code)
+        assertEquals(AutomationTaskStepStatus.UNKNOWN, ledger.record("s1", 2, stale, 1400L).steps[0].status)
+    }
+
+    @Test
     fun `调用方声称可重试失败不能覆盖动作回执或证明未派发`() {
         for (hasReceipt in listOf(false, true)) {
             val ledger = ledger(spec("s1", action = AutomationTaskActions.CLICK, verify = AutomationTaskActions.VERIFY_NONE, maxAttempts = 2), spec("s2"))

@@ -213,7 +213,7 @@ internal data class AutomationTaskStepOutcome(
 )
 
 /** A successful action matches a task only if its actual app, action and view ID equal the in-flight step. */
-internal data class AutomationTaskActionReceipt(val taskId: String, val stepId: String, val attempt: Int, val atMs: Long, val textDigest: String? = null)
+internal data class AutomationTaskActionReceipt(val taskId: String, val stepId: String, val attempt: Int, val atMs: Long, val textDigest: String? = null, val rejectedCode: String? = null)
 
 internal object AutomationTaskEvidence {
     fun textDigest(text: String?): String? = text?.takeIf { it.length <= 512 }?.let { value ->
@@ -227,20 +227,25 @@ internal object AutomationTaskEvidence {
         return AutomationTaskActionReceipt(snapshot.taskId, step.id, step.attemptsUsed, nowMs,
             if (action == AutomationTaskActions.SET_TEXT) textDigest(text) else null)
     }
+    /** A device-generated rejection is permitted only for the pre-dispatch rate limit. */
+    fun rateLimited(snapshot: AutomationTaskSnapshot, packageName: String, action: String, viewId: String, nowMs: Long): AutomationTaskActionReceipt? =
+        receipt(snapshot, packageName, action, viewId, nowMs)?.copy(rejectedCode = "ACCESSIBILITY_RATE_LIMITED")
     fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long, targetPresent: Boolean? = null, observedTextDigest: String? = null, expectedPackage: String? = null, observedPackage: String? = null): AutomationTaskStepOutcome {
         if (step == null) return outcome
-        // The caller's failure code is not device evidence. A reported retryable error can
-        // contradict a successful dispatch (or hide an action whose result was lost).
-        // Until negative dispatch receipts are captured, mutating actions must be reviewed.
+        val started = step.startedAtMs
+        val matched = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
+            receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs
+        // Only a matching native pre-dispatch rate-limit receipt proves the action was not sent.
+        // Its result overrides any caller claim, including a false success claim.
+        if (matched && receipt?.rejectedCode == "ACCESSIBILITY_RATE_LIMITED") {
+            return outcome.copy(ok = false, verified = true, timedOut = false, code = receipt.rejectedCode)
+        }
         if (!outcome.ok && step.action in setOf(AutomationTaskActions.CLICK, AutomationTaskActions.SET_TEXT, AutomationTaskActions.SCROLL, AutomationTaskActions.BACK)) {
             return outcome.copy(verified = false, code = AutomationTaskCodes.NEEDS_CHECK)
         }
         if (!outcome.ok) return outcome
-        val started = step.startedAtMs
-        val matched = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
-            receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs
         // Even when no visual verification was requested, click/text/scroll require proof of dispatch.
-        if (step.action in setOf(AutomationTaskActions.CLICK, AutomationTaskActions.SET_TEXT, AutomationTaskActions.SCROLL, AutomationTaskActions.BACK) && !matched) {
+        if (step.action in setOf(AutomationTaskActions.CLICK, AutomationTaskActions.SET_TEXT, AutomationTaskActions.SCROLL, AutomationTaskActions.BACK) && (!matched || receipt?.rejectedCode != null)) {
             return outcome.copy(ok = false, verified = false, code = AutomationTaskCodes.NOT_VERIFIED)
         }
         if (step.verify == AutomationTaskActions.VERIFY_NONE) return outcome
