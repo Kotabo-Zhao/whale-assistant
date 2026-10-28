@@ -97,6 +97,34 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `前一步未验证不能跳到下一步`() {
+        val ledger = ledger(spec("s1"), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        ledger.record("s1", AutomationTaskStepOutcome(ok = true, verified = false), 1100L)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s2", facts(), 1200L).refusedCode())
+        assertEquals(0, ledger.snapshot().steps[1].attemptsUsed)
+    }
+
+    @Test
+    fun `缺少验证字段的成功回执不能证明点击完成`() {
+        val ledger = ledger(spec("s1"), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        val parsed = AutomationTaskWire.parse("""{"op":"record","step":"s1","attempt":1,"status":"ok"}""") as AutomationTaskRequest.Record
+        val snapshot = ledger.record(parsed.stepId, parsed.attempt, parsed.outcome, 1100L)
+        assertEquals(AutomationTaskStepStatus.UNKNOWN, snapshot.steps[0].status)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s2", facts(), 1200L).refusedCode())
+    }
+
+    @Test
+    fun `前一步可重试失败时不能跳过直接执行下一步`() {
+        val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        ledger.record("s1", AutomationTaskStepOutcome(ok = false, code = "AUTOMATION_NODE_UNRESOLVED"), 1100L)
+        assertEquals(AutomationTaskCodes.STEP_OUT_OF_ORDER, ledger.gate("s2", facts(), 1200L).refusedCode())
+        assertEquals(2, ledger.gate("s1", facts(), 1300L).attempt())
+    }
+
+    @Test
     fun `已经成功的步骤再提交不会执行第二次`() {
         val ledger = ledger(spec("s1", maxAttempts = 3))
         ledger.gate("s1", facts(), 1_000L)

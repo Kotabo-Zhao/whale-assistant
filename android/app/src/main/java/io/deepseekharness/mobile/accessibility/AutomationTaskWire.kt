@@ -95,7 +95,7 @@ internal object AutomationTaskWire {
         JSONObject()
             .put("ok", true)
             .put("code", JSONObject.NULL)
-            .put("message", "可以执行步骤 ${gate.stepId}（第 ${gate.attempt + 1} 次尝试）")
+            .put("message", "可以执行步骤 ${gate.stepId}（第 ${gate.attempt} 次尝试）")
             .put("retryable", false)
             .put("step", gate.stepId)
             .put("attempt", gate.attempt)
@@ -205,7 +205,7 @@ internal object AutomationTaskWire {
             outcome = AutomationTaskStepOutcome(
                 ok = status == AutomationTaskStepStatus.OK,
                 code = stringOrNull(json, "code"),
-                verified = boolOrNull(json, "verified") ?: (status == AutomationTaskStepStatus.OK),
+                verified = boolOrNull(json, "verified") ?: false,
                 timedOut = boolOrNull(json, "timedOut") ?: false,
             ),
         )

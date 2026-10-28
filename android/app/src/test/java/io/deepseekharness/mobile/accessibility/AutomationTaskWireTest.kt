@@ -121,8 +121,8 @@ class AutomationTaskWireTest {
         assertEquals(1, ok.attempt)
         assertTrue(ok.outcome.ok)
         assertEquals("AUTOMATION_ACTION_PERFORMED", ok.outcome.code)
-        // 没写 verified 时：报成功按「通过校验」算，报失败按「没通过」算——宁可保守。
-        assertTrue(ok.outcome.verified)
+        // 没写 verified 时不能推断观察校验已通过。
+        assertFalse(ok.outcome.verified)
         assertFalse(ok.outcome.timedOut)
 
         val failed = AutomationTaskWire.parse(
@@ -159,6 +159,7 @@ class AutomationTaskWireTest {
         assertTrue(json.isNull("code"))
         assertEquals("s2", json.getString("step"))
         assertEquals(1, json.getInt("attempt"))
+        assertTrue(json.getString("message").contains("第 1 次尝试"))
         assertFalse(json.getBoolean("retryable"))
         val task = json.getJSONObject("task")
         assertEquals("t1", task.getString("taskId"))

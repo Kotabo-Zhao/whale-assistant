@@ -318,6 +318,13 @@ internal class AutomationTaskLedger {
         if (step.status == AutomationTaskStepStatus.PENDING && step.startedAtMs != null) {
             return refuse(AutomationTaskCodes.BUSY, "这一步已经在执行，等待当前回执", false)
         }
+        // A settled but uncertain/failed earlier step is not permission to execute later steps.
+        val preceding = steps.take(index).indexOfFirst { it.status != AutomationTaskStepStatus.OK }
+        if (preceding >= 0) {
+            val previous = steps[preceding]
+            val code = if (previous.status == AutomationTaskStepStatus.UNKNOWN) AutomationTaskCodes.NEEDS_CHECK else AutomationTaskCodes.STEP_OUT_OF_ORDER
+            return refuse(code, "先处理第 ${preceding + 1} 步（${previous.id}），其结果尚未确认成功", false)
+        }
         val firstPending = steps.indexOfFirst { it.status == AutomationTaskStepStatus.PENDING }
         if (step.status == AutomationTaskStepStatus.UNKNOWN) {
             // 结果不确定的一步：**不重发**，也**不算完成**。调用方要么确认现场后收口，要么重新规划。
