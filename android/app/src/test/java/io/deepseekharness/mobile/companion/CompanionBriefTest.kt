@@ -91,4 +91,19 @@ class CompanionBriefTest {
         assertNull(CompanionNotificationTimeSuggestion.find("明天 02:30", beforeDst, ny, beforeDst))
         assertNull(CompanionNotificationTimeSuggestion.find("2026-12-03 14:30 或 15:30", now, zone, captured))
     }
+
+    @Test fun chineseRelativeTimesAreSuggestionsOnlyForClearSingleTimes() {
+        val zone = java.time.ZoneId.of("Asia/Shanghai")
+        val captured = java.time.Instant.parse("2026-01-01T02:00:00Z").toEpochMilli()
+        fun local(day: Int, hour: Int, minute: Int) = java.time.ZonedDateTime.of(2026, 1, day, hour, minute, 0, 0, zone).toInstant().toEpochMilli()
+        fun find(text: String) = CompanionNotificationTimeSuggestion.find(text, captured, zone, captured)
+        assertEquals(local(2, 15, 30), find("明天下午三点半开会"))
+        assertEquals(local(2, 9, 5), find("明天上午九点零五分"))
+        assertEquals(local(2, 15, 20), find("明天15点20分"))
+        assertEquals(local(2, 12, 0), find("明天中午十二点"))
+        assertEquals(local(2, 20, 0), find("明天晚上八点"))
+        for (text in listOf("明天晚上两点", "明天上午十二点", "明天下午三点多", "明天三点或者五点", "明天三点一刻", "明天三点五十多分", "明天三点60分", "明天12月3日三点", "明天三点到四点")) {
+            assertNull(text, find(text))
+        }
+    }
 }

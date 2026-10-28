@@ -63,7 +63,8 @@ internal object CompanionSourcePolicy {
 /** A single explicit local date and time is only a picker suggestion, never a scheduled alarm. */
 internal object CompanionNotificationTimeSuggestion {
     private val explicit = Regex("(?<![0-9])([0-9]{4})[-年]([0-9]{1,2})[-月]([0-9]{1,2})(?:日)?[ T]+([0-9]{1,2}):([0-9]{2})(?![0-9:])")
-    private val relative = Regex("(今天|明天|后天)\\s*(上午|下午|晚上)?\\s*([0-9]{1,2}):([0-9]{2})(?![0-9:])")
+    private val relative = Regex("(今天|明天|后天)\\s*(凌晨|早上|上午|中午|下午|晚上)?\\s*([0-9]{1,2}):([0-9]{2})(?![0-9:])")
+    private val relativeChinese = Regex("(今天|明天|后天)\\s*(凌晨|早上|上午|中午|下午|晚上)?\\s*([0-9一二两三四五六七八九十]{1,3})点(?:\\s*(半|[0-9零一二两三四五六七八九十]{1,3}分))?(?![0-9零一二两三四五六七八九十半分])")
     private val relativeDay = Regex("今天|明天|后天")
     private val clock = Regex("(?<![0-9:])[0-9]{1,2}:[0-9]{2}(?![0-9:])")
     private val anyDate = Regex("(?<![0-9])(?:[0-9]{1,4}[-年/])?[0-9]{1,2}[-月/][0-9]{1,2}(?:日)?")
@@ -71,7 +72,7 @@ internal object CompanionNotificationTimeSuggestion {
     fun find(text: String, now: Long, zone: java.time.ZoneId, notificationTime: Long? = null): Long? {
         val matches = explicit.findAll(text).take(2).toList()
         if (matches.isEmpty()) return findRelative(text, now, zone, notificationTime)
-        if (matches.size != 1 || relativeDay.containsMatchIn(text) || clock.findAll(text).take(2).count() != 1) return null
+        if (matches.size != 1 || relativeDay.containsMatchIn(text) || clock.findAll(text).take(2).count() != 1 || otherClock.containsMatchIn(text)) return null
         return try {
             val values = matches.single().groupValues.drop(1).map(String::toInt)
             val local = java.time.LocalDateTime.of(values[0], values[1], values[2], values[3], values[4])
@@ -86,15 +87,25 @@ internal object CompanionNotificationTimeSuggestion {
         val posted = notificationTime ?: return null
         // Older snapshots and future timestamps are unreliable anchors for relative language.
         if (posted <= 0 || posted > now || now - posted > 24 * 60 * 60 * 1000L) return null
-        if (relativeDay.findAll(text).take(2).count() != 1 || clock.findAll(text).take(2).count() != 1 || anyDate.containsMatchIn(text) || otherClock.containsMatchIn(text)) return null
-        val match = relative.find(text) ?: return null
+        if (relativeDay.findAll(text).take(2).count() != 1 || clock.findAll(text).take(2).count() + otherClock.findAll(text).take(2).count() != 1 || anyDate.containsMatchIn(text)) return null
+        val chinese = relativeChinese.find(text)
+        val match = chinese ?: relative.find(text) ?: return null
+        val suffix = text.substring(match.range.last + 1).trimStart()
+        if (listOf("多", "左右", "之后", "之前", "以后", "以前", "至", "到", "-", "~", "～").any(suffix::startsWith)) return null
         return try {
-            val rawHour = match.groupValues[3].toInt()
-            val minute = match.groupValues[4].toInt()
+            val rawHour = number(match.groupValues[3]) ?: return null
+            val minute = if (chinese == null) match.groupValues[4].toInt() else when (val part = match.groupValues[4]) {
+                "" -> 0
+                "半" -> 30
+                else -> number(part.removeSuffix("分")) ?: return null
+            }
             val period = match.groupValues[2]
             val hour = when (period) {
-                "上午" -> if (rawHour in 1..12) rawHour % 12 else return null
-                "下午", "晚上" -> if (rawHour in 1..12) rawHour % 12 + 12 else return null
+                "凌晨" -> if (rawHour in 0..5) rawHour else return null
+                "早上", "上午" -> if (rawHour in 1..11) rawHour else return null
+                "中午" -> when (rawHour) { 11, 12 -> rawHour; 1 -> 13; else -> return null }
+                "下午" -> if (rawHour in 1..12) rawHour % 12 + 12 else return null
+                "晚上" -> if (rawHour in 6..11) rawHour + 12 else return null
                 else -> rawHour
             }
             val dayOffset = when (match.groupValues[1]) { "今天" -> 0L; "明天" -> 1L; else -> 2L }
@@ -104,5 +115,18 @@ internal object CompanionNotificationTimeSuggestion {
             val millis = local.toInstant(offsets.single()).toEpochMilli()
             millis.takeIf { it > now && it - now > 10_000 }
         } catch (_: Exception) { null }
+    }
+
+    private fun number(raw: String): Int? {
+        raw.toIntOrNull()?.let { return it }
+        if (raw == "零") return 0
+        val digits = mapOf('零' to 0, '一' to 1, '二' to 2, '两' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)
+        val value = raw.removePrefix("零")
+        if (value.length == 1) return if (value == "十") 10 else digits[value[0]]
+        val parts = value.split('十')
+        if (parts.size != 2 || parts[0].length > 1 || parts[1].length > 1) return null
+        val tens = if (parts[0].isEmpty()) 1 else digits[parts[0][0]] ?: return null
+        val units = if (parts[1].isEmpty()) 0 else digits[parts[1][0]] ?: return null
+        return tens * 10 + units
     }
 }
