@@ -262,6 +262,22 @@ class CompanionActivity : AppCompatActivity() {
         toggle("桌面休息提醒", store.reminders) { store.reminders = it }
         paragraph("悬浮助手运行且设备已解锁时，约每 90 分钟显示一次休息提示；低电量时可发系统通知（需通知权限）。系统可能停止后台服务。")
         heading("提醒与免打扰", "reminders")
+        val reminderHealth = CompanionReminderHealth.read(this)
+        paragraph(when (reminderHealth) {
+            CompanionReminderHealth.State.READY -> "提醒通知：系统允许；省电或后台限制仍可能延迟送达。"
+            CompanionReminderHealth.State.PERMISSION_DENIED -> "提醒通知：通知权限未授予，到期时可能无法送达。"
+            CompanionReminderHealth.State.APP_DISABLED -> "提醒通知：应用通知已关闭，到期时可能无法送达。"
+            CompanionReminderHealth.State.CHANNEL_DISABLED -> "提醒通知：鲸鱼娘提醒渠道已关闭，到期时可能无法送达。"
+            CompanionReminderHealth.State.UNAVAILABLE -> "提醒通知状态暂时无法读取，请检查系统设置。"
+        })
+        button("打开提醒通知设置") {
+            val intent = if (reminderHealth == CompanionReminderHealth.State.CHANNEL_DISABLED)
+                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_CHANNEL_ID, CompanionReminderHealth.CHANNEL)
+            else Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            intent.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            runCatching { startActivity(intent) }.onFailure { paragraph("无法打开通知设置，请在系统设置中检查。") }
+        }
+
         toggle("启用免打扰", store.quietHoursEnabled) { store.quietHoursEnabled = it; render() }
         paragraph("使用手机当前时区。时段内暂停桌面气泡、休息提示和低电量通知；通知仍可按采集设置保存，手动设置的事项提醒通知仍会送达。结束后不会补发被跳过的气泡。起止时间相同表示不限制。")
         fun timeLabel(value: Int) = "%02d:%02d".format(value / 60, value % 60)
@@ -513,7 +529,11 @@ class CompanionActivity : AppCompatActivity() {
                     android.app.TimePickerDialog(this, { _, hour, minute ->
                         selected.set(Calendar.HOUR_OF_DAY, hour); selected.set(Calendar.MINUTE, minute); selected.set(Calendar.SECOND, 0); selected.set(Calendar.MILLISECOND, 0)
                         runCatching { CompanionReminder(this).add(value, selected.timeInMillis) }
-                            .onSuccess { paragraph("提醒已安排；系统可能延迟投递。") }
+                            .onSuccess {
+                                val health = CompanionReminderHealth.read(this)
+                                paragraph(if (health == CompanionReminderHealth.State.READY) "提醒已安排；系统可能延迟投递。"
+                                    else "提醒已安排，但通知权限或状态未就绪，请检查提醒通知设置；到期时可能无法送达。")
+                            }
                             .onFailure { paragraph("无法安排提醒：${it.message ?: "请检查系统设置"}") }
                     }, selected.get(Calendar.HOUR_OF_DAY), selected.get(Calendar.MINUTE), true).show()
                 }, selected.get(Calendar.YEAR), selected.get(Calendar.MONTH), selected.get(Calendar.DAY_OF_MONTH)).show()
@@ -530,10 +550,17 @@ class CompanionActivity : AppCompatActivity() {
             val state = when (row.optString("state")) { "scheduled" -> "已安排"; "delivered" -> "已投递"; "missed" -> "已错过"; else -> "失败" }
             "${row.optString("text")} · $date · $state"
         }
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择要删除的提醒").setItems(labels) { _, index ->
-            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除提醒？").setMessage(labels[index])
-                .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
-                    runCatching { reminders.remove(rows.getJSONObject(index).getString("id")) }.onFailure { paragraph("删除失败：${it.message}") }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择提醒").setItems(labels) { _, index ->
+            val row = rows.getJSONObject(index)
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("管理提醒")
+                .setMessage(labels[index] + "\n\n重新安排会创建一条新提醒，保留原记录；请核对内容与时间。")
+                .setNegativeButton("关闭", null)
+                .setNeutralButton("重新安排") { _, _ -> createReminder(row.optString("text")) }
+                .setPositiveButton("删除") { _, _ ->
+                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除提醒？").setMessage(labels[index])
+                        .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                            runCatching { reminders.remove(row.getString("id")) }.onFailure { paragraph("删除失败：${it.message}") }
+                        }.show()
                 }.show()
         }.setNegativeButton("关闭", null).show()
     }
