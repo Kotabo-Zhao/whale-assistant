@@ -22,8 +22,10 @@ internal object CompanionKnowledgeModel {
             val text = row.getString("text")
             val at = if (matches.mode == "related") CompanionMemorySearch.relatedAnchor(text, query)
                 else text.indexOf(query, ignoreCase = true).coerceAtLeast(0)
-            val start = (at - 200).coerceAtLeast(0)
-            val end = minOf(text.length, start + 1000)
+            var start = (at - 200).coerceAtLeast(0)
+            if (start > 0 && start < text.length && Character.isLowSurrogate(text[start]) && Character.isHighSurrogate(text[start - 1])) start++
+            var end = minOf(text.length, start + 1000)
+            if (end < text.length && end > start && Character.isHighSurrogate(text[end - 1]) && Character.isLowSurrogate(text[end])) end--
             output.put(JSONObject().put("source", row.getString("source")).put("createdAtMs", row.getLong("createdAt"))
                 .put("excerpt", text.substring(start, end)).put("excerptTruncated", start > 0 || end < text.length))
         }

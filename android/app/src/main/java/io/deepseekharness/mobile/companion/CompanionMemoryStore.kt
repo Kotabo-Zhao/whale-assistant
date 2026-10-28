@@ -81,9 +81,9 @@ class CompanionMemoryStore(context: Context) {
     }
 
     private fun write(rows: JSONArray) {
-        val bytes = JSONObject().put("version", 1).put("items", rows).toString().toByteArray(Charsets.UTF_8)
         var stream: java.io.FileOutputStream? = null
         try {
+            val bytes = CompanionKnowledgeData.utf8(JSONObject().put("version", 1).put("items", rows).toString())
             // Check the complete serialized state before touching the atomic file.
             CompanionMemoryFormat.parse(bytes)
             stream = file.startWrite(); stream.write(bytes); file.finishWrite(stream)
@@ -112,6 +112,7 @@ internal object CompanionMemoryFormat {
             val id = row.opt("id") as? String ?: error("bad memory id")
             val text = row.opt("text") as? String ?: error("bad memory text")
             require(idPattern.matches(id) && ids.add(id) && text.length <= 600) { "bad memory" }
+            CompanionKnowledgeData.utf8(text) // Do not silently replace malformed UTF-16 in stored values.
             if (row.has("status")) require(row.opt("status") is String && row.getString("status") in setOf("pending", "confirmed")) { "unknown memory status" }
         }
         return rows
@@ -258,8 +259,13 @@ internal object CompanionMemorySearch {
 
 /** Export is a user-selected snapshot; it does not alter or migrate the stored data. */
 internal object CompanionMemoryExport {
-    fun encode(items: JSONArray): ByteArray = JSONObject().put("version", 1).put("items", items)
-        .toString(2).toByteArray(Charsets.UTF_8)
+    fun encode(items: JSONArray): ByteArray {
+        for (index in 0 until items.length()) {
+            val text = items.getJSONObject(index).opt("text") as? String ?: error("bad memory text")
+            CompanionKnowledgeData.utf8(text)
+        }
+        return CompanionKnowledgeData.utf8(JSONObject().put("version", 1).put("items", items).toString(2))
+    }
 }
 
 internal data class MemoryImportPlan(val original: String, val additions: String, val skipped: Int)
@@ -287,6 +293,7 @@ internal object CompanionMemoryImport {
             val id = row.opt("id") as? String ?: error("记忆 ID 无效")
             val text = row.opt("text") as? String ?: error("记忆内容无效")
             require(id.matches(Regex("[a-f0-9-]{36}")) && text.isNotBlank() && text.length <= 600 && !CompanionStore.sensitive(text)) { "记忆内容无效或可能含敏感信息" }
+            CompanionKnowledgeData.utf8(text)
             if (id in ids || text in texts) { skipped++; continue }
             ids.add(id); texts.add(text)
             // Preserve only known bounded metadata; unknown fields are not imported.

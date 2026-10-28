@@ -8,6 +8,15 @@ import org.junit.Test
 import java.nio.file.Files
 
 class CompanionMemoryEngineTest {
+    @Test fun malformedSurrogateIsRejectedWithoutReplacingUserText() {
+        val raw = "{\"version\":1,\"items\":[{\"id\":\"00000000-0000-0000-0000-000000000001\",\"text\":\"\\uD800\"}]}"
+        assertThrows(Exception::class.java) { CompanionMemoryFormat.parse(raw.toByteArray(Charsets.UTF_8)) }
+        assertThrows(Exception::class.java) { CompanionMemoryImport.plan(raw.toByteArray(Charsets.UTF_8), JSONArray()) }
+        val row = JSONObject().put("id", "00000000-0000-0000-0000-000000000001").put("text", "\uD800")
+        assertThrows(Exception::class.java) { CompanionMemoryExport.encode(JSONArray().put(row)) }
+        row.put("text", "鲸鱼 🐋")
+        assertEquals("鲸鱼 🐋", CompanionMemoryFormat.parse(CompanionMemoryExport.encode(JSONArray().put(row))).getJSONObject(0).getString("text"))
+    }
     @Test fun memoryFileRejectsInvalidUtf8DuplicateIdsAndMalformedStructure() {
         val id = "00000000-0000-0000-0000-000000000001"
         val legacy = JSONArray().put(JSONObject().put("id", id).put("text", "旧记忆"))

@@ -7,6 +7,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionKnowledgeModelTest {
+    @Test fun excerptsDoNotCutSurrogatePairsAtEitherBoundary() {
+        val text = "a".repeat(99) + "🐋" + "x".repeat(199) + "needle" + "y".repeat(794) + "🐋" + "z".repeat(30)
+        val rows = JSONArray().put(JSONObject().put("text", text).put("createdAt", 1).put("source", "shared_text"))
+        val result = JSONObject(CompanionKnowledgeModel.execute(true, "{\"query\":\"needle\"}") { rows })
+        val excerpt = result.getJSONArray("items").getJSONObject(0).getString("excerpt")
+        CompanionKnowledgeData.utf8(excerpt)
+        assertTrue(excerpt.contains("needle"))
+        assertEquals(999, excerpt.length)
+    }
     @Test fun checksConsentAndReturnsBoundedMatchingExcerpts() {
         var loads = 0
         val rows = JSONArray()
