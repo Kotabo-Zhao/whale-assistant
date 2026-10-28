@@ -2038,7 +2038,20 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
         if (item.name === 'package.json') {
           let pkg
           try { pkg = read(location) } catch { fail('PLUGIN_SCAN_UNAVAILABLE', id) }
+          if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) fail('PLUGIN_SCAN_UNAVAILABLE', id)
           if (pkg.gypfile === true || (pkg.binary && typeof pkg.binary === 'object')) fail('PLUGIN_NATIVE_UNSUPPORTED', id)
+          // Only package roots inside node_modules are dependency manifests. Other package.json
+          // files can be fixtures or module-type declarations and need not have a name/version.
+          const parts = path.relative(stageModules, current).split(path.sep)
+          const lastModules = parts.lastIndexOf('node_modules')
+          const packageParts = parts.slice(lastModules + 1)
+          const packageId = packageParts.length === 1 ? packageParts[0]
+            : packageParts.length === 2 && packageParts[0].startsWith('@') ? packageParts.join('/') : null
+          if (packageId) {
+            const platformError = npmMetadataCheck(pkg, packageId, pkg.version, process.platform, process.arch)
+            if (typeof pkg.version !== 'string' || !parseVersion(pkg.version)) fail('PLUGIN_METADATA_UNAVAILABLE', packageId)
+            if (platformError) fail(platformError, packageId)
+          }
         }
       }
     }

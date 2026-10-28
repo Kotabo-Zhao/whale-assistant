@@ -833,6 +833,36 @@ test('依赖中声明原生构建时拒绝安装', t => {
   assert.throws(() => manager.update('test-plugin'), /PLUGIN_NATIVE_UNSUPPORTED/)
 })
 
+test('嵌套依赖的平台声明与实际包身份不符时拒绝替换旧插件', t => {
+  for (const change of [
+    { os: [process.platform === 'win32' ? 'linux' : 'win32'] },
+    { cpu: [process.arch === 'arm64' ? 'x64' : 'arm64'] },
+    { os: [7] },
+    { name: 'other-dependency' },
+    { version: 'broken' },
+  ]) {
+    const { manager, root } = fixture(t, (id, directory) => {
+      installer(id, directory)
+      const dep = stagedPackage(path.join(directory, 'node_modules/test-plugin/node_modules'), '@scope/helper', '1.0.0')
+      fs.writeFileSync(path.join(dep, 'package.json'), JSON.stringify({ name: '@scope/helper', version: '1.0.0', ...change }))
+    })
+    const before = manager.list().plugins
+    assert.throws(() => manager.update('test-plugin'), /PLUGIN_PLATFORM_UNSUPPORTED|PLUGIN_METADATA_UNAVAILABLE/)
+    assert.deepEqual(manager.list().plugins, before)
+    assert.equal(fs.existsSync(path.join(root, 'root/.dsh-mobile/plugin-manager/journal.json')), false)
+  }
+})
+
+test('插件包内的普通 package.json 不被误当作依赖清单', t => {
+  const { manager } = fixture(t, (id, directory) => {
+    installer(id, directory)
+    const folder = path.join(directory, 'node_modules/test-plugin/esm')
+    fs.mkdirSync(folder, { recursive: true })
+    fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ type: 'module' }))
+  })
+  assert.doesNotThrow(() => manager.update('test-plugin'))
+})
+
 // ---------------------------------------------------------------------------
 // 模块图探测（只读）：访客里到底有几份 dsh-tools
 //
