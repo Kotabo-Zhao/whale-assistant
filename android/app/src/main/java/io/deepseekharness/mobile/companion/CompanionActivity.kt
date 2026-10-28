@@ -456,6 +456,7 @@ class CompanionActivity : AppCompatActivity() {
         button("复制通知习惯摘要") { copyNotificationSummary() }
         button("从通知整理记忆") { chooseNotificationForMemory() }
         paragraph("选择一条本地通知作为参考，自行填写并确认要记住的事实；不会自动保存通知原文。")
+        button("搜索通知记录") { searchNotificationRecords() }
         button("刷新通知记录") { notificationVisible = CompanionNotificationPaging.PAGE_SIZE; renderRecords() }
         button("按应用清除通知记录") { clearNotificationsForApp() }
         button("清除全部本地通知记录") {
@@ -965,6 +966,45 @@ class CompanionActivity : AppCompatActivity() {
                     }.onFailure { paragraph("未能确认提醒是否安排；请先查看提醒列表，避免重复创建。") }
                 }
             }.setNegativeButton("取消", null).show()
+    }
+
+    private fun searchNotificationRecords() {
+        val input = android.widget.EditText(this).apply {
+            hint = "应用名、包名或通知关键词"
+            setSingleLine(true)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(100))
+        }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("搜索本地通知")
+            .setMessage("仅搜索当前手机保存的记录；通知可能过期或不完整。")
+            .setView(input).setNegativeButton("取消", null).setPositiveButton("搜索", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val query = input.text.toString().trim()
+                if (query.isEmpty()) { input.error = "请输入关键词。"; return@setOnClickListener }
+                if (memoryBusy) { input.error = "本地读取正在进行，请稍候。"; return@setOnClickListener }
+                dialog.dismiss()
+                val app = applicationContext
+                runMemoryIo("正在搜索本地通知…", {
+                    CompanionNotificationSearch.find(CompanionStore(app).read(), query) { pkg ->
+                        app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString()
+                    }
+                }) { result ->
+                    result.onFailure { android.widget.Toast.makeText(this, "无法读取通知记录，原数据已保留。", android.widget.Toast.LENGTH_LONG).show() }
+                        .onSuccess { matches ->
+                            if (matches.isEmpty()) { android.widget.Toast.makeText(this, "没有匹配的本地通知；不代表原应用没有消息。", android.widget.Toast.LENGTH_LONG).show(); return@onSuccess }
+                            val dates = matches.map { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it.row.getLong("time"))) }
+                            val labels = matches.mapIndexed { index, item ->
+                                val excerpt = item.row.getString("title").ifBlank { item.row.getString("text") }.replace('\n', ' ').take(120)
+                                "${item.sourceName} · ${dates[index]}\n$excerpt"
+                            }.toTypedArray()
+                            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地搜索结果（${matches.size} 条）")
+                                .setItems(labels) { _, index -> showRecordActions(matches[index].row, dates[index]) }
+                                .setNegativeButton("关闭", null).show()
+                        }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun renderRecords() {
