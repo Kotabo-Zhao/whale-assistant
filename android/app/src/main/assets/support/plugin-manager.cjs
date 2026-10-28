@@ -542,7 +542,9 @@ function declaredDshRange(metadata, id) {
   if (!engines || typeof engines !== 'object' || Array.isArray(engines)) fail('PLUGIN_METADATA_UNAVAILABLE', id)
   const range = engines.dsh
   if (range === undefined) return null
-  if (typeof range !== 'string' || range.length < 1 || range.length > 256) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+  // A valid npm range can still use syntax this lightweight parser does not support.
+  // Treat it as unknown rather than misreporting a proven engine incompatibility.
+  if (typeof range !== 'string' || range.length < 1 || range.length > 256 || !supportedRange(range)) fail('PLUGIN_METADATA_UNAVAILABLE', id)
   return range
 }
 

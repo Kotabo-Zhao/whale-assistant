@@ -62,6 +62,7 @@ test('指定版本仍在下载前检查引擎和平台，并只安装指定版�
   const install = value => { calls.push(value); return { status: 0 } }
   const response = extra => ({ status: 0, stdout: JSON.stringify({ name: 'demo', version: '1.2.3', ...extra }) })
   assert.throws(() => installExplicitVersion(response({ dsh: { engines: { dsh: '>=9.0.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_ENGINE_UNSUPPORTED/)
+  assert.throws(() => installExplicitVersion(response({ dsh: { engines: { dsh: '0.1.0 - 0.3.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_METADATA_UNAVAILABLE/)
   assert.throws(() => installExplicitVersion(response({ cpu: ['x64'] }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_PLATFORM_UNSUPPORTED/)
   assert.deepEqual(calls, [])
   installExplicitVersion(response({ dsh: { engines: { dsh: '>=0.1.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64')
@@ -276,6 +277,8 @@ test('批量元数据可发现六个新版本以外的兼容版本，身份或�
   assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
   payload.versions['1.0.2'].name = 'demo'
   payload.versions['1.0.2'].dsh.engines.dsh = 42
+  assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
+  payload.versions['1.0.2'].dsh.engines.dsh = '0.1.0 - 0.3.0'
   assert.deepEqual(selectFromPackument(payload, 'demo', '0.2.0', 'linux', 'arm64'), { available: false })
 })
 
@@ -508,6 +511,20 @@ test('下载包实际声明与运行时冲突时事务不切换旧版本', t => 
   })
   write('opt/dsh/node_modules/@deepseek-ai/dsh/package.json', { name: '@deepseek-ai/dsh', version: '0.2.1-rc.2' })
   assert.throws(() => manager.update('test-plugin'), /PLUGIN_ENGINE_UNSUPPORTED/)
+  assert.equal(manager.list().plugins.find(p => p.id === 'test-plugin').version, '1.0.0')
+  assert.deepEqual(fs.readdirSync(path.join(root, 'root/.dsh-mobile/plugin-manager/versions')), [])
+})
+
+test('下载包的未知引擎范围不被误报为不兼容且保留原版本', t => {
+  const { manager, root, write } = fixture(t, (id, directory) => {
+    installer(id, directory)
+    const file = path.join(directory, 'node_modules', id, 'package.json')
+    const pkg = JSON.parse(fs.readFileSync(file, 'utf8'))
+    pkg.dsh.engines = { dsh: '0.1.0 - 0.3.0' }
+    fs.writeFileSync(file, JSON.stringify(pkg))
+  })
+  write('opt/dsh/node_modules/@deepseek-ai/dsh/package.json', { name: '@deepseek-ai/dsh', version: '0.2.0' })
+  assert.throws(() => manager.update('test-plugin'), /PLUGIN_METADATA_UNAVAILABLE/)
   assert.equal(manager.list().plugins.find(p => p.id === 'test-plugin').version, '1.0.0')
   assert.deepEqual(fs.readdirSync(path.join(root, 'root/.dsh-mobile/plugin-manager/versions')), [])
 })
