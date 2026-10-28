@@ -42,6 +42,7 @@ class CompanionActivity : AppCompatActivity() {
     private var notificationVisible = CompanionNotificationPaging.PAGE_SIZE
     @Volatile private var memoryCountGeneration = 0L
     private val briefExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-brief").apply { isDaemon = true } }
+    private var notificationDeleteBusy = false
     private var briefBusy = false
     private var usageBusy = false
     private val calendarPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -349,6 +350,7 @@ class CompanionActivity : AppCompatActivity() {
         button("从通知整理记忆") { chooseNotificationForMemory() }
         paragraph("选择一条本地通知作为参考，自行填写并确认要记住的事实；不会自动保存通知原文。")
         button("刷新通知记录") { notificationVisible = CompanionNotificationPaging.PAGE_SIZE; renderRecords() }
+        button("按应用清除通知记录") { clearNotificationsForApp() }
         button("清除全部本地通知记录") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清除全部通知记录？")
                 .setMessage("此操作无法撤销，包括可能损坏的记录。")
@@ -510,6 +512,41 @@ class CompanionActivity : AppCompatActivity() {
     private fun recordsOrNull(): org.json.JSONArray? = runCatching { store.read() }.getOrElse {
         paragraph("通知记录无法读取，原数据已保留；新通知暂不写入。")
         null
+    }
+
+    private fun clearNotificationsForApp() {
+        if (notificationDeleteBusy) { paragraph("正在清除通知记录，请稍候。"); return }
+        val rows = recordsOrNull() ?: return
+        val counts = (0 until rows.length()).map { rows.getJSONObject(it).getString("package") }
+            .filter(CompanionSourcePolicy::validPackage).groupingBy { it }.eachCount().toSortedMap()
+        if (counts.isEmpty()) { paragraph("暂无可按应用清除的通知记录。"); return }
+        val packages = counts.keys.toList()
+        val labels = packages.map { pkg ->
+            val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+            "$label ($pkg) · ${counts.getValue(pkg)} 条"
+        }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择要清除记录的应用")
+            .setItems(labels) { _, index ->
+                val pkg = packages[index]
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清除该应用的通知记录？")
+                    .setMessage("将清除执行时该应用已保存的所有本地通知。已确认的长期记忆和提醒不会删除；如果仍开启采集，以后的通知仍可能保存。")
+                    .setNegativeButton("取消", null).setPositiveButton("清除") { _, _ ->
+                        if (!notificationDeleteBusy) {
+                            notificationDeleteBusy = true
+                            android.widget.Toast.makeText(this, "正在清除…", android.widget.Toast.LENGTH_SHORT).show()
+                            briefExecutor.execute {
+                                val result = runCatching { store.removeRecordsForPackage(pkg) }
+                                runOnUiThread {
+                                    if (!isFinishing && !isDestroyed) {
+                                        notificationDeleteBusy = false
+                                        android.widget.Toast.makeText(this, result.fold({ "已清除 $it 条通知记录。" }, { "未能确认清除结果，请重新查看。" }), android.widget.Toast.LENGTH_LONG).show()
+                                        renderRecords()
+                                    }
+                                }
+                            }
+                        }
+                    }.show()
+            }.setNegativeButton("取消", null).show()
     }
 
     private fun selectExcludedApps() {

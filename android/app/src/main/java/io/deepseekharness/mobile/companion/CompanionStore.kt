@@ -109,6 +109,12 @@ class CompanionStore(context: Context) {
         result
     }
 
+    fun removeRecordsForPackage(packageName: String): Int = synchronized(lock) {
+        val (kept, removed) = CompanionNotificationRecords.withoutPackage(read(), packageName)
+        if (removed > 0) check(prefs.edit().putString("records", kept.toString()).commit()) { "未能确认清除结果" }
+        removed
+    }
+
     fun clear() = synchronized(lock) { prefs.edit().remove("records").apply() }
 
     companion object {
@@ -122,6 +128,17 @@ class CompanionStore(context: Context) {
 
 /** Corrupt data must not be mistaken for an empty inbox or replaced by the next notification. */
 internal object CompanionNotificationRecords {
+    fun withoutPackage(rows: JSONArray, packageName: String): Pair<JSONArray, Int> {
+        require(CompanionSourcePolicy.validPackage(packageName)) { "应用包名无效" }
+        val kept = JSONArray()
+        var removed = 0
+        for (index in 0 until rows.length()) {
+            val row = rows.getJSONObject(index)
+            if (row.getString("package") == packageName) removed++ else kept.put(row)
+        }
+        return kept to removed
+    }
+
     fun parse(raw: String): JSONArray {
         require(raw.length <= 256_000) { "通知记录过大" }
         val rows = JSONArray(raw)
