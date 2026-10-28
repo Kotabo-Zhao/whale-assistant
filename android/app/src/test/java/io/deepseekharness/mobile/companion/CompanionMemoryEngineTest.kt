@@ -54,4 +54,27 @@ class CompanionMemoryEngineTest {
         assertEquals(before, items.toString())
         assertEquals(0, JSONObject(String(CompanionMemoryExport.encode(JSONArray()), Charsets.UTF_8)).getJSONArray("items").length())
     }
+    @Test fun importPreviewMergesWithoutOverwritingOrMutatingExistingRows() {
+        val old = JSONObject().put("id", "00000000-0000-0000-0000-000000000001").put("text", "旧记忆")
+        val current = JSONArray().put(old)
+        val incoming = JSONArray().put(JSONObject().put("id", old.getString("id")).put("text", "不应覆盖"))
+            .put(JSONObject().put("id", "00000000-0000-0000-0000-000000000002").put("text", "旧记忆"))
+            .put(JSONObject().put("id", "00000000-0000-0000-0000-000000000003").put("text", "新增记忆").put("source", "user_edit").put("unexpected", "ignored"))
+        val before = current.toString()
+        val plan = CompanionMemoryImport.plan(CompanionMemoryExport.encode(incoming), current)
+        assertEquals(2, plan.skipped)
+        assertEquals(before, current.toString())
+        val added = JSONArray(plan.additions)
+        assertEquals(1, added.length())
+        assertEquals("新增记忆", added.getJSONObject(0).getString("text"))
+        assertFalse(added.getJSONObject(0).has("unexpected"))
+    }
+    @Test fun importRejectsSensitiveInvalidOversizedOrTooMany() {
+        val id = "00000000-0000-0000-0000-000000000001"
+        val invalid = JSONArray().put(JSONObject().put("id", id).put("text", "密码 123456"))
+        assertThrows(Exception::class.java) { CompanionMemoryImport.plan(CompanionMemoryExport.encode(invalid), JSONArray()) }
+        assertThrows(Exception::class.java) { CompanionMemoryImport.plan(ByteArray(256_001), JSONArray()) }
+        assertThrows(Exception::class.java) { CompanionMemoryImport.plan("{\"version\":2,\"items\":[]}".toByteArray(), JSONArray()) }
+        assertThrows(Exception::class.java) { CompanionMemoryImport.plan(byteArrayOf(0xc3.toByte(), 0x28), JSONArray()) }
+    }
 }

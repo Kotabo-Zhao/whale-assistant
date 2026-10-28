@@ -26,6 +26,18 @@ class CompanionMemoryStore(context: Context) {
     /** UI management remains available even when model access is disabled. */
     fun listForUser(): JSONArray = synchronized(lock) { load() }
     fun exportForUser(): ByteArray = synchronized(lock) { CompanionMemoryExport.encode(load()) }
+    internal fun previewImport(bytes: ByteArray): MemoryImportPlan = synchronized(lock) {
+        CompanionMemoryImport.plan(bytes, load())
+    }
+    internal fun applyImport(plan: MemoryImportPlan): Int = synchronized(lock) {
+        val current = load()
+        require(current.toString() == plan.original) { "记忆已发生变化，请重新选择文件并核对" }
+        val combined = JSONArray(plan.original)
+        val additions = JSONArray(plan.additions)
+        for (index in 0 until additions.length()) combined.put(additions.getJSONObject(index))
+        if (additions.length() > 0) write(combined)
+        additions.length()
+    }
     fun deleteForUser(id: String): Boolean = synchronized(lock) {
         val rows = load(); val kept = JSONArray(); var removed = false
         for (index in 0 until rows.length()) { val row = rows.getJSONObject(index); if (row.getString("id") == id) removed = true else kept.put(row) }
@@ -122,4 +134,46 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
 internal object CompanionMemoryExport {
     fun encode(items: JSONArray): ByteArray = JSONObject().put("version", 1).put("items", items)
         .toString(2).toByteArray(Charsets.UTF_8)
+}
+
+internal data class MemoryImportPlan(val original: String, val additions: String, val skipped: Int)
+
+/** Strict, bounded import; existing identifiers and text win, with no implicit replacement. */
+internal object CompanionMemoryImport {
+    const val MAX_BYTES = 256_000
+    fun plan(bytes: ByteArray, current: JSONArray): MemoryImportPlan {
+        require(bytes.size <= MAX_BYTES) { "文件超过大小上限" }
+        val decoded = Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+        val root = JSONObject(decoded)
+        require(root.getInt("version") == 1) { "不支持的记忆文件版本" }
+        val incoming = root.getJSONArray("items")
+        require(incoming.length() <= 100 && current.length() <= 100) { "记忆条目过多" }
+        val ids = mutableSetOf<String>()
+        val texts = mutableSetOf<String>()
+        for (index in 0 until current.length()) {
+            val row = current.getJSONObject(index)
+            ids.add(row.getString("id")); texts.add(row.getString("text"))
+        }
+        val additions = JSONArray()
+        var skipped = 0
+        for (index in 0 until incoming.length()) {
+            val row = incoming.getJSONObject(index)
+            val id = row.opt("id") as? String ?: error("记忆 ID 无效")
+            val text = row.opt("text") as? String ?: error("记忆内容无效")
+            require(id.matches(Regex("[a-f0-9-]{36}")) && text.isNotBlank() && text.length <= 600 && !CompanionStore.sensitive(text)) { "记忆内容无效或可能含敏感信息" }
+            if (id in ids || text in texts) { skipped++; continue }
+            ids.add(id); texts.add(text)
+            // Preserve only known bounded metadata; unknown fields are not imported.
+            val copy = JSONObject().put("id", id).put("text", text)
+            val source = row.optString("source", "")
+            if (source in setOf("assistant_tool", "user_edit")) copy.put("source", source)
+            for (key in listOf("createdAt", "updatedAt")) {
+                val value = row.opt(key)
+                if (value is Number && value.toLong() >= 0) copy.put(key, value.toLong())
+            }
+            additions.put(copy)
+        }
+        require(current.length() + additions.length() <= 100) { "合并后超过 100 条上限" }
+        return MemoryImportPlan(current.toString(), additions.toString(), skipped)
+    }
 }

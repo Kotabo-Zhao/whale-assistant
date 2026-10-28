@@ -34,6 +34,39 @@ class CompanionActivity : AppCompatActivity() {
         setColor(Color.parseColor(color)); cornerRadius = dp(16).toFloat()
         if (stroke != null) setStroke(dp(1), Color.parseColor(stroke))
     }
+    private val memoryImport = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val result = runCatching {
+                val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        if (count == 0) error("无法读取文件")
+                        require(output.size() + count <= CompanionMemoryImport.MAX_BYTES) { "文件超过大小上限" }
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                } ?: error("无法读取文件")
+                CompanionMemoryStore(this).previewImport(bytes)
+            }
+            result.onSuccess { plan ->
+                val rows = org.json.JSONArray(plan.additions)
+                val details = (0 until rows.length()).joinToString("\n\n") { index -> "${index + 1}. ${rows.getJSONObject(index).getString("text")}" }
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对要导入的记忆")
+                    .setMessage("将新增 ${rows.length()} 条，跳过 ${plan.skipped} 条已有 ID 或相同内容。现有记忆不会被覆盖。\n\n" + if (details.isEmpty()) "没有需要新增的记忆。" else details)
+                    .setNegativeButton("取消", null).setPositiveButton("确认合并") { _, _ ->
+                        runCatching { CompanionMemoryStore(this).applyImport(plan) }
+                            .onSuccess { android.widget.Toast.makeText(this, "已导入 $it 条记忆", android.widget.Toast.LENGTH_LONG).show() }
+                            .onFailure { android.widget.Toast.makeText(this, "导入失败，原记忆已保留；请重新选择文件核对。", android.widget.Toast.LENGTH_LONG).show() }
+                    }.show()
+            }.onFailure {
+                android.widget.Toast.makeText(this, "无法读取或验证记忆文件，原记忆已保留。", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private val memoryExport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
             val result = runCatching {
@@ -85,7 +118,8 @@ class CompanionActivity : AppCompatActivity() {
         paragraph("助手可保存和检索长期偏好；相关内容可能发送给当前模型服务。记忆保存在应用私有存储，运行环境更新不会清空；卸载应用会删除。")
         button("查看、编辑和删除长期记忆") { showMemories() }
         button("导出长期记忆") { memoryExport.launch("whale-memory.json") }
-        paragraph("导出为未加密 JSON，包含所有记忆和来源；由你选择保存位置，云盘等服务可能同步文件。当前版本仅支持导出，不能从文件恢复。")
+        button("从文件导入记忆") { memoryImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+        paragraph("导出为未加密 JSON，包含所有记忆和来源；由你选择保存位置，云盘等服务可能同步文件。导入前会显示待新增内容，由你确认后合并。")
         button("清空全部长期记忆") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清空长期记忆？")
                 .setMessage("这会删除全部长期记忆，无法撤销。")
