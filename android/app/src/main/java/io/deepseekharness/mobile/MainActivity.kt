@@ -94,6 +94,7 @@ class MainActivity : BridgeActivity() {
     }
 
     override fun onStop() {
+        harnessSurface.pauseAudio()
         AppForeground.onActivityStopped()
         super.onStop()
     }

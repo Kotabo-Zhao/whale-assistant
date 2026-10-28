@@ -11,6 +11,12 @@
     <string name="harness_voice_unavailable">Speech recognition or the chat input is unavailable. Please type instead.</string>
     <string name="harness_voice_copy_notice">Could not insert automatically. You can copy the recognized text and paste it yourself.</string>
     <string name="harness_voice_copy">Copy</string>
+    <string name="harness_speak">Read aloud</string>
+    <string name="harness_speak_stop">Stop</string>
+    <string name="harness_speak_preview">Text to read</string>
+    <string name="harness_speak_notice">Review the text; the system speech service may use the network. Up to 2000 characters will be read.</string>
+    <string name="harness_speak_truncated">The text is long; only the first 2000 characters will be read.</string>
+    <string name="harness_speak_unavailable">No assistant reply was found. Select reply text or check the system speech service.</string>
     <string name="harness_manage">Manage and settings</string>
     <string name="harness_exit_confirm_title">Exit DSH</string>
     <string name="harness_exit_confirm_message">Return to the app? The current DSH page will remain in the background.</string>

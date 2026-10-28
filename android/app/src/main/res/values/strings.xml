@@ -11,6 +11,12 @@
     <string name="harness_voice_unavailable">语音识别或对话输入框不可用，请使用文字输入。</string>
     <string name="harness_voice_copy_notice">无法自动填入，确认后可复制识别结果并自行粘贴。</string>
     <string name="harness_voice_copy">复制</string>
+    <string name="harness_speak">朗读</string>
+    <string name="harness_speak_stop">停止</string>
+    <string name="harness_speak_preview">朗读内容</string>
+    <string name="harness_speak_notice">请核对内容；系统语音服务可能联网。朗读最长 2000 字。</string>
+    <string name="harness_speak_truncated">内容较长，仅朗读前 2000 字。</string>
+    <string name="harness_speak_unavailable">没有找到可朗读的助手回复；可先选中回复中的文字，或检查系统语音服务。</string>
     <string name="harness_manage">管理与设置</string>
     <string name="harness_exit_confirm_title">退出 DSH</string>
     <string name="harness_exit_confirm_message">确定返回应用吗？当前 DSH 页面会保留在后台。</string>

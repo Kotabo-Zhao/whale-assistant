@@ -6,6 +6,8 @@ import android.app.Activity
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -25,6 +27,7 @@ import io.deepseekharness.mobile.runtime.WorkspaceFileSharing
 import java.util.concurrent.Executors
 import java.lang.ref.WeakReference
 import org.json.JSONObject
+import org.json.JSONTokener
 
 /** MainActivity 内的独立受限 WebView；不把 Harness 凭据暴露给 Capacitor 页面。 */
 internal class MainHarnessSurface(private val activity: MainActivity) {
@@ -40,6 +43,9 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     private var chooser: ValueCallback<Array<Uri>>? = null
     private var voiceGate: HarnessPageLoadGate? = null
     private var voicePage: String? = null
+    private var speaker: TextToSpeech? = null
+    private var speechPending = false
+    private var speechGeneration = 0L
     private var retries = 0
     private var entry: String? = null
     private val single = activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> deliver(listOfNotNull(uri)) }
@@ -60,6 +66,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     /** 只在主线程调用；失败由调用者保留原独立页面作为回退。 */
     fun open(access: HarnessAccess, sessionId: String?): Boolean {
         if (activity.isFinishing || activity.isDestroyed) return false
+        stopSpeech()
         val targetOrigin = HarnessOrigin.parse(access.url) ?: return false
         val cookie = runCatching { HarnessSessionCookie.authenticated(access.password) }.getOrNull() ?: return false
         val target = runCatching {
@@ -124,6 +131,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
 
     fun onBack(): Boolean {
         if (!visible()) return false
+        stopSpeech()
         val view = web
         if (view != null && view.canGoBack()) view.goBack() else hide()
         return true
@@ -153,6 +161,8 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         shareExecutor.shutdown()
     }
 
+    fun pauseAudio() { stopSpeech() }
+
     private fun ensureView(): WebView {
         web?.let { return it }
         val root = LayoutInflater.from(activity).inflate(R.layout.activity_harness, null, false)
@@ -168,6 +178,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
             activity.startActivity(Intent(activity, io.deepseekharness.mobile.companion.CompanionActivity::class.java))
         }
         root.findViewById<View>(R.id.harness_voice).setOnClickListener { startVoice() }
+        root.findViewById<View>(R.id.harness_speak).setOnClickListener { readAloud() }
         root.findViewById<View>(R.id.harness_manage).setOnClickListener { hide() }
         activity.addContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         HarnessThemeBridge.attach(view)
@@ -176,9 +187,10 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
 
     private fun current(expected: HarnessPageLoadGate) = gate === expected && authorized()
     private fun authorized() = !activity.isFinishing && !activity.isDestroyed && AppAuthenticationState.ownsHarnessAccess(owner)
-    private fun hide() { container?.visibility = View.GONE }
+    private fun hide() { stopSpeech(); container?.visibility = View.GONE }
 
     private fun destroyView() {
+        stopSpeech()
         if (active?.get() === this) active = null
         gate.cancel()
         voiceGate = null
@@ -215,6 +227,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
 
     private fun startVoice() {
         if (!visible() || !authorized()) return
+        stopSpeech()
         voiceGate = gate
         voicePage = web?.url
         if (voicePage == null) { voiceGate = null; voiceUnavailable(); return }
@@ -260,6 +273,84 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     }
 
     private fun voiceUnavailable() = Toast.makeText(activity, R.string.harness_voice_unavailable, Toast.LENGTH_LONG).show()
+
+    private fun readAloud() {
+        if (speaker != null || speechPending) { stopSpeech(); return }
+        val target = web ?: return
+        val page = target.url ?: return
+        val currentOrigin = origin ?: return
+        if (!visible() || !authorized() || !currentOrigin.allows(Uri.parse(page))) return
+        val template = runCatching { activity.assets.open("support/harness-voice-read.js").bufferedReader(Charsets.UTF_8).use { it.readText() } }.getOrNull()
+        val marker = "/*__VOICE_PAGE__*/null"
+        if (template == null || template.indexOf(marker) < 0 || template.indexOf(marker) != template.lastIndexOf(marker)) { speakUnavailable(); return }
+        val expected = gate
+        val generation = ++speechGeneration
+        speechPending = true
+        setSpeechButton(true)
+        runCatching {
+            target.evaluateJavascript(template.replace(marker, JSONObject.quote(page))) { result ->
+                if (generation != speechGeneration) return@evaluateJavascript
+                if (!current(expected) || !visible() || web?.url != page) { stopSpeech(); return@evaluateJavascript }
+                val payload = runCatching { JSONObject(JSONTokener(result ?: "").nextValue() as String) }.getOrNull()
+                val text = payload?.optString("text").orEmpty()
+                if (payload?.optString("status") != "ok" || text.isBlank() || text.length > 2000) {
+                    stopSpeech(); speakUnavailable(); return@evaluateJavascript
+                }
+                val prefix = activity.getString(R.string.harness_speak_notice) +
+                    if (payload.optBoolean("truncated")) "\n" + activity.getString(R.string.harness_speak_truncated) else ""
+                AlertDialog.Builder(activity).setTitle(R.string.harness_speak_preview)
+                    .setMessage(prefix + "\n\n" + text)
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> stopSpeech() }
+                    .setPositiveButton(R.string.harness_speak) { _, _ -> speak(text, expected, page, generation) }
+                    .setOnCancelListener { stopSpeech() }.show()
+            }
+        }.onFailure { stopSpeech(); speakUnavailable() }
+    }
+
+    private fun speak(text: String, expected: HarnessPageLoadGate, page: String, generation: Long) {
+        if (generation != speechGeneration || !current(expected) || !visible() || web?.url != page) { stopSpeech(); return }
+        try {
+            val engine = TextToSpeech(activity.applicationContext) { status ->
+                handler.post {
+                    val active = speaker
+                    if (generation != speechGeneration) return@post
+                    if (!current(expected) || !visible() || web?.url != page) { stopSpeech(); return@post }
+                    if (status != TextToSpeech.SUCCESS || active == null || text.length > TextToSpeech.getMaxSpeechInputLength()) {
+                        stopSpeech(); speakUnavailable(); return@post
+                    }
+                    speechPending = false
+                    if (active.speak(text, TextToSpeech.QUEUE_FLUSH, null, generation.toString()) != TextToSpeech.SUCCESS) {
+                        stopSpeech(); speakUnavailable()
+                    }
+                }
+            }
+            speaker = engine
+            val listenerResult = engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = Unit
+                override fun onDone(utteranceId: String?) { handler.post { if (generation == speechGeneration) stopSpeech() } }
+                @Deprecated("Deprecated in Android")
+                override fun onError(utteranceId: String?) { handler.post { if (generation == speechGeneration) { stopSpeech(); speakUnavailable() } } }
+                override fun onError(utteranceId: String?, errorCode: Int) { handler.post { if (generation == speechGeneration) { stopSpeech(); speakUnavailable() } } }
+            })
+            if (listenerResult != TextToSpeech.SUCCESS) { stopSpeech(); speakUnavailable(); return }
+            handler.postDelayed({ if (generation == speechGeneration && speechPending) { stopSpeech(); speakUnavailable() } }, 10_000)
+        } catch (_: Exception) { stopSpeech(); speakUnavailable() }
+    }
+
+    private fun stopSpeech() {
+        speechGeneration++
+        speechPending = false
+        speaker?.let { runCatching { it.stop() }; runCatching { it.shutdown() } }
+        speaker = null
+        setSpeechButton(false)
+    }
+
+    private fun setSpeechButton(active: Boolean) {
+        (container?.findViewById<View>(R.id.harness_speak) as? android.widget.Button)
+            ?.setText(if (active) R.string.harness_speak_stop else R.string.harness_speak)
+    }
+
+    private fun speakUnavailable() = Toast.makeText(activity, R.string.harness_speak_unavailable, Toast.LENGTH_LONG).show()
 
     private fun voiceCopyFallback(text: String) {
         AlertDialog.Builder(activity).setTitle(R.string.harness_voice_review)

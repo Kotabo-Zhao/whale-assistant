@@ -174,6 +174,7 @@ class HarnessActivity : AppCompatActivity() {
         AppWindowInsets.apply(this)
         // 回退 Activity 仍使用独立会话；语音直填仅在主界面容器中可用。
         findViewById<android.view.View>(R.id.harness_voice).visibility = android.view.View.GONE
+        findViewById<android.view.View>(R.id.harness_speak).visibility = android.view.View.GONE
         findViewById<android.view.View>(R.id.harness_companion).setOnClickListener {
             startActivity(Intent(this, io.deepseekharness.mobile.companion.CompanionActivity::class.java))
         }
