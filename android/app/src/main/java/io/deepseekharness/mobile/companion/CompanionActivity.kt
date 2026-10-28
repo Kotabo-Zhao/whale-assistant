@@ -160,6 +160,34 @@ class CompanionActivity : AppCompatActivity() {
         }
     }
 
+    private val knowledgeTextFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runMemoryIo("正在读取文本文件…", {
+            val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                val output = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(4096)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (count == 0) error("无法读取文件")
+                    require(output.size() + count <= CompanionKnowledgeTextFile.MAX_FILE_BYTES) { "文件过大" }
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            } ?: error("无法读取文件")
+            CompanionKnowledgeTextFile.decode(bytes)
+        }) { result ->
+            result.onSuccess { text ->
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对要导入的文本")
+                    .setMessage("以下完整内容将保存到本地资料库。对话访问开启时，匹配内容可能发送给模型服务。\n\n$text")
+                    .setNegativeButton("取消", null).setPositiveButton("保存资料") { _, _ ->
+                        runMemoryIo("正在保存资料…", { CompanionKnowledgeStore(this).add(text, "text_file") }) { outcome ->
+                            android.widget.Toast.makeText(this, outcome.fold({ if (it) "文本已保存。" else "资料库中已有相同内容。" }, { "保存失败，请检查资料库容量。" }), android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }.show()
+            }.onFailure { android.widget.Toast.makeText(this, "无法读取文本：请选取不超过 8000 字的 UTF-8 文本文件。", android.widget.Toast.LENGTH_LONG).show() }
+        }
+    }
+
     private val knowledgeExport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) runMemoryIo("正在导出资料…", {
             val bytes = CompanionKnowledgeStore(this).exportForUser()
@@ -296,7 +324,7 @@ class CompanionActivity : AppCompatActivity() {
                 }.show()
         }
         heading("本地资料", "knowledge")
-        paragraph("在其他应用分享文字到鲸鱼娘并选择本地资料库后，可在这里查看、搜索和删除。对话访问默认关闭；开启后助手检索到的资料可能发送给模型服务。")
+        paragraph("可从分享或文本文件保存资料，并在这里查看、搜索和删除。对话访问默认关闭；开启后助手检索到的资料可能发送给模型服务。")
         toggle("允许助手对话访问本地资料", store.knowledgeModelAccess) { enabled ->
             if (!enabled) { store.knowledgeModelAccess = false; render() }
             else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许对话检索资料？")
@@ -304,6 +332,8 @@ class CompanionActivity : AppCompatActivity() {
                 .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.knowledgeModelAccess = true; render() }.show()
         }
         button("查看或搜索资料") { searchKnowledge() }
+        button("导入文本文件") { if (!memoryBusy) knowledgeTextFile.launch(arrayOf("text/plain", "application/octet-stream")) else paragraph("文件操作正在进行，请稍候。") }
+        paragraph("文本文件须为 UTF-8，最多 8000 字；导入前显示完整内容供确认。")
         button("导出资料备份") { if (!memoryBusy) knowledgeExport.launch("whale-knowledge.json") else paragraph("文件操作正在进行，请稍候。") }
         button("导入资料备份") { if (!memoryBusy) knowledgeImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("文件操作正在进行，请稍候。") }
         paragraph("资料备份为未加密 JSON，包含完整文字；云盘可能同步。导入前可核对，确认后合并，不覆盖已有资料。")
@@ -626,7 +656,8 @@ class CompanionActivity : AppCompatActivity() {
             val row = rows.getJSONObject(index)
             val date = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.getLong("createdAt")))
             val excerpt = row.getString("text").replace('\n', ' ').take(100)
-            "$date · 分享文字\n$excerpt"
+            val source = if (row.getString("source") == "text_file") "文本文件" else "分享文字"
+            "$date · $source\n$excerpt"
         }
         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地资料（${rows.length()} 条）")
             .setItems(labels) { _, index ->

@@ -23,9 +23,9 @@ internal class CompanionKnowledgeStore(context: Context) {
         if (additions.length() > 0) write(current)
         additions.length()
     }
-    fun add(text: String): Boolean = synchronized(lock) {
+    fun add(text: String, source: String = "shared_text"): Boolean = synchronized(lock) {
         val rows = load()
-        if (!CompanionKnowledgeData.add(rows, text, System.currentTimeMillis())) return@synchronized false
+        if (!CompanionKnowledgeData.add(rows, text, System.currentTimeMillis(), source)) return@synchronized false
         write(rows)
         true
     }
@@ -69,15 +69,16 @@ internal object CompanionKnowledgeData {
             val id = row.getString("id")
             require(runCatching { UUID.fromString(id).toString() == id }.getOrDefault(false) && ids.add(id)) { "资料标识无效" }
             val text = row.getString("text")
-            require(text.isNotBlank() && text.length <= MAX_TEXT && row.getString("source") == "shared_text" && row.getLong("createdAt") > 0) { "资料内容无效" }
+            require(text.isNotBlank() && text.length <= MAX_TEXT && row.getString("source") in setOf("shared_text", "text_file") && row.getLong("createdAt") > 0) { "资料内容无效" }
         }
         return rows
     }
-    fun add(rows: JSONArray, text: String, now: Long): Boolean {
+    fun add(rows: JSONArray, text: String, now: Long, source: String = "shared_text"): Boolean {
+        require(source in setOf("shared_text", "text_file")) { "资料来源无效" }
         require(text.isNotBlank() && text.length <= MAX_TEXT && now > 0) { "文字为空或超过 8000 字" }
         for (i in 0 until rows.length()) if (rows.getJSONObject(i).getString("text") == text) return false
         require(rows.length() < MAX_ITEMS) { "资料已满，请先删除部分资料" }
-        rows.put(JSONObject().put("id", UUID.randomUUID().toString()).put("text", text).put("source", "shared_text").put("createdAt", now))
+        rows.put(JSONObject().put("id", UUID.randomUUID().toString()).put("text", text).put("source", source).put("createdAt", now))
         return true
     }
     fun search(rows: JSONArray, query: String): JSONArray {
@@ -135,5 +136,18 @@ internal object CompanionKnowledgeBackup {
         for (i in 0 until additions.length()) merged.put(additions.getJSONObject(i))
         encode(merged)
         return KnowledgeImportPlan(current.toString(), additions.toString(), skipped)
+    }
+}
+
+/** Strictly decode a user-selected text file; no truncation or silent charset replacement. */
+internal object CompanionKnowledgeTextFile {
+    const val MAX_FILE_BYTES = 32_000
+    fun decode(bytes: ByteArray): String {
+        require(bytes.size <= MAX_FILE_BYTES) { "文件超过大小上限" }
+        val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        val text = decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString().removePrefix("\uFEFF")
+        require(text.isNotBlank() && text.length <= CompanionKnowledgeData.MAX_TEXT && '\u0000' !in text) { "文件为空、过长或不是文本" }
+        return text
     }
 }

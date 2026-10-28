@@ -24,7 +24,7 @@ internal object CompanionKnowledgeModel {
                 else text.indexOf(query, ignoreCase = true).coerceAtLeast(0)
             val start = (at - 200).coerceAtLeast(0)
             val end = minOf(text.length, start + 1000)
-            output.put(JSONObject().put("source", "shared_text").put("createdAtMs", row.getLong("createdAt"))
+            output.put(JSONObject().put("source", row.getString("source")).put("createdAtMs", row.getLong("createdAt"))
                 .put("excerpt", text.substring(start, end)).put("excerptTruncated", start > 0 || end < text.length))
         }
         return JSONObject().put("schemaVersion", 1).put("items", output).put("truncated", matches.items.size > limit)

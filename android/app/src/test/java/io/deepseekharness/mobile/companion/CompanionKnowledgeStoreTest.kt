@@ -39,6 +39,18 @@ class CompanionKnowledgeStoreTest {
         assertThrows(Exception::class.java) { CompanionKnowledgeBackup.plan(byteArrayOf(0xc3.toByte(), 0x28), existing) }
         assertThrows(Exception::class.java) { CompanionKnowledgeBackup.plan("{\"version\":1,\"items\":[]}".toByteArray(), existing) }
     }
+    @Test fun textFilesRequireValidUtf8AndPreserveSourceThroughBackup() {
+        assertEquals("你好\n世界", CompanionKnowledgeTextFile.decode("\uFEFF你好\n世界".toByteArray(Charsets.UTF_8)))
+        assertThrows(Exception::class.java) { CompanionKnowledgeTextFile.decode(byteArrayOf(0xc3.toByte(), 0x28)) }
+        assertThrows(Exception::class.java) { CompanionKnowledgeTextFile.decode("x\u0000y".toByteArray()) }
+        assertThrows(Exception::class.java) { CompanionKnowledgeTextFile.decode("x".repeat(8001).toByteArray()) }
+        assertThrows(Exception::class.java) { CompanionKnowledgeTextFile.decode(ByteArray(32001)) }
+        val rows = JSONArray()
+        assertTrue(CompanionKnowledgeData.add(rows, "文件内容", 1, "text_file"))
+        val plan = CompanionKnowledgeBackup.plan(CompanionKnowledgeBackup.encode(rows), JSONArray())
+        assertEquals("text_file", JSONArray(plan.additions).getJSONObject(0).getString("source"))
+        assertThrows(Exception::class.java) { CompanionKnowledgeData.add(rows, "bad", 2, "other") }
+    }
     @Test fun invalidAndOversizedDataIsRejected() {
         assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.add(JSONArray(), "x".repeat(8001), 1) }
         assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.search(JSONArray(), "x".repeat(201)) }

@@ -10,7 +10,7 @@ class CompanionKnowledgeModelTest {
     @Test fun checksConsentAndReturnsBoundedMatchingExcerpts() {
         var loads = 0
         val rows = JSONArray()
-        repeat(4) { rows.put(JSONObject().put("text", "x".repeat(900) + "关键字" + "y".repeat(300)).put("createdAt", it + 1)) }
+        repeat(4) { rows.put(JSONObject().put("text", "x".repeat(900) + "关键字" + "y".repeat(300)).put("createdAt", it + 1).put("source", "shared_text")) }
         assertThrows(RuntimeFailure::class.java) { CompanionKnowledgeModel.execute(false, "{\"query\":\"关键字\"}") { loads++; rows } }
         assertEquals(0, loads)
         val result = JSONObject(CompanionKnowledgeModel.execute(true, "{\"query\":\"关键字\"}") { loads++; rows })
@@ -23,10 +23,11 @@ class CompanionKnowledgeModelTest {
         assertTrue(item.getBoolean("excerptTruncated"))
     }
     @Test fun relatedLookupIsMarkedAndShowsMatchingContext() {
-        val rows = JSONArray().put(JSONObject().put("text", "x".repeat(1100) + "咖啡偏好是拿铁" + "y".repeat(1200)).put("createdAt", 1))
+        val rows = JSONArray().put(JSONObject().put("text", "x".repeat(1100) + "咖啡偏好是拿铁" + "y".repeat(1200)).put("createdAt", 1).put("source", "text_file"))
         val result = JSONObject(CompanionKnowledgeModel.execute(true, "{\"query\":\"我的咖啡偏好是什么\"}") { rows })
         assertEquals("related", result.getString("matchMode"))
         assertEquals(1, result.getJSONArray("items").length())
+        assertEquals("text_file", result.getJSONArray("items").getJSONObject(0).getString("source"))
         assertTrue(result.getJSONArray("items").getJSONObject(0).getString("excerpt").contains("咖啡偏好"))
         assertTrue(result.getJSONArray("items").getJSONObject(0).getBoolean("excerptTruncated"))
         val absent = JSONObject(CompanionKnowledgeModel.execute(true, "{\"query\":\"完全无关\"}") { rows })
