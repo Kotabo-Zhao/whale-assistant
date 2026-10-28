@@ -86,6 +86,7 @@ class OverlayBallService : Service() {
     @Volatile private var avatarDestroyed = false
     @Volatile private var avatarGeneration = 0L
     private var hintView: View? = null
+    private var reminderHintVisible = false
     private val hintHandler = Handler(Looper.getMainLooper())
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
     private var calendarQueryRunning = false
@@ -315,6 +316,7 @@ class OverlayBallService : Service() {
     private fun removeCompanionHint() {
         hintView?.let { runCatching { windowManager.removeView(it) } }
         hintView = null
+        reminderHintVisible = false
     }
 
     private fun notifyLowBattery() {
@@ -410,13 +412,13 @@ class OverlayBallService : Service() {
         }
     }
 
-    private fun showCompanionHint(message: String, onTap: (() -> Unit)? = null): Boolean {
+    private fun showCompanionHint(message: String, reminder: Boolean = false, onTap: (() -> Unit)? = null): Boolean {
         if (CompanionStore(this).inQuietHours()) return false
         if (!ballAttached || ballView == null || stopIfOverlayPermissionRevoked()) return false
         if (getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false) return false
         if (getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return false
         val now = SystemClock.elapsedRealtime()
-        if (lastHintAt != 0L && now - lastHintAt < 120_000) return false
+        if (!io.deepseekharness.mobile.companion.CompanionHintPolicy.mayShow(reminder, reminderHintVisible, now, lastHintAt)) return false
         val metrics = resources.displayMetrics
         val density = metrics.density
         val screenWidth = metrics.widthPixels.coerceAtLeast(1)
@@ -450,6 +452,7 @@ class OverlayBallService : Service() {
         removeCompanionHint()
         if (runCatching { windowManager.addView(bubble, params) }.isSuccess) {
             hintView = bubble
+            reminderHintVisible = reminder
             lastHintAt = now
             val accessibility = getSystemService(android.view.accessibility.AccessibilityManager::class.java)
             val timeout = if (android.os.Build.VERSION.SDK_INT >= 29 && accessibility != null)
@@ -1871,7 +1874,7 @@ class OverlayBallService : Service() {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
                     val message = io.deepseekharness.mobile.companion.CompanionHintContent.recurring(text, CompanionStore(service).recurringBubbleDetails)
-                    service.showCompanionHint(message) {
+                    service.showCompanionHint(message, reminder = true) {
                         if (service.conversationView == null && !service.conversationOpening) service.toggleConversation()
                     }
                 }
@@ -1924,7 +1927,7 @@ class OverlayBallService : Service() {
         internal fun companionHint(message: String) {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
-                    service.showCompanionHint("$message 点击查看提醒。") {
+                    service.showCompanionHint("$message 点击查看提醒。", reminder = true) {
                         runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
                             .putExtra(io.deepseekharness.mobile.companion.CompanionHintContent.OPEN_ONCE_REMINDERS, true)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
