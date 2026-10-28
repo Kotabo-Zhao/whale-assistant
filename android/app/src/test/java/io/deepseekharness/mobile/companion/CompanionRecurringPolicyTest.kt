@@ -6,6 +6,20 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 class CompanionRecurringPolicyTest {
+    @Test fun deletionRequiresTheReviewedRecordAndDoesNotMutateTheInput() {
+        val rows = org.json.JSONArray().put(org.json.JSONObject().put("id", "a").put("text", "取药").put("state", "scheduled"))
+            .put(org.json.JSONObject().put("id", "b").put("text", "喝水").put("state", "scheduled"))
+        val expected = rows.getJSONObject(0).toString()
+        rows.getJSONObject(0).put("state", "failed")
+        assertNull(CompanionRecurringPolicy.removeReviewed(rows, "a", expected))
+        assertNull(CompanionRecurringPolicy.removeReviewed(rows, "missing", expected))
+        val kept = CompanionRecurringPolicy.removeReviewed(rows, "a", rows.getJSONObject(0).toString())!!
+        assertEquals(1, kept.length())
+        assertEquals("b", kept.getJSONObject(0).getString("id"))
+        assertEquals(2, rows.length())
+        rows.put(org.json.JSONObject(rows.getJSONObject(0).toString()))
+        assertNull(CompanionRecurringPolicy.removeReviewed(rows, "a", rows.getJSONObject(0).toString()))
+    }
     @Test fun dailyAndWeeklyUseLocalCalendarRatherThanFixedDurations() {
         val zone = ZoneId.of("Asia/Shanghai")
         val now = ZonedDateTime.of(2026, 10, 29, 10, 0, 0, 0, zone).toInstant().toEpochMilli()

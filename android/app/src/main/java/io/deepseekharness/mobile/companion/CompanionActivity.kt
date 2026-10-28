@@ -905,7 +905,11 @@ class CompanionActivity : AppCompatActivity() {
                 .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
                     androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除重复提醒？").setMessage(labels[index])
                         .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
-                            runCatching { reminders.remove(id) }.onSuccess { paragraph("重复提醒已删除。") }.onFailure { paragraph("删除失败，原记录已保留。") }
+                            val expected = rows.getJSONObject(index).toString()
+                            runMemoryIo("正在删除重复提醒…", { reminders.removeReviewed(id, expected) }) { result ->
+                                val message = result.fold({ if (it) "重复提醒已删除。" else "提醒已变化或不存在，请重新查看。" }, { "未能确认删除结果，请查看提醒列表。" })
+                                android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                            }
                         }.show()
                 }
             dialog.setNeutralButton("更多操作") { _, _ ->

@@ -19,6 +19,14 @@ import java.util.UUID
 
 /** Daily or weekly local-time reminders. No missed occurrences are replayed after restart. */
 internal object CompanionRecurringPolicy {
+    /** Only remove the exact record the user reviewed. The input array is never mutated. */
+    fun removeReviewed(rows: JSONArray, id: String, expected: String): JSONArray? {
+        val found = (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.optString("id") == id }.singleOrNull() ?: return null
+        if (found.toString() != expected) return null
+        val kept = JSONArray()
+        for (index in 0 until rows.length()) if (rows.getJSONObject(index).optString("id") != id) kept.put(rows.getJSONObject(index))
+        return kept
+    }
     fun next(now: Long, hour: Int, minute: Int, weekday: Int, zone: ZoneId): Long {
         require(hour in 0..23 && minute in 0..59 && weekday in 0..7)
         val localNow = Instant.ofEpochMilli(now).atZone(zone)
@@ -92,6 +100,12 @@ internal class CompanionRecurringReminder(context: Context) {
             if (row.getString("id") == id) found = true else kept.put(row)
         }
         if (found) { save(kept); alarm?.cancel(pending(id)) }
+    }
+    fun removeReviewed(id: String, expected: String): Boolean = synchronized(lock) {
+        val kept = CompanionRecurringPolicy.removeReviewed(read(), id, expected) ?: return@synchronized false
+        save(kept)
+        alarm?.cancel(pending(id))
+        true
     }
     fun retry(id: String) = synchronized(lock) {
         val rows = read()
