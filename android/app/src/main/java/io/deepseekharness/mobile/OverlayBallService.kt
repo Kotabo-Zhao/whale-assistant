@@ -82,6 +82,8 @@ class OverlayBallService : Service() {
     private lateinit var windowManager: WindowManager
     private var ballView: View? = null
     private var companionAnimator: android.animation.ObjectAnimator? = null
+    private val avatarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-avatar").apply { isDaemon = true } }
+    @Volatile private var avatarDestroyed = false
     private var hintView: View? = null
     private val hintHandler = Handler(Looper.getMainLooper())
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
@@ -282,6 +284,8 @@ class OverlayBallService : Service() {
 
     override fun onDestroy() {
         calendarServiceDestroyed = true
+        avatarDestroyed = true
+        avatarExecutor.shutdownNow()
         calendarExecutor.shutdownNow()
         hintHandler.removeCallbacksAndMessages(null)
         removeCompanionHint()
@@ -623,7 +627,28 @@ class OverlayBallService : Service() {
         // 乐观置位：addView 返回时窗口已登记，首次遍历（附着回调）还没跑完，
         // 这一小段空窗期不能把刚挂上的球误判成陈旧视图。
         ballAttached = true
+        loadCompanionAvatar(view, size)
         return true
+    }
+
+    /** Decode only as many pixels as the square overlay can display, away from the UI thread. */
+    private fun loadCompanionAvatar(view: View, size: Int) {
+        avatarExecutor.execute {
+            val bitmap = runCatching {
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true; inScaled = false }
+                android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_companion, bounds)
+                val sample = io.deepseekharness.mobile.overlay.CompanionAvatarSizing.sample(bounds.outWidth, bounds.outHeight, size)
+                val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample; inScaled = false }
+                android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_companion, options)
+            }.getOrNull() ?: return@execute
+            if (avatarDestroyed) { bitmap.recycle(); return@execute }
+            val posted = hintHandler.post {
+                if (!avatarDestroyed && ballView === view && ballAttached) {
+                    view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageBitmap(bitmap)
+                } else bitmap.recycle()
+            }
+            if (!posted) bitmap.recycle()
+        }
     }
 
     private fun detachBall() {
