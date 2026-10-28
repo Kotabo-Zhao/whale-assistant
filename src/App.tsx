@@ -1,7 +1,6 @@
 import appMark from './assets/app-mark.png'
 import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
-import { PluginSettings } from './components/PluginSettings'
 import { TaskStarter } from './components/TaskStarter'
 import { CompanionSettingsButton } from './components/CompanionSettingsButton'
 import { ApplicationPicker } from './components/ApplicationPicker'
@@ -16,11 +15,10 @@ import { LanguageSettings } from './components/LanguageSettings'
 import { AppearanceSettings } from './components/AppearanceSettings'
 import { SessionManager } from './components/SessionManager'
 import { DiagnosticLogPanel, HarnessLogPanel } from './ui/logs'
-import { FilesScreen, type FilesRoot } from './screens/FilesScreen'
+import type { FilesRoot } from './screens/FilesScreen'
 import { RuntimeSelfCheckPanel } from './screens/RuntimeSelfCheckPanel'
 import { PermissionGuideDialog, ResetDialog, UpdateDialog } from './screens/Dialogs'
 import { keepAliveGuideResolved, overlayFailureGuide, overlayGuideResolved, type PermissionGuide } from './ui/permissionGuide'
-import { RuntimeVersionsScreen } from './screens/RuntimeVersionsScreen'
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { triggerHaptic } from './platform/haptics'
@@ -151,6 +149,9 @@ import {
 } from './platform/types'
 
 const TerminalPanel = lazy(() => import('./components/TerminalPanel').then(module => ({ default: module.TerminalPanel })))
+const PluginSettings = lazy(() => import('./components/PluginSettings').then(module => ({ default: module.PluginSettings })))
+const FilesScreen = lazy(() => import('./screens/FilesScreen').then(module => ({ default: module.FilesScreen })))
+const RuntimeVersionsScreen = lazy(() => import('./screens/RuntimeVersionsScreen').then(module => ({ default: module.RuntimeVersionsScreen })))
 
 type AppView =
   | 'conversation'
@@ -5508,7 +5509,7 @@ export function App() {
         </header>
 
         {/* 切换页面后从顶部重新渲染，不保留上一页的滚动位置。 */}
-        <main className="app-main" key={activeView}>{screen}</main>
+        <main className="app-main" key={activeView}><Suspense fallback={<div className="terminal-loading" role="status">{t("正在加载页面…")}</div>}>{screen}</Suspense></main>
       </div>
       <BottomNavigation activeView={activeView} onNavigate={setActiveView} />
 
