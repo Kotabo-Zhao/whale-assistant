@@ -38,14 +38,16 @@ class CompanionMemoryStore(context: Context) {
         if (additions.length() > 0) write(combined)
         additions.length()
     }
-    fun approveForUser(id: String, expectedText: String): Boolean = synchronized(lock) {
+    fun approveForUser(id: String, expectedText: String, reviewedSnapshot: String? = null): Boolean = synchronized(lock) {
         val rows = load()
+        if (reviewedSnapshot != null && !CompanionMemorySimilarity.isCurrent(rows, reviewedSnapshot)) return@synchronized false
         if (!CompanionMemoryApproval.approve(rows, id, System.currentTimeMillis(), expectedText)) return@synchronized false
         write(rows)
         true
     }
-    fun approveEditedForUser(id: String, expectedText: String, edited: String): Boolean = synchronized(lock) {
+    fun approveEditedForUser(id: String, expectedText: String, edited: String, reviewedSnapshot: String? = null): Boolean = synchronized(lock) {
         val rows = load()
+        if (reviewedSnapshot != null && !CompanionMemorySimilarity.isCurrent(rows, reviewedSnapshot)) return@synchronized false
         if (!CompanionMemoryApproval.approveEdited(rows, id, expectedText, edited, System.currentTimeMillis())) return@synchronized false
         write(rows)
         true
@@ -58,8 +60,8 @@ class CompanionMemoryStore(context: Context) {
     }
     fun clearForUser() = synchronized(lock) { write(JSONArray()) }
     /** Explicit user-authored memory; does not ingest notification text automatically. */
-    internal fun reviewForUser(text: String): MemorySimilarityReview = synchronized(lock) {
-        CompanionMemorySimilarity.review(load(), text)
+    internal fun reviewForUser(text: String, excludeId: String? = null): MemorySimilarityReview = synchronized(lock) {
+        CompanionMemorySimilarity.review(load(), text, excludeId)
     }
     internal fun addForUser(text: String, source: String, expected: String? = null): UserMemoryResult = synchronized(lock) {
         val rows = load()
@@ -68,8 +70,9 @@ class CompanionMemoryStore(context: Context) {
         if (result == UserMemoryResult.ADDED) write(rows)
         result
     }
-    fun updateForUser(id: String, expected: String, text: String): Boolean = synchronized(lock) {
+    fun updateForUser(id: String, expected: String, text: String, reviewedSnapshot: String? = null): Boolean = synchronized(lock) {
         val rows = load()
+        if (reviewedSnapshot != null && !CompanionMemorySimilarity.isCurrent(rows, reviewedSnapshot)) return@synchronized false
         if (!CompanionUserMemory.update(rows, id, expected, text, System.currentTimeMillis())) return@synchronized false
         write(rows)
         true
@@ -130,9 +133,9 @@ internal data class MemorySimilarityReview(val snapshot: String, val candidates:
 /** Hints only: local lexical overlap can neither prove similarity nor identify contradictions. */
 internal object CompanionMemorySimilarity {
     fun isCurrent(rows: JSONArray, snapshot: String): Boolean = rows.toString() == snapshot
-    fun review(rows: JSONArray, text: String): MemorySimilarityReview {
+    fun review(rows: JSONArray, text: String, excludeId: String? = null): MemorySimilarityReview {
         require(text.isNotBlank() && text.length <= 600)
-        val input = (0 until rows.length()).map { rows.getJSONObject(it) }
+        val input = (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.optString("id") != excludeId }
         val matches = CompanionMemorySearch.find(input, text)
         val candidates = matches.items.take(3).map { row ->
             (if (row.optString("status") == "pending") "待确认" else "已确认") to row.getString("text")

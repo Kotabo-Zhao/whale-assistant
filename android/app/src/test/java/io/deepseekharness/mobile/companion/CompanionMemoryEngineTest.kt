@@ -22,6 +22,8 @@ class CompanionMemoryEngineTest {
         val related = JSONArray().put(JSONObject().put("text", "我喜欢喝咖啡").put("status", "confirmed"))
         val hint = CompanionMemorySimilarity.review(related, "我不喜欢喝咖啡")
         assertEquals("已确认" to "我喜欢喝咖啡", hint.candidates.single())
+        val editedId = rows.getJSONObject(0).getString("id")
+        assertTrue(CompanionMemorySimilarity.review(rows, "我喜欢喝咖啡", editedId).candidates.none { it.second == "我喜欢喝咖啡" })
     }
     @Test fun malformedSurrogateIsRejectedWithoutReplacingUserText() {
         val raw = "{\"version\":1,\"items\":[{\"id\":\"00000000-0000-0000-0000-000000000001\",\"text\":\"\\uD800\"}]}"
