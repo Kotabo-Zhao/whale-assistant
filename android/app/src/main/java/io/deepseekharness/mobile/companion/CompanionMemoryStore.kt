@@ -136,11 +136,13 @@ internal object CompanionMemorySimilarity {
     fun review(rows: JSONArray, text: String, excludeId: String? = null): MemorySimilarityReview {
         require(text.isNotBlank() && text.length <= 600)
         val input = (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.optString("id") != excludeId }
-        val matches = CompanionMemorySearch.find(input, text)
-        val candidates = matches.items.take(3).map { row ->
+        val exact = input.filter { it.getString("text").contains(text, ignoreCase = true) }
+        val other = input.filterNot { it.getString("text").contains(text, ignoreCase = true) }
+        val related = CompanionMemorySearch.find(other, text)
+        val candidates = (exact.asReversed() + related.items).take(3).map { row ->
             (if (row.optString("status") == "pending") "待确认" else "已确认") to row.getString("text")
         }
-        return MemorySimilarityReview(rows.toString(), candidates, matches.matchedCount > candidates.size)
+        return MemorySimilarityReview(rows.toString(), candidates, exact.size + related.matchedCount > candidates.size)
     }
 }
 
