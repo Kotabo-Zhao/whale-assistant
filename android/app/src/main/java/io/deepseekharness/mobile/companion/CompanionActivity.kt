@@ -1284,20 +1284,39 @@ class CompanionActivity : AppCompatActivity() {
                     edit.error = "记忆文件操作正在进行，请稍候。"
                     return@setOnClickListener
                 }
-                dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
-                runMemoryIo("正在保存记忆…", { CompanionMemoryStore(this).addForUser(value, if (reference == null) "user_edit" else "user_notification") }) { result ->
-                    dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
-                    result.onSuccess { outcome ->
-                        if (outcome != UserMemoryResult.EXISTING_PENDING) onConfirmed?.invoke()
-                        dialog.dismiss()
-                        val message = when (outcome) {
-                            UserMemoryResult.ADDED -> "已添加长期记忆。"
-                            UserMemoryResult.EXISTING_PENDING -> "相同内容已在待确认列表中，请先核对。"
-                            UserMemoryResult.EXISTING_CONFIRMED -> "相同内容已存在。"
-                        }
-                        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
-                        render()
-                    }.onFailure { edit.error = it.message ?: "保存失败，原数据已保留。" }
+                val save = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                save.isEnabled = false; edit.isEnabled = false
+                val memory = CompanionMemoryStore(this)
+                fun restoreInput() { save.isEnabled = true; edit.isEnabled = true }
+                fun saveReviewed(snapshot: String) {
+                    runMemoryIo("正在保存记忆…", { memory.addForUser(value, if (reference == null) "user_edit" else "user_notification", snapshot) }) { result ->
+                        restoreInput()
+                        result.onSuccess { outcome ->
+                            if (outcome == UserMemoryResult.STALE) { edit.error = "记忆已变化，请重新核对后再保存。"; return@onSuccess }
+                            if (outcome != UserMemoryResult.EXISTING_PENDING) onConfirmed?.invoke()
+                            dialog.dismiss()
+                            val message = when (outcome) {
+                                UserMemoryResult.ADDED -> "已添加长期记忆。"
+                                UserMemoryResult.EXISTING_PENDING -> "相同内容已在待确认列表中，请先核对。"
+                                UserMemoryResult.EXISTING_CONFIRMED -> "相同内容已存在。"
+                                UserMemoryResult.STALE -> "记忆已变化，请重新核对。"
+                            }
+                            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                            render()
+                        }.onFailure { edit.error = it.message ?: "保存失败，原数据已保留。" }
+                    }
+                }
+                runMemoryIo("正在查找相关记忆…", { memory.reviewForUser(value) }) { result ->
+                    result.onSuccess { review ->
+                        if (!dialog.isShowing) return@onSuccess
+                        if (review.candidates.isEmpty()) { saveReviewed(review.snapshot); return@onSuccess }
+                        val related = review.candidates.joinToString("\n\n") { (status, text) -> "[$status] $text" }
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对相关记忆")
+                            .setMessage("发现可能相关的记录；词语匹配可能误判或遗漏，不能确定是否矛盾。请核对是否需要保留两条：\n\n$related" + if (review.truncated) "\n\n还有其他可能相关的记录，请到记忆管理中查看。" else "")
+                            .setNegativeButton("返回编辑") { _, _ -> restoreInput() }
+                            .setPositiveButton("仍然保存") { _, _ -> saveReviewed(review.snapshot) }
+                            .setOnCancelListener { restoreInput() }.show()
+                    }.onFailure { restoreInput(); edit.error = it.message ?: "无法读取已有记忆，请稍后重试。" }
                 }
             }
         }

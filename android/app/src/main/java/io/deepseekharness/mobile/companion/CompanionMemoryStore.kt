@@ -58,8 +58,12 @@ class CompanionMemoryStore(context: Context) {
     }
     fun clearForUser() = synchronized(lock) { write(JSONArray()) }
     /** Explicit user-authored memory; does not ingest notification text automatically. */
-    internal fun addForUser(text: String, source: String): UserMemoryResult = synchronized(lock) {
+    internal fun reviewForUser(text: String): MemorySimilarityReview = synchronized(lock) {
+        CompanionMemorySimilarity.review(load(), text)
+    }
+    internal fun addForUser(text: String, source: String, expected: String? = null): UserMemoryResult = synchronized(lock) {
         val rows = load()
+        if (expected != null && !CompanionMemorySimilarity.isCurrent(rows, expected)) return@synchronized UserMemoryResult.STALE
         val result = CompanionUserMemory.add(rows, text, source, System.currentTimeMillis())
         if (result == UserMemoryResult.ADDED) write(rows)
         result
@@ -119,7 +123,23 @@ internal object CompanionMemoryFormat {
     }
 }
 
-internal enum class UserMemoryResult { ADDED, EXISTING_PENDING, EXISTING_CONFIRMED }
+internal enum class UserMemoryResult { ADDED, EXISTING_PENDING, EXISTING_CONFIRMED, STALE }
+
+internal data class MemorySimilarityReview(val snapshot: String, val candidates: List<Pair<String, String>>, val truncated: Boolean)
+
+/** Hints only: local lexical overlap can neither prove similarity nor identify contradictions. */
+internal object CompanionMemorySimilarity {
+    fun isCurrent(rows: JSONArray, snapshot: String): Boolean = rows.toString() == snapshot
+    fun review(rows: JSONArray, text: String): MemorySimilarityReview {
+        require(text.isNotBlank() && text.length <= 600)
+        val input = (0 until rows.length()).map { rows.getJSONObject(it) }
+        val matches = CompanionMemorySearch.find(input, text)
+        val candidates = matches.items.take(3).map { row ->
+            (if (row.optString("status") == "pending") "待确认" else "已确认") to row.getString("text")
+        }
+        return MemorySimilarityReview(rows.toString(), candidates, matches.matchedCount > candidates.size)
+    }
+}
 
 /** Manual confirmation is explicit; no notification metadata or content is copied implicitly. */
 internal object CompanionUserMemory {

@@ -8,6 +8,21 @@ import org.junit.Test
 import java.nio.file.Files
 
 class CompanionMemoryEngineTest {
+    @Test fun similarMemoryReviewIsAdvisoryBoundedAndBecomesStaleAfterChanges() {
+        val rows = JSONArray()
+        CompanionUserMemory.add(rows, "我喜欢喝咖啡", "user_edit", 1L)
+        CompanionUserMemory.add(rows, "我不喜欢喝咖啡", "user_edit", 2L)
+        val review = CompanionMemorySimilarity.review(rows, "我喜欢喝咖啡")
+        assertTrue(review.candidates.any { it.second == "我喜欢喝咖啡" })
+        assertTrue(CompanionMemorySimilarity.isCurrent(rows, review.snapshot))
+        rows.getJSONObject(1).put("text", "我不喜欢喝茶")
+        assertFalse(CompanionMemorySimilarity.isCurrent(rows, review.snapshot))
+        val empty = CompanionMemorySimilarity.review(JSONArray(), "我喜欢咖啡")
+        assertTrue(empty.candidates.isEmpty())
+        val related = JSONArray().put(JSONObject().put("text", "我喜欢喝咖啡").put("status", "confirmed"))
+        val hint = CompanionMemorySimilarity.review(related, "我不喜欢喝咖啡")
+        assertEquals("已确认" to "我喜欢喝咖啡", hint.candidates.single())
+    }
     @Test fun malformedSurrogateIsRejectedWithoutReplacingUserText() {
         val raw = "{\"version\":1,\"items\":[{\"id\":\"00000000-0000-0000-0000-000000000001\",\"text\":\"\\uD800\"}]}"
         assertThrows(Exception::class.java) { CompanionMemoryFormat.parse(raw.toByteArray(Charsets.UTF_8)) }
