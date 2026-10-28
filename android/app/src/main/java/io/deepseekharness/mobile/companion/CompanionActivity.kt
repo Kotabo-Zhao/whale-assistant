@@ -34,9 +34,37 @@ class CompanionActivity : AppCompatActivity() {
         setColor(Color.parseColor(color)); cornerRadius = dp(16).toFloat()
         if (stroke != null) setStroke(dp(1), Color.parseColor(stroke))
     }
+    private val memoryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val memoryHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var memoryBusy = false
+
+    private fun <T> runMemoryIo(message: String, work: () -> T, done: (Result<T>) -> Unit) {
+        if (memoryBusy || isFinishing || isDestroyed) {
+            android.widget.Toast.makeText(this, "记忆文件操作正在进行，请稍候。", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        memoryBusy = true
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
+        memoryExecutor.execute {
+            val result = runCatching(work)
+            memoryHandler.post {
+                if (!isFinishing && !isDestroyed) {
+                    memoryBusy = false
+                    done(result)
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // A confirmed write may finish; do not show its result on a destroyed activity.
+        memoryExecutor.shutdown()
+    }
+
     private val memoryImport = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            val result = runCatching {
+            runMemoryIo("正在读取记忆文件…", {
                 val bytes = contentResolver.openInputStream(uri)?.use { input ->
                     val output = java.io.ByteArrayOutputStream()
                     val buffer = ByteArray(8192)
@@ -50,32 +78,35 @@ class CompanionActivity : AppCompatActivity() {
                     output.toByteArray()
                 } ?: error("无法读取文件")
                 CompanionMemoryStore(this).previewImport(bytes)
-            }
+            }) { result ->
             result.onSuccess { plan ->
                 val rows = org.json.JSONArray(plan.additions)
                 val details = (0 until rows.length()).joinToString("\n\n") { index -> "${index + 1}. ${rows.getJSONObject(index).getString("text")}" }
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对要导入的记忆")
                     .setMessage("将新增 ${rows.length()} 条，跳过 ${plan.skipped} 条已有 ID 或相同内容。现有记忆不会被覆盖。\n\n" + if (details.isEmpty()) "没有需要新增的记忆。" else details)
                     .setNegativeButton("取消", null).setPositiveButton("确认合并") { _, _ ->
-                        runCatching { CompanionMemoryStore(this).applyImport(plan) }
-                            .onSuccess { android.widget.Toast.makeText(this, "已导入 $it 条记忆", android.widget.Toast.LENGTH_LONG).show() }
-                            .onFailure { android.widget.Toast.makeText(this, "导入失败，原记忆已保留；请重新选择文件核对。", android.widget.Toast.LENGTH_LONG).show() }
+                        runMemoryIo("正在合并记忆…", { CompanionMemoryStore(this).applyImport(plan) }) { outcome ->
+                            outcome.onSuccess { android.widget.Toast.makeText(this, "已导入 $it 条记忆", android.widget.Toast.LENGTH_LONG).show() }
+                                .onFailure { android.widget.Toast.makeText(this, "导入失败，原记忆已保留；请重新选择文件核对。", android.widget.Toast.LENGTH_LONG).show() }
+                        }
                     }.show()
             }.onFailure {
                 android.widget.Toast.makeText(this, "无法读取或验证记忆文件，原记忆已保留。", android.widget.Toast.LENGTH_LONG).show()
+            }
             }
         }
     }
 
     private val memoryExport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
-            val result = runCatching {
+            runMemoryIo("正在导出记忆…", {
                 // Read and validate before opening the selected output, so a bad store cannot overwrite it.
                 val bytes = CompanionMemoryStore(this).exportForUser()
                 val stream = contentResolver.openOutputStream(uri, "wt") ?: error("无法打开文件")
                 stream.use { it.write(bytes); it.flush() }
+            }) { result ->
+                android.widget.Toast.makeText(this, if (result.isSuccess) "记忆已导出" else "导出失败，请检查保存位置；原记忆未改变。", android.widget.Toast.LENGTH_LONG).show()
             }
-            android.widget.Toast.makeText(this, if (result.isSuccess) "记忆已导出" else "导出失败，请检查保存位置；原记忆未改变。", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -117,8 +148,8 @@ class CompanionActivity : AppCompatActivity() {
         toggle("允许助手使用长期记忆", memory.enabled) { memory.enabled = it }
         paragraph("助手可保存和检索长期偏好；相关内容可能发送给当前模型服务。记忆保存在应用私有存储，运行环境更新不会清空；卸载应用会删除。")
         button("查看、编辑和删除长期记忆") { showMemories() }
-        button("导出长期记忆") { memoryExport.launch("whale-memory.json") }
-        button("从文件导入记忆") { memoryImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+        button("导出长期记忆") { if (!memoryBusy) memoryExport.launch("whale-memory.json") else paragraph("记忆文件操作正在进行，请稍候。") }
+        button("从文件导入记忆") { if (!memoryBusy) memoryImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("记忆文件操作正在进行，请稍候。") }
         paragraph("导出为未加密 JSON，包含所有记忆和来源；由你选择保存位置，云盘等服务可能同步文件。导入前会显示待新增内容，由你确认后合并。")
         button("清空全部长期记忆") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清空长期记忆？")
