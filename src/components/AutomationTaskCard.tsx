@@ -99,7 +99,7 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
     {task !== null && <>
       <p className="settings-note">
         <strong>{t('目标应用：{0}', task.packageName)}</strong>
-        {` · ${t(TASK_STATUS_LABELS[task.status] ?? task.status)}`}
+        {` · ${t(task.status === 'done' && task.steps.some(step => step.code === 'AUTOMATION_TASK_ACTION_UNVERIFIED') ? '步骤已结束，部分结果未验证' : TASK_STATUS_LABELS[task.status] ?? task.status)}`}
       </p>
       <p className="settings-note">{t('进度：已收口 {0} 步，待执行 {1} 步，共 {2} 步。', String(task.settledSteps), String(task.pendingSteps), String(task.steps.length))}</p>
       {task.lastMessage !== null && <p className="settings-note">
@@ -108,7 +108,7 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
       </p>}
       {task.steps.map(step => <p className="settings-note" key={step.id}>
         <strong>{t(ACTION_LABELS[step.action] ?? step.action)}</strong>
-        {` · ${t(STEP_STATUS_LABELS[step.status] ?? step.status)}`}
+        {` · ${t(step.code === 'AUTOMATION_TASK_ACTION_UNVERIFIED' ? '已记录，结果未验证' : STEP_STATUS_LABELS[step.status] ?? step.status)}`}
         {step.attempts > 1 ? t(' · 已试 {0} 次', String(step.attempts)) : ''}
         {step.code !== null ? `（${step.code}）` : ''}
       </p>)}

@@ -139,6 +139,43 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `未要求画面验证的动作仍需实际回执且不宣称已验证`() {
+        val ledger = ledger(spec("s1", action = AutomationTaskActions.SCROLL, verify = AutomationTaskActions.VERIFY_NONE), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        val state = ledger.snapshot(); val step = state.steps[0]
+        val claim = AutomationTaskStepOutcome(ok = true, verified = true)
+        val absent = AutomationTaskEvidence.constrain(state.taskId, step, claim, "d1", null, 1200L)
+        assertFalse(absent.ok)
+        ledger.record("s1", 1, absent, 1200L)
+        assertEquals(AutomationTaskStepStatus.UNKNOWN, ledger.snapshot().steps[0].status)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s2", facts(), 1300L).refusedCode())
+
+        val good = ledger(spec("s1", action = AutomationTaskActions.SCROLL, verify = AutomationTaskActions.VERIFY_NONE))
+        good.gate("s1", facts(), 1000L)
+        val current = good.snapshot()
+        val receipt = AutomationTaskEvidence.receipt(current, "com.example.app", "scroll", "com.example.app:id/ok", 1100L)
+        val outcome = AutomationTaskEvidence.constrain(current.taskId, current.steps[0], claim, "d1", receipt, 1200L)
+        assertTrue(outcome.ok)
+        assertEquals(AutomationTaskCodes.ACTION_UNVERIFIED, good.record("s1", 1, outcome, 1200L).steps[0].code)
+    }
+
+    @Test
+    fun `包变化仅靠调用者声称不能算验证`() {
+        val ledger = ledger(spec("back", action = AutomationTaskActions.BACK, verify = AutomationTaskActions.VERIFY_PACKAGE_CHANGED))
+        ledger.gate("back", facts(), 1000L)
+        val state = ledger.snapshot()
+        val outcome = AutomationTaskEvidence.constrain(state.taskId, state.steps[0], AutomationTaskStepOutcome(ok = true, verified = true), "other", null, 1200L)
+        assertFalse(outcome.verified)
+        assertEquals(AutomationTaskStepStatus.UNKNOWN, ledger.record("back", 1, outcome, 1200L).steps[0].status)
+        val noVerification = ledger(spec("back", action = AutomationTaskActions.BACK, verify = AutomationTaskActions.VERIFY_NONE))
+        noVerification.gate("back", facts(), 1000L)
+        val state2 = noVerification.snapshot()
+        val unchecked = AutomationTaskEvidence.constrain(state2.taskId, state2.steps[0], AutomationTaskStepOutcome(ok = true), "d1", null, 1200L)
+        assertFalse(unchecked.ok)
+        assertEquals(AutomationTaskStepStatus.UNKNOWN, noVerification.record("back", 1, unchecked, 1200L).steps[0].status)
+    }
+
+    @Test
     fun `目标消失验证需要匹配动作且真实查询目标缺失`() {
         val ledger = ledger(spec("s1", verify = AutomationTaskActions.VERIFY_TARGET_GONE), spec("s2"))
         ledger.gate("s1", facts(), 1000L)

@@ -1858,6 +1858,8 @@ export const english: Readonly<Record<string, string>> = {
   "已计划，还没有发出任何一步": "Planned; no step has been sent yet",
   "正在执行": "Running",
   "已经完成": "Finished",
+  "步骤已结束，部分结果未验证": "Steps finished; some results are unverified",
+  "已记录，结果未验证": "Recorded; result unverified",
   "失败了": "Failed",
   "被挡住了：目标变了，要重新读页面再继续": "Blocked: the target changed, so the page has to be read again before continuing",
   "已经停止": "Stopped",

@@ -61,6 +61,7 @@ internal object AutomationTaskCodes {
     const val ATTEMPTS_EXHAUSTED = "AUTOMATION_TASK_ATTEMPTS_EXHAUSTED"
     const val NEEDS_CHECK = "AUTOMATION_TASK_NEEDS_CHECK"
     const val VERIFIED = "AUTOMATION_TASK_VERIFIED"
+    const val ACTION_UNVERIFIED = "AUTOMATION_TASK_ACTION_UNVERIFIED"
     const val NOT_VERIFIED = "AUTOMATION_TASK_NOT_VERIFIED"
 }
 
@@ -224,10 +225,18 @@ internal object AutomationTaskEvidence {
             if (action == AutomationTaskActions.SET_TEXT) textDigest(text) else null)
     }
     fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long, targetPresent: Boolean? = null, observedTextDigest: String? = null): AutomationTaskStepOutcome {
-        if (step == null || !outcome.ok || step.verify !in setOf(AutomationTaskActions.VERIFY_WINDOW_CHANGED, AutomationTaskActions.VERIFY_TARGET_GONE, AutomationTaskActions.VERIFY_TEXT_APPLIED)) return outcome
+        if (step == null || !outcome.ok) return outcome
         val started = step.startedAtMs
         val matched = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
             receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs
+        // Even when no visual verification was requested, click/text/scroll require proof of dispatch.
+        if (step.action in setOf(AutomationTaskActions.CLICK, AutomationTaskActions.SET_TEXT, AutomationTaskActions.SCROLL) && !matched) {
+            return outcome.copy(ok = false, verified = false, code = AutomationTaskCodes.NOT_VERIFIED)
+        }
+        // No bound global-back receipt/foreground evidence exists yet, even if verification was disabled.
+        if (step.action == AutomationTaskActions.BACK) return outcome.copy(ok = false, verified = false, code = AutomationTaskCodes.NOT_VERIFIED)
+        if (step.verify == AutomationTaskActions.VERIFY_PACKAGE_CHANGED) return outcome.copy(verified = false)
+        if (step.verify == AutomationTaskActions.VERIFY_NONE) return outcome
         val observed = when (step.verify) {
             AutomationTaskActions.VERIFY_WINDOW_CHANGED -> step.startedDigest != null && observedDigest.isNotEmpty() && step.startedDigest != observedDigest
             AutomationTaskActions.VERIFY_TARGET_GONE -> targetPresent == false
@@ -610,7 +619,8 @@ internal class AutomationTaskLedger {
         val needsVerify = AutomationTaskActions.requiresVerification(step.verify)
         return when {
             outcome.timedOut -> step.copy(status = AutomationTaskStepStatus.UNKNOWN, code = AutomationTaskCodes.TIMEOUT)
-            outcome.ok && (!needsVerify || outcome.verified) -> step.copy(status = AutomationTaskStepStatus.OK, code = AutomationTaskCodes.VERIFIED)
+            outcome.ok && !needsVerify -> step.copy(status = AutomationTaskStepStatus.OK, code = AutomationTaskCodes.ACTION_UNVERIFIED)
+            outcome.ok && outcome.verified -> step.copy(status = AutomationTaskStepStatus.OK, code = AutomationTaskCodes.VERIFIED)
             outcome.ok -> step.copy(status = AutomationTaskStepStatus.UNKNOWN, code = AutomationTaskCodes.NOT_VERIFIED)
             needsVerify && !outcome.verified -> step.copy(status = AutomationTaskStepStatus.UNKNOWN, code = AutomationTaskCodes.NOT_VERIFIED)
             outcome.code != null && outcome.code in AutomationTaskRetry.RETRYABLE ->
@@ -620,9 +630,10 @@ internal class AutomationTaskLedger {
     }
 
     private fun message(step: AutomationTaskStepState): String = when (step.code) {
-        AutomationTaskCodes.VERIFIED -> "第 ${step.id} 步已完成"
+        AutomationTaskCodes.VERIFIED -> "第 ${step.id} 步已验证"
+        AutomationTaskCodes.ACTION_UNVERIFIED -> "第 ${step.id} 步已记录，但未独立验证结果"
         AutomationTaskCodes.TIMEOUT -> "第 ${step.id} 步超时：这次是否已经生效不确定，请先确认现场再决定"
-        AutomationTaskCodes.NOT_VERIFIED -> "第 ${step.id} 步发出去了但没有观察到预期变化：先确认现场，不要直接重发"
+        AutomationTaskCodes.NOT_VERIFIED -> "第 ${step.id} 步结果未验证或缺少动作回执：先确认现场，不要直接重发"
         AutomationTaskCodes.NEEDS_CHECK -> "第 ${step.id} 步结果不确定（${step.code ?: "无码"}）：先确认现场"
         else -> "第 ${step.id} 步失败：${step.code ?: "无码"}"
     }

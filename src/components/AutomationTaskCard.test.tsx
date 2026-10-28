@@ -79,6 +79,14 @@ describe('自动化任务卡片', () => {
     row('输入文字 · 待执行')
   })
 
+  it('完成的步骤若未验证结果，不把任务描述为已经完成', async () => {
+    card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: task({
+      status: 'done', pendingSteps: 0, steps: [step('s1', { action: 'scroll', status: 'ok', code: 'AUTOMATION_TASK_ACTION_UNVERIFIED' })],
+    }) }) })
+    await findRow('目标应用：com.example.chat · 步骤已结束，部分结果未验证')
+    row('滚动 · 已记录，结果未验证（AUTOMATION_TASK_ACTION_UNVERIFIED）')
+  })
+
   it('不确定的步骤写明「不要重发」并带上受控码', async () => {
     card({
       getAutomationTaskState: vi.fn().mockResolvedValue({
