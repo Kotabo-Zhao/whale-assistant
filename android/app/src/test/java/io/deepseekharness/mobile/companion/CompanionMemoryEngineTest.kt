@@ -43,4 +43,15 @@ class CompanionMemoryEngineTest {
             } catch (error: RuntimeFailure) { assertEquals("MEMORY_INPUT_INVALID", error.code) }
         }
     }
+    @Test fun exportsVersionedUtf8SnapshotWithoutModifyingItems() {
+        val items = JSONArray().put(JSONObject().put("id", "00000000-0000-0000-0000-000000000001")
+            .put("text", "喜欢蓝色 🐋").put("source", "user_edit"))
+        val before = items.toString()
+        val exported = JSONObject(String(CompanionMemoryExport.encode(items), Charsets.UTF_8))
+        assertEquals(1, exported.getInt("version"))
+        assertEquals("喜欢蓝色 🐋", exported.getJSONArray("items").getJSONObject(0).getString("text"))
+        assertEquals("user_edit", exported.getJSONArray("items").getJSONObject(0).getString("source"))
+        assertEquals(before, items.toString())
+        assertEquals(0, JSONObject(String(CompanionMemoryExport.encode(JSONArray()), Charsets.UTF_8)).getJSONArray("items").length())
+    }
 }

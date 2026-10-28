@@ -25,6 +25,7 @@ class CompanionMemoryStore(context: Context) {
 
     /** UI management remains available even when model access is disabled. */
     fun listForUser(): JSONArray = synchronized(lock) { load() }
+    fun exportForUser(): ByteArray = synchronized(lock) { CompanionMemoryExport.encode(load()) }
     fun deleteForUser(id: String): Boolean = synchronized(lock) {
         val rows = load(); val kept = JSONArray(); var removed = false
         for (index in 0 until rows.length()) { val row = rows.getJSONObject(index); if (row.getString("id") == id) removed = true else kept.put(row) }
@@ -115,4 +116,10 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
     }
 
     private fun invalid() = RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数无效或包含敏感内容")
+}
+
+/** Export is a user-selected snapshot; it does not alter or migrate the stored data. */
+internal object CompanionMemoryExport {
+    fun encode(items: JSONArray): ByteArray = JSONObject().put("version", 1).put("items", items)
+        .toString(2).toByteArray(Charsets.UTF_8)
 }

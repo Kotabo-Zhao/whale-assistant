@@ -34,6 +34,18 @@ class CompanionActivity : AppCompatActivity() {
         setColor(Color.parseColor(color)); cornerRadius = dp(16).toFloat()
         if (stroke != null) setStroke(dp(1), Color.parseColor(stroke))
     }
+    private val memoryExport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            val result = runCatching {
+                // Read and validate before opening the selected output, so a bad store cannot overwrite it.
+                val bytes = CompanionMemoryStore(this).exportForUser()
+                val stream = contentResolver.openOutputStream(uri, "wt") ?: error("无法打开文件")
+                stream.use { it.write(bytes); it.flush() }
+            }
+            android.widget.Toast.makeText(this, if (result.isSuccess) "记忆已导出" else "导出失败，请检查保存位置；原记忆未改变。", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     private val voiceInput = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
@@ -72,6 +84,8 @@ class CompanionActivity : AppCompatActivity() {
         toggle("允许助手使用长期记忆", memory.enabled) { memory.enabled = it }
         paragraph("助手可保存和检索长期偏好；相关内容可能发送给当前模型服务。记忆保存在应用私有存储，运行环境更新不会清空；卸载应用会删除。")
         button("查看、编辑和删除长期记忆") { showMemories() }
+        button("导出长期记忆") { memoryExport.launch("whale-memory.json") }
+        paragraph("导出为未加密 JSON，包含所有记忆和来源；由你选择保存位置，云盘等服务可能同步文件。当前版本仅支持导出，不能从文件恢复。")
         button("清空全部长期记忆") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清空长期记忆？")
                 .setMessage("这会删除全部长期记忆，无法撤销。")
