@@ -1109,26 +1109,30 @@ class CompanionActivity : AppCompatActivity() {
 
     private fun showBrief() {
         if (briefBusy) { android.widget.Toast.makeText(this, "正在读取简报，请稍候。", android.widget.Toast.LENGTH_SHORT).show(); return }
-        val records = recordsOrNull()
-        val notifications = if (records == null) "通知记录读取失败，请检查本地数据。" else if (records.length() == 0) {
-            "没有可用的本地通知记录；请检查采集开关和通知读取权限。"
-        } else {
-            val lines = CompanionBrief.counts(records).entries.joinToString("\n") { "${it.key}：${it.value} 条" }
-            val recent = (maxOf(0, records.length() - 3) until records.length()).reversed().map { index ->
-                val row = records.getJSONObject(index)
-                val pkg = row.optString("package")
-                val source = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
-                val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.optLong("time")))
-                "$source · $time\n${row.optString("title")} ${row.optString("text")}"
-            }.joinToString("\n\n")
-            "最近保留的 ${records.length()} 条通知：\n$lines\n\n最近记录：\n$recent"
-        }
         briefBusy = true
         android.widget.Toast.makeText(this, "正在读取本地简报…", android.widget.Toast.LENGTH_SHORT).show()
         val app = applicationContext
         briefExecutor.execute {
             val checkedAt = System.currentTimeMillis()
             val zone = java.util.TimeZone.getDefault()
+            // Reading and parsing the local snapshot and resolving application labels can
+            // block on storage or PackageManager; keep them off the UI thread.
+            val notifications = runCatching {
+                val records = CompanionStore(app).read()
+                if (records.length() == 0) "没有可用的本地通知记录；请检查采集开关和通知读取权限。"
+                else {
+                    val lines = CompanionBrief.counts(records).entries.joinToString("\n") { "${it.key}：${it.value} 条" }
+                    val formatter = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }
+                    val recent = (maxOf(0, records.length() - 3) until records.length()).reversed().map { index ->
+                        val row = records.getJSONObject(index)
+                        val pkg = row.optString("package")
+                        val source = runCatching { app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+                        val time = formatter.format(Date(row.optLong("time")))
+                        "$source · $time\n${row.optString("title")} ${row.optString("text")}"
+                    }.joinToString("\n\n")
+                    "最近保留的 ${records.length()} 条通知：\n$lines\n\n最近记录：\n$recent"
+                }
+            }.getOrElse { "通知记录读取失败，原数据已保留；请检查本地数据。" }
             val calendar = CompanionCalendar.read(app, checkedAt, zone)
             val once = runCatching { CompanionBriefReminders.read(CompanionReminder(app).list(), false, checkedAt, zone.toZoneId()) }
             val repeating = runCatching { CompanionBriefReminders.read(CompanionRecurringReminder(app).list(), true, checkedAt, zone.toZoneId()) }
