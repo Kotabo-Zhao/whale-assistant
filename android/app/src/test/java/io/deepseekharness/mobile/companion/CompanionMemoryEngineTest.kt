@@ -8,6 +8,20 @@ import org.junit.Test
 import java.nio.file.Files
 
 class CompanionMemoryEngineTest {
+    @Test fun memoryFileRejectsInvalidUtf8DuplicateIdsAndMalformedStructure() {
+        val id = "00000000-0000-0000-0000-000000000001"
+        val legacy = JSONArray().put(JSONObject().put("id", id).put("text", "旧记忆"))
+        val bytes = CompanionMemoryExport.encode(legacy)
+        assertEquals("旧记忆", CompanionMemoryFormat.parse(bytes).getJSONObject(0).getString("text"))
+        val duplicate = JSONArray(legacy.toString()).put(JSONObject().put("id", id).put("text", "另一条"))
+        assertThrows(Exception::class.java) { CompanionMemoryFormat.parse(CompanionMemoryExport.encode(duplicate)) }
+        assertThrows(Exception::class.java) { CompanionMemoryFormat.parse("{\"version\":\"1\",\"items\":[]}".toByteArray()) }
+        assertThrows(Exception::class.java) { CompanionMemoryFormat.parse("{\"version\":1,\"items\":[{\"id\":42,\"text\":\"x\"}]}".toByteArray()) }
+        assertThrows(Exception::class.java) { CompanionMemoryFormat.parse(byteArrayOf(0xc3.toByte(), 0x28)) }
+        assertThrows(Exception::class.java) { CompanionMemoryFormat.parse(ByteArray(CompanionMemoryFormat.MAX_BYTES + 1)) }
+        val invalidStatus = JSONArray(legacy.toString()); invalidStatus.getJSONObject(0).put("status", "unknown")
+        assertThrows(Exception::class.java) { CompanionMemoryFormat.parse(CompanionMemoryExport.encode(invalidStatus)) }
+    }
     @Test fun confirmedMemoryEditsAndDeletesAreBoundToReviewedRecord() {
         val rows = JSONArray()
         CompanionUserMemory.add(rows, "原记忆", "user_notification", 100L)

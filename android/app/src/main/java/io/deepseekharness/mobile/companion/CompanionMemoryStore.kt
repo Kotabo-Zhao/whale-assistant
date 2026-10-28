@@ -74,18 +74,7 @@ class CompanionMemoryStore(context: Context) {
     private fun load(): JSONArray {
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return JSONArray()
         try {
-            val bytes = file.readFully()
-            if (bytes.size > 256_000) throw IllegalStateException("memory too large")
-            val root = JSONObject(String(bytes, Charsets.UTF_8))
-            if (root.getInt("version") != 1) throw IllegalStateException("unknown memory version")
-            val rows = root.getJSONArray("items")
-            if (rows.length() > 100) throw IllegalStateException("too many memories")
-            for (index in 0 until rows.length()) {
-                val row = rows.getJSONObject(index)
-                if (!row.getString("id").matches(Regex("[a-f0-9-]{36}")) || row.getString("text").length > 600) throw IllegalStateException("bad memory")
-                if (row.has("status") && row.optString("status") !in setOf("pending", "confirmed")) throw IllegalStateException("unknown memory status")
-            }
-            return rows
+            return CompanionMemoryFormat.parse(file.readFully())
         } catch (e: Exception) {
             throw RuntimeFailure("MEMORY_READ_FAILED", "无法读取记忆，原文件已保留", e)
         }
@@ -94,10 +83,39 @@ class CompanionMemoryStore(context: Context) {
     private fun write(rows: JSONArray) {
         val bytes = JSONObject().put("version", 1).put("items", rows).toString().toByteArray(Charsets.UTF_8)
         var stream: java.io.FileOutputStream? = null
-        try { stream = file.startWrite(); stream.write(bytes); file.finishWrite(stream) }
+        try {
+            // Check the complete serialized state before touching the atomic file.
+            CompanionMemoryFormat.parse(bytes)
+            stream = file.startWrite(); stream.write(bytes); file.finishWrite(stream)
+        }
         catch (e: Exception) { if (stream != null) file.failWrite(stream); throw RuntimeFailure("MEMORY_WRITE_FAILED", "记忆保存失败，原数据已保留", e) }
     }
     companion object { private val lock = Any() }
+}
+
+/** Strict decoding and bounded structure, while accepting legacy rows without status or source. */
+internal object CompanionMemoryFormat {
+    const val MAX_BYTES = 256_000
+    private val idPattern = Regex("[a-f0-9-]{36}")
+    fun parse(bytes: ByteArray): JSONArray {
+        require(bytes.size <= MAX_BYTES) { "memory too large" }
+        val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        val root = JSONObject(decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString())
+        val version = root.opt("version")
+        require((version is Int || version is Long) && (version as Number).toLong() == 1L) { "unknown memory version" }
+        val rows = root.getJSONArray("items")
+        require(rows.length() <= 100) { "too many memories" }
+        val ids = mutableSetOf<String>()
+        for (index in 0 until rows.length()) {
+            val row = rows.getJSONObject(index)
+            val id = row.opt("id") as? String ?: error("bad memory id")
+            val text = row.opt("text") as? String ?: error("bad memory text")
+            require(idPattern.matches(id) && ids.add(id) && text.length <= 600) { "bad memory" }
+            if (row.has("status")) require(row.opt("status") is String && row.getString("status") in setOf("pending", "confirmed")) { "unknown memory status" }
+        }
+        return rows
+    }
 }
 
 internal enum class UserMemoryResult { ADDED, EXISTING_PENDING, EXISTING_CONFIRMED }
