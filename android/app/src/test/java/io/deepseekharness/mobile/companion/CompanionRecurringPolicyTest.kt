@@ -28,6 +28,22 @@ class CompanionRecurringPolicyTest {
         row.put("state", "failed").put("nextAt", due)
         assertFalse(CompanionRecurringPolicy.claim(row, due, zone))
     }
+    @Test fun interruptedSchedulingIsRecoveredWithoutReplayingAnOverdueOccurrence() {
+        val zone = ZoneId.of("Asia/Shanghai")
+        val now = ZonedDateTime.of(2026, 10, 29, 10, 0, 0, 0, zone).toInstant().toEpochMilli()
+        val row = org.json.JSONObject().put("state", "scheduled").put("nextAt", now - 1).put("hour", 9).put("minute", 0)
+            .put("weekday", 0).put("schedulePending", true).put("last", "pending")
+        assertTrue(CompanionRecurringPolicy.prepareRecovery(row, now, zone))
+        assertEquals("missed", row.getString("last"))
+        assertEquals("2026-10-30T09:00+08:00[Asia/Shanghai]", java.time.Instant.ofEpochMilli(row.getLong("nextAt")).atZone(zone).toString())
+        assertTrue(row.getBoolean("schedulePending"))
+        row.put("schedulePending", false)
+        assertFalse(CompanionRecurringPolicy.prepareRecovery(row, now, zone))
+        row.put("state", "failed").put("schedulePending", true)
+        assertFalse(CompanionRecurringPolicy.prepareRecovery(row, now, zone))
+        val legacy = org.json.JSONObject().put("state", "scheduled").put("nextAt", now + 100)
+        assertFalse(CompanionRecurringPolicy.prepareRecovery(legacy, now, zone))
+    }
     @Test fun daylightSavingGapMovesToFirstValidTimeAndInvalidRulesFail() {
         val zone = ZoneId.of("America/New_York")
         val now = ZonedDateTime.of(2026, 3, 7, 12, 0, 0, 0, zone).toInstant().toEpochMilli()

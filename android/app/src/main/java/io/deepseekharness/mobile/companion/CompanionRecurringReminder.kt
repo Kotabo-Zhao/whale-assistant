@@ -36,7 +36,14 @@ internal object CompanionRecurringPolicy {
     fun claim(row: JSONObject, now: Long, zone: ZoneId): Boolean {
         if (row.optString("state") != "scheduled" || row.getLong("nextAt") > now) return false
         val following = next(now, row.getInt("hour"), row.getInt("minute"), row.getInt("weekday"), zone)
-        row.put("nextAt", following).put("last", "pending")
+        row.put("nextAt", following).put("last", "pending").put("schedulePending", true)
+        return true
+    }
+    fun prepareRecovery(row: JSONObject, now: Long, zone: ZoneId): Boolean {
+        if (row.optString("state") != "scheduled" || !row.optBoolean("schedulePending", false)) return false
+        if (row.getLong("nextAt") <= now) {
+            row.put("nextAt", next(now, row.getInt("hour"), row.getInt("minute"), row.getInt("weekday"), zone)).put("last", "missed")
+        }
         return true
     }
 }
@@ -52,9 +59,10 @@ internal class CompanionRecurringReminder(context: Context) {
         val next = CompanionRecurringPolicy.next(System.currentTimeMillis(), hour, minute, weekday, ZoneId.systemDefault())
         val rows = read(); require(rows.length() < 50) { "重复提醒已满，请先删除" }
         val row = JSONObject().put("id", UUID.randomUUID().toString()).put("text", content).put("hour", hour)
-            .put("minute", minute).put("weekday", weekday).put("nextAt", next).put("state", "scheduled").put("last", "none")
+            .put("minute", minute).put("weekday", weekday).put("nextAt", next).put("state", "scheduled").put("last", "none").put("schedulePending", true)
         rows.put(row); save(rows)
-        try { schedule(row) } catch (e: Exception) { row.put("state", "failed"); save(rows); throw e }
+        try { schedule(row); row.put("schedulePending", false); save(rows) }
+        catch (e: Exception) { row.put("state", "failed").put("schedulePending", false); save(rows); throw e }
     }
     fun remove(id: String) = synchronized(lock) {
         val rows = read(); val kept = JSONArray(); var found = false
@@ -68,15 +76,29 @@ internal class CompanionRecurringReminder(context: Context) {
         val rows = read()
         val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("id") == id } ?: error("提醒已不存在")
         require(row.optString("state") == "failed") { "提醒仍在安排中" }
-        row.put("nextAt", next(row, System.currentTimeMillis())).put("state", "scheduled")
+        row.put("nextAt", next(row, System.currentTimeMillis())).put("state", "scheduled").put("schedulePending", true)
         save(rows)
-        try { schedule(row) } catch (e: Exception) { row.put("state", "failed"); save(rows); throw e }
+        try { schedule(row); row.put("schedulePending", false); save(rows) }
+        catch (e: Exception) { row.put("state", "failed").put("schedulePending", false); save(rows); throw e }
+    }
+    fun recoverPending(now: Long = System.currentTimeMillis()) = synchronized(lock) {
+        val rows = read()
+        for (i in 0 until rows.length()) {
+            val row = rows.getJSONObject(i)
+            if (!CompanionRecurringPolicy.prepareRecovery(row, now, ZoneId.systemDefault())) continue
+            // Commit the future occurrence first, then use the same PendingIntent to safely replace any existing alarm.
+            save(rows)
+            try { schedule(row); row.put("schedulePending", false) }
+            catch (_: Exception) { row.put("state", "failed").put("schedulePending", false) }
+            save(rows)
+        }
     }
     fun restore(recalculate: Boolean = false, now: Long = System.currentTimeMillis()) = synchronized(lock) {
         val rows = read(); var changed = false
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i)
             if (row.optString("state") != "scheduled") continue
+            row.put("schedulePending", true); changed = true
             val overdue = row.getLong("nextAt") <= now
             if (overdue || recalculate) {
                 row.put("nextAt", next(row, now)); if (overdue) row.put("last", "missed")
@@ -87,7 +109,9 @@ internal class CompanionRecurringReminder(context: Context) {
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i)
             if (row.optString("state") == "scheduled") {
-                try { schedule(row) } catch (_: Exception) { row.put("state", "failed"); changed = true }
+                try { schedule(row); row.put("schedulePending", false) }
+                catch (_: Exception) { row.put("state", "failed").put("schedulePending", false) }
+                changed = true
             }
         }
         if (changed) save(rows)
@@ -98,7 +122,9 @@ internal class CompanionRecurringReminder(context: Context) {
         if (!CompanionRecurringPolicy.claim(row, now, ZoneId.systemDefault())) return
         // Persist the next occurrence before notification, so duplicate broadcasts do not replay this one.
         save(rows)
-        try { schedule(row) } catch (_: Exception) { row.put("state", "failed") }
+        try { schedule(row); row.put("schedulePending", false) }
+        catch (_: Exception) { row.put("state", "failed").put("schedulePending", false) }
+        save(rows)
         val result = runCatching {
             val manager = app.getSystemService(NotificationManager::class.java) ?: error("notification unavailable")
             manager.createNotificationChannel(NotificationChannel(CompanionReminderHealth.CHANNEL, "鲸鱼娘提醒", NotificationManager.IMPORTANCE_DEFAULT))
@@ -130,11 +156,20 @@ internal class CompanionRecurringReminder(context: Context) {
             val row = rows.getJSONObject(i); UUID.fromString(row.getString("id"))
             require(row.getString("text").length in 1..200 && row.getInt("hour") in 0..23 && row.getInt("minute") in 0..59 && row.getInt("weekday") in 0..7 && row.getLong("nextAt") > 0)
             require(row.getString("state") in setOf("scheduled", "failed"))
+            require(!row.has("schedulePending") || row.opt("schedulePending") is Boolean)
         }
         return rows
     }
     private fun save(rows: JSONArray) { check(prefs.edit().putString("items", rows.toString()).commit()) { "无法保存重复提醒" } }
-    companion object { private val lock = Any(); const val ACTION_DELIVER = "io.deepseekharness.mobile.RECURRING_REMINDER" }
+    companion object {
+        private val lock = Any()
+        const val ACTION_DELIVER = "io.deepseekharness.mobile.RECURRING_REMINDER"
+        private val recoveryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { work -> Thread(work, "recurring-recovery").apply { isDaemon = true } }
+        fun requestRecovery(context: Context) {
+            val app = context.applicationContext
+            recoveryExecutor.execute { runCatching { CompanionRecurringReminder(app).recoverPending() } }
+        }
+    }
 }
 
 class CompanionRecurringReceiver : BroadcastReceiver() {

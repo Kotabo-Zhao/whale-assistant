@@ -152,6 +152,7 @@ class CompanionActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CompanionRecurringReminder.requestRecovery(applicationContext)
         store = CompanionStore(this)
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -574,7 +575,11 @@ class CompanionActivity : AppCompatActivity() {
         val labels = Array(rows.length()) { index ->
             val row = rows.getJSONObject(index)
             val next = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.getLong("nextAt")))
-            val state = if (row.optString("state") == "scheduled") "已安排" else "安排失败"
+            val state = when {
+                row.optString("state") != "scheduled" -> "安排失败"
+                row.optBoolean("schedulePending", false) -> "等待恢复安排"
+                else -> "已安排"
+            }
             val last = when (row.optString("last")) { "submitted" -> "上次已交给系统"; "failed" -> "上次投递失败"; "missed" -> "上次已错过"; "pending" -> "上次状态未确认"; else -> "尚无记录" }
             "${row.getString("text")} · ${days[row.getInt("weekday")]} ${"%02d:%02d".format(row.getInt("hour"), row.getInt("minute"))}\n$state · 下次 $next · $last"
         }

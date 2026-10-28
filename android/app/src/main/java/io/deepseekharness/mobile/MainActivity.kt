@@ -55,6 +55,7 @@ class MainActivity : BridgeActivity() {
         warmUpWebView()
         registerPlugin(MobileRuntimePlugin::class.java)
         super.onCreate(savedInstanceState)
+        io.deepseekharness.mobile.companion.CompanionRecurringReminder.requestRecovery(applicationContext)
         AppWindowInsets.apply(this)
         handleExternalFileIntent(intent)
         applySystemFontScale()
