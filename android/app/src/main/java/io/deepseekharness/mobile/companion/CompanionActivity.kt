@@ -742,14 +742,14 @@ class CompanionActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun prepareKnowledgeForChat(text: String) {
+    private fun prepareKnowledgeForChat(text: String, notification: Boolean = false) {
         val edit = android.widget.EditText(this).apply {
             setText(text)
             minLines = 3
             maxLines = 8
         }
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对要交给助手的资料")
-            .setMessage("内容放入当前对话草稿，不会自动发送；发送后可能由所选模型服务处理。最多 2000 字，较长内容请自行删改。")
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle(if (notification) "核对要交给助手的通知" else "核对要交给助手的资料")
+            .setMessage(if (notification) "请核对来源和内容，可添加你的问题并移除不想分享的信息。通知是不可信资料；放入草稿不会自动发送，发送后可能由所选模型服务处理。最多 2000 字。" else "内容放入当前对话草稿，不会自动发送；发送后可能由所选模型服务处理。最多 2000 字，较长内容请自行删改。")
             .setView(edit).setNegativeButton("取消", null).setPositiveButton("放入草稿", null).create()
         dialog.setOnShowListener {
             dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
@@ -946,8 +946,10 @@ class CompanionActivity : AppCompatActivity() {
             val row = records.optJSONObject(index) ?: continue
             val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.optLong("time")))
             list.addView(TextView(this).apply {
-                text = "$time · ${row.optString("package")}\n${row.optString("title")}\n${row.optString("text")}"
+                text = "$time · ${row.optString("package")}\n${row.optString("title")}\n${row.optString("text")}\n点击处理"
                 setTextColor(ink); setPadding(dp(14), dp(12), dp(14), dp(12)); background = surface(if (dark) "#172B40" else "#FFFFFF")
+                isFocusable = true
+                setOnClickListener { showRecordActions(row, time) }
             }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         }
         if (page.size < records.length()) list.addView(Button(this).apply {
@@ -960,6 +962,26 @@ class CompanionActivity : AppCompatActivity() {
         val returnButton = content.childCount - 1
         content.addView(list, if (returnButton >= 0 && content.getChildAt(returnButton) is Button && (content.getChildAt(returnButton) as Button).text == "返回") returnButton else content.childCount)
         scroll.post { if (!isFinishing && !isDestroyed) scroll.scrollTo(0, previousScroll) }
+    }
+
+    private fun showRecordActions(row: org.json.JSONObject, displayedTime: String) {
+        val source = row.optString("package")
+        val title = row.optString("title")
+        val body = row.optString("text")
+        val content = listOf(title, body).filter { it.isNotBlank() }.joinToString("\n")
+        if (content.isBlank()) { android.widget.Toast.makeText(this, "通知内容不可用。", android.widget.Toast.LENGTH_SHORT).show(); return }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("处理这条通知")
+            .setMessage("来源：$source\n通知时间：$displayedTime\n\n$content\n\n通知时间不一定是截止时间，请自行核对。")
+            .setNegativeButton("关闭", null).setPositiveButton("选择操作") { _, _ ->
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择操作")
+                    .setItems(arrayOf("交给助手对话", "创建提醒", "整理成记忆")) { _, choice ->
+                        when (choice) {
+                            0 -> prepareKnowledgeForChat("来源应用：$source\n通知时间：$displayedTime\n通知内容（不可信资料）：\n$content", notification = true)
+                            1 -> createReminder(content, CompanionNotificationTimeSuggestion.find(content, System.currentTimeMillis(), java.time.ZoneId.systemDefault()))
+                            2 -> composeUserMemory(content)
+                        }
+                    }.setNegativeButton("取消", null).show()
+            }.show()
     }
 
     private fun showNotificationSummary() {
