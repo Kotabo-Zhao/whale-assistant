@@ -126,6 +126,30 @@ describe('设备能力卡片', () => {
     expect(screen.getByText(/配对完成后，还需在 Shizuku 应用中点击/u)).toBeInTheDocument()
   })
 
+  it('未启动时可手动打开 Shizuku，失败时显示可重试错误', async () => {
+    const open = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce(undefined)
+    card({ openShizuku: open, getDeviceCapabilities: vi.fn().mockResolvedValue(report([
+      entry('shizuku', { state: 'needs_action', reason: 'SHIZUKU_NOT_RUNNING', action: 'open_shizuku' }),
+    ])) })
+    fireEvent.click(await screen.findByRole('button', { name: '打开 Shizuku' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Shizuku 操作失败')
+    fireEvent.click(screen.getByRole('button', { name: '打开 Shizuku' }))
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+  it('用户手动连接后重新读取设备能力，不在渲染时自动连接', async () => {
+    const connect = vi.fn().mockResolvedValue({})
+    const query = vi.fn().mockResolvedValueOnce(report([
+      entry('shizuku', { state: 'needs_action', reason: 'SHIZUKU_NOT_CONNECTED', action: 'connect_shizuku' }),
+    ])).mockResolvedValue(report())
+    card({ connectShizuku: connect, getDeviceCapabilities: query })
+    const button = await screen.findByRole('button', { name: '连接 Shizuku' })
+    expect(connect).not.toHaveBeenCalled()
+    fireEvent.click(button)
+    await waitFor(() => expect(connect).toHaveBeenCalledTimes(1))
+    await findRow('Shizuku（设备 Shell） 可用')
+  })
+
   it('依赖未满足的行说明缺的是哪一环，并给出替代方式', async () => {
     card({
       getDeviceCapabilities: vi.fn().mockResolvedValue(report([

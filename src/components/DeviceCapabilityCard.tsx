@@ -151,11 +151,16 @@ function RefreshAction({ refreshing, label, onClick }: { refreshing: boolean; la
  *    绝不显示成「六项都不可用」——把「读不到」说成「确认不可用」与事实相反。
  *  - **就绪的行不教用户去设置**：`ready` 的行不显示原因、下一步与替代方式，免得让人以为还要做什么；
  *    但 `degraded` 的行**要**说原因——那正是「能用但不完整」里最该知道的那一半。
- *  - 卡片本身**不写入任何浏览器存储**，也不触发任何动作。
+ *  - 仅在用户明确点击时提供 Shizuku 操作入口，不写入浏览器存储。
  */
 export function DeviceCapabilityCard({ bridge = runtimeBridge, onOpenDeviceShell }: { bridge?: RuntimeBridge; onOpenDeviceShell?: () => void }) {
   const [load, setLoad] = useState<CapabilityLoad>({ status: 'loading' })
   const [refreshing, setRefreshing] = useState(false)
+  const [actionBusy, setActionBusy] = useState(false)
+  const [actionError, setActionError] = useState(false)
+  const actionInFlight = useRef(false)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const requestId = useRef(0)
   const invalidate = useCallback(() => { requestId.current += 1 }, [])
 
@@ -196,6 +201,19 @@ export function DeviceCapabilityCard({ bridge = runtimeBridge, onOpenDeviceShell
 
   const report = load.status === 'ready' ? load.report : null
   const failed = load.status === 'failed'
+  const shizuku = report?.capabilities.find(entry => entry.id === 'shizuku')
+  const takeShizukuAction = async (kind: 'open' | 'grant' | 'connect') => {
+    if (actionInFlight.current) return
+    actionInFlight.current = true
+    setActionBusy(true); setActionError(false)
+    try {
+      if (kind === 'open') await bridge.openShizuku()
+      else if (kind === 'grant') await bridge.requestShizukuPermission()
+      else await bridge.connectShizuku()
+      if (mounted.current && kind !== 'open') await refresh(true)
+    } catch { if (mounted.current) setActionError(true) }
+    finally { actionInFlight.current = false; if (mounted.current) setActionBusy(false) }
+  }
 
   return <section className="settings-section" aria-labelledby="device-capabilities">
     <div className="section-title"><span className="section-icon"><Cpu size={19} /></span>
@@ -214,6 +232,17 @@ export function DeviceCapabilityCard({ bridge = runtimeBridge, onOpenDeviceShell
           {entry.alternative !== null && <>{' · '}{t('替代方式：{0}', t(ALTERNATIVE_NOTES[entry.alternative] ?? entry.alternative))}</>}
         </>}
       </p>)}
+    </div>}
+    {shizuku && shizuku.state !== 'ready' && <div className="device-capability-actions">
+      {(shizuku.action === 'install_shizuku' || shizuku.action === 'open_shizuku' || shizuku.reason === 'SHIZUKU_PERMISSION_DENIED') &&
+        <button className="button button-secondary compact-button" type="button" disabled={actionBusy} onClick={() => { void takeShizukuAction('open') }}>
+          {t(shizuku.action === 'install_shizuku' ? '安装 / 打开 Shizuku' : '打开 Shizuku')}
+        </button>}
+      {shizuku.action === 'grant_shizuku_permission' && shizuku.reason !== 'SHIZUKU_PERMISSION_DENIED' &&
+        <button className="button button-secondary compact-button" type="button" disabled={actionBusy} onClick={() => { void takeShizukuAction('grant') }}>{t('授予 Shizuku 权限')}</button>}
+      {shizuku.action === 'connect_shizuku' &&
+        <button className="button button-secondary compact-button" type="button" disabled={actionBusy} onClick={() => { void takeShizukuAction('connect') }}>{t('连接 Shizuku')}</button>}
+      {actionError && <p role="alert">{t('Shizuku 操作失败，请检查服务和权限后重试。')}</p>}
     </div>}
     {report?.capabilities.some(entry => entry.id === 'shizuku' && entry.reason === 'SHIZUKU_NOT_RUNNING') &&
       <p className="settings-note">{t('无线调试配对完成后，还需在 Shizuku 应用中点击「启动」；如果启动失败，可关闭再开启无线调试后重试。')}</p>}

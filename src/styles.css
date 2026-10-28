@@ -1901,6 +1901,8 @@ button:disabled {
 
 .device-capability-list { display: grid; gap: 8px; }
 .device-capability-row { margin: 0; padding: 10px 12px; border: 1px solid var(--line-alt); border-radius: 10px; font-size: 0.875rem; line-height: 1.6; }
+.device-capability-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+.device-capability-actions p { margin: 0; color: var(--red-text); }
 .device-capability-row > strong { margin-right: 4px; }
 .device-capability-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
 .device-capability-footer .settings-note { margin: 0; }

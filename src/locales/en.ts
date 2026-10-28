@@ -403,6 +403,7 @@ export const english: Readonly<Record<string, string>> = {
   "需要先授权 Shizuku，AI 才能通过它执行设备操作。请点击下方按钮打开 Shizuku 应用完成授权，返回后重新点击授权。": "Shizuku must be authorized before AI can perform device operations through it. Tap the button below to open the Shizuku app and grant permission, then return and tap authorize again.",
   "前往授权 Shizuku": "Grant Shizuku permission",
   "服务端 API {0}": "Server API {0}",
+  "Shizuku 操作失败，请检查服务和权限后重试。": "Shizuku operation failed. Check its service and permissions and try again.",
   "Shizuku 服务不会自动启动：请在 Shizuku App 内通过无线调试或 adb 启动服务（设备重启后需重新启动）。": "Start Shizuku using wireless debugging or adb in the Shizuku app. Restart it after rebooting the device.",
   "打开 Shizuku": "Open Shizuku",
   "连接 Shizuku": "Connect Shizuku",
