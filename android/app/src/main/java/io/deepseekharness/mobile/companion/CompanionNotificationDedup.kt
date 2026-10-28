@@ -15,3 +15,14 @@ internal object CompanionNotificationDedup {
         key != null && key == priorKey && content == priorContent &&
             priorTime <= now && now - priorTime < WINDOW_MS
 }
+
+/** Matches an active notification to the exact recorded item, including its current content. */
+internal object CompanionNotificationTarget {
+    fun validDigest(value: String): Boolean = value.matches(Regex("[a-f0-9]{64}"))
+    fun matches(packageName: String, keyHash: String?, contentHash: String?, activePackage: String,
+                activeKey: String?, activeTitle: String, activeText: String, creatorPackage: String?): Boolean =
+        CompanionSourcePolicy.validPackage(packageName) && packageName == activePackage && creatorPackage == packageName &&
+            keyHash != null && validDigest(keyHash) && contentHash != null && validDigest(contentHash) &&
+            keyHash == CompanionNotificationDedup.digest(activeKey) &&
+            contentHash == CompanionNotificationDedup.contentDigest(activeTitle, activeText)
+}

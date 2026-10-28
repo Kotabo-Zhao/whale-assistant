@@ -24,9 +24,21 @@ class CompanionBriefTest {
         assertEquals("com.example.delivery", candidates[0].packageName)
         assertEquals(200L, candidates[0].time)
         assertEquals("可能需要取件", candidates[0].reason)
+        assertEquals(null, candidates[0].notificationKeyHash)
         assertEquals("明天上午", candidates[1].text)
         assertEquals(100L, candidates[1].time)
         assertEquals(emptyList<CompanionBrief.Candidate>(), CompanionBrief.candidates(JSONArray()))
+    }
+    @Test fun notificationCandidateRetainsOnlyValidHashes() {
+        val key = CompanionNotificationDedup.digest("key")!!
+        val content = CompanionNotificationDedup.contentDigest("会议", "请回复")
+        val rows = JSONArray().put(JSONObject().put("package", "com.example.chat").put("time", 1L).put("title", "会议")
+            .put("text", "请回复").put("notificationKeyHash", key).put("notificationContentHash", content))
+        val candidate = CompanionBrief.candidates(rows).single()
+        assertEquals(key, candidate.notificationKeyHash)
+        assertEquals(content, candidate.notificationContentHash)
+        rows.getJSONObject(0).put("notificationKeyHash", "invalid")
+        assertEquals(null, CompanionBrief.candidates(rows).single().notificationKeyHash)
     }
     @Test fun sourceAppMustBeAValidPackageAndMatchResolvedLauncher() {
         org.junit.Assert.assertTrue(CompanionSourcePolicy.matchesResolved("com.example.reader", "com.example.reader"))

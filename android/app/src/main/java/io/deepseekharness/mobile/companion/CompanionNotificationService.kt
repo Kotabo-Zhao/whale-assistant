@@ -6,6 +6,32 @@ import android.service.notification.StatusBarNotification
 import io.deepseekharness.mobile.OverlayBallService
 
 class CompanionNotificationService : NotificationListenerService() {
+    override fun onListenerConnected() { super.onListenerConnected(); current = this }
+    override fun onListenerDisconnected() { if (current === this) current = null; super.onListenerDisconnected() }
+    override fun onDestroy() { if (current === this) current = null; super.onDestroy() }
+
+    companion object {
+        @Volatile private var current: CompanionNotificationService? = null
+
+        /** Only called after a foreground user action. Never stores or reconstructs a PendingIntent. */
+        internal fun openOriginal(candidate: CompanionBrief.Candidate): Boolean {
+            val service = current ?: return false
+            return runCatching {
+                val matches = service.activeNotifications.filter { sbn ->
+                    val extras = sbn.notification.extras
+                    val title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+                    val text = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+                    CompanionNotificationTarget.matches(candidate.packageName, candidate.notificationKeyHash, candidate.notificationContentHash,
+                        sbn.packageName, sbn.key, title, text, sbn.notification.contentIntent?.creatorPackage)
+                }
+                if (matches.size != 1) return false
+                val intent = matches.single().notification.contentIntent ?: return false
+                intent.send()
+                true
+            }.getOrDefault(false)
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null || sbn.packageName == packageName || sbn.isOngoing) return
         val store = CompanionStore(this)

@@ -444,9 +444,16 @@ class CompanionActivity : AppCompatActivity() {
                 val item = candidates[index]
                 val content = listOf(item.title, item.text).filter { it.isNotBlank() }.joinToString(" · ")
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle(item.reason)
-                    .setMessage("${labels[index]}\n\n$content\n\n本地规则可能误判；时间是通知时间，不是截止时间。打开来源应用只会打开应用入口，不能保证跳转到原通知。创建提醒时请核对内容并自行选择时间；提醒不保留与原通知的关联。")
+                    .setMessage("${labels[index]}\n\n$content\n\n本地规则可能误判；时间是通知时间，不是截止时间。原通知仅在仍然有效且内容未改变时可打开；来源应用入口不能保证跳转到原通知。创建提醒时请核对内容并自行选择时间；提醒不保留与原通知的关联。")
                     .setNegativeButton("关闭", null)
-                    .setNeutralButton("打开来源应用") { _, _ -> openNotificationSource(item.packageName) }
+                    .setNeutralButton("打开通知或应用") { _, _ ->
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择打开方式")
+                            .setItems(arrayOf("打开原通知（仍有效时）", "打开来源应用首页")) { _, choice ->
+                                if (choice == 0) {
+                                    if (!CompanionNotificationService.openOriginal(item)) android.widget.Toast.makeText(this, "原通知不可用或内容已变化，请选择打开来源应用。", android.widget.Toast.LENGTH_LONG).show()
+                                } else openNotificationSource(item.packageName)
+                            }.setNegativeButton("取消", null).show()
+                    }
                     .setPositiveButton("创建提醒") { _, _ -> createReminder(content) }.show()
             }.setNegativeButton("关闭", null).show()
     }

@@ -15,7 +15,7 @@ internal object CompanionBrief {
         return rules.firstOrNull { it.second.containsMatchIn(content) }?.first ?: "其他"
     }
 
-    data class Candidate(val packageName: String, val time: Long, val title: String, val text: String, val reason: String)
+    data class Candidate(val packageName: String, val time: Long, val title: String, val text: String, val reason: String, val notificationKeyHash: String? = null, val notificationContentHash: String? = null)
     private val candidateRules = listOf(
         "可能是日程" to Regex("会议|预约|开会|meeting|appointment", RegexOption.IGNORE_CASE),
         "可能需要取件" to Regex("取件|待取|领取快递|pickup|pick up|parcel ready", RegexOption.IGNORE_CASE),
@@ -32,7 +32,9 @@ internal object CompanionBrief {
             val time = row.optLong("time", 0)
             if (source.isBlank() || time <= 0 || (title.isBlank() && text.isBlank()) || CompanionStore.sensitive("$title $text")) continue
             val reason = candidateRules.firstOrNull { it.second.containsMatchIn("$title $text") }?.first ?: continue
-            output.add(Candidate(source, time, title, text, reason))
+            output.add(Candidate(source, time, title, text, reason,
+                row.optString("notificationKeyHash").takeIf(CompanionNotificationTarget::validDigest),
+                row.optString("notificationContentHash").takeIf(CompanionNotificationTarget::validDigest)))
             if (output.size >= 20) break
         }
         return output

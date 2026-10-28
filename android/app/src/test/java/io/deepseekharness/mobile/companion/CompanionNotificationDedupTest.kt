@@ -23,4 +23,17 @@ class CompanionNotificationDedupTest {
         assertEquals(64, CompanionNotificationDedup.digest("key")!!.length)
         assertNull(CompanionNotificationDedup.digest(""))
     }
+    @Test fun originalNotificationRequiresExactCurrentContentAndCreator() {
+        val key = CompanionNotificationDedup.digest("active-key")!!
+        val content = CompanionNotificationDedup.contentDigest("会议", "请回复")
+        fun matches(pkg: String = "com.example.chat", currentKey: String = "active-key", text: String = "请回复", creator: String? = "com.example.chat") =
+            CompanionNotificationTarget.matches("com.example.chat", key, content, pkg, currentKey, "会议", text, creator)
+        assertTrue(matches())
+        assertFalse(matches(pkg = "com.other.app"))
+        assertFalse(matches(currentKey = "other-key"))
+        assertFalse(matches(text = "内容已变化"))
+        assertFalse(matches(creator = "com.other.app"))
+        assertFalse(matches(creator = null))
+        assertFalse(CompanionNotificationTarget.matches("com.example.chat", null, content, "com.example.chat", "active-key", "会议", "请回复", "com.example.chat"))
+    }
 }
