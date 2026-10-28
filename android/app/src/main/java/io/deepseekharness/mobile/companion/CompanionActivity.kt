@@ -385,6 +385,13 @@ class CompanionActivity : AppCompatActivity() {
         button("查看和删除提醒") { showReminders() }
         button("添加每天或每周提醒") { createRecurringReminder() }
         button("查看重复提醒") { showRecurringReminders() }
+        toggle("重复提醒气泡显示事项内容", store.recurringBubbleDetails) { enabled ->
+            if (!enabled) { store.recurringBubbleDetails = false; render() }
+            else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("在屏幕上显示提醒内容？")
+                .setMessage("重复提醒触发时，鲸鱼娘气泡可显示事项摘要；附近的人或屏幕录制可能看到。不会因此自动发送到模型，可以随时关闭。")
+                .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.recurringBubbleDetails = true; render() }.show()
+        }
+        paragraph("仅影响重复提醒气泡；默认显示通用提示。气泡遵守免打扰和屏幕锁定限制。")
         paragraph("按手机当前时区安排；系统省电可能延迟，重启时错过的次数不会集中补发。")
         heading("常用应用", "apps")
         val shortcuts = runCatching { store.shortcuts().sorted() }.getOrNull()

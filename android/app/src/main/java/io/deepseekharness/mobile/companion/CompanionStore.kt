@@ -56,6 +56,9 @@ class CompanionStore(context: Context) {
     var usageSuggestions: Boolean
         get() = prefs.getBoolean("usage_suggestions", false)
         set(value) { prefs.edit().putBoolean("usage_suggestions", value).apply() }
+    var recurringBubbleDetails: Boolean
+        get() = prefs.getBoolean("recurring_bubble_details", false)
+        set(value) { prefs.edit().putBoolean("recurring_bubble_details", value).apply() }
     var reminders: Boolean
         get() = prefs.getBoolean("reminders", false)
         set(value) { prefs.edit().putBoolean("reminders", value).apply() }

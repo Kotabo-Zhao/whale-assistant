@@ -141,7 +141,7 @@ internal class CompanionRecurringReminder(context: Context) {
         }
         row.put("last", if (result.isSuccess) "submitted" else "failed")
         save(rows)
-        if (result.isSuccess) OverlayBallService.companionRecurringConversationHint()
+        if (result.isSuccess) OverlayBallService.companionRecurringConversationHint(row.getString("text"))
     }
     private fun next(row: JSONObject, now: Long) = CompanionRecurringPolicy.next(now, row.getInt("hour"), row.getInt("minute"), row.getInt("weekday"), ZoneId.systemDefault())
     private fun schedule(row: JSONObject) {

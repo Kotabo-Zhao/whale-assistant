@@ -1821,10 +1821,11 @@ class OverlayBallService : Service() {
     companion object {
         @Volatile private var activeService: OverlayBallService? = null
         /** Reminder bubble opens chat only after a user tap; it never inserts or sends a message. */
-        internal fun companionRecurringConversationHint() {
+        internal fun companionRecurringConversationHint(text: String) {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
-                    service.showCompanionHint("提醒到了，要和我聊聊吗？点击打开对话。") {
+                    val message = io.deepseekharness.mobile.companion.CompanionHintContent.recurring(text, CompanionStore(service).recurringBubbleDetails)
+                    service.showCompanionHint(message) {
                         if (service.conversationView == null && !service.conversationOpening) service.toggleConversation()
                     }
                 }
