@@ -189,6 +189,8 @@ class CompanionActivity : AppCompatActivity() {
         heading("本地通知记录")
         paragraph("简报使用本地规则分类，可能漏判或分类错误，不代表已检查所有信息。")
         button("查看本地通知简报") { showBrief() }
+        button("查看通知候选事项") { showNotificationCandidates() }
+        paragraph("本地规则仅提供待核对的候选，不会自动安排提醒或发送回复。")
         button("查看通知习惯摘要") { showNotificationSummary() }
         button("复制通知习惯摘要") { copyNotificationSummary() }
         button("刷新通知记录") { renderRecords() }
@@ -256,10 +258,11 @@ class CompanionActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun createReminder() {
-        val input = android.widget.EditText(this).apply { hint = "提醒内容"; setSingleLine(true) }
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("新建提醒").setView(input)
-            .setNegativeButton("取消", null).setPositiveButton("选择时间") { _, _ ->
+    private fun createReminder(initialText: String = "") {
+        val input = android.widget.EditText(this).apply { hint = "提醒内容"; setSingleLine(true); setText(initialText.take(200)) }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("新建提醒").setView(input)
+        if (initialText.length > 200) dialog.setMessage("原摘要超过 200 字，已截取前 200 字；请核对和编辑提醒内容。")
+        dialog.setNegativeButton("取消", null).setPositiveButton("选择时间") { _, _ ->
                 val value = input.text.toString().trim()
                 if (value.isBlank()) { paragraph("提醒内容不能为空。"); return@setPositiveButton }
                 val selected = Calendar.getInstance().apply { add(Calendar.MINUTE, 5) }
@@ -343,6 +346,25 @@ class CompanionActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地通知简报")
             .setMessage("最近保留的 ${records.length()} 条通知：\n$lines\n\n最近记录：\n$recent\n\n分类由本地规则生成，可能遗漏重要事项。日历和天气尚未接入。")
             .setPositiveButton("关闭", null).show()
+    }
+
+    private fun showNotificationCandidates() {
+        val records = recordsOrNull() ?: return
+        val candidates = CompanionBrief.candidates(records)
+        if (candidates.isEmpty()) { paragraph("当前本地记录没有匹配的候选；这不代表没有待处理事项。") ; return }
+        val labels = candidates.map { item ->
+            val source = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(item.packageName, 0)).toString() }.getOrDefault(item.packageName)
+            val date = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.time))
+            "${item.reason} · $source · $date\n${item.title.ifBlank { item.text }.take(120)}"
+        }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("通知候选（时间为通知时间）")
+            .setItems(labels) { _, index ->
+                val item = candidates[index]
+                val content = listOf(item.title, item.text).filter { it.isNotBlank() }.joinToString(" · ")
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle(item.reason)
+                    .setMessage("${labels[index]}\n\n$content\n\n本地规则可能误判；时间是通知时间，不是截止时间。创建提醒时请核对内容并自行选择时间；提醒不保留与原通知的关联。")
+                    .setNegativeButton("关闭", null).setPositiveButton("创建提醒") { _, _ -> createReminder(content) }.show()
+            }.setNegativeButton("关闭", null).show()
     }
 
     private fun showMemories() {

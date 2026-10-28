@@ -13,4 +13,19 @@ class CompanionBriefTest {
         assertEquals(mapOf("日程与待办" to 1, "物流与出行" to 1, "其他" to 1), CompanionBrief.counts(rows))
         assertEquals(emptyMap<String, Int>(), CompanionBrief.counts(JSONArray()))
     }
+    @Test fun candidatesKeepSourcesAndNeverInventDueTimes() {
+        val rows = JSONArray()
+            .put(JSONObject().put("package", "com.example.calendar").put("time", 100L).put("title", "会议提醒").put("text", "明天上午"))
+            .put(JSONObject().put("package", "com.example.delivery").put("time", 200L).put("title", "包裹").put("text", "请取件"))
+            .put(JSONObject().put("package", "com.example.chat").put("time", 300L).put("title", "消息").put("text", "验证码 123456"))
+            .put(JSONObject().put("package", "com.example.other").put("time", 400L).put("title", "天气").put("text", "晴"))
+        val candidates = CompanionBrief.candidates(rows)
+        assertEquals(2, candidates.size)
+        assertEquals("com.example.delivery", candidates[0].packageName)
+        assertEquals(200L, candidates[0].time)
+        assertEquals("可能需要取件", candidates[0].reason)
+        assertEquals("明天上午", candidates[1].text)
+        assertEquals(100L, candidates[1].time)
+        assertEquals(emptyList<CompanionBrief.Candidate>(), CompanionBrief.candidates(JSONArray()))
+    }
 }
