@@ -17,6 +17,7 @@
     <string name="harness_speak_notice">Review the text; the system speech service may use the network. Up to 2000 characters will be read.</string>
     <string name="harness_speak_truncated">The text is long; only the first 2000 characters will be read.</string>
     <string name="harness_speak_unavailable">No assistant reply was found. Select reply text or check the system speech service.</string>
+    <string name="harness_manage_return_hint">Use system Back to return to the current conversation.</string>
     <string name="harness_manage">Manage and settings</string>
     <string name="harness_exit_confirm_title">Exit DSH</string>
     <string name="harness_exit_confirm_message">Return to the app? The current DSH page will remain in the background.</string>

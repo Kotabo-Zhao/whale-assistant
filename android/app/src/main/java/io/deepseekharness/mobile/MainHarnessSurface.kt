@@ -50,6 +50,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     private var speechGeneration = 0L
     private var retries = 0
     private var entry: String? = null
+    private var returnAfterManage = false
     private val single = activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> deliver(listOfNotNull(uri)) }
     private val multiple = activity.registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> deliver(uris) }
     private val voice = activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -145,7 +146,16 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
 
     fun showIfOwned() {
         claimIfUnowned()
-        if (web != null && authorized()) container?.visibility = View.VISIBLE
+        if (web != null && authorized()) { container?.visibility = View.VISIBLE; returnAfterManage = false }
+    }
+
+    /** Management was opened from chat: return only to the still-owned view, without reloading. */
+    fun returnFromManage(): Boolean {
+        val restore = HarnessManageReturnPolicy.shouldRestore(returnAfterManage, web != null, authorized(), visible())
+        returnAfterManage = false
+        if (!restore) return false
+        container?.visibility = View.VISIBLE
+        return true
     }
 
     /** 放弃当前视图但不撤销授权，以便调用者回退到原对话 Activity。 */
@@ -191,7 +201,10 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         }
         root.findViewById<View>(R.id.harness_voice).setOnClickListener { startVoice() }
         root.findViewById<View>(R.id.harness_speak).setOnClickListener { readAloud() }
-        root.findViewById<View>(R.id.harness_manage).setOnClickListener { hide() }
+        root.findViewById<View>(R.id.harness_manage).setOnClickListener {
+            hide(returnToConversation = true)
+            Toast.makeText(activity, R.string.harness_manage_return_hint, Toast.LENGTH_SHORT).show()
+        }
         activity.addContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         HarnessThemeBridge.attach(view)
         return view
@@ -199,11 +212,14 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
 
     private fun current(expected: HarnessPageLoadGate) = gate === expected && authorized()
     private fun authorized() = !activity.isFinishing && !activity.isDestroyed && AppAuthenticationState.ownsHarnessAccess(owner)
-    private fun hide() { stopSpeech(); container?.visibility = View.GONE }
+    private fun hide(returnToConversation: Boolean = false) {
+        stopSpeech(); returnAfterManage = returnToConversation; container?.visibility = View.GONE
+    }
 
     private fun destroyView() {
         stopSpeech()
         pendingVoice = null
+        returnAfterManage = false
         if (active?.get() === this) active = null
         gate.cancel()
         voiceGate = null

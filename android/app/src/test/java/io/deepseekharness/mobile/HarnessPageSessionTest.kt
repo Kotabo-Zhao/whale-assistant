@@ -8,6 +8,13 @@ import org.junit.Test
 import java.net.URI
 
 class HarnessPageSessionTest {
+    @Test fun managementBackRestoresOnlyStillOwnedHiddenView() {
+        assertTrue(HarnessManageReturnPolicy.shouldRestore(true, true, true, false))
+        assertEquals(false, HarnessManageReturnPolicy.shouldRestore(false, true, true, false))
+        assertEquals(false, HarnessManageReturnPolicy.shouldRestore(true, false, true, false))
+        assertEquals(false, HarnessManageReturnPolicy.shouldRestore(true, true, false, false))
+        assertEquals(false, HarnessManageReturnPolicy.shouldRestore(true, true, true, true))
+    }
     @Test
     fun acceptedCookieAllowsExactlyOnePageLoad() {
         val gate = HarnessPageLoadGate()

@@ -68,6 +68,8 @@ class MainActivity : BridgeActivity() {
                     webView.goBack()
                     return
                 }
+                // 管理页由对话进入且原视图仍有授权时，返回同一会话而不是重载。
+                if (harnessSurface.returnFromManage()) return
                 // 历史见底：整个任务退到后台。不调用 finish()，也不回调 super（那会走默认的 finish），
                 // 这样 Activity、WebView 历史与本机运行时原样保留，用户从最近任务回来还是原来的界面。
                 moveTaskToBack(true)

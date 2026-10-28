@@ -27,6 +27,11 @@ internal class HarnessPageLoadGate {
     }
 }
 
+internal object HarnessManageReturnPolicy {
+    fun shouldRestore(requested: Boolean, hasView: Boolean, owned: Boolean, visible: Boolean): Boolean =
+        requested && hasView && owned && !visible
+}
+
 internal object HarnessSessionCookie {
     private val TOKEN = Regex("[A-Za-z0-9_-]{43}")
 
