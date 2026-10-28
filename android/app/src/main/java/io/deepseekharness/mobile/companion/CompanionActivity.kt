@@ -37,6 +37,11 @@ class CompanionActivity : AppCompatActivity() {
     private val memoryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val memoryHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var memoryBusy = false
+    private val briefExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-brief").apply { isDaemon = true } }
+    private var briefBusy = false
+    private val calendarPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        android.widget.Toast.makeText(this, if (granted) "已授权；可打开简报查看日历。" else "日历未授权；简报仍可查看通知。", android.widget.Toast.LENGTH_LONG).show()
+    }
     private val readinessExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-readiness").apply { isDaemon = true } }
     @Volatile private var readinessGeneration = 0L
 
@@ -62,6 +67,7 @@ class CompanionActivity : AppCompatActivity() {
         super.onDestroy()
         // A confirmed write may finish; do not show its result on a destroyed activity.
         memoryExecutor.shutdown()
+        briefExecutor.shutdownNow()
         readinessGeneration++
         readinessExecutor.shutdownNow()
     }
@@ -212,7 +218,13 @@ class CompanionActivity : AppCompatActivity() {
         button("查看最近 7 天使用情况") { showUsage() }
         heading("本地通知记录")
         paragraph("简报使用本地规则分类，可能漏判或分类错误，不代表已检查所有信息。")
-        button("查看本地通知简报") { showBrief() }
+        paragraph("日历只在打开简报时临时读取当天可见日历，不保存，也不会自动发送给模型；是否显示取决于系统授权。")
+        button("授权读取日历") {
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("读取日历用于简报")
+                .setMessage("授权后，仅在你打开简报时读取当天可见日历；不会修改日程或自动发送给模型。可随时在系统设置撤销。")
+                .setNegativeButton("取消", null).setPositiveButton("继续") { _, _ -> calendarPermission.launch(android.Manifest.permission.READ_CALENDAR) }.show()
+        }
+        button("查看本地简报") { showBrief() }
         button("查看通知候选事项") { showNotificationCandidates() }
         paragraph("本地规则仅提供待核对的候选，不会自动安排提醒或发送回复。")
         button("查看通知习惯摘要") { showNotificationSummary() }
@@ -422,22 +434,46 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun showBrief() {
-        val records = recordsOrNull() ?: return
-        if (records.length() == 0) {
-            paragraph("没有可用的本地通知记录；请检查采集开关和通知读取权限。")
-            return
+        if (briefBusy) { android.widget.Toast.makeText(this, "正在读取简报，请稍候。", android.widget.Toast.LENGTH_SHORT).show(); return }
+        val records = recordsOrNull()
+        val notifications = if (records == null) "通知记录读取失败，请检查本地数据。" else if (records.length() == 0) {
+            "没有可用的本地通知记录；请检查采集开关和通知读取权限。"
+        } else {
+            val lines = CompanionBrief.counts(records).entries.joinToString("\n") { "${it.key}：${it.value} 条" }
+            val recent = (maxOf(0, records.length() - 3) until records.length()).reversed().map { index ->
+                val row = records.getJSONObject(index)
+                val pkg = row.optString("package")
+                val source = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+                val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.optLong("time")))
+                "$source · $time\n${row.optString("title")} ${row.optString("text")}"
+            }.joinToString("\n\n")
+            "最近保留的 ${records.length()} 条通知：\n$lines\n\n最近记录：\n$recent"
         }
-        val lines = CompanionBrief.counts(records).entries.joinToString("\n") { "${it.key}：${it.value} 条" }
-        val recent = (maxOf(0, records.length() - 3) until records.length()).reversed().map { index ->
-            val row = records.getJSONObject(index)
-            val pkg = row.optString("package")
-            val source = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
-            val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.optLong("time")))
-            "$source · $time\n${row.optString("title")} ${row.optString("text")}"
-        }.joinToString("\n\n")
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地通知简报")
-            .setMessage("最近保留的 ${records.length()} 条通知：\n$lines\n\n最近记录：\n$recent\n\n分类由本地规则生成，可能遗漏重要事项。日历和天气尚未接入。")
-            .setPositiveButton("关闭", null).show()
+        briefBusy = true
+        android.widget.Toast.makeText(this, "正在读取本地简报…", android.widget.Toast.LENGTH_SHORT).show()
+        val app = applicationContext
+        briefExecutor.execute {
+            val calendar = CompanionCalendar.read(app)
+            val checkedAt = System.currentTimeMillis()
+            memoryHandler.post {
+                briefBusy = false
+                if (isFinishing || isDestroyed) return@post
+                val calendarText = when (calendar.state) {
+                    CompanionCalendar.State.NO_PERMISSION -> "日历未授权；可在助手设置中授权。"
+                    CompanionCalendar.State.UNAVAILABLE -> "日历读取失败或系统日历不可用。"
+                    CompanionCalendar.State.OK -> if (calendar.events.isEmpty()) "当天可见日历没有日程。" else {
+                        val dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                        calendar.events.joinToString("\n") { event ->
+                            val time = if (event.allDay) "全天" else dateFormat.format(Date(event.start))
+                            "$time · ${event.title}"
+                        } + if (calendar.truncated) "\n仅显示前 ${CompanionCalendar.MAX_EVENTS} 条。" else ""
+                    }
+                }
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地简报")
+                    .setMessage("今天的可见日历（${java.util.TimeZone.getDefault().id}，读取于 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(checkedAt))}）：\n$calendarText\n\n$notifications\n\n通知分类由本地规则生成，可能遗漏重要事项。天气尚未接入。")
+                    .setPositiveButton("关闭", null).show()
+            }
+        }
     }
 
     private fun showNotificationCandidates() {
