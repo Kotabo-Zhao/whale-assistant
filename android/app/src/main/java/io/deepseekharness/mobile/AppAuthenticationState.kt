@@ -49,6 +49,18 @@ internal object AppAuthenticationState {
         return true
     }
 
+    /** 仅接管仍未被任何页面领取的同一会话，不抢占已有页面。 */
+    @Synchronized
+    fun claimUnownedHarnessAccess(owner: Any, access: HarnessAccess): Boolean {
+        if (!harnessAuthenticated.get() || harnessAccess != access || harnessOwner != null) return false
+        harnessOwner = owner
+        return true
+    }
+
+    @Synchronized
+    fun isUnownedHarnessAccess(access: HarnessAccess): Boolean =
+        harnessAuthenticated.get() && harnessAccess == access && harnessOwner == null
+
     @Synchronized
     fun ownsHarnessAccess(owner: Any): Boolean = harnessAuthenticated.get() && harnessOwner === owner
 

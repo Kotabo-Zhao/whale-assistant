@@ -10,6 +10,23 @@ import org.junit.Test
 class AppAuthenticationStateTest {
     private val access = HarnessAccess("http://127.0.0.1:3080/", HarnessAccess.USERNAME, "A".repeat(43))
 
+    @Test
+    fun unownedSessionCanBeReclaimedWithoutStealingAnotherOwner() {
+        val first = Any()
+        val second = Any()
+        AppAuthenticationState.revokeHarness()
+        AppAuthenticationState.authorizeHarnessLaunch(access)
+        assertTrue(AppAuthenticationState.isUnownedHarnessAccess(access))
+        assertTrue(AppAuthenticationState.claimUnownedHarnessAccess(first, access))
+        assertFalse(AppAuthenticationState.isUnownedHarnessAccess(access))
+        assertFalse(AppAuthenticationState.claimUnownedHarnessAccess(second, access))
+        assertTrue(AppAuthenticationState.ownsHarnessAccess(first))
+        AppAuthenticationState.authorizeHarnessLaunch(access)
+        val different = HarnessAccess("http://127.0.0.1:3081/", HarnessAccess.USERNAME, "B".repeat(43))
+        assertFalse(AppAuthenticationState.claimUnownedHarnessAccess(second, different))
+        assertTrue(AppAuthenticationState.claimUnownedHarnessAccess(second, access))
+    }
+
     @Before
     fun resetState() {
         AppAuthenticationState.revokeHarness()

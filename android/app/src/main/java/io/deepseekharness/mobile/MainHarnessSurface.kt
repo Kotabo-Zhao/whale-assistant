@@ -32,6 +32,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     private var web: WebView? = null
     private var chrome: HarnessWebChromeClient? = null
     private var origin: HarnessOrigin? = null
+    private var boundAccess: HarnessAccess? = null
     private var gate = HarnessPageLoadGate()
     private var chooser: ValueCallback<Array<Uri>>? = null
     private var retries = 0
@@ -62,6 +63,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         view.stopLoading()
         view.clearHistory()
         origin = targetOrigin
+        boundAccess = access
         entry = target
         retries = 0
         var clearHistoryOnLoad = true
@@ -113,6 +115,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     }
 
     fun showIfOwned() {
+        claimIfUnowned()
         if (web != null && authorized()) container?.visibility = View.VISIBLE
     }
 
@@ -120,6 +123,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     fun discard() { destroyView() }
 
     fun resume() {
+        claimIfUnowned()
         if (web != null && !AppAuthenticationState.ownsHarnessAccess(owner)) destroyView()
         else web?.let(HarnessThemeBridge::apply)
     }
@@ -169,6 +173,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         web = null
         container?.let { (it.parent as? ViewGroup)?.removeView(it) }
         container = null
+        boundAccess = null
         if (old != null) {
             HarnessThemeBridge.detach(old)
             old.stopLoading()
@@ -236,11 +241,21 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         authCacheExecutor.execute { runCatching { WebViewDatabase.getInstance(app).clearHttpAuthUsernamePassword() } }
     }
 
+    private fun claimIfUnowned() {
+        val access = boundAccess ?: return
+        if (web != null && !activity.isFinishing && !activity.isDestroyed) {
+            AppAuthenticationState.claimUnownedHarnessAccess(owner, access)
+        }
+    }
+
     companion object {
         @Volatile private var active: WeakReference<MainHarnessSurface>? = null
         private val authCacheExecutor = Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "dsh-embedded-auth-db").apply { isDaemon = true }
         }
-        fun hasOwnedSurface(): Boolean = active?.get()?.let { it.web != null && it.authorized() } == true
+        fun hasOwnedSurface(): Boolean = active?.get()?.let {
+            val access = it.boundAccess
+            it.web != null && (it.authorized() || (access != null && AppAuthenticationState.isUnownedHarnessAccess(access)))
+        } == true
     }
 }
