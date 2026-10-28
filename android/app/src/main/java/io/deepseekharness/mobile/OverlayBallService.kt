@@ -1922,7 +1922,16 @@ class OverlayBallService : Service() {
             }
         }
         internal fun companionHint(message: String) {
-            Handler(Looper.getMainLooper()).post { activeService?.showCompanionHint(message) }
+            Handler(Looper.getMainLooper()).post {
+                activeService?.let { service ->
+                    service.showCompanionHint("$message 点击查看提醒。") {
+                        runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
+                            .putExtra(io.deepseekharness.mobile.companion.CompanionHintContent.OPEN_ONCE_REMINDERS, true)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            .onFailure { Toast.makeText(service, "无法打开提醒，请在助手设置中查看。", Toast.LENGTH_LONG).show() }
+                    }
+                }
+            }
         }
 
         internal fun refreshAppearance() {

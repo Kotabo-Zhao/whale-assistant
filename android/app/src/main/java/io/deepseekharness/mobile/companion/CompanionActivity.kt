@@ -256,6 +256,9 @@ class CompanionActivity : AppCompatActivity() {
         } else if (intent?.getBooleanExtra("open_recurring_reminders", false) == true) {
             intent?.removeExtra("open_recurring_reminders")
             showRecurringReminders()
+        } else if (intent?.getBooleanExtra(CompanionHintContent.OPEN_ONCE_REMINDERS, false) == true) {
+            intent?.removeExtra(CompanionHintContent.OPEN_ONCE_REMINDERS)
+            showReminders()
         } else if (intent?.getBooleanExtra("open_pending_memories", false) == true) {
             intent?.removeExtra("open_pending_memories")
             showMemories()
