@@ -2,6 +2,7 @@ package io.deepseekharness.mobile
 
 import android.content.ContentResolver
 import android.content.Intent
+import android.app.Activity
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -17,11 +18,13 @@ import android.webkit.WebViewClient
 import android.webkit.WebViewDatabase
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import io.deepseekharness.mobile.runtime.HarnessAccess
 import io.deepseekharness.mobile.runtime.RuntimeStore
 import io.deepseekharness.mobile.runtime.WorkspaceFileSharing
 import java.util.concurrent.Executors
 import java.lang.ref.WeakReference
+import org.json.JSONObject
 
 /** MainActivity 内的独立受限 WebView；不把 Harness 凭据暴露给 Capacitor 页面。 */
 internal class MainHarnessSurface(private val activity: MainActivity) {
@@ -35,10 +38,22 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     private var boundAccess: HarnessAccess? = null
     private var gate = HarnessPageLoadGate()
     private var chooser: ValueCallback<Array<Uri>>? = null
+    private var voiceGate: HarnessPageLoadGate? = null
+    private var voicePage: String? = null
     private var retries = 0
     private var entry: String? = null
     private val single = activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> deliver(listOfNotNull(uri)) }
     private val multiple = activity.registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> deliver(uris) }
+    private val voice = activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val expected = voiceGate
+        val page = voicePage
+        voiceGate = null
+        voicePage = null
+        if (result.resultCode == Activity.RESULT_OK && expected != null && page != null && current(expected) && visible() && web?.url == page) {
+            val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+            if (text.isNotBlank() && text.length <= 2000) reviewVoice(text, expected, page) else voiceUnavailable()
+        }
+    }
 
     fun visible(): Boolean = container?.visibility == View.VISIBLE
 
@@ -152,6 +167,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         root.findViewById<View>(R.id.harness_companion).setOnClickListener {
             activity.startActivity(Intent(activity, io.deepseekharness.mobile.companion.CompanionActivity::class.java))
         }
+        root.findViewById<View>(R.id.harness_voice).setOnClickListener { startVoice() }
         root.findViewById<View>(R.id.harness_manage).setOnClickListener { hide() }
         activity.addContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         HarnessThemeBridge.attach(view)
@@ -165,6 +181,8 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     private fun destroyView() {
         if (active?.get() === this) active = null
         gate.cancel()
+        voiceGate = null
+        voicePage = null
         handler.removeCallbacksAndMessages(null)
         deliver(emptyList())
         chrome?.closePopup()
@@ -193,6 +211,64 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
             if (params?.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) multiple.launch(types) else single.launch(types)
             true
         } catch (_: Throwable) { deliver(emptyList()); false }
+    }
+
+    private fun startVoice() {
+        if (!visible() || !authorized()) return
+        voiceGate = gate
+        voicePage = web?.url
+        if (voicePage == null) { voiceGate = null; voiceUnavailable(); return }
+        val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, activity.getString(R.string.harness_voice_prompt))
+        runCatching { voice.launch(intent) }.onFailure { voiceGate = null; voicePage = null; voiceUnavailable() }
+    }
+
+    private fun reviewVoice(text: String, expected: HarnessPageLoadGate, expectedPage: String) {
+        val edit = android.widget.EditText(activity).apply { setText(text); setSelection(length()) }
+        AlertDialog.Builder(activity).setTitle(R.string.harness_voice_review).setMessage(R.string.harness_voice_notice)
+            .setView(edit).setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.harness_voice_insert) { _, _ ->
+                val message = edit.text.toString()
+                val target = web
+                val currentOrigin = origin
+                val page = target?.url?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                if (!current(expected) || !visible() || target == null || target.url != expectedPage || currentOrigin == null || page == null ||
+                    !currentOrigin.allows(page) || message.isBlank() || message.length > 2000) {
+                    voiceUnavailable()
+                } else {
+                    val template = runCatching { activity.assets.open("support/harness-voice-insert.js").bufferedReader(Charsets.UTF_8).use { it.readText() } }.getOrNull()
+                    val marker = "/*__VOICE_INPUT__*/null"
+                    val pageMarker = "/*__VOICE_PAGE__*/null"
+                    if (template == null || template.indexOf(marker) < 0 || template.indexOf(marker) != template.lastIndexOf(marker) ||
+                        template.indexOf(pageMarker) < template.indexOf(marker) + marker.length || template.indexOf(pageMarker) != template.lastIndexOf(pageMarker)) {
+                        voiceCopyFallback(message)
+                    } else {
+                        runCatching {
+                            val textAt = template.indexOf(marker)
+                            val pageAt = template.indexOf(pageMarker)
+                            val script = template.substring(0, textAt) + JSONObject.quote(message) +
+                                template.substring(textAt + marker.length, pageAt) + JSONObject.quote(expectedPage) +
+                                template.substring(pageAt + pageMarker.length)
+                            target.evaluateJavascript(script) { result ->
+                                if (current(expected) && visible() && result != "\"inserted\"") voiceCopyFallback(message)
+                            }
+                        }.onFailure { if (current(expected) && visible()) voiceCopyFallback(message) }
+                    }
+                }
+            }.show()
+    }
+
+    private fun voiceUnavailable() = Toast.makeText(activity, R.string.harness_voice_unavailable, Toast.LENGTH_LONG).show()
+
+    private fun voiceCopyFallback(text: String) {
+        AlertDialog.Builder(activity).setTitle(R.string.harness_voice_review)
+            .setMessage(activity.getString(R.string.harness_voice_copy_notice) + "\n\n" + text)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.harness_voice_copy) { _, _ ->
+                activity.getSystemService(android.content.ClipboardManager::class.java)
+                    ?.setPrimaryClip(android.content.ClipData.newPlainText("语音输入", text))
+            }.show()
     }
 
     private fun deliver(uris: List<Uri>) {
