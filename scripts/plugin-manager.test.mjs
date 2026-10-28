@@ -335,17 +335,21 @@ test('下载失败保留旧插件并清理失败暂存目录', t => {
   assert.deepEqual(fs.readdirSync(path.join(root, 'root/.dsh-mobile/plugin-manager/versions')), [])
 })
 
-test('共享依赖冲突时拒绝整次更新并保留原版本', t => {
-  const { manager, write } = fixture(t, (id, directory) => {
+test('共享依赖版本冲突时保留插件私有版本，不覆盖运行时', t => {
+  const { manager, write, root } = fixture(t, (id, directory) => {
     installer(id, directory)
     const dependency = path.join(directory, 'node_modules/shared')
     fs.mkdirSync(dependency)
     fs.writeFileSync(path.join(dependency, 'package.json'), JSON.stringify({ name: 'shared', version: '2.0.0' }))
   })
   const shared = write('opt/dsh/node_modules/shared/package.json', { name: 'shared', version: '1.0.0' })
-  assert.throws(() => manager.update('test-plugin'), /PLUGIN_DEPENDENCY_UNSUPPORTED/)
-  assert.equal(manager.list().plugins[1].version, '1.0.0')
+  assert.equal(manager.update('test-plugin').plugins[1].version, '2.0.0')
   assert.equal(JSON.parse(fs.readFileSync(shared)).version, '1.0.0')
+  const plugin = fs.realpathSync(path.join(root, 'opt/dsh/node_modules/test-plugin'))
+  const requireFromPlugin = createRequire(path.join(plugin, 'index.js'))
+  assert.equal(JSON.parse(fs.readFileSync(requireFromPlugin.resolve('shared/package.json'))).version, '2.0.0')
+  manager.pruneVersions()
+  assert.equal(JSON.parse(fs.readFileSync(requireFromPlugin.resolve('shared/package.json'))).version, '2.0.0')
 })
 
 test('切换第二个依赖失败时回滚已经替换的插件', t => {

@@ -32,6 +32,15 @@ class CompanionMemoryStore(context: Context) {
         removed
     }
     fun clearForUser() = synchronized(lock) { write(JSONArray()) }
+    fun updateForUser(id: String, text: String): Boolean = synchronized(lock) {
+        val value = text.trim()
+        require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value)) { "内容为空、过长或可能含敏感信息" }
+        val rows = load()
+        val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("id") == id } ?: return@synchronized false
+        row.put("text", value).put("source", "user_edit").put("updatedAt", System.currentTimeMillis())
+        write(rows)
+        true
+    }
 
     private fun load(): JSONArray {
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return JSONArray()

@@ -18,14 +18,15 @@ class CompanionStore(context: Context) {
     fun excludedPackages(): Set<String> = prefs.getStringSet("excluded_packages", emptySet())?.toSet() ?: emptySet()
     fun setExcludedPackages(packages: Set<String>) { prefs.edit().putStringSet("excluded_packages", packages.toSet()).apply() }
 
-    fun record(packageName: String, title: String, text: String, now: Long = System.currentTimeMillis()) = synchronized(lock) {
-        if (!notificationCapture || packageName in excludedPackages() || sensitive("$title $text")) return
+    fun record(packageName: String, title: String, text: String, now: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
+        if (!notificationCapture || packageName in excludedPackages() || sensitive("$title $text")) return@synchronized false
         val records = read(now)
         records.put(JSONObject().put("package", packageName.take(200)).put("title", title.take(160))
             .put("text", text.take(400)).put("time", now))
         val trimmed = JSONArray()
         for (index in maxOf(0, records.length() - MAX_RECORDS) until records.length()) trimmed.put(records.getJSONObject(index))
         prefs.edit().putString("records", trimmed.toString()).apply()
+        true
     }
 
     fun read(now: Long = System.currentTimeMillis()): JSONArray = synchronized(lock) {

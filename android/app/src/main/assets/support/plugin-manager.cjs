@@ -1943,10 +1943,8 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
         continue
       }
       if (name !== id && installed) {
-        // 不覆盖其他插件正在共享的依赖；不兼容时整次更新失败并保留原版本。
-        if (read(path.join(installed, 'package.json')).version !== pkg.version) {
-          fail('PLUGIN_DEPENDENCY_UNSUPPORTED', `${name} ${pkg.version} != ${read(path.join(installed, 'package.json')).version}`)
-        }
+        // 非核心依赖保留在此次事务的 node_modules 内，插件按真实路径解析自己的版本。
+        // 不覆盖运行时共享版本，也不把这个私有版本暴露给其他插件。
         continue
       }
       const target = modules.map(base => path.join(base, name)).find(exists) ?? safe(path.join(fallbackModules, name))

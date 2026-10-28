@@ -31,6 +31,8 @@ class BootRecoveryReceiver : BroadcastReceiver() {
         // 避免在凭据加密存储不可用时误读为默认关闭。
         if (userManager != null && !userManager.isUserUnlocked) return
 
+        runCatching { io.deepseekharness.mobile.companion.CompanionReminder(appContext).restore() }
+
         val store = RuntimeStore(appContext)
 
         // 悬浮球只依赖用户开关与系统授权，服务自身会再次校验权限并处理竞态。
