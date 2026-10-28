@@ -21,6 +21,8 @@ describe('插件桥接校验', () => {
   it('导入接受包名、https 直链与带 ref 的 git 地址', () => {
     expect(validatePluginRequest({ operation: 'import', source: 'dsh-plugin-demo' }))
       .toEqual({ operation: 'import', source: 'dsh-plugin-demo' })
+    expect(validatePluginRequest({ operation: 'import', source: '@scope/plugin@1.2.3-rc.1' }))
+      .toEqual({ operation: 'import', source: '@scope/plugin@1.2.3-rc.1' })
     expect(validatePluginRequest({ operation: 'import', source: '@scope/plugin' }))
       .toEqual({ operation: 'import', source: '@scope/plugin' })
     expect(validatePluginRequest({ operation: 'import', source: 'https://example.com/plugin.tgz' }))
@@ -32,7 +34,7 @@ describe('插件桥接校验', () => {
   })
   it('导入来源非法时一律拒绝，且不回显输入', () => {
     const bad = [
-      '', '-x', 'plugin..name', 'https://example.com/%2e%2e/x', 'http://example.com/p.tgz',
+      '', '-x', 'plugin..name', 'foo@latest', 'foo@^1.0.0', 'foo@9007199254740992.0.0', `foo@1.0.0-${'a'.repeat(65)}`, 'https://example.com/%2e%2e/x', 'http://example.com/p.tgz',
       'git://example.com/u/r.git', 'ssh://git@example.com/u/r.git', 'file:///etc/passwd', 'data:text/plain,x',
       'https://example.com/a b.tgz', 'https://example.com/"x".tgz', 'https://example.com/<x>.tgz',
       'https://example.com/`x`.tgz', 'https://example.com/x\ntgz', 'https://user:pass@example.com/p.tgz',

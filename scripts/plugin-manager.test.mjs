@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const { createManager, npmMetadataCheck, readRegistryMetadata, declaredDshRange, installAfterMetadata, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, engineScanIncomplete, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
+const { createManager, npmMetadataCheck, readRegistryMetadata, declaredDshRange, installAfterMetadata, installExplicitVersion, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, engineScanIncomplete, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
   require('../android/app/src/main/assets/support/plugin-manager.cjs')
 
 test('npm 元数据预检区分平台不兼容、原生扩展和无法核验', () => {
@@ -46,6 +46,17 @@ test('无法读取元数据不能伪装为未声明引擎范围', () => {
   assert.equal(declaredDshRange(readRegistryMetadata({ status: 0, stdout: JSON.stringify(good) }, 'test-plugin', '1.2.3'), 'test-plugin'), '>=0.2.0')
   assert.equal(declaredDshRange({ name: 'test-plugin' }, 'test-plugin'), null)
   assert.throws(() => declaredDshRange({ dsh: { engines: { dsh: 42 } } }, 'test-plugin'), /PLUGIN_METADATA_UNAVAILABLE/)
+})
+
+test('指定版本仍在下载前检查引擎和平台，并只安装指定版本', () => {
+  const calls = []
+  const install = value => { calls.push(value); return { status: 0 } }
+  const response = extra => ({ status: 0, stdout: JSON.stringify({ name: 'demo', version: '1.2.3', ...extra }) })
+  assert.throws(() => installExplicitVersion(response({ dsh: { engines: { dsh: '>=9.0.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_ENGINE_UNSUPPORTED/)
+  assert.throws(() => installExplicitVersion(response({ cpu: ['x64'] }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64'), /PLUGIN_PLATFORM_UNSUPPORTED/)
+  assert.deepEqual(calls, [])
+  installExplicitVersion(response({ dsh: { engines: { dsh: '>=0.1.0' } } }), install, 'demo', '1.2.3', '0.2.0', 'linux', 'arm64')
+  assert.deepEqual(calls, ['demo@1.2.3'])
 })
 
 test('裸导入抽取只认包名，路径与内建模块一律忽略', () => {
@@ -938,6 +949,21 @@ test('导入 npm 包名：新包进入清单且重复导入不产生重复条目
   assert.equal(manager.list().plugins.filter(row => row.id === 'extra-plugin').length, 1)
 })
 
+test('显式版本安装按包名保护并验证暂存包的实际版本', t => {
+  const calls = []
+  const { manager, root } = fixture(t, (name, directory, version) => {
+    calls.push([name, version])
+    installer(name, directory)
+  })
+  assert.equal(manager.importPackage('test-plugin@2.0.0').plugins.find(row => row.id === 'test-plugin').version, '2.0.0')
+  assert.deepEqual(calls, [['test-plugin', '2.0.0']])
+  assert.throws(() => manager.importPackage('test-plugin@1.5.0'), /PLUGIN_UPDATE_FAILED/)
+  assert.equal(manager.list().plugins.find(row => row.id === 'test-plugin').version, '2.0.0')
+  assert.throws(() => manager.importPackage('@deepseek-ai/dsh-base@1.0.0'), /PLUGIN_PROTECTED/)
+  assert.equal(calls.length, 2)
+  assert.ok(fs.existsSync(path.join(root, 'opt/dsh/node_modules/test-plugin')))
+})
+
 test('导入 https 直链：原地址交给 npm，包名从安装结果推导，返回值不回传地址', t => {
   const seen = []
   const { manager, profile } = fixture(t, pluginInstaller('linked-plugin', '3.0.0', seen))
@@ -980,10 +1006,11 @@ test('导入 git 地址：git 确实没有与探测不可判定给出不同受�
 test('导入来源校验：只接受包名、https 直链与 git+https，拒绝时一律不回显', t => {
   assert.deepEqual(validateImportSource('@scope/foo'), { kind: 'npm', source: '@scope/foo', name: '@scope/foo' })
   assert.deepEqual(validateImportSource('foo'), { kind: 'npm', source: 'foo', name: 'foo' })
+  assert.deepEqual(validateImportSource('@scope/foo@1.2.3-rc.1'), { kind: 'npm', source: '@scope/foo@1.2.3-rc.1', name: '@scope/foo', version: '1.2.3-rc.1' })
   assert.deepEqual(validateImportSource('https://example.com/x.tgz'), { kind: 'url', source: 'https://example.com/x.tgz', name: null })
   assert.deepEqual(validateImportSource('git+https://github.com/u/r.git#v1.2.3'), { kind: 'git', source: 'git+https://github.com/u/r.git#v1.2.3', name: null })
   const rejected = [
-    '-foo',
+    '-foo', 'foo@latest', 'foo@^1.0.0', 'foo@9007199254740992.0.0', `foo@1.0.0-${'a'.repeat(65)}`,
     'http://example.com/x.tgz',
     'git://example.com/x.git',
     'ssh://git@example.com/x.git',

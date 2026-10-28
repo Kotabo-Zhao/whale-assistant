@@ -385,6 +385,11 @@ function validateImportSource(raw) {
   if (!SOURCE_CHARS.test(raw)) fail('PLUGIN_SOURCE_INVALID')
   // 裸 npm 包名（含作用域名）直接就是来源本身。
   if (NAME.test(raw)) return { kind: 'npm', source: raw, name: raw }
+  const at = raw.lastIndexOf('@')
+  if (at > 0) {
+    const name = raw.slice(0, at); const version = raw.slice(at + 1)
+    if (name.length <= 214 && NAME.test(name) && VERSION.test(version) && parseVersion(version)) return { kind: 'npm', source: raw, name, version }
+  }
   const prefix = raw.startsWith(SOURCE_GIT_PREFIX) ? SOURCE_GIT_PREFIX : raw.startsWith(SOURCE_HTTPS_PREFIX) ? SOURCE_HTTPS_PREFIX : null
   if (prefix === null) fail('PLUGIN_SOURCE_INVALID')
   const rest = raw.slice(prefix.length)
@@ -458,6 +463,13 @@ function installAfterMetadata(probe, install, id, version, platform, arch) {
   const error = npmMetadataCheck(metadata, id, version, platform, arch)
   if (error) fail(error, id)
   if (install(id + '@' + version).status !== 0) fail('PLUGIN_UPDATE_FAILED')
+}
+
+function installExplicitVersion(reply, install, id, version, runtime, platform, arch) {
+  const metadata = readRegistryMetadata(reply, id, version)
+  const range = declaredDshRange(metadata, id)
+  if (range !== null && !satisfiesRange(runtime, range)) fail('PLUGIN_ENGINE_UNSUPPORTED', `${id} dsh=${runtime}`)
+  installAfterMetadata(() => reply, install, id, version, platform, arch)
 }
 
 function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
@@ -1772,7 +1784,7 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     return declaredDshRange(metadata, id)
   }
 
-  function npmInstall(id, directory) {
+  function npmInstall(id, directory, explicitVersion = null) {
     const npm = path.join(root, 'opt/node/lib/node_modules/npm/bin/npm-cli.js')
     safe(npm)
     if (!exists(npm)) fail('PLUGIN_UPDATER_MISSING')
@@ -1800,6 +1812,12 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     }
     const runtimeDsh = runtimeDshVersion()
     if (runtimeDsh === null) fail('PLUGIN_RUNTIME_VERSION_UNAVAILABLE', id)
+    if (explicitVersion !== null) {
+      const cache = new Map()
+      engineRangeOf(npm, id, explicitVersion, common, environment, cache)
+      installExplicitVersion(cache.get(explicitVersion), install, id, explicitVersion, runtimeDsh, process.platform, process.arch)
+      return
+    }
     const listed = spawnSync(process.execPath, [npm, 'view', id, 'versions', '--json', ...common], { env: environment, encoding: 'utf8', timeout: 45000, maxBuffer: 1024 * 1024 })
     if (listed.status !== 0) fail('PLUGIN_METADATA_UNAVAILABLE', id)
     let versions
@@ -1894,7 +1912,7 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     try { fs.symlinkSync(directory, probe, 'junction'); fs.unlinkSync(probe) } catch { fail('PLUGIN_LINK_UNSUPPORTED') }
     // git 地址需要访客里真的有 git：先探测，探测不出结论时绝不谎报"没有 git"。
     if (spec.kind === 'git') requireGit()
-    ;(installPackage ?? npmInstall)(spec.kind === 'npm' ? spec.name : spec.source, directory)
+    ;(installPackage ?? npmInstall)(spec.kind === 'npm' ? spec.name : spec.source, directory, spec.version ?? null)
     const stageModules = path.join(directory, 'node_modules')
     // 安装后消重：npm 会把插件依赖的 `@deepseek-ai/*` 装成真实副本，留在插件目录里就是
     // 同一份运行时服务模块的第二份物理副本（Symbol 身份失配 → 所有工具调用失败）。
@@ -1948,6 +1966,7 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     const selected = read(path.join(stageModules, id, 'package.json'))
     const declared = bundlePatchFiles(selected)
     if (selected.name !== id || !VERSION.test(selected.version ?? '') || declared === null) fail('PLUGIN_UPDATE_FAILED')
+    if (spec.version && selected.version !== spec.version) fail('PLUGIN_UPDATE_FAILED')
     // Registry declarations can differ from the downloaded package; check the staged package before any cutover.
     const actualRange = declaredDshRange(selected, id)
     if (actualRange !== null) {
@@ -2168,6 +2187,7 @@ module.exports = {
   readRegistryMetadata,
   declaredDshRange,
   installAfterMetadata,
+  installExplicitVersion,
   validName,
   within,
   // 供单测直接覆盖版本选择语义（无网络、无 npm）。

@@ -579,6 +579,7 @@ internal object PluginSourcePolicy {
     const val GIT_PREFIX = "git+https://"
     const val HTTPS_PREFIX = "https://"
     private val packageName = Regex("^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$")
+    private val version = Regex("^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.-]+)?(?:\\+[A-Za-z0-9.-]+)?$")
     private val chars = Regex("^[A-Za-z0-9@/:._~%+?#=&-]+$")
     private val host = Regex("^[A-Za-z0-9.-]+(?::[0-9]{1,5})?$")
     private val ref = Regex("^[A-Za-z0-9._/-]{1,128}$")
@@ -592,6 +593,14 @@ internal object PluginSourcePolicy {
         if (candidate.startsWith("-") || ".." in candidate || percentDot.containsMatchIn(candidate)) return null
         if (!chars.matches(candidate)) return null
         if (packageName.matches(candidate)) return "npm"
+        val at = candidate.lastIndexOf('@')
+        if (at > 0) {
+            val name = candidate.substring(0, at)
+            val release = candidate.substring(at + 1)
+            val components = release.split('.', '-', '+').take(3)
+            if (name.length <= 214 && packageName.matches(name) && release.length <= 64 && version.matches(release) &&
+                components.size == 3 && components.all { it.toLongOrNull()?.let { n -> n <= 9007199254740991L } == true }) return "npm"
+        }
         val prefix = when {
             candidate.startsWith(GIT_PREFIX) -> GIT_PREFIX
             candidate.startsWith(HTTPS_PREFIX) -> HTTPS_PREFIX

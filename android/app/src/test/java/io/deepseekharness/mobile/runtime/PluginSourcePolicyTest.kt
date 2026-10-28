@@ -16,6 +16,7 @@ class PluginSourcePolicyTest {
     fun acceptsPackageNamesAndHttpsAddresses() {
         assertEquals("npm", PluginSourcePolicy.classify("dsh-plugin-demo"))
         assertEquals("npm", PluginSourcePolicy.classify("@scope/plugin"))
+        assertEquals("npm", PluginSourcePolicy.classify("@scope/plugin@1.2.3-rc.1"))
         assertEquals("url", PluginSourcePolicy.classify("https://example.com/plugin.tgz"))
         assertEquals("url", PluginSourcePolicy.classify("https://example.com:8443/a/b.tgz?x=1#frag"))
         assertEquals("git", PluginSourcePolicy.classify("git+https://github.com/u/r.git"))
@@ -39,7 +40,7 @@ class PluginSourcePolicyTest {
     @Test
     fun rejectsOptionInjectionAndTraversal() {
         listOf(
-            "-foo",
+            "-foo", "foo@latest", "foo@^1.0.0", "foo@9007199254740992.0.0", "foo@1.0.0-" + "a".repeat(65),
             "--registry=http://evil",
             "plugin..name",
             "https://example.com/../x.tgz",

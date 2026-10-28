@@ -73,3 +73,21 @@ it('在插件目录内就地显示检查、版本扫描不完整和结果详情'
   expect(screen.getByRole('alert')).toHaveTextContent('仍有旧版本未检查')
   expect(screen.getByRole('alert')).toHaveTextContent('example-plugin dsh=0.2.1')
 })
+
+it('目录可指定精确版本，拒绝范围或标签', async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '示例', npm: '@example/plugin' }] }))
+  let complete = false
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({
+    read: () => Promise.resolve(complete ? { done: true } : (complete = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+  }) } }))
+  const install = vi.fn()
+  render(<MobileMarket locked={false} onInstall={install} />)
+  fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+  fireEvent.click(await screen.findByRole('button', { name: '安装' }))
+  const input = screen.getByRole('textbox', { name: '指定版本（可选）' })
+  fireEvent.change(input, { target: { value: 'latest' } })
+  expect(screen.getByRole('button', { name: '确认安装' })).toBeDisabled()
+  fireEvent.change(input, { target: { value: '1.2.3-rc.1' } })
+  fireEvent.click(screen.getByRole('button', { name: '确认安装' }))
+  expect(install).toHaveBeenCalledWith('@example/plugin@1.2.3-rc.1')
+})

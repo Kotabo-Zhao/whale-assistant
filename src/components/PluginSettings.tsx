@@ -277,7 +277,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
     <section className="plugin-import" aria-labelledby="plugin-import-title">
       <h2 id="plugin-import-title">{t('通过 npm 包名或链接导入')}</h2>
-      <p className="plugin-description">{t('支持 npm 包名、HTTPS 压缩包直链和 git+https 仓库地址。导入时不执行包内的安装脚本；来源校验不通过时不会下载。')}</p>
+      <p className="plugin-description">{t('支持 npm 包名、精确版本（如 example-plugin@1.2.3）、HTTPS 压缩包直链和 git+https 仓库地址。导入时不执行安装脚本，并检查运行环境要求；指定版本不保证安卓兼容。')}</p>
       <div className="plugin-import-row">
         <input type="text" aria-label={t('插件来源')} placeholder={t('例如插件包名，或 https://…/plugin.tgz')} value={source} disabled={busy} onChange={event => setSource(event.target.value)} />
         <button className="button compact-button" type="button" disabled={busy || locked || source.trim() === ''} onClick={() => { void run({ operation: 'import', source: source.trim(), ...(expected.trim() === '' ? {} : { id: expected.trim() }) }) }}>{t('导入')}</button>

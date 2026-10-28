@@ -64,6 +64,9 @@ function importSource(value: unknown): string {
   const raw = text(value, sourceChars, sourceMax)
   if (raw.startsWith('-') || raw.includes('..') || /%2e/i.test(raw)) invalid()
   if (packageId.test(raw)) return raw
+  const at = raw.lastIndexOf('@')
+  const version = raw.slice(at + 1)
+  if (at > 0 && raw.slice(0, at).length <= 214 && packageId.test(raw.slice(0, at)) && version.length <= 64 && semver.test(version) && version.split(/[.+-]/, 3).every(part => Number.isSafeInteger(Number(part)))) return raw
   const prefix = raw.startsWith('git+https://') ? 'git+https://' : raw.startsWith('https://') ? 'https://' : null
   if (prefix === null) invalid()
   const rest = raw.slice(prefix.length)

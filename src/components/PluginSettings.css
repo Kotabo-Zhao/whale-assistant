@@ -78,6 +78,8 @@
 .mobile-market-review { margin-top: 14px; padding: 16px; border: 1px solid var(--blue); border-radius: var(--radius-inner); background: var(--blue-soft); color: var(--ink); }
 .mobile-market-review h3 { margin: 0 0 8px; font-size: 1rem; }
 .mobile-market-review p { line-height: 1.55; overflow-wrap: anywhere; }
+.mobile-market-version { display: grid; gap: 6px; font-weight: 600; }
+.mobile-market-version input { width: 100%; min-width: 0; }
 .mobile-market-review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 

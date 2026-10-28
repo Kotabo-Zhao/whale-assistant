@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { t, useLanguage } from '../i18n'
 
 import { fetchCatalog, type Entry } from './marketCatalog'
+import { validatePluginRequest } from '../platform/plugins'
 
 type InstallState = { name: string; busy: boolean; failed: boolean; notice: string; detail: string }
 export function MobileMarket({ locked, onInstall, installState = null }: { locked: boolean; onInstall: (name: string) => void; installState?: InstallState | null }) {
@@ -9,6 +10,7 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [query, setQuery] = useState('')
   const [review, setReview] = useState<Entry | null>(null)
+  const [version, setVersion] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
   const request = useRef<AbortController | null>(null)
   const reviewRegion = useRef<HTMLDivElement | null>(null)
@@ -20,6 +22,9 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
     const term = query.trim().toLowerCase()
     return (entries ?? []).filter(item => !term || `${item.name} ${item.npm} ${item.description}`.toLowerCase().includes(term)).slice(0, 30)
   }, [entries, query])
+  const versionValid = !review || !version.trim() || (() => {
+    try { validatePluginRequest({ operation: 'import', source: `${review.npm}@${version.trim()}` }); return true } catch { return false }
+  })()
   const load = async () => {
     request.current?.abort()
     const controller = new AbortController()
@@ -52,12 +57,17 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
       <p><strong>{review.name}</strong><br /><code>{review.npm}</code></p>
       <p>{t('来源：npm 社区包。版本将在下载时按当前运行环境选择；目录信息不代表已验证作者、权限或安卓兼容性。')}</p>
       <p>{t('安装脚本不会运行；安装后插件本身可能读取数据或联网。请先确认你信任此来源。')}</p>
+      <label className="mobile-market-version">{t('指定版本（可选）')}
+        <input value={version} onChange={event => setVersion(event.target.value)} placeholder="1.2.3" aria-invalid={!versionValid} />
+      </label>
+      <p className="plugin-hint">{t('留空自动选择；填写已知精确版本可尝试较旧版本，仍会检查兼容性。')}</p>
+      {!versionValid && <p role="alert">{t('请输入完整版本号，例如 1.2.3。')}</p>}
       {locked && <p role="status">{t('请先停止运行环境再安装。')}</p>}
       <div className="mobile-market-review-actions">
         <button className="button button-secondary compact-button" type="button" onClick={() => setReview(null)}>{t('取消')}</button>
-        <button className="button button-primary compact-button" type="button" disabled={locked} onClick={() => {
-          if (locked) return
-          const name = review.npm
+        <button className="button button-primary compact-button" type="button" disabled={locked || !versionValid} onClick={() => {
+          if (locked || !versionValid) return
+          const name = version.trim() ? `${review.npm}@${version.trim()}` : review.npm
           setReview(null)
           onInstall(name)
         }}>{t('确认安装')}</button>
@@ -68,7 +78,7 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
       <p className="plugin-hint">{t('目录中有 {0} 个 npm 插件，最多显示前 30 个结果。', entries.length)}{locked ? t('请先停止运行环境再安装。') : ''}</p>
       {visible.length === 0 ? <p>{t('没有匹配的插件。')}</p> : <ul className="mobile-market-list">{visible.map(item => <li key={item.npm}>
         <div><strong>{item.name}</strong><code>{item.npm}</code>{item.description && <p>{item.description}</p>}</div>
-        <button className="button button-secondary compact-button" type="button" disabled={locked} onClick={() => setReview(item)}>{t('安装')}</button>
+        <button className="button button-secondary compact-button" type="button" disabled={locked} onClick={() => { setVersion(''); setReview(item) }}>{t('安装')}</button>
       </li>)}</ul>}
     </>}
   </section>
