@@ -500,7 +500,13 @@ function readRegistryMetadata(reply, id, version) {
   return metadata
 }
 function declaredDshRange(metadata, id) {
-  const range = metadata?.dsh?.engines?.dsh
+  const dsh = metadata?.dsh
+  if (dsh === undefined) return null
+  if (!dsh || typeof dsh !== 'object' || Array.isArray(dsh)) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+  const engines = dsh.engines
+  if (engines === undefined) return null
+  if (!engines || typeof engines !== 'object' || Array.isArray(engines)) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+  const range = engines.dsh
   if (range === undefined) return null
   if (typeof range !== 'string' || range.length < 1 || range.length > 256) fail('PLUGIN_METADATA_UNAVAILABLE', id)
   return range
@@ -2038,8 +2044,11 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     }
     const selected = read(path.join(stageModules, id, 'package.json'))
     const declared = bundlePatchFiles(selected)
-    if (selected.name !== id || !VERSION.test(selected.version ?? '') || declared === null) fail('PLUGIN_UPDATE_FAILED')
+    if (selected.name !== id || !VERSION.test(selected.version ?? '') || !parseVersion(selected.version) || declared === null) fail('PLUGIN_UPDATE_FAILED')
     if (spec.version && selected.version !== spec.version) fail('PLUGIN_UPDATE_FAILED')
+    // Registry metadata and downloaded package may differ; validate actual platform before cutover.
+    const actualPlatformError = npmMetadataCheck(selected, id, selected.version, process.platform, process.arch)
+    if (actualPlatformError) fail(actualPlatformError, id)
     // Registry declarations can differ from the downloaded package; check the staged package before any cutover.
     const actualRange = declaredDshRange(selected, id)
     if (actualRange !== null) {

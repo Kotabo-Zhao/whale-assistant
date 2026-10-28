@@ -46,6 +46,10 @@ test('无法读取元数据不能伪装为未声明引擎范围', () => {
   assert.equal(declaredDshRange(readRegistryMetadata({ status: 0, stdout: JSON.stringify(good) }, 'test-plugin', '1.2.3'), 'test-plugin'), '>=0.2.0')
   assert.equal(declaredDshRange({ name: 'test-plugin' }, 'test-plugin'), null)
   assert.throws(() => declaredDshRange({ dsh: { engines: { dsh: 42 } } }, 'test-plugin'), /PLUGIN_METADATA_UNAVAILABLE/)
+  for (const malformed of [{ dsh: null }, { dsh: 'bad' }, { dsh: [] }, { dsh: { engines: null } }, { dsh: { engines: [] } }, { dsh: { engines: 'bad' } }]) {
+    assert.throws(() => declaredDshRange(malformed, 'test-plugin'), /PLUGIN_METADATA_UNAVAILABLE/)
+  }
+  assert.equal(declaredDshRange({ dsh: { bundle: {} } }, 'test-plugin'), null)
 })
 
 test('指定版本仍在下载前检查引擎和平台，并只安装指定版本', () => {
@@ -464,6 +468,24 @@ test('下载失败保留旧插件并清理失败暂存目录', t => {
   assert.throws(() => manager.update('test-plugin'), /PLUGIN_UPDATE_FAILED/)
   assert.equal(manager.list().plugins[1].version, '1.0.0')
   assert.deepEqual(fs.readdirSync(path.join(root, 'root/.dsh-mobile/plugin-manager/versions')), [])
+})
+
+test('下载后的包与预检声明不一致时，按实际平台拒绝并保留原版本', t => {
+  for (const field of [
+    { os: [process.platform === 'win32' ? 'linux' : 'win32'] },
+    { cpu: [process.arch === 'arm64' ? 'x64' : 'arm64'] },
+    { os: [42] },
+  ]) {
+    const { manager, root } = fixture(t, (id, directory) => {
+      installer(id, directory)
+      const file = path.join(directory, 'node_modules', id, 'package.json')
+      fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), ...field }))
+    })
+    const before = manager.list().plugins
+    assert.throws(() => manager.update('test-plugin'), /PLUGIN_PLATFORM_UNSUPPORTED|PLUGIN_METADATA_UNAVAILABLE/)
+    assert.deepEqual(manager.list().plugins, before)
+    assert.deepEqual(fs.readdirSync(path.join(root, 'root/.dsh-mobile/plugin-manager/versions')), [])
+  }
 })
 
 test('下载包实际声明与运行时冲突时事务不切换旧版本', t => {
