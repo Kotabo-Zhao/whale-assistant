@@ -719,6 +719,8 @@ export function createBrowserBridge(): RuntimeBridge {
     // 后者在真机上是有意义的状态（提示去开服务），前者提示了也没用。
     getAutomationTaskState: (): Promise<AutomationTaskState> =>
       Promise.reject(new Error('浏览器预览不支持任务台账')),
+    acknowledgeInterruptedTask: (): Promise<AutomationTaskState> =>
+      Promise.reject(new Error('浏览器模式无法确认设备任务')),
     cancelAutomationTask: (): Promise<AutomationTaskState> =>
       Promise.reject(new Error('浏览器预览不支持取消任务')),
     // 会话工作区在预览里没有原生侧那条只读通道：如实拒绝，让界面显示「读不到会话列表」+

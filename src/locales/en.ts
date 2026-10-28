@@ -1978,4 +1978,7 @@ export const english: Readonly<Record<string, string>> = {
   "插件声明不支持当前运行环境的平台或处理器，已保留原版本": "The plugin does not support this runtime platform or processor; the previous version was preserved.",
   "无法核对插件版本元数据，请检查网络后重试，已保留原版本": "Could not verify plugin version metadata; check your connection and retry. The previous version was preserved.",
   "无法确认当前 Harness 版本，请修复运行环境后重试，已保留原版本": "Could not verify the current Harness version; repair the runtime and retry. The previous version was preserved.",
+  "之前的任务可能中断，已发出的操作可能生效。请先检查目标应用，确认后才能开始新任务。": "A previous task may have been interrupted and issued actions may have taken effect. Check the target app before starting another task.",
+  "已检查现场，清除中断提示": "I checked the app; clear warning",
+  "无法清除中断提示，请先停止任务或稍后重试。": "Could not clear the warning. Stop the task first or retry later.",
 }

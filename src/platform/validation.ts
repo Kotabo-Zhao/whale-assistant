@@ -2829,8 +2829,11 @@ export function validateAutomationTaskState(value: unknown): AutomationTaskState
   const record = asRecord(value, '任务台账读数')
   const connected = record.connected
   if (typeof connected !== 'boolean') throw new Error('任务台账连接状态格式无效')
+  const interrupted = record.interrupted
+  if (interrupted !== undefined && typeof interrupted !== 'boolean') throw new Error('任务中断状态格式无效')
+  const flag = interrupted === undefined ? {} : { interrupted }
   const raw = record.task
-  if (raw === null || raw === undefined) return { connected, task: null }
+  if (raw === null || raw === undefined) return { connected, task: null, ...flag }
   if (!connected) throw new Error('任务台账读数自相矛盾：没连上却带着任务')
   const task = asRecord(raw, '任务台账')
   const taskId = task.taskId
@@ -2880,6 +2883,7 @@ export function validateAutomationTaskState(value: unknown): AutomationTaskState
   if (settledSteps + pendingSteps !== steps.length) throw new Error('任务台账的步数与状态对不上')
   return {
     connected,
+    ...flag,
     task: {
       taskId,
       status: status as AutomationTaskStatus,

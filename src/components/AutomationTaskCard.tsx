@@ -67,6 +67,7 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
   const [busy, setBusy] = useState(false)
   const [stopFailed, setStopFailed] = useState<string | null>(null)
   const [stopped, setStopped] = useState(false)
+  const [ackFailed, setAckFailed] = useState(false)
 
   const refresh = useCallback(async () => {
     setLoaded(false); setFailed(false)
@@ -82,6 +83,13 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
     finally { setBusy(false) }
   }, [bridge])
 
+  const acknowledge = useCallback(async () => {
+    setBusy(true); setAckFailed(false)
+    try { setState(await bridge.acknowledgeInterruptedTask()) }
+    catch { setAckFailed(true) }
+    finally { setBusy(false) }
+  }, [bridge])
+
   const ready = loaded && !failed && state !== null
   const task: AutomationTask | null = ready ? state.task : null
 
@@ -91,11 +99,16 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
         <p>{t('AI 按步骤执行时的当前任务；读不到就读不到，这里也是你随时叫停它的地方。')}</p></div>
     </div>
     {!loaded && !failed && <p className="settings-note">{t('正在读取当前任务…')}</p>}
+    {ready && state.interrupted === true && <div role="alert" className="settings-note">
+      <p>{t('之前的任务可能中断，已发出的操作可能生效。请先检查目标应用，确认后才能开始新任务。')}</p>
+      <button className="button button-secondary" type="button" disabled={busy} onClick={() => { void acknowledge() }}>{t('已检查现场，清除中断提示')}</button>
+      {ackFailed && <p>{t('无法清除中断提示，请先停止任务或稍后重试。')}</p>}
+    </div>}
     {ready && !state.connected && <>
       <p className="settings-note">{t('无障碍服务没有连上，读不到任务状态。')}</p>
       <p className="settings-note">{t('这不是「没有任务」：连接恢复后再读一次才知道现在是什么状态。')}</p>
     </>}
-    {ready && state.connected && task === null && <p className="settings-note">{t('现在没有正在执行的任务。')}</p>}
+    {ready && state.connected && task === null && state.interrupted !== true && <p className="settings-note">{t('现在没有正在执行的任务。')}</p>}
     {task !== null && <>
       <p className="settings-note">
         <strong>{t('目标应用：{0}', task.packageName)}</strong>

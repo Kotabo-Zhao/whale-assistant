@@ -2754,21 +2754,21 @@ class MobileRuntimePlugin : Plugin() {
     /**
      * 权限：应用内桥接；读**当前任务台账**的只读快照（设置页那块「当前任务」用它）。
      *
-     * 台账只活在无障碍服务进程里（刻意不落盘）：服务没连上时 `task` 一律是 `null`，
+     * 任务步骤只活在无障碍服务进程里；另存不含任务内容的中断标记。服务没连上时 `task` 一律是 `null`，
      * 界面必须把「读不到」与「现在没有任务」分开显示——这正是 `connected` 的用途。
      * 快照里没有任何界面文字：包名、步骤标识与受控码只到这一层，**不进诊断日志**。
      */
     @PluginMethod
     fun getAutomationTaskState(call: PluginCall) {
         resolveWhileActive(call) {
-            val service = DeepSeekAccessibilityService.current()
-            JSObject()
-                .put("connected", service != null)
-                .put(
-                    "task",
-                    service?.currentAutomationTask()?.takeIf { it.taskId.isNotEmpty() }?.toJs()
-                        ?: JSONObject.NULL,
-                )
+            synchronized(io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore.lock) {
+                val service = DeepSeekAccessibilityService.current()
+                val snapshot = service?.currentAutomationTask()
+                val pending = io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore(context).pending()
+                JSObject().put("connected", service != null)
+                    .put("interrupted", io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore.orphaned(pending, snapshot))
+                    .put("task", snapshot?.takeIf { it.taskId.isNotEmpty() }?.toJs() ?: JSONObject.NULL)
+            }
         }
     }
 
@@ -2785,6 +2785,7 @@ class MobileRuntimePlugin : Plugin() {
             val service = DeepSeekAccessibilityService.current()
                 ?: throw RuntimeFailure("ACCESSIBILITY_SERVICE_DISABLED", "无障碍服务没有连上，没有可取消的任务")
             audited(AuditEvent.ACCESSIBILITY_CONFIG) {
+                synchronized(io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore.lock) {
                 if (service.currentAutomationTask().taskId.isEmpty()) {
                     throw RuntimeFailure("AUTOMATION_TASK_NOT_PLANNED", "现在没有任务可取消")
                 }
@@ -2793,7 +2794,29 @@ class MobileRuntimePlugin : Plugin() {
                 recordAudit(AuditEvent.ACCESSIBILITY_CONFIG, AuditResult.SUCCEEDED, "AUTOMATION_TASK_CANCEL")
                 JSObject()
                     .put("connected", true)
+                    .put("interrupted", io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore.orphaned(
+                        io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore(context).pending(), snapshot))
                     .put("task", snapshot.toJs())
+                }
+            }
+        }
+    }
+
+    /** User confirms they checked the previous task; model tools cannot clear this marker. */
+    @PluginMethod
+    fun acknowledgeInterruptedTask(call: PluginCall) {
+        execute(call) {
+            synchronized(io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore.lock) {
+                val service = DeepSeekAccessibilityService.current()
+                val snapshot = service?.currentAutomationTask()
+                if (snapshot != null && io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore.active(snapshot)) {
+                    throw RuntimeFailure("AUTOMATION_TASK_BUSY", "任务仍在运行，请先停止")
+                }
+                if (!io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore(context).clear()) {
+                    throw RuntimeFailure("AUTOMATION_TASK_STORAGE_UNAVAILABLE", "无法清除中断提示，请重试")
+                }
+                JSObject().put("connected", service != null).put("interrupted", false)
+                    .put("task", snapshot?.takeIf { it.taskId.isNotEmpty() }?.toJs() ?: JSONObject.NULL)
             }
         }
     }

@@ -880,6 +880,8 @@ export interface AutomationTask {
  */
 export interface AutomationTaskState {
   connected: boolean
+  /** Minimal persistent warning; never represents a resumable plan. */
+  interrupted?: boolean
   task: AutomationTask | null
 }
 
@@ -1770,6 +1772,7 @@ export interface RuntimeBridge {
    * 这是**人**的刹车（设置页按钮），AI 侧没有这条路；没有任务时按受控码拒收，不做空操作。
    */
   cancelAutomationTask: () => Promise<AutomationTaskState>
+  acknowledgeInterruptedTask: () => Promise<AutomationTaskState>
   /**
    * 读某个包已保存的自动化规则（**只读**）。
    *

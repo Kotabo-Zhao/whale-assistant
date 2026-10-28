@@ -149,6 +149,10 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         if (now - lastActionAt < ACTION_INTERVAL_MS && command in setOf("accessibilityAction", "accessibilityBack", "tap", "inputText")) {
             return failure("ACCESSIBILITY_RATE_LIMITED", "无障碍动作过于频繁，请稍后再试")
         }
+        if (command in setOf("accessibilityAction", "accessibilityBack", "tap", "inputText") &&
+            AutomationTaskInterruptionStore.orphaned(AutomationTaskInterruptionStore(this).pending(), automationTaskLedger.snapshot())) {
+            return failure(AutomationTaskCodes.INTERRUPTED, "之前的任务可能中断，请先检查现场并在任务卡片确认")
+        }
         val root = rootInActiveWindow ?: return failure("ACCESSIBILITY_WINDOW_UNAVAILABLE", "当前没有可读取的应用窗口")
         val packageName = root.packageName?.toString().orEmpty()
         if (!AccessibilityAutomationStore.packageAllowed(this, packageName)) {
@@ -1362,18 +1366,26 @@ class DeepSeekAccessibilityService : AccessibilityService() {
      *
      * 参数与回执形状见 [AutomationTaskWire]；这里只做「取事实 → 问台账 → 拼回执」。
      */
-    private fun automationTask(root: AccessibilityNodeInfo, packageName: String, param: String): DeviceCommandResult {
+    private fun automationTask(root: AccessibilityNodeInfo, packageName: String, param: String): DeviceCommandResult = synchronized(AutomationTaskInterruptionStore.lock) {
         val ledger = automationTaskLedger
+        val interruption = AutomationTaskInterruptionStore(this)
         val digest = windowDigest(root)
         val facts = AutomationTaskFacts(foregroundPackage = packageName, windowDigest = digest)
-        return when (val request = AutomationTaskWire.parse(param)) {
+        when (val request = AutomationTaskWire.parse(param)) {
             is AutomationTaskRequest.Invalid ->
                 taskFailure(request.code, request.message, null, false)
             is AutomationTaskRequest.Plan ->
-                when (val gate = ledger.plan(request.taskId, request.packageName, digest, request.steps).also {
+                if (AutomationTaskInterruptionStore.orphaned(interruption.pending(), ledger.snapshot())) {
+                    taskFailure(AutomationTaskCodes.INTERRUPTED, "之前的任务可能中断，请先检查现场并在任务卡片确认", ledger.snapshot(), false)
+                } else when (val gate = ledger.plan(request.taskId, request.packageName, digest, request.steps).also {
                     if (it is AutomationTaskGate.Proceed) { automationTaskActionAt = 0L; automationTaskReceipt = null }
                 }) {
-                    is AutomationTaskGate.Proceed -> taskAccepted(gate, ledger.snapshot())
+                    is AutomationTaskGate.Proceed -> {
+                        if (!interruption.arm()) {
+                            ledger.cancel()
+                            taskFailure(AutomationTaskCodes.STORAGE_UNAVAILABLE, "无法保存任务中断标记，未执行动作", ledger.snapshot(), false)
+                        } else taskAccepted(gate, ledger.snapshot())
+                    }
                     is AutomationTaskGate.Refused ->
                         taskFailure(gate.code, gate.message, ledger.snapshot(), gate.retryable)
                 }
@@ -1413,6 +1425,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                         )
                     } else {
                         automationTaskReceipt = null
+                        if (snapshot.status == AutomationTaskStatus.DONE && !AutomationTaskInterruptionStore.requiresReview(snapshot)) interruption.clear()
                         DeviceCommandResult(true, 0, AutomationTaskWire.done(snapshot), false, null)
                     }
                 }
@@ -1428,11 +1441,16 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                         taskFailure(gate.code, gate.message, ledger.snapshot(), gate.retryable)
                 }
             AutomationTaskRequest.Cancel -> {
+                val before = ledger.snapshot()
                 automationTaskReceipt = null
-                DeviceCommandResult(true, 0, AutomationTaskWire.done(ledger.cancel()), false, null)
+                val snapshot = ledger.cancel()
+                if (!AutomationTaskInterruptionStore.requiresReview(before)) interruption.clear()
+                DeviceCommandResult(true, 0, AutomationTaskWire.done(snapshot), false, null)
             }
             AutomationTaskRequest.Status ->
-                DeviceCommandResult(true, 0, AutomationTaskWire.done(ledger.snapshot()), false, null)
+                if (AutomationTaskInterruptionStore.orphaned(interruption.pending(), ledger.snapshot()))
+                    taskFailure(AutomationTaskCodes.INTERRUPTED, "之前的任务可能中断，请先检查现场并在任务卡片确认", ledger.snapshot(), false)
+                else DeviceCommandResult(true, 0, AutomationTaskWire.done(ledger.snapshot()), false, null)
         }
     }
 
@@ -1521,9 +1539,12 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     internal fun currentAutomationTask(): AutomationTaskSnapshot = automationTaskLedger.snapshot()
 
     /** 取消当前任务：未收口的步骤记 `skipped` + `AUTOMATION_TASK_CANCELLED`，动作本身不再发出。 */
-    internal fun cancelAutomationTask(): AutomationTaskSnapshot {
+    internal fun cancelAutomationTask(): AutomationTaskSnapshot = synchronized(AutomationTaskInterruptionStore.lock) {
         cancelPendingConfirmation()
-        return automationTaskLedger.cancel()
+        val before = automationTaskLedger.snapshot()
+        val result = automationTaskLedger.cancel()
+        if (!AutomationTaskInterruptionStore.requiresReview(before)) AutomationTaskInterruptionStore(this).clear()
+        result
     }
 
     /** 运行记录的只读快照：最新在前，`packageName` 为 null 表示所有包按时间合并。 */

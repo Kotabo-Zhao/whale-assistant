@@ -189,6 +189,20 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `中断标记不含步骤内容且不把未验证动作当作安全收口`() {
+        val ledger = ledger(spec("s1", action = AutomationTaskActions.SCROLL, verify = AutomationTaskActions.VERIFY_NONE))
+        assertTrue(AutomationTaskInterruptionStore.active(ledger.snapshot()))
+        assertFalse(AutomationTaskInterruptionStore.orphaned(true, ledger.snapshot()))
+        assertTrue(AutomationTaskInterruptionStore.orphaned(true, null))
+        assertFalse(AutomationTaskInterruptionStore.orphaned(false, null))
+        ledger.gate("s1", facts(), 1000L)
+        assertTrue(AutomationTaskInterruptionStore.requiresReview(ledger.snapshot()))
+        val finished = ledger.record("s1", AutomationTaskStepOutcome(ok = true), 1200L)
+        assertTrue(AutomationTaskInterruptionStore.requiresReview(finished))
+        assertTrue(AutomationTaskInterruptionStore.orphaned(true, finished))
+    }
+
+    @Test
     fun `目标消失验证需要匹配动作且真实查询目标缺失`() {
         val ledger = ledger(spec("s1", verify = AutomationTaskActions.VERIFY_TARGET_GONE), spec("s2"))
         ledger.gate("s1", facts(), 1000L)

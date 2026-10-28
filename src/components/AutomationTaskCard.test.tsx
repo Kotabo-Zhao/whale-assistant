@@ -62,6 +62,22 @@ describe('自动化任务卡片', () => {
     expect(bridge.cancelAutomationTask).not.toHaveBeenCalled()
   })
 
+  it('中断标记可见，检查现场后才由用户清除', async () => {
+    const ack = vi.fn().mockResolvedValue({ connected: true, interrupted: false, task: null })
+    card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, interrupted: true, task: null }), acknowledgeInterruptedTask: ack })
+    expect(await screen.findByRole('alert')).toHaveTextContent('之前的任务可能中断')
+    expect(screen.queryByText('现在没有正在执行的任务。')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '已检查现场，清除中断提示' }))
+    await waitFor(() => expect(ack).toHaveBeenCalledOnce())
+    expect(await screen.findByText('现在没有正在执行的任务。')).toBeInTheDocument()
+  })
+  it('清除中断提示失败时保留提示并说明失败', async () => {
+    card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: false, interrupted: true, task: null }), acknowledgeInterruptedTask: vi.fn().mockRejectedValue(new Error('failed')) })
+    fireEvent.click(await screen.findByRole('button', { name: '已检查现场，清除中断提示' }))
+    expect(await screen.findByText('无法清除中断提示，请先停止任务或稍后重试。')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('之前的任务可能中断')
+  })
+
   it('服务没连上时说读不到，并且明确这不是「没有任务」', async () => {
     card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: false, task: null }) })
 
