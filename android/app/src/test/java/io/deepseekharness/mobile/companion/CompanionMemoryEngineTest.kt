@@ -208,6 +208,29 @@ class CompanionMemoryEngineTest {
         assertEquals("旧偏好", result.getJSONArray("items").getJSONObject(0).getString("text"))
     }
 
+    @Test fun confirmedMemoriesCanBePagedWithoutExposingPendingItems() {
+        val rows = JSONArray()
+        repeat(23) { index -> rows.put(JSONObject().put("id", "id-$index").put("text", "咖啡偏好 $index")) }
+        rows.put(JSONObject().put("id", "pending").put("text", "咖啡待确认").put("status", "pending"))
+        val engine = CompanionMemoryEngine({ rows }, {})
+        fun search(offset: Int) = JSONObject(engine.execute(JSONObject().put("op", "search").put("query", "咖啡").put("offset", offset).toString()))
+        val first = search(0); val second = search(10); val third = search(20)
+        assertEquals(23, first.getInt("matchedCount")); assertEquals(10, first.getInt("nextOffset")); assertTrue(first.getBoolean("truncated"))
+        assertEquals(20, second.getInt("nextOffset")); assertEquals(3, third.getJSONArray("items").length())
+        assertTrue(third.isNull("nextOffset")); assertFalse(third.getBoolean("truncated"))
+        val ids = listOf(first, second, third).flatMap { page ->
+            val items = page.getJSONArray("items"); (0 until items.length()).map { items.getJSONObject(it).getString("id") }
+        }
+        assertEquals(23, ids.toSet().size); assertFalse(ids.contains("pending"))
+        assertEquals(0, search(100).getJSONArray("items").length())
+        val recent = JSONObject(engine.execute("{\"op\":\"search\",\"query\":\"\",\"offset\":10}"))
+        assertEquals("recent", recent.getString("matchMode")); assertEquals(10, recent.getJSONArray("items").length())
+        for (offset in listOf(-1, 101, 1.5, "10", JSONObject.NULL)) {
+            val request = JSONObject().put("op", "search").put("query", "咖啡").put("offset", offset)
+            assertThrows(RuntimeFailure::class.java) { engine.execute(request.toString()) }
+        }
+    }
+
     @Test fun rejectsSensitiveAndOversizedMemories() {
         val engine = CompanionMemoryEngine({ JSONArray() }, { })
         for (value in listOf("", "密码 abc", "api key: sk-abcdefghijklmnop", "a".repeat(601))) {

@@ -98,10 +98,15 @@ test('长期记忆工具通过本机桥保存、检索和删除，并验证输�
   const f = fixture(t, () => ok('{"items":[]}'))
   await f.tools.get('mobile_memory_save').execute({ text: '喜欢蓝色' }, {})
   await f.tools.get('mobile_memory_search').execute({ query: '蓝色' }, {})
+  await f.tools.get('mobile_memory_search').execute({ query: '蓝色', offset: 10 }, {})
   await f.tools.get('mobile_memory_delete').execute({ id: virtualSession }, {})
   assert.deepEqual(f.requests.map(r => [r.command, JSON.parse(r.param).op]), [
-    ['companionMemory', 'save'], ['companionMemory', 'search'], ['companionMemory', 'delete'],
+    ['companionMemory', 'save'], ['companionMemory', 'search'], ['companionMemory', 'search'], ['companionMemory', 'delete'],
   ])
+  assert.equal(JSON.parse(f.requests[2].param).offset, 10)
+  for (const offset of [-1, 101]) await assert.rejects(f.tools.get('mobile_memory_search').execute({ query: '蓝色', offset }, {}), /MEMORY_INPUT_INVALID/)
+  for (const offset of [1.5, '10', null]) await assert.rejects(f.tools.get('mobile_memory_search').execute({ query: '蓝色', offset }, {}))
+  assert.equal(f.requests.length, 4)
   await assert.rejects(f.tools.get('mobile_memory_save').execute({ text: '' }, {}), /MEMORY_INPUT_INVALID/)
   await assert.rejects(f.tools.get('mobile_memory_delete').execute({ id: '../bad' }, {}), /MEMORY_INPUT_INVALID/)
 })
