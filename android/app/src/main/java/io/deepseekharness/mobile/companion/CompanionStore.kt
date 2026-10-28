@@ -14,6 +14,18 @@ class CompanionStore(context: Context) {
     var candidateNotifications: Boolean
         get() = prefs.getBoolean("candidate_notifications", false)
         set(value) { prefs.edit().putBoolean("candidate_notifications", value).apply() }
+    /** Separate opt-in: local notification excerpts remain untrusted until the user confirms. */
+    var notificationMemorySuggestions: Boolean
+        get() = prefs.getBoolean("notification_memory_suggestions", false)
+        set(value) { prefs.edit().putBoolean("notification_memory_suggestions", value).apply() }
+    fun dismissedMemorySuggestions(): Set<String> = prefs.getStringSet("dismissed_memory_suggestions", emptySet())?.toSet() ?: emptySet()
+    fun dismissMemorySuggestion(id: String) = synchronized(lock) {
+        require(CompanionNotificationTarget.validDigest(id))
+        val next = dismissedMemorySuggestions().filter(CompanionNotificationTarget::validDigest).takeLast(99).toMutableSet()
+        next.add(id)
+        prefs.edit().putStringSet("dismissed_memory_suggestions", next).apply()
+    }
+    fun clearDismissedMemorySuggestions() { prefs.edit().remove("dismissed_memory_suggestions").apply() }
     var notificationCapture: Boolean
         get() = prefs.getBoolean("capture", false)
         set(value) { prefs.edit().putBoolean("capture", value).apply() }

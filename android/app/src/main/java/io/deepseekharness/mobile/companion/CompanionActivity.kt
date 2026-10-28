@@ -176,6 +176,9 @@ class CompanionActivity : AppCompatActivity() {
         } else if (intent?.getBooleanExtra("open_usage_suggestions", false) == true) {
             intent?.removeExtra("open_usage_suggestions")
             showUsageSuggestions()
+        } else if (intent?.getBooleanExtra("open_memory_suggestions", false) == true) {
+            intent?.removeExtra("open_memory_suggestions")
+            showMemorySuggestions()
         } else if (intent?.getBooleanExtra("open_notification_candidates", false) == true) {
             intent?.removeExtra("open_notification_candidates")
             showNotificationCandidates()
@@ -211,6 +214,10 @@ class CompanionActivity : AppCompatActivity() {
                 }
             }
         }
+        toggle("从通知中寻找记忆候选", store.notificationMemorySuggestions) { store.notificationMemorySuggestions = it; render() }
+        paragraph("开启后在本机从已采集通知中寻找短句，供你核对；通知可能来自其他人，不能直接当作你的偏好。候选不会提供给模型，清除原通知记录后消失。")
+        button("查看通知记忆候选") { showMemorySuggestions() }
+        button("重置已忽略的通知记忆候选") { store.clearDismissedMemorySuggestions(); android.widget.Toast.makeText(this, "已重置忽略记录。", android.widget.Toast.LENGTH_SHORT).show() }
         button("手动添加长期记忆") { composeUserMemory(null) }
         button("查看、确认和管理长期记忆") { showMemories() }
         button("搜索长期记忆") {
@@ -645,6 +652,27 @@ class CompanionActivity : AppCompatActivity() {
         if (!opened) android.widget.Toast.makeText(this, "无法打开应用，它可能已卸载或没有启动入口。", android.widget.Toast.LENGTH_LONG).show()
     }
 
+    private fun showMemorySuggestions() {
+        if (!store.notificationMemorySuggestions) { paragraph("请先开启从通知中寻找记忆候选。") ; return }
+        val rows = recordsOrNull() ?: return
+        val candidates = CompanionMemorySuggestions.fromRecords(rows, store.excludedPackages(), store.dismissedMemorySuggestions())
+        if (candidates.isEmpty()) { paragraph("当前没有可用候选；规则可能遗漏，也不代表没有值得记住的信息。") ; return }
+        val labels = candidates.map { item ->
+            val source = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(item.packageName, 0)).toString() }.getOrDefault(item.packageName)
+            val date = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.time))
+            "$source · $date\n${item.excerpt}"
+        }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("通知记忆候选")
+            .setItems(labels) { _, index ->
+                val candidate = candidates[index]
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对候选来源")
+                    .setMessage("${labels[index]}\n\n这只是通知中可能表达偏好的短句，可能由其他人发送，也可能过时或误判。请自行判断是否与你有关。")
+                    .setNegativeButton("关闭", null)
+                    .setNeutralButton("忽略此条") { _, _ -> store.dismissMemorySuggestion(candidate.id); showMemorySuggestions() }
+                    .setPositiveButton("整理成记忆") { _, _ -> composeUserMemory(candidate.excerpt) { store.dismissMemorySuggestion(candidate.id) } }.show()
+            }.setNegativeButton("关闭", null).show()
+    }
+
     private fun chooseNotificationForMemory() {
         val rows = recordsOrNull() ?: return
         if (rows.length() == 0) { paragraph("没有可用的本地通知记录。") ; return }
@@ -661,7 +689,7 @@ class CompanionActivity : AppCompatActivity() {
             }.setNegativeButton("取消", null).show()
     }
 
-    private fun composeUserMemory(reference: String?) {
+    private fun composeUserMemory(reference: String?, onConfirmed: (() -> Unit)? = null) {
         val edit = android.widget.EditText(this).apply {
             hint = "写下你希望助手记住的事实或偏好"
             minLines = 2
@@ -686,6 +714,7 @@ class CompanionActivity : AppCompatActivity() {
                 runMemoryIo("正在保存记忆…", { CompanionMemoryStore(this).addForUser(value, if (reference == null) "user_edit" else "user_notification") }) { result ->
                     dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
                     result.onSuccess { outcome ->
+                        if (outcome != UserMemoryResult.EXISTING_PENDING) onConfirmed?.invoke()
                         dialog.dismiss()
                         val message = when (outcome) {
                             UserMemoryResult.ADDED -> "已添加长期记忆。"

@@ -1781,6 +1781,17 @@ class OverlayBallService : Service() {
 
     companion object {
         @Volatile private var activeService: OverlayBallService? = null
+        internal fun companionMemorySuggestionHint() {
+            Handler(Looper.getMainLooper()).post {
+                activeService?.let { service ->
+                    if (!CompanionStore(service).notificationMemorySuggestions) return@let
+                    service.showCompanionHint("发现一条可能值得记住的信息，点击核对。") {
+                        runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
+                            .putExtra("open_memory_suggestions", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
+                }
+            }
+        }
         internal fun companionCandidateHint() {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
