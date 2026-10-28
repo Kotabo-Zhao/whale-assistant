@@ -432,6 +432,9 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
   assert.deepEqual(
     registeredTools.map(tool => tool.name),
     [
+      'mobile_recurring_list',
+      'mobile_recurring_create',
+      'mobile_recurring_delete',
       'mobile_reminder_list',
       'mobile_reminder_create',
       'mobile_reminder_delete',

@@ -262,6 +262,12 @@ class DeviceBridgeServer(
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return
                     }
+                    if (commandName == "companionRecurring") {
+                        val context = appContext ?: throw RuntimeFailure("REMINDER_UNAVAILABLE", "提醒服务不可用")
+                        val result = io.deepseekharness.mobile.companion.CompanionRecurringBridge(context).execute(param)
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                        return
+                    }
                     if (commandName == "companionReminder") {
                         val context = appContext ?: throw RuntimeFailure("REMINDER_UNAVAILABLE", "提醒服务不可用")
                         val result = io.deepseekharness.mobile.companion.CompanionReminderBridge(context).execute(param)

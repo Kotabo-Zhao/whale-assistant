@@ -43,6 +43,19 @@ test('手机提醒工具通过授权桥传递明确时间并拒绝不合法参�
   await assert.rejects(f.tools.get('mobile_reminder_delete').execute({ id: '../bad' }, {}), /REMINDER_INPUT_INVALID/)
 })
 
+test('重复提醒工具传递明确的时间、星期和时区，非法参数不出桥', async t => {
+  const f = fixture(t, () => ok('{"scheduled":true,"inexact":true}'))
+  await f.tools.get('mobile_recurring_list').execute({}, {})
+  await f.tools.get('mobile_recurring_create').execute({ text: '喝水', hour: 9, minute: 30, weekday: 0, timeZone: 'Asia/Shanghai' }, {})
+  await f.tools.get('mobile_recurring_delete').execute({ id: virtualSession }, {})
+  assert.deepEqual(f.requests.map(r => [r.command, JSON.parse(r.param).op]), [
+    ['companionRecurring', 'list'], ['companionRecurring', 'create'], ['companionRecurring', 'delete'],
+  ])
+  await assert.rejects(f.tools.get('mobile_recurring_create').execute({ text: '喝水', hour: 24, minute: 0, weekday: 0, timeZone: 'Asia/Shanghai' }, {}), /REMINDER_INPUT_INVALID/)
+  await assert.rejects(f.tools.get('mobile_recurring_delete').execute({ id: '../bad' }, {}), /REMINDER_INPUT_INVALID/)
+  assert.equal(f.requests.length, 3)
+})
+
 test('任务返回工具通过受限无障碍桥发送空参数', async t => {
   const f = fixture(t, () => ok('已执行'))
   const tool = f.tools.get('mobile_accessibility_back')
