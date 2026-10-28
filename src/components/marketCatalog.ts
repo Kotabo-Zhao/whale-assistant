@@ -48,6 +48,7 @@ export async function parseCatalogOffThread(data: Uint8Array, signal: AbortSigna
     const abort = () => finish(null, new Error('目录读取已取消'))
     signal.addEventListener('abort', abort, { once: true })
     worker.onmessage = event => {
+      if (finished) return
       const message: unknown = event.data
       if (!message || typeof message !== 'object' || !('ok' in message) || message.ok !== true || !('entries' in message) || !Array.isArray(message.entries)) {
         finish(null, new Error('目录格式无效')); return
@@ -55,6 +56,7 @@ export async function parseCatalogOffThread(data: Uint8Array, signal: AbortSigna
       finish(message.entries as Entry[])
     }
     worker.onerror = () => {
+      if (finished) return
       if (signal.aborted) { abort(); return }
       try { finish(parseCatalogData(data)) } catch { finish(null, new Error('目录格式无效')) }
     }

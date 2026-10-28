@@ -118,6 +118,30 @@ it('插件目录分页可访问全部结果，搜索后回到第一页', async (
   expect(screen.queryByRole('navigation', { name: '插件目录分页' })).not.toBeInTheDocument()
 })
 
+it('搜索名称、包名和描述时忽略大小写，刷新后不保留旧索引', async () => {
+  let generation = 0
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+    const plugins = generation++ === 0
+      ? [{ name: 'Weather', npm: 'weather-plugin', description: { zh: '每日天气' } }, { name: '笔记', npm: 'notes-plugin', description: { en: 'Quick Note' } }]
+      : [{ name: '新版', npm: 'new-plugin', description: { zh: '每日天气' } }]
+    const bytes = new TextEncoder().encode(JSON.stringify({ plugins }))
+    let done = false
+    return Promise.resolve({ ok: true, body: { getReader: () => ({ read: () => Promise.resolve(done ? { done: true } : (done = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {} }) } })
+  }))
+  render(<MobileMarket locked={false} onInstall={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+  expect(await screen.findByText('Weather')).toBeVisible()
+  const search = screen.getByRole('searchbox', { name: '搜索目录' })
+  fireEvent.change(search, { target: { value: 'QUICK NOTE' } })
+  expect(await screen.findByText('笔记')).toBeVisible()
+  expect(screen.queryByText('Weather')).not.toBeInTheDocument()
+  fireEvent.change(search, { target: { value: '每日天气' } })
+  expect(await screen.findByText('Weather')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '刷新目录' }))
+  expect(await screen.findByText('新版')).toBeVisible()
+  expect(screen.queryByText('Weather')).not.toBeInTheDocument()
+})
+
 
 it('按需读取指定 npm 版本声明，校验包身份且不将声明当作兼容结论', async () => {
   const manifest = { name: '@example/plugin', version: '1.2.3', os: ['linux'], cpu: ['arm64'], engines: { node: '>=20' }, dsh: { engines: { dsh: '^0.2.1' } }, dependencies: { example: '^1' }, optionalDependencies: { helper: '~2' }, peerDependencies: { host: '>=3' }, scripts: { install: 'do not display' } }

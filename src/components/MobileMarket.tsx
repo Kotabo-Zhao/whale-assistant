@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { t, useLanguage } from '../i18n'
 
 import { fetchCatalog, fetchPackagePreview, type Entry, type PackagePreview } from './marketCatalog'
@@ -12,6 +12,7 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
   useLanguage()
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [query, setQuery] = useState('')
+  const deferredQuery = useDeferredValue(query)
   const [page, setPage] = useState(0)
   const [review, setReview] = useState<Entry | null>(null)
   const [version, setVersion] = useState('')
@@ -27,10 +28,13 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
   }, [review])
   useEffect(() => () => { request.current?.abort(); request.current = null; previewRequest.current?.abort(); previewRequest.current = null }, [])
   useEffect(() => { previewRequest.current?.abort(); previewRequest.current = null; setPreview(null); setPreviewStatus('idle') }, [review, version])
+  const searchIndex = useMemo(() => (entries ?? []).map(item => ({
+    item, text: `${item.name} ${item.npm} ${item.description}`.toLowerCase(),
+  })), [entries])
   const matches = useMemo(() => {
-    const term = query.trim().toLowerCase()
-    return (entries ?? []).filter(item => !term || `${item.name} ${item.npm} ${item.description}`.toLowerCase().includes(term))
-  }, [entries, query])
+    const term = deferredQuery.trim().toLowerCase()
+    return term ? searchIndex.filter(row => row.text.includes(term)).map(row => row.item) : (entries ?? [])
+  }, [entries, searchIndex, deferredQuery])
   const pageCount = Math.ceil(matches.length / PAGE_SIZE)
   const currentPage = Math.min(page, Math.max(0, pageCount - 1))
   const visible = matches.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
@@ -123,16 +127,16 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
     </div>}
     {entries && <>
       <label className="mobile-market-search">{t('搜索目录')}<input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(0); setReview(null) }} placeholder={t('搜索插件名称或包名')} /></label>
-      <div ref={resultsRegion} tabIndex={-1}>
+      <div ref={resultsRegion} tabIndex={-1} aria-busy={query !== deferredQuery}>
         <p className="plugin-hint" role="status" aria-live="polite">{matches.length === 0 ? t('没有匹配的插件。') : t('共 {0} 个结果，第 {1}/{2} 页。', matches.length, currentPage + 1, pageCount)}{locked ? t('请先停止运行环境再安装。') : ''}</p>
         {visible.length > 0 && <ul className="mobile-market-list">{visible.map(item => <li key={item.npm}>
           <div><strong>{item.name}</strong><code>{item.npm}</code>{item.description && <p>{item.description}</p>}</div>
-          <button className="button button-secondary compact-button" type="button" disabled={locked} onClick={() => { setVersion(''); setReview(item) }}>{t('安装')}</button>
+          <button className="button button-secondary compact-button" type="button" disabled={locked || query !== deferredQuery} onClick={() => { setVersion(''); setReview(item) }}>{t('安装')}</button>
         </li>)}</ul>}
       </div>
       {pageCount > 1 && <nav className="mobile-market-pagination" aria-label={t('插件目录分页')}>
-        <button className="button button-secondary compact-button" type="button" disabled={currentPage === 0} onClick={() => changePage(currentPage - 1)}>{t('上一页')}</button>
-        <button className="button button-secondary compact-button" type="button" disabled={currentPage + 1 >= pageCount} onClick={() => changePage(currentPage + 1)}>{t('下一页')}</button>
+        <button className="button button-secondary compact-button" type="button" disabled={query !== deferredQuery || currentPage === 0} onClick={() => changePage(currentPage - 1)}>{t('上一页')}</button>
+        <button className="button button-secondary compact-button" type="button" disabled={query !== deferredQuery || currentPage + 1 >= pageCount} onClick={() => changePage(currentPage + 1)}>{t('下一页')}</button>
       </nav>}
     </>}
   </section>
