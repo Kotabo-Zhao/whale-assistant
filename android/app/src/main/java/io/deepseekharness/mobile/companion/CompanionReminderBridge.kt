@@ -10,6 +10,8 @@ import io.deepseekharness.mobile.runtime.RuntimeFailure
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.ZoneId
+import java.time.LocalDateTime
+import java.time.Instant
 import java.util.UUID
 
 /** 仅接收结构化提醒命令，不解析自然语言，也不读取其他应用的数据。 */
@@ -44,20 +46,43 @@ internal class CompanionReminderBridgeEngine(
         if (param.length > 4096) throw invalid()
         val request = try { JSONObject(param) } catch (_: Exception) { throw invalid() }
         return when (request.opt("op") as? String ?: throw invalid()) {
-            "list" -> JSONObject().put("items", list()).put("nowMillis", now()).put("timeZone", zone()).toString()
+            "list" -> {
+                val clock = now()
+                val zoneId = ZoneId.of(zone())
+                JSONObject().put("items", list()).put("nowMillis", clock).put("timeZone", zoneId.id)
+                    .put("nowLocal", Instant.ofEpochMilli(clock).atZone(zoneId).toOffsetDateTime().toString()).toString()
+            }
             "create" -> {
                 val text = (request.opt("text") as? String)?.trim() ?: throw invalid()
-                val timestamp = when (val value = request.opt("atMillis")) {
-                    is Int -> value.toLong()
-                    is Long -> value
-                    else -> throw invalid()
+                val hasEpoch = request.has("atMillis")
+                val hasLocal = request.has("localDateTime")
+                if (hasEpoch == hasLocal) throw invalid()
+                val timestamp = if (hasEpoch) {
+                    when (val value = request.opt("atMillis")) {
+                        is Int -> value.toLong()
+                        is Long -> value
+                        else -> throw invalid()
+                    }
+                } else {
+                    val value = request.opt("localDateTime") as? String ?: throw invalid()
+                    if (!value.matches(Regex("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}"))) throw invalid()
+                    val requestedZone = request.opt("timeZone") as? String ?: throw invalid()
+                    if (requestedZone != zone()) throw RuntimeFailure("REMINDER_TIMEZONE_CHANGED", "设备时区已变化，请重新确认提醒时间")
+                    val resolved = try {
+                        val local = LocalDateTime.parse(value)
+                        val offsets = ZoneId.of(requestedZone).rules.getValidOffsets(local)
+                        if (offsets.size != 1) throw invalid()
+                        local.toInstant(offsets[0]).toEpochMilli()
+                    } catch (error: RuntimeFailure) { throw error }
+                    catch (_: Exception) { throw invalid() }
+                    resolved
                 }
                 if (text.isEmpty() || text.length > 200 || CompanionStore.sensitive(text) || timestamp <= now() + 10_000) throw invalid()
                 if (!notificationsAvailable()) throw RuntimeFailure("REMINDER_NOTIFICATION_DISABLED", "请先允许助手发送通知")
                 try { create(text, timestamp) }
                 catch (_: IllegalArgumentException) { throw invalid() }
                 catch (e: Exception) { throw RuntimeFailure("REMINDER_SCHEDULE_FAILED", "提醒安排失败，请检查设备设置", e) }
-                JSONObject().put("scheduled", true).put("atMillis", timestamp).put("inexact", true).toString()
+                JSONObject().put("scheduled", true).put("atMillis", timestamp).put("timeZone", zone()).put("inexact", true).toString()
             }
             "delete" -> {
                 val id = request.opt("id") as? String ?: throw invalid()

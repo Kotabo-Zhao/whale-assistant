@@ -33,13 +33,13 @@ const virtualSession = '00000000-1111-2222-3333-444444444444'
 test('手机提醒工具通过授权桥传递明确时间并拒绝不合法参数', async t => {
   const f = fixture(t, () => ok('{"scheduled":true,"inexact":true}'))
   await f.tools.get('mobile_reminder_list').execute({}, {})
-  await f.tools.get('mobile_reminder_create').execute({ text: '取快递', atMillis: 1800000000000 }, {})
+  await f.tools.get('mobile_reminder_create').execute({ text: '取快递', localDateTime: '2026-10-30T15:00', timeZone: 'Asia/Shanghai' }, {})
   await f.tools.get('mobile_reminder_delete').execute({ id: virtualSession }, {})
   assert.deepEqual(f.requests.map(r => [r.command, JSON.parse(r.param).op]), [
     ['companionReminder', 'list'], ['companionReminder', 'create'], ['companionReminder', 'delete'],
   ])
-  await assert.rejects(f.tools.get('mobile_reminder_create').execute({ text: '', atMillis: 1 }, {}), /REMINDER_INPUT_INVALID/)
-  await assert.rejects(f.tools.get('mobile_reminder_create').execute({ text: '会议', atMillis: 1.5 }, {}), /integer|REMINDER_INPUT_INVALID/)
+  await assert.rejects(f.tools.get('mobile_reminder_create').execute({ text: '', localDateTime: '2026-10-30T15:00', timeZone: 'Asia/Shanghai' }, {}), /REMINDER_INPUT_INVALID/)
+  await assert.rejects(f.tools.get('mobile_reminder_create').execute({ text: '会议', localDateTime: '明天', timeZone: 'Asia/Shanghai' }, {}), /REMINDER_INPUT_INVALID/)
   await assert.rejects(f.tools.get('mobile_reminder_delete').execute({ id: '../bad' }, {}), /REMINDER_INPUT_INVALID/)
 })
 
