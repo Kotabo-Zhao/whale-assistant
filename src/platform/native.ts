@@ -123,6 +123,7 @@ interface NativeRuntimePlugin {
   listHarnessReleases(): Promise<unknown>
   manageHarnessVersions(options: { operation: HarnessVersionOperation; version?: string }): Promise<unknown>
   managePlugins(options: PluginRequest): Promise<PluginCatalog>
+  marketProposal(options: { operation: 'get' | 'dismiss'; id?: string }): Promise<unknown>
   setAppLanguage(options: { language: 'zh-CN' | 'en' }): Promise<void>
   /** 同步主题模式给原生，由原生把它落到状态栏（登记册 5.4）。 */
   setAppTheme(options: { mode: AppThemeMode }): Promise<void>
@@ -308,6 +309,23 @@ function createNativeBridge(): RuntimeBridge {
     listHarnessReleases: () => NativeRuntime.listHarnessReleases().then(validateHarnessReleases),
     manageHarnessVersions: (operation, version) => NativeRuntime.manageHarnessVersions(harnessVersionRequest(operation, version)).then(validateHarnessVersions),
     managePlugins: request => NativeRuntime.managePlugins(validatePluginRequest(request)).then(validatePluginCatalog),
+    getMarketProposal: () => NativeRuntime.marketProposal({ operation: 'get' }).then(value => {
+      if (!value || typeof value !== 'object' || !('proposal' in value)) throw new Error('无效安装请求')
+      const proposal = value.proposal
+      if (proposal === null) return null
+      if (!proposal || typeof proposal !== 'object' || !('id' in proposal) || !('packageName' in proposal) || !('createdAt' in proposal) ||
+          typeof proposal.id !== 'string' || !/^[a-f0-9-]{36}$/.test(proposal.id) || typeof proposal.packageName !== 'string' ||
+          proposal.packageName.length > 214 || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(proposal.packageName) ||
+          proposal.packageName.includes('..') || typeof proposal.createdAt !== 'number' || !Number.isSafeInteger(proposal.createdAt) || proposal.createdAt <= 0) throw new Error('无效安装请求')
+      return { id: proposal.id, packageName: proposal.packageName, createdAt: proposal.createdAt }
+    }),
+    dismissMarketProposal: id => {
+      if (!/^[a-f0-9-]{36}$/.test(id)) return Promise.reject(new Error('无效安装请求'))
+      return NativeRuntime.marketProposal({ operation: 'dismiss', id }).then(value => {
+        if (!value || typeof value !== 'object' || !('removed' in value) || typeof value.removed !== 'boolean') throw new Error('无效安装请求')
+        return value.removed
+      })
+    },
     setAppLanguage: language => {
       if (language !== 'zh-CN' && language !== 'en') return Promise.reject(new Error('不支持的应用语言'))
       return NativeRuntime.setAppLanguage({ language })

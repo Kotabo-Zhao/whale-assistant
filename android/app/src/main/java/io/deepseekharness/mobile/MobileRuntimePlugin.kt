@@ -750,6 +750,23 @@ class MobileRuntimePlugin : Plugin() {
         }
     }
 
+    /** Read or dismiss a queued marketplace proposal; installation still uses managePlugins. */
+    @PluginMethod
+    fun marketProposal(call: PluginCall) {
+        execute(call) {
+            val store = io.deepseekharness.mobile.runtime.MarketProposalStore(context)
+            when (call.getString("operation")) {
+                "get" -> {
+                    val proposal = store.get()
+                    JSObject().put("proposal", if (proposal == null) JSONObject.NULL else JSObject()
+                        .put("id", proposal.id).put("packageName", proposal.packageName).put("createdAt", proposal.createdAt))
+                }
+                "dismiss" -> JSObject().put("removed", store.dismiss(call.getString("id").orEmpty()))
+                else -> throw RuntimeFailure("MARKET_PROPOSAL_INVALID", "安装请求操作无效")
+            }
+        }
+    }
+
     /**
      * 权限：应用内桥接。
      * 运行时自检：`check` 只读（可用空间、dsh 版本、WebView 版本与十八项检查 —— 访客脚本产出 14 项：

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown, Package, RefreshCw, X } from 'lucide-react'
 import { t, useLanguage } from '../i18n'
-import type { PluginCatalog, PluginRecoveryState, PluginRequest, RuntimeBridge, RuntimeState } from '../platform/types'
+import type { MarketProposal, PluginCatalog, PluginRecoveryState, PluginRequest, RuntimeBridge, RuntimeState } from '../platform/types'
 import './PluginSettings.css'
 import { MobileMarket } from './MobileMarket'
 
@@ -137,6 +137,9 @@ function RecoveryNotice({ recovery, unresolved, locked, onRepair, onPrune }: {
 export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBridge; runtime: RuntimeState; onBack: () => void }) {
   useLanguage()
   const [catalog, setCatalog] = useState<PluginCatalog | null>(null)
+  const [proposal, setProposal] = useState<MarketProposal | null>(null)
+  const [proposalBusy, setProposalBusy] = useState(false)
+  const [proposalError, setProposalError] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   /** 受控详情（包名与版本差异），与 notice 分开保存：notice 要能被 t() 整条查表翻译。 */
@@ -151,8 +154,8 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const [query, setQuery] = useState('')
   const active = useRef(true)
   const pending = useRef(false)
-  const run = useCallback(async (request: PluginRequest): Promise<void> => {
-    if (pending.current) return
+  const run = useCallback(async (request: PluginRequest): Promise<boolean> => {
+    if (pending.current) return false
     pending.current = true
     setBusy(true); setNotice(''); setNoticeDetail(''); setFailed(false)
     try {
@@ -163,6 +166,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         // 导入成功后清空输入：同一条来源再点一次只会命中既有安装，清空更不容易误解成"导入两次"。
         if (request.operation === 'import') { setSource(''); setExpected('') }
       }
+      return true
     } catch (error) {
       if (active.current) {
         const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : ''
@@ -176,6 +180,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         setNoticeDetail(detail)
         setFailed(true)
       }
+      return false
     } finally { pending.current = false; if (active.current) setBusy(false) }
   }, [bridge])
   useEffect(() => {
@@ -183,6 +188,21 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     void run({ operation: 'list' })
     return () => { active.current = false }
   }, [run])
+  const refreshProposal = useCallback(async () => {
+    try { const value = await bridge.getMarketProposal(); if (active.current) { setProposal(value); setProposalError(false) } }
+    catch { if (active.current) setProposalError(true) }
+  }, [bridge])
+  useEffect(() => { void refreshProposal() }, [refreshProposal])
+  const handleProposal = async (install: boolean) => {
+    if (!proposal || proposalBusy || busy) return
+    setProposalBusy(true)
+    try {
+      if (install && !await run({ operation: 'import', source: proposal.packageName })) return
+      await bridge.dismissMarketProposal(proposal.id)
+      await refreshProposal()
+    } catch { if (active.current) setProposalError(true) }
+    finally { if (active.current) setProposalBusy(false) }
+  }
   useEffect(() => { setStopped(false) }, [runtime.phase])
   const stop = async (): Promise<void> => {
     if (pending.current) return
@@ -235,6 +255,16 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         <small>{t('市场安装后重启对话生效；移动端兼容性取决于插件。')}</small>
       </div>
       <button className="button button-primary compact-button" type="button" disabled={locked || !catalog || marketplaceInstalled} onClick={() => { void run({ operation: 'import', source: 'dshmarket' }) }}>{marketplaceInstalled ? t('插件市场已安装') : t('安装插件市场')}</button>
+    </section>
+    <section className="plugin-import" aria-label={t('商店待处理请求')}>
+      <h2>{t('商店待处理请求')}</h2>
+      <p>{t('商店请求只暂存包名，需停止运行环境并由你确认后才会安装。来源与安卓兼容性仍需核对。')}</p>
+      <button className="button button-secondary compact-button" type="button" disabled={proposalBusy} onClick={() => { void refreshProposal() }}>{t('刷新请求')}</button>
+      {proposalError && <p role="alert">{t('无法读取或清除安装请求，请稍后重试。')}</p>}
+      {proposal && <div><p><strong>{t('待确认包名')}：</strong><code>{proposal.packageName}</code></p>
+        <button className="button button-secondary compact-button" type="button" disabled={proposalBusy || busy} onClick={() => { void handleProposal(false) }}>{t('忽略请求')}</button>{' '}
+        <button className="button button-primary compact-button" type="button" disabled={proposalBusy || locked} onClick={() => { void handleProposal(true) }}>{t('确认安装请求')}</button>
+      </div>}
     </section>
     <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }) }} />
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}

@@ -214,6 +214,12 @@ class DeviceBridgeServer(
                     if (commandName.length > 32 || param.length > DeviceFilePolicy.MAX_PARAM_CHARS) {
                         throw RuntimeFailure("DEVICE_COMMAND_INVALID", "设备参数过长")
                     }
+                    if (commandName == "pluginMarketProposal") {
+                        val context = appContext ?: throw RuntimeFailure("MARKET_PROPOSAL_UNAVAILABLE", "安装请求服务不可用")
+                        io.deepseekharness.mobile.runtime.MarketProposalStore(context).propose(param)
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
+                        return
+                    }
                     if (commandName == "companionMemory") {
                         if (param.length > 4096) throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数过长")
                         val context = appContext ?: throw RuntimeFailure("MEMORY_UNAVAILABLE", "记忆服务不可用")

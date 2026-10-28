@@ -1577,12 +1577,16 @@ export interface RuntimeWorkspaceFileList {
   truncated: boolean
 }
 
+export interface MarketProposal { id: string; packageName: string; createdAt: number }
+
 export interface RuntimeBridge {
   listHarnessReleases: () => Promise<HarnessReleaseList>
   manageHarnessVersions: (operation: HarnessVersionOperation, version?: string) => Promise<HarnessVersionsState>
   /** Harness 包安装的阶段进度；只有安装会上报，其它操作没有事件。 */
   addHarnessProgressListener: (listener: (event: HarnessProgress) => void) => Promise<ListenerHandle>
   managePlugins: (request: PluginRequest) => Promise<PluginCatalog>
+  getMarketProposal: () => Promise<MarketProposal | null>
+  dismissMarketProposal: (id: string) => Promise<boolean>
   /** 保存应用语言，仅接受简体中文和英语。 */
   setAppLanguage: (language: 'zh-CN' | 'en') => Promise<void>
   /**

@@ -33,6 +33,28 @@ describe('应用外层插件管理', () => {
       await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: 'catalog-example' }))
     } finally { mock.mockRestore() }
   })
+  it('商店请求需确认，并且安装成功后才清除', async () => {
+    const proposal = { id: '00000000-0000-0000-0000-000000000001', packageName: 'example-market-plugin', createdAt: 1000 }
+    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValue(catalog), stopRuntime: vi.fn(),
+      getMarketProposal: vi.fn().mockResolvedValueOnce(proposal).mockResolvedValue(null), dismissMarketProposal: vi.fn().mockResolvedValue(true) }
+    render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
+    await screen.findByText('example-market-plugin')
+    expect(bridge.managePlugins).not.toHaveBeenCalledWith({ operation: 'import', source: proposal.packageName })
+    fireEvent.click(screen.getByRole('button', { name: '确认安装请求' }))
+    await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: proposal.packageName }))
+    await waitFor(() => expect(bridge.dismissMarketProposal).toHaveBeenCalledWith(proposal.id))
+  })
+  it('安装失败时保留商店请求', async () => {
+    const proposal = { id: '00000000-0000-0000-0000-000000000002', packageName: 'example-market-plugin', createdAt: 1000 }
+    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(new Error('failed')),
+      getMarketProposal: vi.fn().mockResolvedValue(proposal), dismissMarketProposal: vi.fn() }
+    render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
+    await screen.findByText('example-market-plugin')
+    fireEvent.click(screen.getByRole('button', { name: '确认安装请求' }))
+    await screen.findByRole('alert')
+    expect(bridge.dismissMarketProposal).not.toHaveBeenCalled()
+    expect(screen.getByText('example-market-plugin')).toBeInTheDocument()
+  })
   it('Harness 错误状态下仍可展开文件和禁用子插件', async () => {
     const bridge = setup()
     const summary = await screen.findByText('example-plugin')
