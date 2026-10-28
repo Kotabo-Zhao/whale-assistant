@@ -23,11 +23,11 @@ import { App } from '../App'
  *
  *   - DOM 变了  → 这次提交产出了用户可见的变化，属于**必要渲染**；
  *   - DOM 一字未变 → React 把整棵子树 reconcile + render 跑了一遍，却没产出任何可见变化，
- *     这次提交是**可避免的浪费**。
+ *     这次提交没有产生 HTML 变化，但仍可能更新事件处理等状态，需要进一步定位才能判定是否可避免。
  *
  * `innerHTML` 是渲染输出的确定性函数，两次相同即输出相同 —— 这个判据不靠猜。
- * 夹具自检用例（第一个 `it`）专门钉住它：一次已知会改 DOM 的交互必须被记成 `domChanged=true`，
- * 否则说明 `onRender` 的调用时机与 DOM 变更之间错位，整套数字都不可信。
+ * 夹具自检用一个受控组件验证显示变化和仅隐藏状态变化，再单独测量真实导航。
+ * 真实导航可能包含异步和懒加载提交，不能假设每一次提交都会更改 DOM。
  *
  * ## 为什么桥接桩必须返回「值相同、引用不同」的快照
  *
@@ -119,8 +119,8 @@ function report(label: string, rows: CommitRecord[]): void {
     .join('\n')
   console.log(
     `\n[RENDER-PROFILE] ${label}\n` +
-      `      commits=${rows.length} wasted(DOM 未变)=${wasted.length} ` +
-      `actual 合计=${total.toFixed(2)}ms 其中白做=${wastedMs.toFixed(2)}ms (${share}%)\n${table}\n`,
+      `      commits=${rows.length} DOM未变=${wasted.length} ` +
+      `actual 合计=${total.toFixed(2)}ms 其中DOM未变=${wastedMs.toFixed(2)}ms (${share}%)\n${table}\n`,
   )
 }
 
@@ -160,11 +160,30 @@ describe('§5.6-B 渲染测量', () => {
   beforeEach(beforeEachAppTest)
 
   /**
-   * 夹具自检：一次已知会改 DOM 的交互必须被记成 `domChanged=true`。
-   * 这条**必须真实失败**的能力来自「把 onRender 的读取改成提前一帧」之类的错误改动；
-   * 它是其余所有数字的前提，所以单独钉住。
+   * 用受控组件分别验证 DOM 变化与不变化，再测量含异步操作的实际导航。
    */
-  it('夹具自检：纯导航的每一次提交都必须改变 DOM', async () => {
+  it('夹具自检：识别可见与不可见的提交，并测量真实导航', async () => {
+    const probeContainer = document.createElement('div')
+    document.body.appendChild(probeContainer)
+    let previous: string | null = null
+    const changes: boolean[] = []
+    function Probe() {
+      const [visible, setVisible] = useState(0)
+      const [, setHidden] = useState(0)
+      return <div><span>{visible}</span>
+        <button onClick={() => setVisible(value => value + 1)}>改变显示</button>
+        <button onClick={() => setHidden(value => value + 1)}>改变隐藏状态</button></div>
+    }
+    const probe = render(<Profiler id="probe" onRender={() => {
+      const html = probeContainer.innerHTML
+      changes.push(html !== previous)
+      previous = html
+    }}><Probe /></Profiler>, { container: probeContainer })
+    fireEvent.click(screen.getByRole('button', { name: '改变显示' }))
+    fireEvent.click(screen.getByRole('button', { name: '改变隐藏状态' }))
+    expect(changes).toEqual([true, true, false])
+    probe.unmount()
+    probeContainer.remove()
     await withFakeTimers(async () => {
       const { profile } = mountProfiledApp()
       // 先等外壳稳定在设置首页（自动启动会把视图推到这里），再开始计数：
@@ -180,9 +199,8 @@ describe('§5.6-B 渲染测量', () => {
       const rows = profile.sinceReset()
       report('夹具自检：设置首页 → 诊断与日志', rows)
       expect(rows.length).toBeGreaterThan(0)
-      // 一次真实导航必须每一次提交都改动了 DOM。这条同时是「DOM 未变 = 白做」判据的对照组：
-      // 如果判据坏了（例如恒为 true），这里就会挂。
-      expect(rows.filter(row => !row.domChanged)).toHaveLength(0)
+      // 懒加载和异步状态也可能产生没有 DOM 变化的提交；保留计数，不假设导航全无此类提交。
+      expect(rows.some(row => row.domChanged)).toBe(true)
     })
   })
 

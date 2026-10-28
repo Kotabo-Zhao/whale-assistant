@@ -170,6 +170,10 @@ export const bridge = {
   // 任务台账：界面进「无障碍应用自动化」页会读一次当前任务，取消是用户点击后才调；
   // 缺桩同样会让 effect 抛错并卸载整棵树。
   getAutomationTaskState: vi.fn(),
+  acknowledgeInterruptedTask: vi.fn(),
+  getMarketProposal: vi.fn(),
+  dismissMarketProposal: vi.fn(),
+  openCompanionSettings: vi.fn(),
   cancelAutomationTask: vi.fn(),
   clearRuntimeCache: vi.fn(),
   purgePluginData: vi.fn(),
@@ -618,6 +622,10 @@ export function beforeEachAppTest(): void {
   // 任务台账默认「服务连着、当前没有任务」：多数用例只关心别的页面，不该被一块写着「有任务在跑」
   // 的读数影响；需要「读不到」（connected=false）或「有任务」的用例自己覆盖这两条桩。
   bridge.getAutomationTaskState.mockResolvedValue({ connected: true, task: null })
+  bridge.acknowledgeInterruptedTask.mockResolvedValue({ connected: true, task: null })
+  bridge.getMarketProposal.mockResolvedValue(null)
+  bridge.dismissMarketProposal.mockResolvedValue(false)
+  bridge.openCompanionSettings.mockResolvedValue(undefined)
   bridge.cancelAutomationTask.mockResolvedValue({ connected: true, task: null })
   // 默认「没有任何快照」：多数用例只关心别的页面，不该被一份假快照影响；
   // 关心快照的用例自己覆盖这四条桩。上限取值与原生侧一致（3 份 / 512 MiB）。
