@@ -18,6 +18,18 @@ class OverlayBallPreferencesTest {
     }
 
     @Test
+    fun avatarSizeIsBoundedAndDefaultsForUnknownValues() {
+        val storage = FakeStorage()
+        val preferences = OverlayBallPreferences(storage)
+        assertEquals(88, preferences.readSizeDp())
+        preferences.writeSizeDp(112)
+        assertEquals(112, preferences.readSizeDp())
+        storage.values[OverlayBallPreferences.KEY_SIZE] = 999
+        assertEquals(88, preferences.readSizeDp())
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { preferences.writeSizeDp(20) }
+    }
+
+    @Test
     fun returnsNullWhenNothingStored() {
         val preferences = OverlayBallPreferences(FakeStorage())
         assertNull(preferences.readPosition())

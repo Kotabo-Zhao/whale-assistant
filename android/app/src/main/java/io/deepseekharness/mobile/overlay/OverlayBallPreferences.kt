@@ -18,6 +18,12 @@ class OverlayBallPreferences(private val storage: Storage) {
         fun writeInt(key: String, value: Int)
     }
 
+    fun readSizeDp(): Int = storage.readInt(KEY_SIZE)?.takeIf { it in SIZES_DP } ?: DEFAULT_SIZE_DP
+    fun writeSizeDp(size: Int) {
+        require(size in SIZES_DP) { "不支持的悬浮形象尺寸" }
+        storage.writeInt(KEY_SIZE, size)
+    }
+
     fun readPosition(): Pair<Int, Int>? {
         val x = storage.readInt(KEY_X) ?: return null
         val y = storage.readInt(KEY_Y) ?: return null
@@ -46,6 +52,9 @@ class OverlayBallPreferences(private val storage: Storage) {
     companion object {
         const val KEY_X = "ball_x"
         const val KEY_Y = "ball_y"
+        const val KEY_SIZE = "ball_size_dp"
+        const val DEFAULT_SIZE_DP = 88
+        val SIZES_DP = listOf(64, DEFAULT_SIZE_DP, 112)
 
         /**
          * 未设置的哨兵值：[clearPosition] 主动写入它表示已清除；

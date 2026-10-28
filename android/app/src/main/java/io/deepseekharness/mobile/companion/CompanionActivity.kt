@@ -281,6 +281,10 @@ class CompanionActivity : AppCompatActivity() {
         content.removeAllViews()
         hero()
         readinessCard()
+        heading("桌面形象")
+        val avatarSize = io.deepseekharness.mobile.overlay.OverlayBallPreferences.from(this).readSizeDp()
+        button("鲸鱼娘大小 · ${when (avatarSize) { 64 -> "小"; 112 -> "大"; else -> "中" }}") { chooseAvatarSize() }
+        paragraph("可选择悬浮形象大小；悬浮窗权限和系统后台限制仍会影响显示。")
         heading("语音对话", "voice")
         paragraph("通知和使用数据默认在本机处理；单独开启对话访问后，相关内容可能发送给当前模型服务。系统和应用可能限制读取。")
         button("语音输入任务") { startVoiceInput() }
@@ -467,6 +471,20 @@ class CompanionActivity : AppCompatActivity() {
         renderRecords()
         button("返回") { finish() }
         scroll.post { if (!isFinishing && !isDestroyed) scroll.scrollTo(0, previousScroll) }
+    }
+
+    private fun chooseAvatarSize() {
+        val preferences = io.deepseekharness.mobile.overlay.OverlayBallPreferences.from(this)
+        val sizes = io.deepseekharness.mobile.overlay.OverlayBallPreferences.SIZES_DP
+        val current = sizes.indexOf(preferences.readSizeDp()).coerceAtLeast(0)
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择鲸鱼娘大小")
+            .setSingleChoiceItems(arrayOf("小 · 64 dp", "中 · 88 dp", "大 · 112 dp"), current) { dialog, index ->
+                preferences.writeSizeDp(sizes[index])
+                val applied = io.deepseekharness.mobile.OverlayBallService.applyCompanionSizePreference()
+                dialog.dismiss()
+                android.widget.Toast.makeText(this, if (applied) "形象大小已更新。" else "已保存，下次显示悬浮形象时生效。", android.widget.Toast.LENGTH_LONG).show()
+                render()
+            }.setNegativeButton("取消", null).show()
     }
 
     private fun readinessCard() {

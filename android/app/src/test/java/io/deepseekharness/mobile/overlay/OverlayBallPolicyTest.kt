@@ -14,6 +14,12 @@ import org.junit.Test
  * 真机上的拖动手感、吸附动画与菜单弹出属于人工验收项（见 docs/悬浮球与内容分享.md）。
  */
 class OverlayBallPolicyTest {
+    @Test fun resizingKeepsRightEdgeAndClampsToScreen() {
+        assertEquals(688 to 300, OverlayBallPolicy.resizedPosition(712, 300, 800, 1000, 88, 112))
+        assertEquals(0 to 300, OverlayBallPolicy.resizedPosition(0, 300, 800, 1000, 88, 112))
+        assertEquals(100 to 888, OverlayBallPolicy.resizedPosition(100, 990, 800, 1000, 88, 112))
+    }
+
     @Test
     fun showsBallOnlyWhenEnabledAndPermissionGranted() {
         assertTrue(OverlayBallPolicy.shouldShowBall(enabled = true, canDrawOverlays = true))

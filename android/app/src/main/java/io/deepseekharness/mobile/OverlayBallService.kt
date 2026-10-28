@@ -84,6 +84,7 @@ class OverlayBallService : Service() {
     private var companionAnimator: android.animation.ObjectAnimator? = null
     private val avatarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-avatar").apply { isDaemon = true } }
     @Volatile private var avatarDestroyed = false
+    @Volatile private var avatarGeneration = 0L
     private var hintView: View? = null
     private val hintHandler = Handler(Looper.getMainLooper())
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
@@ -513,7 +514,7 @@ class OverlayBallService : Service() {
         // 避免窗口泄漏与重复添加。已经不在 WindowManager 上时 removeView 会抛异常，吞掉即可。
         detachBall()
         val metrics = resources.displayMetrics
-        val size = (BALL_SIZE_DP * metrics.density).toInt()
+        val size = (preferences.readSizeDp() * metrics.density).toInt().coerceAtLeast(1)
 
         // 充气必须显式带 AppCompat 主题：厂商「强制深色 / 强制主题」会把服务当前主题
         // 换成平台主题，此时布局里的 AppCompat 属性解析不到，inflate 抛
@@ -579,7 +580,7 @@ class OverlayBallService : Service() {
             if (!stopIfOverlayPermissionRevoked()) toggleConversation()
             true
         }
-        view.setOnTouchListener { touched, event -> handleTouch(touched, event, size) }
+        view.setOnTouchListener { touched, event -> handleTouch(touched, event, layoutParams.width) }
         // 球是否还在窗口上由视图的附着回调维护：客户端侧的移除一定会回调，系统侧的移除
         // 视 ROM 实现而定，因此它只用于避免「已被摘掉的窗口挡住重挂」这一类误判，
         // 真正的清理由插件每次回前台的权限对齐（撤销 → 停服务 → 摘视图）兜底。
@@ -633,6 +634,7 @@ class OverlayBallService : Service() {
 
     /** Decode only as many pixels as the square overlay can display, away from the UI thread. */
     private fun loadCompanionAvatar(view: View, size: Int) {
+        val generation = ++avatarGeneration
         avatarExecutor.execute {
             val bitmap = runCatching {
                 val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true; inScaled = false }
@@ -643,7 +645,7 @@ class OverlayBallService : Service() {
             }.getOrNull() ?: return@execute
             if (avatarDestroyed) { bitmap.recycle(); return@execute }
             val posted = hintHandler.post {
-                if (!avatarDestroyed && ballView === view && ballAttached) {
+                if (!avatarDestroyed && avatarGeneration == generation && ballView === view && ballAttached) {
                     view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageBitmap(bitmap)
                 } else bitmap.recycle()
             }
@@ -651,7 +653,26 @@ class OverlayBallService : Service() {
         }
     }
 
+    /** Called on the main thread after the user changes the size preference. */
+    private fun applyCompanionSize(): Boolean {
+        val view = ballView ?: return false
+        if (!ballAttached || stopIfOverlayPermissionRevoked()) return false
+        val metrics = resources.displayMetrics
+        val size = (preferences.readSizeDp() * metrics.density).toInt().coerceAtLeast(1)
+        val next = WindowManager.LayoutParams().apply { copyFrom(layoutParams) }
+        val (x, y) = OverlayBallPolicy.resizedPosition(layoutParams.x, layoutParams.y, metrics.widthPixels, metrics.heightPixels, layoutParams.width, size)
+        next.width = size; next.height = size; next.x = x; next.y = y
+        if (runCatching { windowManager.updateViewLayout(view, next) }.isFailure) return false
+        layoutParams = next
+        preferences.writePosition(x, y)
+        detachSecondaryChoices()
+        removeCompanionHint()
+        loadCompanionAvatar(view, size)
+        return true
+    }
+
     private fun detachBall() {
+        avatarGeneration++
         companionAnimator?.cancel()
         companionAnimator = null
         ballView?.let { view ->
@@ -1878,6 +1899,8 @@ class OverlayBallService : Service() {
             }
         }
         /** Opens only the local notification list on an explicit bubble tap. */
+        internal fun applyCompanionSizePreference(): Boolean = activeService?.applyCompanionSize() == true
+
         internal fun companionNotificationHint() {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
@@ -1918,7 +1941,6 @@ class OverlayBallService : Service() {
 
         private const val CHANNEL_ID = "harness_overlay_ball"
         private const val NOTIFICATION_ID = 0x44534802
-        private const val BALL_SIZE_DP = 88
         private const val DEFAULT_MARGIN_DP = 12
         private const val MENU_TEXT_SIZE_SP = 15f
 

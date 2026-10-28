@@ -120,6 +120,13 @@ object OverlayBallPolicy {
         return x.coerceIn(0, maxX) to y.coerceIn(0, maxY)
     }
 
+    /** Preserve a right-edge anchor when the view is resized; otherwise retain its position. */
+    fun resizedPosition(x: Int, y: Int, screenWidth: Int, screenHeight: Int, oldSize: Int, newSize: Int): Pair<Int, Int> {
+        val oldRight = (screenWidth - oldSize).coerceAtLeast(0)
+        val newX = if (x >= oldRight && oldRight > 0) (screenWidth - newSize).coerceAtLeast(0) else x
+        return clampPosition(newX, y, screenWidth, screenHeight, newSize)
+    }
+
     /**
      * 松手后吸附到最近的左右边缘，返回吸附后的 x 坐标。
      *
