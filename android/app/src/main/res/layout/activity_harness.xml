@@ -11,4 +11,26 @@
         android:layout_weight="1"
         android:background="@color/harness_page_background" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="4dp">
+
+        <Button
+            android:id="@+id/harness_companion"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="@string/harness_companion" />
+
+        <Button
+            android:id="@+id/harness_manage"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="@string/harness_manage" />
+    </LinearLayout>
+
 </LinearLayout>

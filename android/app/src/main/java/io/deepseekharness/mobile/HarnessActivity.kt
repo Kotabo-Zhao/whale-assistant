@@ -175,6 +175,10 @@ class HarnessActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_harness)
         AppWindowInsets.apply(this)
+        findViewById<android.view.View>(R.id.harness_companion).setOnClickListener {
+            startActivity(Intent(this, io.deepseekharness.mobile.companion.CompanionActivity::class.java))
+        }
+        findViewById<android.view.View>(R.id.harness_manage).setOnClickListener { returnToMainActivity() }
         // 会话页让出整条工具栏空间，返回交给系统手势与返回键。
         applyNativeChrome()
 

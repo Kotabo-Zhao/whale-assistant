@@ -3,6 +3,7 @@ import { arriveAtSettingsHome } from './__tests__/appTestHarness'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { arriveAtShell, beforeEachAppTest, bridge, notInstalledState, openSettingsPage, readyState, runningState, settings, shizuku } from './__tests__/appTestHarness'
 import type { RuntimeProgress, RuntimeState } from './platform/types'
+import { Capacitor } from '@capacitor/core'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
 vi.mock('./components/TerminalPanel', () => ({
@@ -35,6 +36,47 @@ async function flushOnHide(): Promise<void> {
  */
 describe('App conversation gate', () => {
   beforeEach(beforeEachAppTest)
+
+  it('安卓启动已配置的助手时自动进入对话，重新渲染不重复打开', async () => {
+    const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
+    try {
+      const view = render(<App />)
+      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
+      expect(bridge.startHarness).toHaveBeenCalledTimes(1)
+      view.rerender(<App />)
+      fireEvent.focus(window)
+      await act(async () => { await Promise.resolve() })
+      expect(bridge.openHarness).toHaveBeenCalledTimes(1)
+    } finally { native.mockRestore() }
+  })
+
+  it('自动进入失败后不循环重试，用户仍可手动重试', async () => {
+    const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
+    bridge.startHarness.mockRejectedValueOnce(new Error('启动失败'))
+    try {
+      render(<App />)
+      await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
+      const retry = await screen.findByRole('button', { name: /打开对话|打开 Harness/ })
+      await waitFor(() => expect(retry).toBeEnabled())
+      fireEvent.focus(window)
+      await act(async () => { await Promise.resolve() })
+      expect(bridge.startHarness).toHaveBeenCalledTimes(1)
+      fireEvent.click(retry)
+      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
+      expect(bridge.startHarness).toHaveBeenCalledTimes(2)
+    } finally { native.mockRestore() }
+  })
+
+  it('安卓启动时没有模型凭据不自动进入对话', async () => {
+    const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
+    bridge.getSettings.mockResolvedValue({ ...settings, configuredModelProviders: [], deepSeekAccountConfigured: false })
+    try {
+      render(<App />)
+      await arriveAtShell()
+      expect(bridge.startHarness).not.toHaveBeenCalled()
+      expect(bridge.openHarness).not.toHaveBeenCalled()
+    } finally { native.mockRestore() }
+  })
 
   it('blocks the old Harness until the bundled runtime update is explicitly confirmed', async () => {
     bridge.getState
@@ -101,14 +143,12 @@ describe('App conversation gate', () => {
     expect(screen.queryByRole('heading', { name: '模型与密钥' })).not.toBeInTheDocument()
   })
 
-  it('开机不自动启动也不自动打开 Harness', async () => {
+  it('浏览器预览开机不自动启动也不自动打开 Harness', async () => {
     render(<App />)
     await arriveAtShell()
 
     /*
-     * 旧行为是「打开应用就自动进 Harness」，而且原生侧把 autoLaunch 写死成 true，
-     * 于是没有开关也照进不误；冷启动还会占住忙锁，用户从 Harness 返回后点不回来。
-     * 现在入口只认用户点击：开机既不启动也不开门。
+     * 浏览器预览不应触发原生运行时操作；安卓的单次直接进入行为由上面的专门用例覆盖。
      */
     expect(screen.getByRole('button', { name: /打开对话|打开 Harness/ })).toBeInTheDocument()
     expect(bridge.startHarness).not.toHaveBeenCalled()
