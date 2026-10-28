@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.provider.Settings
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -26,6 +27,7 @@ import java.util.Calendar
 class CompanionActivity : AppCompatActivity() {
     private lateinit var store: CompanionStore
     private lateinit var content: LinearLayout
+    private lateinit var scroll: ScrollView
     private val dark: Boolean get() = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
     private val ink: Int get() = Color.parseColor(if (dark) "#E8F3FF" else "#173454")
     private val muted: Int get() = Color.parseColor(if (dark) "#ADC4D9" else "#526B82")
@@ -37,6 +39,7 @@ class CompanionActivity : AppCompatActivity() {
     private val memoryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val memoryHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var memoryBusy = false
+    @Volatile private var memoryCountGeneration = 0L
     private val briefExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-brief").apply { isDaemon = true } }
     private var briefBusy = false
     private var usageBusy = false
@@ -67,6 +70,7 @@ class CompanionActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         // A confirmed write may finish; do not show its result on a destroyed activity.
+        memoryCountGeneration++
         memoryExecutor.shutdown()
         briefExecutor.shutdownNow()
         readinessGeneration++
@@ -154,7 +158,14 @@ class CompanionActivity : AppCompatActivity() {
             setPadding(pad, pad, pad, pad)
             setBackgroundColor(Color.parseColor(if (dark) "#0D1A2A" else "#F1F7FC"))
         }
-        setContentView(ScrollView(this).apply { addView(content) })
+        scroll = ScrollView(this).apply { isFillViewport = true; addView(content) }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor(if (dark) "#0D1A2A" else "#F1F7FC"))
+            addView(sectionNavigation(), LinearLayout.LayoutParams(-1, -2))
+            addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        setContentView(root)
     }
 
     override fun onResume() {
@@ -169,21 +180,34 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun render() {
+        val previousScroll = scroll.scrollY
         content.removeAllViews()
         hero()
         readinessCard()
-        paragraph("通知与使用数据只在本机处理，不会自动发送给模型。系统和应用可能限制读取；锁屏或敏感内容不会显示在桌面气泡。")
+        heading("语音对话", "voice")
+        paragraph("通知和使用数据默认在本机处理；单独开启对话访问后，相关内容可能发送给当前模型服务。系统和应用可能限制读取。")
         button("语音输入任务") { startVoiceInput() }
         paragraph("使用手机提供的语音识别服务；核对后可填入已打开的对话草稿，不自动发送；服务可能联网。")
         val memory = CompanionMemoryStore(this)
-        heading("长期记忆")
+        heading("长期记忆", "memory")
         toggle("允许助手使用长期记忆", memory.enabled) { memory.enabled = it }
         paragraph("助手提出的记忆先等待你确认；已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。记忆保存在应用私有存储，运行环境更新不会清空；卸载应用会删除。")
-        val pendingCount = runCatching { memory.listForUser() }.getOrNull()?.let { rows ->
-            (0 until rows.length()).count { rows.optJSONObject(it)?.optString("status") == "pending" }
+        val pendingStatus = TextView(this).apply {
+            text = "正在读取记忆状态…"; textSize = 14f; setTextColor(muted); setPadding(dp(2), dp(6), dp(2), dp(8))
         }
-        if (pendingCount == null) paragraph("无法读取长期记忆，原数据已保留。")
-        else if (pendingCount > 0) paragraph("有 $pendingCount 条记忆等待确认。")
+        content.addView(pendingStatus)
+        val countGeneration = ++memoryCountGeneration
+        memoryExecutor.execute {
+            val pendingCount = runCatching { memory.listForUser() }.getOrNull()?.let { rows ->
+                (0 until rows.length()).count { rows.optJSONObject(it)?.optString("status") == "pending" }
+            }
+            memoryHandler.post {
+                if (!isFinishing && !isDestroyed && countGeneration == memoryCountGeneration) {
+                    pendingStatus.text = if (pendingCount == null) "无法读取长期记忆，原数据已保留。"
+                        else if (pendingCount > 0) "有 $pendingCount 条记忆等待确认。" else "暂无待确认记忆。"
+                }
+            }
+        }
         button("查看、确认和管理长期记忆") { showMemories() }
         button("搜索长期记忆") {
             val input = android.widget.EditText(this).apply {
@@ -205,6 +229,7 @@ class CompanionActivity : AppCompatActivity() {
                     runCatching { memory.clearForUser() }.onSuccess { render() }.onFailure { paragraph("无法清空记忆，原数据已保留。") }
                 }.show()
         }
+        heading("通知与隐私", "notifications")
         toggle("允许助手对话访问通知摘要", store.notificationModelAccess) { enabled ->
             if (!enabled) { store.notificationModelAccess = false; render() }
             else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许助手读取通知摘要？")
@@ -221,7 +246,7 @@ class CompanionActivity : AppCompatActivity() {
         paragraph("可从已记录过的应用中选择不再采集的来源；已有记录不会自动删除。")
         toggle("桌面休息提醒", store.reminders) { store.reminders = it }
         paragraph("悬浮助手运行且设备已解锁时，约每 90 分钟显示一次休息提示；低电量时可发系统通知（需通知权限）。系统可能停止后台服务。")
-        heading("免打扰时段")
+        heading("提醒与免打扰", "reminders")
         toggle("启用免打扰", store.quietHoursEnabled) { store.quietHoursEnabled = it; render() }
         paragraph("使用手机当前时区。时段内暂停桌面气泡、休息提示和低电量通知；通知仍可按采集设置保存，手动设置的事项提醒通知仍会送达。结束后不会补发被跳过的气泡。起止时间相同表示不限制。")
         fun timeLabel(value: Int) = "%02d:%02d".format(value / 60, value % 60)
@@ -231,7 +256,7 @@ class CompanionActivity : AppCompatActivity() {
         paragraph("手动设置一次性提醒；需要通知权限。系统省电可能导致延迟，重启后会恢复未来提醒，错过的不会自动补发。")
         button("新建提醒") { createReminder() }
         button("查看和删除提醒") { showReminders() }
-        heading("常用应用")
+        heading("常用应用", "apps")
         val shortcuts = runCatching { store.shortcuts().sorted() }.getOrNull()
         if (shortcuts == null) paragraph("无法读取快捷方式，原数据已保留。")
         else if (shortcuts.isEmpty()) paragraph("还没有快捷方式；可从使用情况中手动选择。")
@@ -247,7 +272,7 @@ class CompanionActivity : AppCompatActivity() {
         paragraph("开启后，悬浮助手运行且解锁时，在本机按最近约 7 天的使用时长建议快捷方式，最多每天提示一次；不记录或发送使用数据，不推断个人属性。需要使用情况访问权限，系统可能限制后台提示。")
         button("查看常用应用建议") { showUsageSuggestions() }
         button("查看最近 7 天使用情况") { showUsage() }
-        heading("本地通知记录")
+        heading("日历与本地简报", "brief")
         paragraph("简报使用本地规则分类，可能漏判或分类错误，不代表已检查所有信息。")
         paragraph("日历只在打开简报时临时读取当天可见日历，不保存，也不会自动发送给模型；是否显示取决于系统授权。")
         toggle("允许助手对话访问今日日历", store.calendarModelAccess) { enabled ->
@@ -285,10 +310,11 @@ class CompanionActivity : AppCompatActivity() {
         }
         renderRecords()
         button("返回") { finish() }
+        scroll.post { if (!isFinishing && !isDestroyed) scroll.scrollTo(0, previousScroll) }
     }
 
     private fun readinessCard() {
-        heading("助手能力状态")
+        heading("助手能力状态", "status")
         val status = TextView(this).apply {
             text = "正在读取状态…"; textSize = 14f; setTextColor(ink)
             setLineSpacing(dp(5).toFloat(), 1f); setPadding(dp(16), dp(14), dp(16), dp(14))
@@ -635,7 +661,7 @@ class CompanionActivity : AppCompatActivity() {
                     .setMessage(labels[index]).setNegativeButton("关闭", null)
                     .setNeutralButton(if (records.getJSONObject(index).optString("status") == "pending") "确认记住" else "编辑") { _, _ ->
                         if (records.getJSONObject(index).optString("status") == "pending") {
-                            runCatching { memory.approveForUser(id) }.onSuccess { if (it) paragraph("已确认记忆。") else paragraph("记忆已变化，请重新查看。") }
+                            runCatching { memory.approveForUser(id) }.onSuccess { if (it) { render(); paragraph("已确认记忆。") } else paragraph("记忆已变化，请重新查看。") }
                                 .onFailure { paragraph("确认失败，原数据已保留。") }
                         } else {
 
@@ -683,8 +709,33 @@ class CompanionActivity : AppCompatActivity() {
         card.addView(TextView(this).apply { text = "记住重要的事，陪你从容处理每一天。"; textSize = 14f; setTextColor(Color.parseColor("#E3F3FF")) })
         content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
     }
-    private fun heading(value: String) { content.addView(TextView(this).apply {
+    private fun sectionNavigation(): android.widget.HorizontalScrollView {
+        val items = listOf("status" to "状态", "voice" to "语音", "memory" to "记忆", "notifications" to "通知", "reminders" to "提醒", "apps" to "常用", "brief" to "日历与简报")
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(14), dp(8), dp(14), dp(8)) }
+        for ((id, label) in items) {
+            val item = Button(this).apply {
+                text = label; textSize = 13f; isAllCaps = false; minHeight = dp(44); minimumWidth = 0
+                setPadding(dp(16), 0, dp(16), 0); elevation = 0f
+                setTextColor(ink); background = surface(if (dark) "#172B40" else "#FFFFFF", if (dark) "#294660" else "#DCEAF5")
+                contentDescription = "跳转到$label"
+                setOnClickListener {
+                    val section = content.findViewWithTag<View>("section:$id") ?: return@setOnClickListener
+                    scroll.smoothScrollTo(0, section.top)
+                    section.announceForAccessibility("已定位到$label")
+                }
+            }
+            row.addView(item, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
+        }
+        return android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            contentDescription = "助手设置分区导航"
+            addView(row)
+        }
+    }
+    private fun heading(value: String, section: String? = null) { content.addView(TextView(this).apply {
         text = value; textSize = 19f; setTypeface(typeface, Typeface.BOLD); setTextColor(ink); setPadding(0, dp(24), 0, dp(10))
+        if (section != null) tag = "section:$section"
+        androidx.core.view.ViewCompat.setAccessibilityHeading(this, true)
     }) }
     private fun paragraph(value: String) { content.addView(TextView(this).apply {
         text = value; textSize = 14f; setTextColor(muted); setLineSpacing(dp(3).toFloat(), 1f); setPadding(dp(2), dp(6), dp(2), dp(8))
