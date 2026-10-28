@@ -15,6 +15,20 @@ class CompanionStore(context: Context) {
         get() = prefs.getBoolean("reminders", false)
         set(value) { prefs.edit().putBoolean("reminders", value).apply() }
 
+    var quietHoursEnabled: Boolean
+        get() = prefs.getBoolean("quiet_hours_enabled", false)
+        set(value) { prefs.edit().putBoolean("quiet_hours_enabled", value).apply() }
+    var quietHoursStart: Int
+        get() = prefs.getInt("quiet_hours_start", 22 * 60).takeIf { it in 0 until 1440 } ?: 22 * 60
+        set(value) { require(value in 0 until 1440); prefs.edit().putInt("quiet_hours_start", value).apply() }
+    var quietHoursEnd: Int
+        get() = prefs.getInt("quiet_hours_end", 8 * 60).takeIf { it in 0 until 1440 } ?: 8 * 60
+        set(value) { require(value in 0 until 1440); prefs.edit().putInt("quiet_hours_end", value).apply() }
+
+    fun inQuietHours(now: java.util.Calendar = java.util.Calendar.getInstance()): Boolean =
+        CompanionQuietHours.contains(quietHoursEnabled, quietHoursStart, quietHoursEnd,
+            now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE))
+
     fun excludedPackages(): Set<String> = prefs.getStringSet("excluded_packages", emptySet())?.toSet() ?: emptySet()
     fun setExcludedPackages(packages: Set<String>) { prefs.edit().putStringSet("excluded_packages", packages.toSet()).apply() }
 

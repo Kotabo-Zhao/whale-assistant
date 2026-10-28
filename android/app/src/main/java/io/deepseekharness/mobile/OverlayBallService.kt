@@ -88,7 +88,7 @@ class OverlayBallService : Service() {
     private var lastRestAt = SystemClock.elapsedRealtime()
     private val reminderTick = object : Runnable {
         override fun run() {
-            if (CompanionStore(this@OverlayBallService).reminders) {
+            if (CompanionStore(this@OverlayBallService).let { it.reminders && !it.inQuietHours() }) {
                 if (SystemClock.elapsedRealtime() - lastRestAt >= 90L * 60 * 1000) {
                     showCompanionHint("休息一下，喝口水吧。")
                     lastRestAt = SystemClock.elapsedRealtime()
@@ -319,6 +319,7 @@ class OverlayBallService : Service() {
     }
 
     private fun showCompanionHint(message: String) {
+        if (CompanionStore(this).inQuietHours()) return
         if (!ballAttached || ballView == null || stopIfOverlayPermissionRevoked()) return
         if (getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false) return
         if (getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return

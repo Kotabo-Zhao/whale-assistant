@@ -86,6 +86,12 @@ class CompanionActivity : AppCompatActivity() {
         paragraph("可从已记录过的应用中选择不再采集的来源；已有记录不会自动删除。")
         toggle("桌面休息提醒", store.reminders) { store.reminders = it }
         paragraph("悬浮助手运行且设备已解锁时，约每 90 分钟显示一次休息提示；低电量时可发系统通知（需通知权限）。系统可能停止后台服务。")
+        heading("免打扰时段")
+        toggle("启用免打扰", store.quietHoursEnabled) { store.quietHoursEnabled = it; render() }
+        paragraph("使用手机当前时区。时段内暂停桌面气泡、休息提示和低电量通知；通知仍可按采集设置保存，手动设置的事项提醒通知仍会送达。结束后不会补发被跳过的气泡。起止时间相同表示不限制。")
+        fun timeLabel(value: Int) = "%02d:%02d".format(value / 60, value % 60)
+        button("开始时间 · ${timeLabel(store.quietHoursStart)}") { chooseQuietTime(true) }
+        button("结束时间 · ${timeLabel(store.quietHoursEnd)}") { chooseQuietTime(false) }
         heading("事项提醒")
         paragraph("手动设置一次性提醒；需要通知权限。系统省电可能导致延迟，重启后会恢复未来提醒，错过的不会自动补发。")
         button("新建提醒") { createReminder() }
@@ -103,6 +109,14 @@ class CompanionActivity : AppCompatActivity() {
         button("清除全部本地通知记录") { store.clear(); render() }
         renderRecords()
         button("返回") { finish() }
+    }
+
+    private fun chooseQuietTime(start: Boolean) {
+        val current = if (start) store.quietHoursStart else store.quietHoursEnd
+        android.app.TimePickerDialog(this, { _, hour, minute ->
+            if (start) store.quietHoursStart = hour * 60 + minute else store.quietHoursEnd = hour * 60 + minute
+            render()
+        }, current / 60, current % 60, true).show()
     }
 
     private fun showUsage() {
