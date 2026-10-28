@@ -1232,7 +1232,42 @@ class MobileRuntimePlugin : Plugin() {
                     if (!harnessOpenRequests.isCurrent(request)) {
                         throw RuntimeFailure("HARNESS_OPEN_CANCELLED", "打开请求已取消")
                     }
-                    context.startActivity(intent)
+                    val host = activity as? MainActivity
+                    if (host == null) {
+                        context.startActivity(intent)
+                    } else {
+                        // 主线程创建 WebView；桥接线程在有界时间内等待结果，不能提前谎报成功。
+                        val live = java.util.concurrent.atomic.AtomicBoolean(true)
+                        val task = java.util.concurrent.FutureTask<Unit> {
+                            if (!live.get() || !harnessOpenRequests.isCurrent(request)) {
+                                throw RuntimeFailure("HARNESS_OPEN_CANCELLED", "打开请求已取消")
+                            }
+                            val opened = runCatching { host.openHarnessSurface(sessionId) }.getOrElse {
+                                host.discardHarnessSurface()
+                                false
+                            }
+                            if (!live.get() || !harnessOpenRequests.isCurrent(request)) {
+                                host.discardHarnessSurface()
+                                throw RuntimeFailure("HARNESS_OPEN_CANCELLED", "打开请求已取消")
+                            }
+                            if (!opened) context.startActivity(intent)
+                        }
+                        host.runOnUiThread(task)
+                        try {
+                            task.get(10, java.util.concurrent.TimeUnit.SECONDS)
+                        } catch (error: java.util.concurrent.TimeoutException) {
+                            live.set(false)
+                            task.cancel(false)
+                            throw RuntimeFailure("BRIDGE_TIMEOUT", "打开对话页面超时", error)
+                        } catch (error: InterruptedException) {
+                            live.set(false)
+                            task.cancel(false)
+                            Thread.currentThread().interrupt()
+                            throw RuntimeFailure("HARNESS_OPEN_CANCELLED", "打开请求已取消", error)
+                        } catch (error: java.util.concurrent.ExecutionException) {
+                            throw error.cause ?: error
+                        }
+                    }
                 } catch (error: Throwable) {
                     authorization?.let { AppAuthenticationState.revokeHarness(it) }
                     throw error

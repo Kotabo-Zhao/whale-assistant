@@ -41,6 +41,7 @@ import java.util.concurrent.Executors
  * `onBackPressed()`，避免「既 goBack 又 finish」的两条路径同时生效。
  */
 class MainActivity : BridgeActivity() {
+    private val harnessSurface = MainHarnessSurface(this)
     private val importExecutor = Executors.newSingleThreadExecutor()
     private var fallbackMimeTypes = arrayOf(ANY_MIME_TYPE)
     private val fallbackFilePicker = registerForActivityResult(
@@ -60,6 +61,7 @@ class MainActivity : BridgeActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (harnessSurface.onBack()) return
                 val webView = bridge?.webView
                 if (webView != null && webView.canGoBack()) {
                     webView.goBack()
@@ -82,6 +84,7 @@ class MainActivity : BridgeActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_SHOW_HARNESS, false)) harnessSurface.showIfOwned()
         handleExternalFileIntent(intent)
     }
 
@@ -97,6 +100,7 @@ class MainActivity : BridgeActivity() {
 
     override fun onResume() {
         super.onResume()
+        harnessSurface.resume()
         // 主题可能刚在 Web 侧被改过，系统深色模式也可能在后台切换过；每次回到前台重算一次状态栏，
         // 比在每条改动路径上分别通知可靠。
         AppThemePreference.applySafely(this)
@@ -112,9 +116,18 @@ class MainActivity : BridgeActivity() {
     }
 
     override fun onDestroy() {
+        harnessSurface.destroy()
         importExecutor.shutdownNow()
         super.onDestroy()
     }
+
+    /** Only the native bridge dispatches this after publishing the current session authorization. */
+    internal fun openHarnessSurface(sessionId: String?): Boolean {
+        val access = AppAuthenticationState.harnessAccess() ?: return false
+        return harnessSurface.open(access, sessionId)
+    }
+
+    internal fun discardHarnessSurface() { harnessSurface.discard() }
 
     /**
      * 管理界面的字号跟随系统字号（登记册 5.6-I）。
@@ -389,6 +402,7 @@ class MainActivity : BridgeActivity() {
     }
 
     companion object {
+        internal const val EXTRA_SHOW_HARNESS = "io.deepseekharness.mobile.extra.SHOW_EMBEDDED_HARNESS"
         /**
          * WebView 提供方预热专用线程：进程级单线程、守护线程，不随 Activity 销毁关闭。
          */

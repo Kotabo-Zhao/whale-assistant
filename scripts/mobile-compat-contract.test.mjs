@@ -933,6 +933,27 @@ test('插件市场只读资源必须落在严格主机白名单内', async () =>
   assert.match(resources, /uri\.rawUserInfo == null/)
 })
 
+test('主界面对话复用受限页面并在授权失效或旧请求取消时拒绝加载', async () => {
+  const surface = await readFile(resolve(appRoot, 'android/app/src/main/java/io/deepseekharness/mobile/MainHarnessSurface.kt'), 'utf8')
+  const activity = await readFile(resolve(appRoot, 'android/app/src/main/java/io/deepseekharness/mobile/MainActivity.kt'), 'utf8')
+  const plugin = await readFile(resolve(appRoot, 'android/app/src/main/java/io/deepseekharness/mobile/MobileRuntimePlugin.kt'), 'utf8')
+  assert.match(surface, /HarnessWebViewPolicy\.configure/)
+  assert.match(surface, /HarnessRestrictedWebViewClient\(/)
+  assert.match(surface, /HarnessWebChromeClient\(/)
+  assert.match(surface, /AppAuthenticationState\.claimHarnessAccess\(owner, access\)/)
+  assert.match(surface, /AppAuthenticationState\.ownsHarnessAccess\(owner\)/)
+  assert.match(surface, /if \(!current\(nextGate\)\) return@post/)
+  assert.match(surface, /gate\.cancel\(\)/)
+  assert.match(surface, /it\.scheme == ContentResolver\.SCHEME_CONTENT/)
+  assert.doesNotMatch(surface, /addJavascriptInterface/)
+  assert.match(activity, /if \(harnessSurface\.onBack\(\)\) return/)
+  assert.match(plugin, /!live\.get\(\) \|\| !harnessOpenRequests\.isCurrent\(request\)/)
+  assert.match(plugin, /host\.discardHarnessSurface\(\)/)
+  assert.match(plugin, /task\.get\(10, java\.util\.concurrent\.TimeUnit\.SECONDS\)/)
+  assert.match(plugin, /host\.openHarnessSurface\(sessionId\)/)
+  assert.match(plugin, /if \(!opened\) context\.startActivity\(intent\)/)
+})
+
 test('runtime packaging leaves the version-matched official client immutable', async () => {
   const builder = await readFile(resolve(appRoot, 'scripts/build-embedded-runtime.py'), 'utf8')
   assert.doesNotMatch(builder, /patch_client_failure_display\(args\.dsh_root\)/)
