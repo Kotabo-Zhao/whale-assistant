@@ -376,11 +376,13 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         if (template == null || template.indexOf(marker) < 0 || template.indexOf(marker) != template.lastIndexOf(marker)) { speakUnavailable(); return }
         val expected = gate
         val generation = ++speechGeneration
+        val readRequest = HarnessSpeechReadRequest(generation)
         speechPending = true
         setSpeechButton(true)
+        handler.postDelayed({ if (readRequest.claim(speechGeneration)) { stopSpeech(); speakUnavailable() } }, 10_000)
         runCatching {
             target.evaluateJavascript(template.replace(marker, JSONObject.quote(page))) { result ->
-                if (generation != speechGeneration) return@evaluateJavascript
+                if (!readRequest.claim(speechGeneration)) return@evaluateJavascript
                 if (!current(expected) || !visible() || web?.url != page) { stopSpeech(); return@evaluateJavascript }
                 val payload = runCatching { JSONObject(JSONTokener(result ?: "").nextValue() as String) }.getOrNull()
                 val text = payload?.optString("text").orEmpty()
@@ -391,15 +393,16 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
                     if (payload.optBoolean("truncated")) "\n" + activity.getString(R.string.harness_speak_truncated) else ""
                 AlertDialog.Builder(activity).setTitle(R.string.harness_speak_preview)
                     .setMessage(prefix + "\n\n" + text)
-                    .setNegativeButton(android.R.string.cancel) { _, _ -> stopSpeech() }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> if (generation == speechGeneration) stopSpeech() }
                     .setPositiveButton(R.string.harness_speak) { _, _ -> speak(text, expected, page, generation) }
-                    .setOnCancelListener { stopSpeech() }.show()
+                    .setOnCancelListener { if (generation == speechGeneration) stopSpeech() }.show()
             }
         }.onFailure { stopSpeech(); speakUnavailable() }
     }
 
     private fun speak(text: String, expected: HarnessPageLoadGate, page: String, generation: Long) {
-        if (generation != speechGeneration || !current(expected) || !visible() || web?.url != page) { stopSpeech(); return }
+        if (generation != speechGeneration) return
+        if (!current(expected) || !visible() || web?.url != page) { stopSpeech(); return }
         try {
             val engine = TextToSpeech(activity.applicationContext) { status ->
                 handler.post {
