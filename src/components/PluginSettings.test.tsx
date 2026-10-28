@@ -29,6 +29,7 @@ describe('应用外层插件管理', () => {
       fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
       await screen.findByText('目录示例')
       fireEvent.click(screen.getByRole('button', { name: '安装' }))
+      fireEvent.click(screen.getByRole('button', { name: '确认安装' }))
       await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: 'catalog-example' }))
     } finally { mock.mockRestore() }
   })

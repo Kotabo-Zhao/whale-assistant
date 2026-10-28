@@ -1,5 +1,9 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "确认安装插件": "Confirm plugin installation",
+  "来源：npm 社区包。版本将在下载时按当前运行环境选择；目录信息不代表已验证作者、权限或安卓兼容性。": "Source: a community npm package. A version is selected for the current runtime during download; the directory does not verify its author, permissions, or Android compatibility.",
+  "安装脚本不会运行；安装后插件本身可能读取数据或联网。请先确认你信任此来源。": "Install scripts are disabled; the plugin itself may access data or the network after installation. Only continue if you trust its source.",
+  "确认安装": "Confirm installation",
   "手机插件目录": "Mobile plugin catalog",
   "浏览社区目录中的 npm 插件。安装由手机插件管理器处理，不运行安装脚本；是否能在安卓正常使用仍需验证。": "Browse npm plugins in the community catalog. The mobile plugin manager installs them without running install scripts; Android compatibility still needs verification.",
   "正在获取目录…": "Loading catalog…",
