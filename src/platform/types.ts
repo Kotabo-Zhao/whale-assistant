@@ -861,6 +861,7 @@ export interface AutomationTaskStep {
 /** 当前任务的只读快照。收口与未收口的步数由原生算好回传，界面不自己数。 */
 export interface AutomationTask {
   taskId: string
+  instanceId?: string
   status: AutomationTaskStatus
   packageName: string
   nextStep: string | null
@@ -1771,7 +1772,7 @@ export interface RuntimeBridge {
    *
    * 这是**人**的刹车（设置页按钮），AI 侧没有这条路；没有任务时按受控码拒收，不做空操作。
    */
-  cancelAutomationTask: () => Promise<AutomationTaskState>
+  cancelAutomationTask: (instanceId: string) => Promise<AutomationTaskState>
   acknowledgeInterruptedTask: () => Promise<AutomationTaskState>
   /**
    * 读某个包已保存的自动化规则（**只读**）。

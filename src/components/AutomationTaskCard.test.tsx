@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AutomationTask, AutomationTaskStep, RuntimeBridge } from '../platform/types'
 import { AutomationTaskCard } from './AutomationTaskCard'
+import { validateAutomationTaskState } from '../platform/validation'
 
 /**
  * 「自动化任务」卡片：当前任务、每一步的状态，以及人叫停它的那一下。
@@ -18,6 +19,7 @@ function step(id: string, overrides: Partial<AutomationTaskStep> = {}): Automati
 function task(overrides: Partial<AutomationTask> = {}): AutomationTask {
   return {
     taskId: 'send-message',
+    instanceId: '12345678-1234-4abc-8def-123456789abc',
     status: 'running',
     packageName: 'com.example.chat',
     nextStep: 's2',
@@ -53,6 +55,11 @@ async function findRow(text: string): Promise<HTMLElement> {
 }
 
 describe('自动化任务卡片', () => {
+  it('桥接校验保留合法实例标识并拒绝无效标识', () => {
+    const current = task()
+    expect(validateAutomationTaskState({ connected: true, task: current }).task?.instanceId).toBe(current.instanceId)
+    expect(() => validateAutomationTaskState({ connected: true, task: task({ instanceId: 'bad' }) })).toThrow()
+  })
   it('连着但没有任务时，说的是「没有正在执行的任务」', async () => {
     const bridge = { getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: null }), cancelAutomationTask: vi.fn() }
     card(bridge)
@@ -154,7 +161,7 @@ describe('自动化任务卡片', () => {
     await findRow('目标应用：com.example.chat · 已经停止')
     row('输入文字 · 已跳过（任务停止）')
     row('已经停止，剩下的步骤都标成了跳过。')
-    expect(bridge.cancelAutomationTask).toHaveBeenCalledTimes(1)
+    expect(bridge.cancelAutomationTask).toHaveBeenCalledWith('12345678-1234-4abc-8def-123456789abc')
   })
 
   it('停不下来时按受控码说原因，并给一次重试', async () => {
@@ -185,6 +192,15 @@ describe('自动化任务卡片', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('停止失败（SOMETHING_NEW）')
+  })
+
+  it('缺少实例标识时不会把停止请求发给可能变化的任务', async () => {
+    const cancel = vi.fn()
+    card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: task({ instanceId: undefined }) }), cancelAutomationTask: cancel })
+    await findRow('目标应用：com.example.chat · 正在执行')
+    fireEvent.click(screen.getByRole('button', { name: '停止这个任务' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('缺少实例标识')
+    expect(cancel).not.toHaveBeenCalled()
   })
 
   it('读不到当前任务时说读不到，并给一次重试', async () => {

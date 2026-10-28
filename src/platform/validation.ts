@@ -2838,6 +2838,8 @@ export function validateAutomationTaskState(value: unknown): AutomationTaskState
   const task = asRecord(raw, '任务台账')
   const taskId = task.taskId
   if (typeof taskId !== 'string' || !AUTOMATION_TASK_ID_PATTERN.test(taskId)) throw new Error('任务标识格式无效')
+  const instanceId = task.instanceId
+  if (instanceId !== undefined && (typeof instanceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(instanceId))) throw new Error('任务实例标识格式无效')
   const status = task.status
   if (typeof status !== 'string' || !AUTOMATION_TASK_STATUSES.has(status as AutomationTaskStatus)) {
     throw new Error('任务状态格式无效')
@@ -2886,6 +2888,7 @@ export function validateAutomationTaskState(value: unknown): AutomationTaskState
     ...flag,
     task: {
       taskId,
+      ...(instanceId === undefined ? {} : { instanceId }),
       status: status as AutomationTaskStatus,
       packageName,
       nextStep: nextStep ?? null,

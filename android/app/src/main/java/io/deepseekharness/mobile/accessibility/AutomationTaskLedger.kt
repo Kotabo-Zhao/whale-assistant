@@ -318,6 +318,7 @@ internal data class AutomationTaskSnapshot(
     val nextStepId: String?,
     val lastCode: String?,
     val lastMessage: String?,
+    val instanceId: String = "",
 ) {
     val settledSteps: Int get() = steps.count { AutomationTaskStepStatus.settled(it.status) }
     val pendingSteps: Int get() = steps.count { it.status == AutomationTaskStepStatus.PENDING }
@@ -335,6 +336,7 @@ internal data class AutomationTaskSnapshot(
  */
 internal class AutomationTaskLedger {
     private var taskId: String? = null
+    private var instanceId: String = ""
     private var status: String = AutomationTaskStatus.PLANNED
     private var packageName: String = ""
     private var digest: String? = null
@@ -373,6 +375,7 @@ internal class AutomationTaskLedger {
             return AutomationTaskGate.Refused(lastCode!!, lastMessage!!, false)
         }
         this.taskId = taskId
+        this.instanceId = java.util.UUID.randomUUID().toString()
         this.packageName = packageName
         this.digest = windowDigest
         this.steps = specs.map { AutomationTaskStepState(it.id, it.action, it.verify, it.timeoutMs, it.maxAttempts, target = it.target) }.toMutableList()
@@ -614,6 +617,7 @@ internal class AutomationTaskLedger {
     @Synchronized
     fun snapshot(): AutomationTaskSnapshot = AutomationTaskSnapshot(
         taskId = taskId.orEmpty(),
+        instanceId = instanceId,
         status = status,
         packageName = packageName,
         steps = steps.toList(),
@@ -664,6 +668,13 @@ internal class AutomationTaskLedger {
         AutomationTaskCodes.NEEDS_CHECK -> "第 ${step.id} 步结果不确定（${step.code ?: "无码"}）：先确认现场"
         else -> "第 ${step.id} 步失败：${step.code ?: "无码"}"
     }
+}
+
+/** Bind a user stop request to a specific plan instance, even if task IDs are reused. */
+internal object AutomationTaskIdentity {
+    fun matches(snapshot: AutomationTaskSnapshot, expected: String?): Boolean =
+        expected != null && runCatching { java.util.UUID.fromString(expected).toString() == expected }.getOrDefault(false) &&
+            snapshot.taskId.isNotEmpty() && snapshot.instanceId == expected
 }
 
 /** 计划校验（纯函数，便于逐条单测）。 */

@@ -41,6 +41,8 @@ const ACTION_LABELS: Record<string, string> = {
 const CANCEL_FAILURE_NOTES: Record<string, string> = {
   ACCESSIBILITY_SERVICE_DISABLED: '无障碍服务没有连上，现在叫不停它',
   AUTOMATION_TASK_NOT_PLANNED: '现在没有任务可停止',
+  AUTOMATION_TASK_CHANGED: '任务已变化，请重新读取后再停止',
+  TASK_IDENTITY_UNAVAILABLE: '当前任务缺少实例标识，请重新读取或更新应用',
   STOP_UNCONFIRMED: '未确认任务已停止，请重新读取状态',
 }
 
@@ -83,10 +85,12 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
   useEffect(() => { const generation = revision; void refresh(); return () => { generation.current++ } }, [refresh])
 
   const stop = useCallback(async () => {
+    const instanceId = state?.task?.instanceId
+    if (!instanceId) { setStopFailed('TASK_IDENTITY_UNAVAILABLE'); return }
     const current = ++revision.current
     setRefreshing(false); setBusy(true); setStopFailed(null); setStopped(false)
     try {
-      const result = await bridge.cancelAutomationTask()
+      const result = await bridge.cancelAutomationTask(instanceId)
       if (revision.current === current) {
         setState(result); setLoaded(true); setFailed(false)
         if (result.task?.status === 'cancelled') setStopped(true)
@@ -94,7 +98,7 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
       }
     } catch (error) { if (revision.current === current) setStopFailed(failureCode(error)) }
     finally { if (revision.current === current) setBusy(false) }
-  }, [bridge])
+  }, [bridge, state])
 
   const acknowledge = useCallback(async () => {
     const current = ++revision.current
@@ -148,7 +152,9 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
     {stopFailed !== null && <p role="alert">
       {CANCEL_FAILURE_NOTES[stopFailed] !== undefined ? t(CANCEL_FAILURE_NOTES[stopFailed]) : t('停止失败（{0}）', stopFailed)}
       {' '}
-      <button className="button button-quiet" type="button" disabled={busy || refreshing} onClick={() => { void stop() }}>{t('重试')}</button>
+      {['AUTOMATION_TASK_CHANGED', 'TASK_IDENTITY_UNAVAILABLE', 'STOP_UNCONFIRMED'].includes(stopFailed)
+        ? <button className="button button-quiet" type="button" disabled={busy || refreshing} onClick={() => { void refresh() }}>{t('重新读取')}</button>
+        : <button className="button button-quiet" type="button" disabled={busy || refreshing} onClick={() => { void stop() }}>{t('重试')}</button>}
     </p>}
     {ready && <button className="button button-secondary" type="button" disabled={busy || refreshing} onClick={() => { void refresh() }}>{t('重新读取')}</button>}
     {failed && <p role="alert">{t('无法读取当前任务')} <button className="button button-quiet" type="button" onClick={() => { void refresh() }}>{t('重试')}</button></p>}

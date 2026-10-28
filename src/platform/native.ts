@@ -256,7 +256,7 @@ interface NativeRuntimePlugin {
   rootEngineState(options?: { refresh?: boolean }): Promise<unknown>
   setRootEngineEnabled(options: { enabled: boolean }): Promise<unknown>
   getAutomationTaskState(): Promise<unknown>
-  cancelAutomationTask(): Promise<unknown>
+  cancelAutomationTask(options: { instanceId: string }): Promise<unknown>
   acknowledgeInterruptedTask(): Promise<unknown>
   clearRuntimeCache(): Promise<unknown>
   purgePluginData(options?: { packageName?: string }): Promise<unknown>
@@ -640,7 +640,7 @@ function createNativeBridge(): RuntimeBridge {
     getAutomationTaskState: () => NativeRuntime.getAutomationTaskState().then(validateAutomationTaskState),
     // 取消是**人**的刹车（设置页按钮）：只把未收口的步骤记成 skipped，
     // 已经发出去的那一次动作不会被假装没发生。AI 侧没有这条路。
-    cancelAutomationTask: () => NativeRuntime.cancelAutomationTask().then(validateAutomationTaskState),
+    cancelAutomationTask: instanceId => NativeRuntime.cancelAutomationTask({ instanceId }).then(validateAutomationTaskState),
     acknowledgeInterruptedTask: () => NativeRuntime.acknowledgeInterruptedTask().then(validateAutomationTaskState),
     clearRuntimeCache: () => NativeRuntime.clearRuntimeCache().then(validateRuntimeCleanupOutcome),
     // 逐包清理：入参先在这里自检（折进 Promise 链，见下面的注释），只把合法的包名送到原生侧 ——

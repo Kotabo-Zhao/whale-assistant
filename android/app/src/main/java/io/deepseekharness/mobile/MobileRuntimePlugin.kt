@@ -2786,8 +2786,12 @@ class MobileRuntimePlugin : Plugin() {
                 ?: throw RuntimeFailure("ACCESSIBILITY_SERVICE_DISABLED", "无障碍服务没有连上，没有可取消的任务")
             audited(AuditEvent.ACCESSIBILITY_CONFIG) {
                 synchronized(io.deepseekharness.mobile.accessibility.AutomationTaskInterruptionStore.lock) {
-                if (service.currentAutomationTask().taskId.isEmpty()) {
+                val current = service.currentAutomationTask()
+                if (current.taskId.isEmpty()) {
                     throw RuntimeFailure("AUTOMATION_TASK_NOT_PLANNED", "现在没有任务可取消")
+                }
+                if (!io.deepseekharness.mobile.accessibility.AutomationTaskIdentity.matches(current, call.getString("instanceId"))) {
+                    throw RuntimeFailure("AUTOMATION_TASK_CHANGED", "任务已变化，请重新读取后再停止")
                 }
                 val snapshot = service.cancelAutomationTask()
                 // 审计只记「取消被按下」这个受控码，不带包名、不带步骤标识。
@@ -2836,6 +2840,7 @@ class MobileRuntimePlugin : Plugin() {
         }
         return JSObject()
             .put("taskId", taskId)
+            .put("instanceId", instanceId)
             .put("status", status)
             .put("packageName", packageName)
             .put("nextStep", nextStepId ?: JSONObject.NULL)

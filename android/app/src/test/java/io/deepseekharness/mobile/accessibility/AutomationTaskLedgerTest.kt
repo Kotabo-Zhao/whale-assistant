@@ -52,6 +52,21 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `停止请求必须匹配计划实例而非可重用的任务名`() {
+        val ledger = ledger(spec("s1"))
+        val first = ledger.snapshot()
+        assertTrue(AutomationTaskIdentity.matches(first, first.instanceId))
+        assertFalse(AutomationTaskIdentity.matches(first, null))
+        assertFalse(AutomationTaskIdentity.matches(first, first.taskId))
+        ledger.cancel()
+        ledger.plan(first.taskId, first.packageName, "d1", listOf(spec("s1")))
+        val next = ledger.snapshot()
+        assertEquals(first.taskId, next.taskId)
+        assertFalse(AutomationTaskIdentity.matches(next, first.instanceId))
+        assertTrue(AutomationTaskIdentity.matches(next, next.instanceId))
+    }
+
+    @Test
     fun `计划校验把不合法的步骤逐条挡住`() {
         val seen = mutableSetOf<String>()
         assertNull(AutomationTaskPlan.validate(spec("s1"), seen))
