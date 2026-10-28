@@ -869,12 +869,21 @@ test('Harness WebView serves the system file chooser and keeps page-initiated lo
     appRoot,
     'android/app/src/main/java/io/deepseekharness/mobile/HarnessRestrictedWebViewClient.kt',
   ), 'utf8')
+  const chrome = await readFile(resolve(
+    appRoot,
+    'android/app/src/main/java/io/deepseekharness/mobile/HarnessWebChromeClient.kt',
+  ), 'utf8')
 
   // 没有 WebChromeClient 时 <input type="file"> 是死按钮：皮肤中心的"从相册导入"与官方
   // 附件上传都依赖这条链路。页面上任何"选择文件"入口都因此失效。
-  assert.match(activity, /webView\.webChromeClient = HarnessWebChromeClient\(\)/)
-  assert.match(activity, /override fun onShowFileChooser\(/)
-  assert.match(activity, /class HarnessWebChromeClient : WebChromeClient\(\)/)
+  assert.match(activity, /webView\.webChromeClient = chrome/)
+  assert.match(activity, /onChooseFile = ::requestFileChooser/)
+  assert.match(chrome, /override fun onShowFileChooser\(/)
+  assert.match(chrome, /class HarnessWebChromeClient\(/)
+  assert.match(chrome, /!isUserGesture/)
+  assert.match(chrome, /javaScriptEnabled = false/)
+  assert.match(chrome, /handler\?\.cancel\(\)/)
+  assert.match(chrome, /blockedResponse\(\)/)
 
   // content:// 访问必须放开，否则 SAF 选中的文件 WebView 读不到，选择器等于白弹。
   assert.match(activity, /HarnessWebViewPolicy\.configure\(webView\.settings/)

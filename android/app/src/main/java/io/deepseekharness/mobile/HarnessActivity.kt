@@ -12,11 +12,8 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.WindowManager
 import android.webkit.CookieManager
-import android.webkit.HttpAuthHandler
-import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -46,7 +43,7 @@ class HarnessActivity : AppCompatActivity() {
     private var rendererRecovery = false
     private var entryUrlForRetry: String? = null
     /** The OAuth page is opened by Harness with window.open(); keep its transport WebView detached. */
-    private var authorizationPopup: WebView? = null
+    private var harnessChromeClient: HarnessWebChromeClient? = null
     private val pageRetryHandler = Handler(Looper.getMainLooper())
     /**
      * 预览面板分享专用线程：复制工作区文件可能到几十 MB，不能占主线程。
@@ -186,7 +183,15 @@ class HarnessActivity : AppCompatActivity() {
         HarnessWebViewPolicy.configure(webView.settings, resources.configuration.fontScale)
         // 没有 WebChromeClient 时 <input type="file"> 点了毫无反应：这是插件"从相册导入"
         // 这类入口在手机上完全不可用的根因（皮肤中心只能靠手填容器路径绕过）。
-        webView.webChromeClient = HarnessWebChromeClient()
+        val chrome = HarnessWebChromeClient(
+            context = this,
+            currentView = { if (::webView.isInitialized) webView else null },
+            canOpen = { !isFinishing && !isDestroyed && AppAuthenticationState.ownsHarnessAccess(authenticationOwner) },
+            onAuthorization = ::openDeepSeekAuthorization,
+            onChooseFile = ::requestFileChooser,
+        )
+        harnessChromeClient = chrome
+        webView.webChromeClient = chrome
         // 设置页改「连背景一起同步」时插件在本进程内改档，需要一块还没销毁的 WebView 来重放。
         HarnessThemeBridge.attach(webView)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -489,113 +494,22 @@ class HarnessActivity : AppCompatActivity() {
         }
     }
 
-    /** Handles user-selected uploads and the provider's authorization popup only. */
-    private inner class HarnessWebChromeClient : WebChromeClient() {
-        override fun onCreateWindow(
-            view: WebView?,
-            isDialog: Boolean,
-            isUserGesture: Boolean,
-            resultMsg: android.os.Message?,
-        ): Boolean {
-            // Only a user-initiated popup may start account authorization.  A detached,
-            // JavaScript-disabled transport page prevents an untrusted redirect from
-            // receiving the localhost session cookie or HTTP Basic credentials.
-            if (view !== webView || !isUserGesture || resultMsg == null || isFinishing || isDestroyed ||
-                !AppAuthenticationState.ownsHarnessAccess(authenticationOwner)
-            ) return false
-            val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-            closeAuthorizationPopup()
-            val popup = WebView(this@HarnessActivity).apply {
-                settings.apply {
-                    javaScriptEnabled = false
-                    domStorageEnabled = false
-                    allowFileAccess = false
-                    allowContentAccess = false
-                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                    javaScriptCanOpenWindowsAutomatically = false
-                    setSupportMultipleWindows(false)
-                    safeBrowsingEnabled = true
-                }
-                webChromeClient = object : WebChromeClient() {
-                    override fun onCloseWindow(window: WebView?) {
-                        if (window === authorizationPopup) closeAuthorizationPopup()
-                    }
-                }
-                webViewClient = AuthorizationPopupClient()
-            }
-            authorizationPopup = popup
-            transport.webView = popup
-            resultMsg.sendToTarget()
-            return true
-        }
-
-        override fun onCloseWindow(window: WebView?) {
-            if (window === authorizationPopup) closeAuthorizationPopup()
-        }
-
-        override fun onShowFileChooser(
-            webView: WebView?,
-            filePathCallback: ValueCallback<Array<Uri>>?,
-            fileChooserParams: WebChromeClient.FileChooserParams?,
-        ): Boolean {
-            if (filePathCallback == null) return false
-            // 上一次选择还没回来就又触发一次：先取消旧的，避免页面拿到错位的结果。
+    private fun requestFileChooser(callback: ValueCallback<Array<Uri>>, params: WebChromeClient.FileChooserParams?): Boolean {
+        deliverFileChooserResult(emptyList())
+        pendingFileChooser = callback
+        val mimeTypes = params?.acceptTypes?.filter { it.contains('/') }?.toTypedArray()?.takeIf { it.isNotEmpty() }
+            ?: arrayOf(ANY_MIME_TYPE)
+        val multiple = params?.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE
+        return try {
+            if (multiple) multipleFileChooser.launch(mimeTypes) else singleFileChooser.launch(mimeTypes)
+            true
+        } catch (_: Throwable) {
             deliverFileChooserResult(emptyList())
-            pendingFileChooser = filePathCallback
-            // 只接受标准 MIME（含 "/"）；页面给的是扩展名（如 ".png"）时退化为任意类型，
-            // 因为 SAF 不接受扩展名过滤。
-            val mimeTypes = fileChooserParams?.acceptTypes
-                ?.filter { it.contains('/') }
-                ?.toTypedArray()
-                ?.takeIf { it.isNotEmpty() }
-                ?: arrayOf(ANY_MIME_TYPE)
-            val multiple = fileChooserParams?.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE
-            return try {
-                if (multiple) multipleFileChooser.launch(mimeTypes) else singleFileChooser.launch(mimeTypes)
-                true
-            } catch (_: Throwable) {
-                // 无法拉起选择器时立即回传 null，页面保持可交互；返回 false 让 WebView 走默认
-                //（即什么都不做），两者都不会让页面卡住。
-                deliverFileChooserResult(emptyList())
-                false
-            }
+            false
         }
     }
 
-    private fun closeAuthorizationPopup() {
-        val popup = authorizationPopup ?: return
-        authorizationPopup = null
-        popup.stopLoading()
-        popup.webChromeClient = null
-        popup.webViewClient = WebViewClient()
-        popup.destroy()
-    }
-
-    /** Never loads a network resource: WebView's shared cookie jar must not reach the popup. */
-    private inner class AuthorizationPopupClient : WebViewClient() {
-        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-            val uri = request?.url ?: return true
-            if (uri.toString() == "about:blank") return false
-            if (isDeepSeekAuthorizationNavigation(uri.toString(), request.method, request.isForMainFrame)) {
-                openDeepSeekAuthorization(uri)
-            }
-            return true
-        }
-
-        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
-            if (request?.url?.toString() == "about:blank") null else blockedResponse()
-
-        override fun onReceivedHttpAuthRequest(
-            view: WebView?, handler: HttpAuthHandler?, host: String?, realm: String?,
-        ) {
-            handler?.cancel()
-        }
-
-        override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-            if (view === authorizationPopup) closeAuthorizationPopup()
-            return true
-        }
-    }
+    private fun closeAuthorizationPopup() { harnessChromeClient?.closePopup() }
 
     private fun openDeepSeekAuthorization(uri: Uri): Boolean {
         if (!isDeepSeekAuthorizationUrl(uri.toString()) || isFinishing || isDestroyed ||
