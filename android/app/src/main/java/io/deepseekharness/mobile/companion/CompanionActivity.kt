@@ -39,6 +39,7 @@ class CompanionActivity : AppCompatActivity() {
     private var memoryBusy = false
     private val briefExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-brief").apply { isDaemon = true } }
     private var briefBusy = false
+    private var usageBusy = false
     private val calendarPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         android.widget.Toast.makeText(this, if (granted) "已授权；可打开简报查看日历。" else "日历未授权；简报仍可查看通知。", android.widget.Toast.LENGTH_LONG).show()
     }
@@ -161,6 +162,9 @@ class CompanionActivity : AppCompatActivity() {
         if (intent?.getBooleanExtra("open_calendar_brief", false) == true) {
             intent?.removeExtra("open_calendar_brief")
             showBrief()
+        } else if (intent?.getBooleanExtra("open_usage_suggestions", false) == true) {
+            intent?.removeExtra("open_usage_suggestions")
+            showUsageSuggestions()
         }
     }
 
@@ -232,6 +236,9 @@ class CompanionActivity : AppCompatActivity() {
         heading("手机使用情况")
         paragraph("只在点击时读取系统提供的最近 7 天应用使用时长，数据可能不完整；需要在系统中单独授予使用情况访问权限。可手动选择应用加入快捷方式，不保存使用时长。")
         button("打开使用情况访问授权") { openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS) }
+        toggle("提醒我整理常用应用", store.usageSuggestions) { store.usageSuggestions = it }
+        paragraph("开启后，悬浮助手运行且解锁时，在本机按最近约 7 天的使用时长建议快捷方式，最多每天提示一次；不记录或发送使用数据，不推断个人属性。需要使用情况访问权限，系统可能限制后台提示。")
+        button("查看常用应用建议") { showUsageSuggestions() }
         button("查看最近 7 天使用情况") { showUsage() }
         heading("本地通知记录")
         paragraph("简报使用本地规则分类，可能漏判或分类错误，不代表已检查所有信息。")
@@ -316,6 +323,44 @@ class CompanionActivity : AppCompatActivity() {
             if (start) store.quietHoursStart = hour * 60 + minute else store.quietHoursEnd = hour * 60 + minute
             render()
         }, current / 60, current % 60, true).show()
+    }
+
+    private fun showUsageSuggestions() {
+        if (usageBusy) { android.widget.Toast.makeText(this, "正在读取使用情况，请稍候。", android.widget.Toast.LENGTH_SHORT).show(); return }
+        usageBusy = true
+        val app = applicationContext
+        val existing = runCatching { store.shortcuts() }.getOrElse { usageBusy = false; paragraph("无法读取快捷方式，原数据已保留。"); return }
+        if (existing.size >= CompanionShortcutPolicy.MAX_SHORTCUTS) { usageBusy = false; paragraph("常用应用已满，请先移除一个快捷方式。"); return }
+        briefExecutor.execute {
+            val snapshot = CompanionUsage.load(app, existing)
+            memoryHandler.post {
+                usageBusy = false
+                if (isFinishing || isDestroyed) return@post
+                when (snapshot.state) {
+                    CompanionUsage.State.NO_PERMISSION -> paragraph("没有使用情况访问权限，请先到系统设置中授权。")
+                    CompanionUsage.State.UNAVAILABLE -> paragraph("无法读取使用情况，请稍后重试。")
+                    CompanionUsage.State.OK -> {
+                        if (snapshot.candidates.isEmpty()) { paragraph("没有足够的可用记录或新建议；系统统计可能不完整。"); return@post }
+                        val labels = snapshot.candidates.map { candidate ->
+                            val name = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(candidate.packageName, 0)).toString() }.getOrDefault(candidate.packageName)
+                            "$name · 约 ${candidate.foregroundMs / 60000} 分钟\n${candidate.packageName}"
+                        }.toTypedArray()
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("建议加入常用应用（约 7 天）")
+                            .setItems(labels) { _, index ->
+                                val candidate = snapshot.candidates[index]
+                                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("加入常用应用？").setMessage(labels[index])
+                                    .setNegativeButton("取消", null).setPositiveButton("加入") { _, _ ->
+                                        val launch = runCatching { packageManager.getLaunchIntentForPackage(candidate.packageName) }.getOrNull()
+                                        if (!CompanionSourcePolicy.matchesResolved(candidate.packageName, launch?.component?.packageName)) {
+                                            paragraph("应用已不可用或没有启动入口，请刷新建议。")
+                                        } else runCatching { store.addShortcut(candidate.packageName) }.onSuccess { render() }
+                                            .onFailure { paragraph("无法添加快捷方式，请检查是否已达到 6 个上限。") }
+                                    }.show()
+                            }.setNegativeButton("关闭", null).show()
+                    }
+                }
+            }
+        }
     }
 
     private fun showUsage() {

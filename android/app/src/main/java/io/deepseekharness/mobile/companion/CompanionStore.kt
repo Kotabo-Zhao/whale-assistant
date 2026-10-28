@@ -18,6 +18,9 @@ class CompanionStore(context: Context) {
     var calendarHints: Boolean
         get() = prefs.getBoolean("calendar_hints", false)
         set(value) { prefs.edit().putBoolean("calendar_hints", value).apply() }
+    var usageSuggestions: Boolean
+        get() = prefs.getBoolean("usage_suggestions", false)
+        set(value) { prefs.edit().putBoolean("usage_suggestions", value).apply() }
     var reminders: Boolean
         get() = prefs.getBoolean("reminders", false)
         set(value) { prefs.edit().putBoolean("reminders", value).apply() }

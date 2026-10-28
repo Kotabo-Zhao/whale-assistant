@@ -86,10 +86,12 @@ class OverlayBallService : Service() {
     private val hintHandler = Handler(Looper.getMainLooper())
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
     private var calendarQueryRunning = false
+    private var usageQueryRunning = false
     @Volatile private var calendarServiceDestroyed = false
     private val calendarTick = object : Runnable {
         override fun run() {
             checkCalendarHint()
+            checkUsageSuggestion()
             hintHandler.postDelayed(this, 5L * 60 * 1000)
         }
     }
@@ -328,6 +330,37 @@ class OverlayBallService : Service() {
             .setContentTitle("鲸鱼娘提醒").setContentText("电量较低，记得充电。")
             .setContentIntent(open).setAutoCancel(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build()
         runCatching { manager.notify(0x44534803, notification) }.onSuccess { prefs.edit().putLong("battery_notified_at", now).apply() }
+    }
+
+    private fun checkUsageSuggestion() {
+        val store = CompanionStore(this)
+        if (usageQueryRunning || !store.usageSuggestions || store.inQuietHours() || !ballAttached || ballView == null ||
+            getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false ||
+            getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return
+        val prefs = getSharedPreferences("companion_usage_hint_v1", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (!io.deepseekharness.mobile.companion.CompanionUsageHintPolicy.due(now, prefs.getLong("checked", 0), prefs.getLong("prompted", 0))) return
+        usageQueryRunning = true
+        val app = applicationContext
+        val shortcuts = runCatching { store.shortcuts() }.getOrNull() ?: run { usageQueryRunning = false; return }
+        calendarExecutor.execute {
+            val snapshot = io.deepseekharness.mobile.companion.CompanionUsage.load(app, shortcuts, now)
+            if (calendarServiceDestroyed) return@execute
+            hintHandler.post {
+                usageQueryRunning = false
+                if (calendarServiceDestroyed || !CompanionStore(this).usageSuggestions || snapshot.state != io.deepseekharness.mobile.companion.CompanionUsage.State.OK) return@post
+                val current = CompanionStore(this)
+                if (current.inQuietHours()) return@post
+                val currentShortcuts = runCatching { current.shortcuts() }.getOrNull() ?: return@post
+                if (currentShortcuts.size >= io.deepseekharness.mobile.companion.CompanionShortcutPolicy.MAX_SHORTCUTS || snapshot.candidates.none { it.packageName !in currentShortcuts }) {
+                    prefs.edit().putLong("checked", now).apply()
+                } else if (showCompanionHint("有常用应用建议，点击查看。") {
+                        runCatching { startActivity(Intent(this, io.deepseekharness.mobile.companion.CompanionActivity::class.java).putExtra("open_usage_suggestions", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }) {
+                    prefs.edit().putLong("checked", now).putLong("prompted", now).apply()
+                }
+            }
+        }
     }
 
     private fun checkCalendarHint() {
