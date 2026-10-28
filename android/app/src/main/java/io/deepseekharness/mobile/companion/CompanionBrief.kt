@@ -63,12 +63,42 @@ internal object CompanionSourcePolicy {
 /** A single explicit local date and time is only a picker suggestion, never a scheduled alarm. */
 internal object CompanionNotificationTimeSuggestion {
     private val explicit = Regex("(?<![0-9])([0-9]{4})[-年]([0-9]{1,2})[-月]([0-9]{1,2})(?:日)?[ T]+([0-9]{1,2}):([0-9]{2})(?![0-9:])")
-    fun find(text: String, now: Long, zone: java.time.ZoneId): Long? {
+    private val relative = Regex("(今天|明天|后天)\\s*(上午|下午|晚上)?\\s*([0-9]{1,2}):([0-9]{2})(?![0-9:])")
+    private val relativeDay = Regex("今天|明天|后天")
+    private val clock = Regex("(?<![0-9:])[0-9]{1,2}:[0-9]{2}(?![0-9:])")
+    private val anyDate = Regex("(?<![0-9])(?:[0-9]{1,4}[-年/])?[0-9]{1,2}[-月/][0-9]{1,2}(?:日)?")
+    private val otherClock = Regex("[0-9一二三四五六七八九十两]{1,3}点")
+    fun find(text: String, now: Long, zone: java.time.ZoneId, notificationTime: Long? = null): Long? {
         val matches = explicit.findAll(text).take(2).toList()
-        if (matches.size != 1) return null
+        if (matches.isEmpty()) return findRelative(text, now, zone, notificationTime)
+        if (matches.size != 1 || relativeDay.containsMatchIn(text) || clock.findAll(text).take(2).count() != 1) return null
         return try {
             val values = matches.single().groupValues.drop(1).map(String::toInt)
             val local = java.time.LocalDateTime.of(values[0], values[1], values[2], values[3], values[4])
+            val offsets = zone.rules.getValidOffsets(local)
+            if (offsets.size != 1) return null
+            val millis = local.toInstant(offsets.single()).toEpochMilli()
+            millis.takeIf { it > now && it - now > 10_000 }
+        } catch (_: Exception) { null }
+    }
+
+    private fun findRelative(text: String, now: Long, zone: java.time.ZoneId, notificationTime: Long?): Long? {
+        val posted = notificationTime ?: return null
+        // Older snapshots and future timestamps are unreliable anchors for relative language.
+        if (posted <= 0 || posted > now || now - posted > 24 * 60 * 60 * 1000L) return null
+        if (relativeDay.findAll(text).take(2).count() != 1 || clock.findAll(text).take(2).count() != 1 || anyDate.containsMatchIn(text) || otherClock.containsMatchIn(text)) return null
+        val match = relative.find(text) ?: return null
+        return try {
+            val rawHour = match.groupValues[3].toInt()
+            val minute = match.groupValues[4].toInt()
+            val period = match.groupValues[2]
+            val hour = when (period) {
+                "上午" -> if (rawHour in 1..12) rawHour % 12 else return null
+                "下午", "晚上" -> if (rawHour in 1..12) rawHour % 12 + 12 else return null
+                else -> rawHour
+            }
+            val dayOffset = when (match.groupValues[1]) { "今天" -> 0L; "明天" -> 1L; else -> 2L }
+            val local = java.time.Instant.ofEpochMilli(posted).atZone(zone).toLocalDate().plusDays(dayOffset).atTime(hour, minute)
             val offsets = zone.rules.getValidOffsets(local)
             if (offsets.size != 1) return null
             val millis = local.toInstant(offsets.single()).toEpochMilli()

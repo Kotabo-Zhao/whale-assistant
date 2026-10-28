@@ -70,4 +70,25 @@ class CompanionBriefTest {
         org.junit.Assert.assertFalse(CompanionSourcePolicy.validPackage("../example"))
         org.junit.Assert.assertFalse(CompanionSourcePolicy.validPackage("a".repeat(200)))
     }
+
+    @Test fun relativeSuggestionUsesRecentCaptureDateAndRejectsAmbiguity() {
+        val zone = java.time.ZoneId.of("Asia/Shanghai")
+        val captured = java.time.Instant.parse("2026-01-01T15:50:00Z").toEpochMilli()
+        val now = captured + 20 * 60_000L // already the next local day
+        val expected = java.time.ZonedDateTime.of(2026, 1, 2, 14, 30, 0, 0, zone).toInstant().toEpochMilli()
+        assertEquals(expected, CompanionNotificationTimeSuggestion.find("明天下午 2:30 开会", now, zone, captured))
+        assertNull(CompanionNotificationTimeSuggestion.find("明天 14:30 或 15:30", now, zone, captured))
+        assertNull(CompanionNotificationTimeSuggestion.find("明天 14:30 或 三点", now, zone, captured))
+        assertNull(CompanionNotificationTimeSuggestion.find("明天 1月3日 14:30", now, zone, captured))
+        assertNull(CompanionNotificationTimeSuggestion.find("明天 14:30 后天再确认", now, zone, captured))
+        assertNull(CompanionNotificationTimeSuggestion.find("明天 14:30", now, zone, null))
+        assertNull(CompanionNotificationTimeSuggestion.find("明天 14:30", now, zone, now + 1))
+        assertNull(CompanionNotificationTimeSuggestion.find("明天 14:30", now, zone, now - 24 * 60 * 60 * 1000L - 1))
+        assertNull(CompanionNotificationTimeSuggestion.find("今天 14:30", now, zone, captured))
+        assertNull(CompanionNotificationTimeSuggestion.find("明天下午 14:30", now, zone, captured))
+        val ny = java.time.ZoneId.of("America/New_York")
+        val beforeDst = java.time.Instant.parse("2026-03-07T17:00:00Z").toEpochMilli()
+        assertNull(CompanionNotificationTimeSuggestion.find("明天 02:30", beforeDst, ny, beforeDst))
+        assertNull(CompanionNotificationTimeSuggestion.find("2026-12-03 14:30 或 15:30", now, zone, captured))
+    }
 }

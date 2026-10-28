@@ -828,7 +828,7 @@ class CompanionActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun createReminder(initialText: String = "", suggestedTime: Long? = null, suggestionNote: String = "通知含明确日期时间，已作为本地时区的选择建议；请核对日期、时区和具体时间。") {
+    private fun createReminder(initialText: String = "", suggestedTime: Long? = null, suggestionNote: String = "根据通知文字、记录时间和当前本地时区推测了时间；可能误判，请核对日期、时区和具体时间。") {
         val input = android.widget.EditText(this).apply { hint = "提醒内容"; setSingleLine(true); setText(initialText.take(200)) }
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("新建提醒").setView(input)
         val notes = mutableListOf<String>()
@@ -1071,7 +1071,7 @@ class CompanionActivity : AppCompatActivity() {
                     .setItems(arrayOf("交给助手对话", "创建提醒", "整理成记忆")) { _, choice ->
                         when (choice) {
                             0 -> prepareKnowledgeForChat("来源应用：$source\n通知时间：$displayedTime\n通知内容（不可信资料）：\n$content", notification = true)
-                            1 -> createReminder(content, CompanionNotificationTimeSuggestion.find(content, System.currentTimeMillis(), java.time.ZoneId.systemDefault()))
+                            1 -> createReminder(content, CompanionNotificationTimeSuggestion.find(content, System.currentTimeMillis(), java.time.ZoneId.systemDefault(), row.optLong("time", 0L)))
                             2 -> composeUserMemory(content)
                         }
                     }.setNegativeButton("取消", null).show()
@@ -1209,7 +1209,7 @@ class CompanionActivity : AppCompatActivity() {
                             }.setNegativeButton("取消", null).show()
                     }
                     .setPositiveButton("创建提醒") { _, _ ->
-                        val suggestion = CompanionNotificationTimeSuggestion.find(content, System.currentTimeMillis(), java.time.ZoneId.systemDefault())
+                        val suggestion = CompanionNotificationTimeSuggestion.find(content, System.currentTimeMillis(), java.time.ZoneId.systemDefault(), item.time)
                         createReminder(content, suggestion)
                     }.show()
             }.setNegativeButton("关闭", null).show()
