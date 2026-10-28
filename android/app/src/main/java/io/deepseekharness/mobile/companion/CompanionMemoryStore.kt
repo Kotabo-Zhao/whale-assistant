@@ -186,6 +186,9 @@ internal object CompanionMemorySearch {
         }
         return result
     }
+    fun relatedAnchor(text: String, query: String): Int = terms(query)
+        .sortedWith(compareByDescending<String> { it.length }.thenBy { it })
+        .firstNotNullOfOrNull { term -> text.indexOf(term, ignoreCase = true).takeIf { it >= 0 } } ?: 0
     fun find(rows: List<JSONObject>, query: String): Result {
         val newestFirst = rows.asReversed()
         if (query.isEmpty()) return Result(newestFirst.take(10), "recent")
