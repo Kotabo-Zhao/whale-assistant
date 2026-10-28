@@ -220,10 +220,10 @@ class MainActivity : BridgeActivity() {
             .setMessage("$preview\n\n保存到本机收件箱后，运行环境及当前或后续对话可能读取并发送给模型。放入草稿后请核对，再自行发送。")
             .setNegativeButton("取消", null).setPositiveButton("保存…") { _, _ ->
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择保存位置")
-                    .setMessage("本地资料库仅保存你选定的文字，最多 8000 字；当前不自动提供给模型。收件箱可供运行环境读取。")
-                    .setItems(arrayOf("保存到本地资料库", "保存到收件箱")) { _, choice ->
-                        if (choice == 0) saveSharedKnowledge(text) else saveSharedTextToInbox(bytes)
-                    }.setNegativeButton("取消", null).show()
+                    .setMessage("本地资料库最多保存 8000 字；开启对话资料访问后，匹配内容可能发送给模型。收件箱可供运行环境读取。")
+                    .setPositiveButton("本地资料库") { _, _ -> saveSharedKnowledge(text) }
+                    .setNeutralButton("收件箱") { _, _ -> saveSharedTextToInbox(bytes) }
+                    .setNegativeButton("取消", null).show()
             }
         if (SharedTextImport.canInsertDraft(text)) dialog.setNeutralButton("放入对话草稿") { _, _ ->
             harnessSurface.showIfOwned()
