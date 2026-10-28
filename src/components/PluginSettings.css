@@ -118,3 +118,5 @@
   .plugin-relink-banner { flex-direction: column; align-items: stretch; margin: 10px 12px; }
   .plugin-relink-banner .button { width: 100%; }
 }
+
+.mobile-market-pagination { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

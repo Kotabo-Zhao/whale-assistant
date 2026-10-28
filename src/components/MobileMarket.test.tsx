@@ -91,3 +91,29 @@ it('目录可指定精确版本，拒绝范围或标签', async () => {
   fireEvent.click(screen.getByRole('button', { name: '确认安装' }))
   expect(install).toHaveBeenCalledWith('@example/plugin@1.2.3-rc.1')
 })
+
+
+it('插件目录分页可访问全部结果，搜索后回到第一页', async () => {
+  const plugins = Array.from({ length: 65 }, (_, i) => ({ name: `插件 ${String(i).padStart(2, '0')}`, npm: `example-${i}` }))
+  const bytes = new TextEncoder().encode(JSON.stringify({ plugins }))
+  let complete = false
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({
+    read: () => Promise.resolve(complete ? { done: true } : (complete = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+  }) } }))
+  render(<MobileMarket locked={false} onInstall={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+  expect(await screen.findByText('插件 00')).toBeVisible()
+  expect(screen.queryByText('插件 30')).not.toBeInTheDocument()
+  expect(screen.getByText('共 65 个结果，第 1/3 页。')).toBeVisible()
+  expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+  expect(screen.getByText('插件 30')).toBeVisible()
+  expect(screen.queryByText('插件 00')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+  expect(screen.getByText('插件 64')).toBeVisible()
+  expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled()
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索目录' }), { target: { value: 'example-1' } })
+  expect(screen.getByText('插件 01')).toBeVisible()
+  expect(screen.queryByText('插件 64')).not.toBeInTheDocument()
+  expect(screen.queryByRole('navigation', { name: '插件目录分页' })).not.toBeInTheDocument()
+})

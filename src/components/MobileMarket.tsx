@@ -4,24 +4,37 @@ import { t, useLanguage } from '../i18n'
 import { fetchCatalog, type Entry } from './marketCatalog'
 import { validatePluginRequest } from '../platform/plugins'
 
+const PAGE_SIZE = 30
+
 type InstallState = { name: string; busy: boolean; failed: boolean; notice: string; detail: string }
 export function MobileMarket({ locked, onInstall, installState = null }: { locked: boolean; onInstall: (name: string) => void; installState?: InstallState | null }) {
   useLanguage()
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [query, setQuery] = useState('')
+  const [page, setPage] = useState(0)
   const [review, setReview] = useState<Entry | null>(null)
   const [version, setVersion] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
   const request = useRef<AbortController | null>(null)
   const reviewRegion = useRef<HTMLDivElement | null>(null)
+  const resultsRegion = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (review) { reviewRegion.current?.scrollIntoView?.({ block: 'nearest' }); reviewRegion.current?.focus() }
   }, [review])
   useEffect(() => () => { request.current?.abort(); request.current = null }, [])
-  const visible = useMemo(() => {
+  const matches = useMemo(() => {
     const term = query.trim().toLowerCase()
-    return (entries ?? []).filter(item => !term || `${item.name} ${item.npm} ${item.description}`.toLowerCase().includes(term)).slice(0, 30)
+    return (entries ?? []).filter(item => !term || `${item.name} ${item.npm} ${item.description}`.toLowerCase().includes(term))
   }, [entries, query])
+  const pageCount = Math.ceil(matches.length / PAGE_SIZE)
+  const currentPage = Math.min(page, Math.max(0, pageCount - 1))
+  const visible = matches.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
+  const changePage = (next: number) => {
+    setReview(null)
+    setPage(next)
+    resultsRegion.current?.scrollIntoView?.({ block: 'start' })
+    resultsRegion.current?.focus()
+  }
   const versionValid = !review || !version.trim() || (() => {
     try { validatePluginRequest({ operation: 'import', source: `${review.npm}@${version.trim()}` }); return true } catch { return false }
   })()
@@ -30,6 +43,7 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
     const controller = new AbortController()
     request.current = controller
     setReview(null)
+    setPage(0)
     setStatus('loading')
     const timeout = window.setTimeout(() => controller.abort(), 30000)
     try {
@@ -43,6 +57,7 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
   return <section className="mobile-market" aria-labelledby="mobile-market-title">
     <h2 id="mobile-market-title">{t('手机插件目录')}</h2>
     <p>{t('浏览社区目录中的 npm 插件。安装由手机插件管理器处理，不运行安装脚本；是否能在安卓正常使用仍需验证。')}</p>
+    <p className="plugin-hint">{t('最多读取目录前 20000 条，跳过无效或重复包名。')}</p>
     <button className="button button-secondary compact-button" type="button" disabled={status === 'loading'} onClick={() => { void load() }}>
       {status === 'loading' ? t('正在获取目录…') : entries ? t('刷新目录') : t('加载插件目录')}
     </button>
@@ -74,12 +89,18 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
       </div>
     </div>}
     {entries && <>
-      <label className="mobile-market-search">{t('搜索目录')}<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('搜索插件名称或包名')} /></label>
-      <p className="plugin-hint">{t('目录中有 {0} 个 npm 插件，最多显示前 30 个结果。', entries.length)}{locked ? t('请先停止运行环境再安装。') : ''}</p>
-      {visible.length === 0 ? <p>{t('没有匹配的插件。')}</p> : <ul className="mobile-market-list">{visible.map(item => <li key={item.npm}>
-        <div><strong>{item.name}</strong><code>{item.npm}</code>{item.description && <p>{item.description}</p>}</div>
-        <button className="button button-secondary compact-button" type="button" disabled={locked} onClick={() => { setVersion(''); setReview(item) }}>{t('安装')}</button>
-      </li>)}</ul>}
+      <label className="mobile-market-search">{t('搜索目录')}<input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(0); setReview(null) }} placeholder={t('搜索插件名称或包名')} /></label>
+      <div ref={resultsRegion} tabIndex={-1}>
+        <p className="plugin-hint" role="status" aria-live="polite">{matches.length === 0 ? t('没有匹配的插件。') : t('共 {0} 个结果，第 {1}/{2} 页。', matches.length, currentPage + 1, pageCount)}{locked ? t('请先停止运行环境再安装。') : ''}</p>
+        {visible.length > 0 && <ul className="mobile-market-list">{visible.map(item => <li key={item.npm}>
+          <div><strong>{item.name}</strong><code>{item.npm}</code>{item.description && <p>{item.description}</p>}</div>
+          <button className="button button-secondary compact-button" type="button" disabled={locked} onClick={() => { setVersion(''); setReview(item) }}>{t('安装')}</button>
+        </li>)}</ul>}
+      </div>
+      {pageCount > 1 && <nav className="mobile-market-pagination" aria-label={t('插件目录分页')}>
+        <button className="button button-secondary compact-button" type="button" disabled={currentPage === 0} onClick={() => changePage(currentPage - 1)}>{t('上一页')}</button>
+        <button className="button button-secondary compact-button" type="button" disabled={currentPage + 1 >= pageCount} onClick={() => changePage(currentPage + 1)}>{t('下一页')}</button>
+      </nav>}
     </>}
   </section>
 }
