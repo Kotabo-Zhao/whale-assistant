@@ -197,6 +197,13 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             val refusal = AutomationTaskActionPolicy.refusal(snapshot, packageName, AutomationTaskActions.BACK,
                 AutomationTaskActions.BACK_TARGET, dispatchAt, automationTaskReceipt)
             if (refusal != null) return@synchronized failure(refusal, "任务未放行返回动作或状态已变化")
+            if (isLockedOrScreenOff()) return@synchronized failure("ACCESSIBILITY_DEVICE_LOCKED", "设备已锁定或屏幕未交互")
+            val current = rootInActiveWindow ?: return@synchronized failure("ACCESSIBILITY_WINDOW_UNAVAILABLE", "当前没有可读取的应用窗口")
+            if (current.packageName?.toString() != packageName || !AccessibilityAutomationStore.packageAllowed(this, packageName))
+                return@synchronized failure("ACCESSIBILITY_PACKAGE_DENIED", "返回前前台应用已变化")
+            if (containsSensitiveWindow(current)) return@synchronized failure("ACCESSIBILITY_SENSITIVE_WINDOW", "返回前检测到敏感窗口")
+            if (AutomationTaskActionPolicy.staleAtDispatch(snapshot, runCatching { windowDigest(current) }.getOrNull()))
+                return@synchronized failure(AutomationTaskCodes.TARGET_STALE, "放行后界面已变化，请重新核对")
             if (!performGlobalAction(GLOBAL_ACTION_BACK)) return@synchronized failure("ACCESSIBILITY_ACTION_REJECTED", "系统未接受返回动作")
             lastActionAt = dispatchAt
             noteAutomationTaskAction(dispatchAt)
@@ -461,8 +468,15 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         // Serialize the last gate check with cancel/plan so no action is dispatched after cancellation wins.
         return synchronized(automationTaskLedger) {
         val dispatchAt = SystemClock.elapsedRealtime()
-        val taskRefusal = AutomationTaskActionPolicy.refusal(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, dispatchAt, automationTaskReceipt)
+        val snapshot = automationTaskLedger.snapshot()
+        val taskRefusal = AutomationTaskActionPolicy.refusal(snapshot, packageName, request.action, request.viewId, dispatchAt, automationTaskReceipt)
         if (taskRefusal != null) return@synchronized failure(taskRefusal, "任务状态已变化或未放行此动作")
+        if (snapshot.status == AutomationTaskStatus.RUNNING) {
+            val current = rootInActiveWindow
+            val currentDigest = if (current?.packageName?.toString() == packageName) runCatching { windowDigest(current) }.getOrNull() else null
+            if (AutomationTaskActionPolicy.staleAtDispatch(snapshot, currentDigest))
+                return@synchronized failure(AutomationTaskCodes.TARGET_STALE, "放行后界面已变化，请重新核对")
+        }
         val success = when (request.action) {
             "click" -> node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             "setText" -> if (!node.isEditable || request.text == null || AccessibilityAutomationPolicy.containsSensitiveText(request.text)) false

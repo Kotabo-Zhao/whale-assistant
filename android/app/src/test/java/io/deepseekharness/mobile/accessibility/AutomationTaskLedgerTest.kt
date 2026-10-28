@@ -339,6 +339,20 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `动作执行前界面与闸门现场不一致时视为过期`() {
+        val ledger = ledger(spec("s1"))
+        ledger.gate("s1", facts(), 1000L)
+        val snapshot = ledger.snapshot()
+        val gated = snapshot.steps.single().startedDigest!!
+        assertFalse(AutomationTaskActionPolicy.staleAtDispatch(snapshot, gated))
+        assertTrue(AutomationTaskActionPolicy.staleAtDispatch(snapshot, "different-window"))
+        assertTrue(AutomationTaskActionPolicy.staleAtDispatch(snapshot, null))
+        assertTrue(AutomationTaskActionPolicy.staleAtDispatch(snapshot, ""))
+        assertTrue(AutomationTaskActionPolicy.staleAtDispatch(snapshot.copy(steps = emptyList()), gated))
+        assertFalse(AutomationTaskActionPolicy.staleAtDispatch(AutomationTaskLedger().snapshot(), null))
+    }
+
+    @Test
     fun `任务结果不确定后不能绕开台账直接重发`() {
         val ledger = ledger(spec("s1"))
         ledger.gate("s1", facts(), 1000L)

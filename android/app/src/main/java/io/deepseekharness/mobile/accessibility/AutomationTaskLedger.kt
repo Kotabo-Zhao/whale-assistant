@@ -266,6 +266,12 @@ internal object AutomationTaskEvidence {
 
 /** Bind accessibility actions to the active task gate; standalone use remains available without an active task. */
 internal object AutomationTaskActionPolicy {
+    /** The gated window must still be the window observed just before dispatch. */
+    fun staleAtDispatch(snapshot: AutomationTaskSnapshot, observedDigest: String?): Boolean {
+        if (snapshot.taskId.isEmpty() || snapshot.status != AutomationTaskStatus.RUNNING) return false
+        val step = snapshot.steps.singleOrNull { it.status == AutomationTaskStepStatus.PENDING && it.startedAtMs != null } ?: return true
+        return step.startedDigest.isNullOrBlank() || observedDigest.isNullOrBlank() || step.startedDigest != observedDigest
+    }
     fun refusal(snapshot: AutomationTaskSnapshot, packageName: String, action: String, viewId: String,
                 nowMs: Long, receipt: AutomationTaskActionReceipt?): String? {
         if (snapshot.taskId.isEmpty()) return null
