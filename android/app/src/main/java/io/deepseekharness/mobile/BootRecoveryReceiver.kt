@@ -32,6 +32,7 @@ class BootRecoveryReceiver : BroadcastReceiver() {
         if (userManager != null && !userManager.isUserUnlocked) return
 
         runCatching { io.deepseekharness.mobile.companion.CompanionReminder(appContext).restore() }
+        runCatching { io.deepseekharness.mobile.companion.CompanionRecurringReminder(appContext).restore() }
 
         val store = RuntimeStore(appContext)
 

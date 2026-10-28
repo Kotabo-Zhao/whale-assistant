@@ -290,6 +290,9 @@ class CompanionActivity : AppCompatActivity() {
         paragraph("手动设置一次性提醒；需要通知权限。系统省电可能导致延迟，重启后会恢复未来提醒，错过的不会自动补发。")
         button("新建提醒") { createReminder() }
         button("查看和删除提醒") { showReminders() }
+        button("添加每天或每周提醒") { createRecurringReminder() }
+        button("查看重复提醒") { showRecurringReminders() }
+        paragraph("按手机当前时区安排；系统省电可能延迟，重启时错过的次数不会集中补发。")
         heading("常用应用", "apps")
         val shortcuts = runCatching { store.shortcuts().sorted() }.getOrNull()
         if (shortcuts == null) paragraph("无法读取快捷方式，原数据已保留。")
@@ -541,6 +544,54 @@ class CompanionActivity : AppCompatActivity() {
                     }, selected.get(Calendar.HOUR_OF_DAY), selected.get(Calendar.MINUTE), true).show()
                 }, selected.get(Calendar.YEAR), selected.get(Calendar.MONTH), selected.get(Calendar.DAY_OF_MONTH)).show()
             }.show()
+    }
+
+    private fun createRecurringReminder() {
+        val input = android.widget.EditText(this).apply { hint = "提醒内容"; setSingleLine(true); filters = arrayOf(android.text.InputFilter.LengthFilter(200)) }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("新建重复提醒").setView(input)
+            .setNegativeButton("取消", null).setPositiveButton("选择重复方式") { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isBlank() || CompanionStore.sensitive(text)) { paragraph("提醒内容为空或可能含敏感信息。") ; return@setPositiveButton }
+                val days = arrayOf("每天", "每周一", "每周二", "每周三", "每周四", "每周五", "每周六", "每周日")
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("重复方式").setItems(days) { _, weekday ->
+                    val now = Calendar.getInstance()
+                    android.app.TimePickerDialog(this, { _, hour, minute ->
+                        runCatching { CompanionRecurringReminder(this).add(text, hour, minute, weekday) }
+                            .onSuccess {
+                                val state = CompanionReminderHealth.read(this)
+                                paragraph(if (state == CompanionReminderHealth.State.READY) "重复提醒已安排；系统可能延迟送达。" else "重复提醒已安排，但通知状态未就绪，请检查系统设置。")
+                            }.onFailure { paragraph("无法安排重复提醒：${it.message ?: "请检查系统设置"}") }
+                    }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), true).show()
+                }.setNegativeButton("取消", null).show()
+            }.show()
+    }
+
+    private fun showRecurringReminders() {
+        val reminders = CompanionRecurringReminder(this)
+        val rows = runCatching { reminders.list() }.getOrElse { paragraph("无法读取重复提醒，原数据已保留。") ; return }
+        if (rows.length() == 0) { paragraph("暂无重复提醒。") ; return }
+        val days = arrayOf("每天", "每周一", "每周二", "每周三", "每周四", "每周五", "每周六", "每周日")
+        val labels = Array(rows.length()) { index ->
+            val row = rows.getJSONObject(index)
+            val next = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.getLong("nextAt")))
+            val state = if (row.optString("state") == "scheduled") "已安排" else "安排失败"
+            val last = when (row.optString("last")) { "submitted" -> "上次已交给系统"; "failed" -> "上次投递失败"; "missed" -> "上次已错过"; "pending" -> "上次状态未确认"; else -> "尚无记录" }
+            "${row.getString("text")} · ${days[row.getInt("weekday")]} ${"%02d:%02d".format(row.getInt("hour"), row.getInt("minute"))}\n$state · 下次 $next · $last"
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择重复提醒").setItems(labels) { _, index ->
+            val id = rows.getJSONObject(index).getString("id")
+            val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("管理重复提醒").setMessage(labels[index] + "\n删除后不会再安排下一次。")
+                .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除重复提醒？").setMessage(labels[index])
+                        .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                            runCatching { reminders.remove(id) }.onSuccess { paragraph("重复提醒已删除。") }.onFailure { paragraph("删除失败，原记录已保留。") }
+                        }.show()
+                }
+            if (rows.getJSONObject(index).optString("state") == "failed") dialog.setNeutralButton("重新安排") { _, _ ->
+                runCatching { reminders.retry(id) }.onSuccess { paragraph("已重新安排下一次提醒。") }.onFailure { paragraph("重新安排失败，请检查系统设置。") }
+            }
+            dialog.show()
+        }.setNegativeButton("关闭", null).show()
     }
 
     private fun showReminders() {
