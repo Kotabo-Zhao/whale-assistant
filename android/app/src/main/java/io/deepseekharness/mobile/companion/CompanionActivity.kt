@@ -760,12 +760,12 @@ class CompanionActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun createReminder(initialText: String = "", suggestedTime: Long? = null) {
+    private fun createReminder(initialText: String = "", suggestedTime: Long? = null, suggestionNote: String = "通知含明确日期时间，已作为本地时区的选择建议；请核对日期、时区和具体时间。") {
         val input = android.widget.EditText(this).apply { hint = "提醒内容"; setSingleLine(true); setText(initialText.take(200)) }
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("新建提醒").setView(input)
         val notes = mutableListOf<String>()
         if (initialText.length > 200) notes.add("原摘要超过 200 字，已截取前 200 字；请核对和编辑提醒内容。")
-        if (suggestedTime != null) notes.add("通知含明确日期时间，已作为本地时区的选择建议；请核对日期、时区和具体时间。")
+        if (suggestedTime != null) notes.add(suggestionNote)
         if (notes.isNotEmpty()) dialog.setMessage(notes.joinToString("\n"))
         dialog.setNegativeButton("取消", null).setPositiveButton("选择时间") { _, _ ->
                 val value = input.text.toString().trim()
@@ -979,12 +979,39 @@ class CompanionActivity : AppCompatActivity() {
                 val repeatingText = briefReminderText(repeating, zone)
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地简报")
                     .setMessage("今天的可见日历（${zone.id}，读取开始于 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }.format(Date(checkedAt))}）：\n$calendarText\n\n今天的一次性提醒：\n$onceText\n\n今天的重复提醒（仅显示下一次）：\n$repeatingText\n\n$notifications\n\n已交给系统不保证送达；通知分类可能遗漏重要事项。天气尚未接入。")
-                    .setNeutralButton("管理提醒") { _, _ ->
-                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择提醒类型")
-                            .setItems(arrayOf("一次性提醒", "重复提醒")) { _, choice -> if (choice == 0) showReminders() else showRecurringReminders() }
-                            .setNegativeButton("取消", null).show()
+                    .setNeutralButton("提醒操作") { _, _ ->
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择操作")
+                            .setItems(arrayOf("管理一次性提醒", "管理重复提醒", "从日程创建提醒")) { _, choice ->
+                                when (choice) { 0 -> showReminders(); 1 -> showRecurringReminders(); 2 -> chooseCalendarReminder() }
+                            }.setNegativeButton("取消", null).show()
                     }
                     .setPositiveButton("关闭", null).show()
+            }
+        }
+    }
+
+    private fun chooseCalendarReminder() {
+        runMemoryIo("正在重新读取日程…", {
+            val now = System.currentTimeMillis()
+            val zone = java.util.TimeZone.getDefault()
+            val snapshot = CompanionCalendar.read(applicationContext, now, zone)
+            Triple(snapshot, CompanionCalendarReminderPolicy.candidates(snapshot.events, now), zone)
+        }) { result ->
+            result.onFailure { android.widget.Toast.makeText(this, "无法读取日程，请检查权限和系统日历。", android.widget.Toast.LENGTH_LONG).show() }.onSuccess { (snapshot, candidates, zone) ->
+                if (snapshot.state != CompanionCalendar.State.OK) {
+                    android.widget.Toast.makeText(this, if (snapshot.state == CompanionCalendar.State.NO_PERMISSION) "日历未授权，请先授权。" else "日历读取失败，请检查系统日历。", android.widget.Toast.LENGTH_LONG).show()
+                } else if (candidates.isEmpty()) {
+                    android.widget.Toast.makeText(this, "当天没有可选的未来非全天日程；此列表最多读取前 20 项。", android.widget.Toast.LENGTH_LONG).show()
+                } else {
+                    val formatter = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }
+                    val labels = candidates.map { "${formatter.format(Date(it.event.start))} · ${it.event.title}" }.toTypedArray()
+                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择未来日程（${zone.id}${if (snapshot.truncated) "，仅前 20 项" else ""}）")
+                        .setItems(labels) { _, index ->
+                            val item = candidates[index]
+                            createReminder(item.event.title, item.suggestedAt,
+                                "时间根据日程开始时间提出，可能提前 10 分钟；请核对时区、时间和内容。日程后续变化不会自动更新此提醒。")
+                        }.setNegativeButton("取消", null).show()
+                }
             }
         }
     }
