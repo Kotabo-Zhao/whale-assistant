@@ -37,6 +37,7 @@ class CompanionActivity : AppCompatActivity() {
     private val memoryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val memoryHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var memoryBusy = false
+    private var memoryViewGeneration = 0L
     private var notificationVisible = CompanionNotificationPaging.PAGE_SIZE
     @Volatile private var memoryCountGeneration = 0L
     private val briefExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-brief").apply { isDaemon = true } }
@@ -77,6 +78,11 @@ class CompanionActivity : AppCompatActivity() {
         usageExecutor.shutdownNow()
         readinessGeneration++
         readinessExecutor.shutdownNow()
+    }
+
+    override fun onPause() {
+        memoryViewGeneration++
+        super.onPause()
     }
 
     private val memoryImport = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -277,6 +283,7 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun render() {
+        memoryViewGeneration++
         val previousScroll = scroll.scrollY
         content.removeAllViews()
         hero()
@@ -1342,13 +1349,25 @@ class CompanionActivity : AppCompatActivity() {
 
     private fun showMemories(query: String = "") {
         val memory = CompanionMemoryStore(this)
-        val all = runCatching { memory.listForUser() }.getOrElse { paragraph("无法读取长期记忆，原数据已保留。"); return }
-        if (all.length() == 0) { paragraph("还没有长期记忆。"); return }
-        val records = org.json.JSONArray()
-        for (index in 0 until all.length()) {
-            val row = all.getJSONObject(index)
-            if (query.isEmpty() || row.getString("text").contains(query, ignoreCase = true)) records.put(row)
+        val generation = ++memoryViewGeneration
+        runMemoryIo("正在读取长期记忆…", {
+            val all = memory.listForUser()
+            val records = org.json.JSONArray()
+            for (index in 0 until all.length()) {
+                val row = all.getJSONObject(index)
+                if (query.isEmpty() || row.getString("text").contains(query, ignoreCase = true)) records.put(row)
+            }
+            all.length() to records
+        }) { result ->
+            if (generation != memoryViewGeneration) return@runMemoryIo
+            result.onSuccess { (total, records) ->
+                if (total == 0) paragraph("还没有长期记忆。")
+                else showMemoryRecords(memory, records)
+            }.onFailure { paragraph("无法读取长期记忆，原数据已保留。") }
         }
+    }
+
+    private fun showMemoryRecords(memory: CompanionMemoryStore, records: org.json.JSONArray) {
         if (records.length() == 0) { paragraph("没有匹配的记忆，请尝试其他关键词。"); return }
         val labels = Array(records.length()) {
             val row = records.getJSONObject(it)
