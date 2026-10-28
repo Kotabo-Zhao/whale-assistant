@@ -546,9 +546,16 @@ internal class AutomationTaskLedger {
     @Synchronized
     fun markExternalChange(): AutomationTaskSnapshot {
         if (taskId != null && status == AutomationTaskStatus.RUNNING) {
+            val inFlight = steps.indexOfFirst { it.status == AutomationTaskStepStatus.PENDING && it.startedAtMs != null }
+            if (inFlight >= 0) {
+                val step = steps[inFlight]
+                // Dispatch may have succeeded even if its response was interrupted. Never replay it.
+                steps[inFlight] = step.copy(status = AutomationTaskStepStatus.UNKNOWN, code = AutomationTaskCodes.NEEDS_CHECK, startedAtMs = null)
+            }
             status = AutomationTaskStatus.BLOCKED
             lastCode = AutomationTaskCodes.MANUAL_PREEMPTED
-            lastMessage = "任务运行期间现场被外部事件改变：请重新确认当前界面，再恢复任务"
+            lastMessage = if (inFlight >= 0) "执行中现场发生变化：该步骤结果不确定，请检查现场并取消或重新规划"
+                else "任务运行期间现场被外部事件改变：请重新确认当前界面，再恢复任务"
         }
         return snapshot()
     }
@@ -565,6 +572,9 @@ internal class AutomationTaskLedger {
         if (steps.map { it.id } != stepIds) return invalid("恢复时的步骤列表与原计划不一致")
         if (status != AutomationTaskStatus.BLOCKED) {
             return refuse(AutomationTaskCodes.RESUME_REQUIRED, "任务当前没有处于暂停状态，不接受重复恢复", false)
+        }
+        if (steps.any { it.status == AutomationTaskStepStatus.UNKNOWN }) {
+            return refuse(AutomationTaskCodes.NEEDS_CHECK, "有步骤结果不确定：请检查现场，取消后重新规划，不要直接重发", false)
         }
         if (!facts.packageAllowed) return block(AutomationTaskCodes.PACKAGE_NOT_ALLOWED, "当前应用不在无障碍自动化白名单中")
         if (!facts.serviceConnected) return block(AutomationTaskCodes.SERVICE_DISCONNECTED, "无障碍服务未连接")

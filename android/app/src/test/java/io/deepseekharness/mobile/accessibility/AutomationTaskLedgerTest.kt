@@ -352,13 +352,28 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
-    fun `任务运行期间的外部界面事件会阻塞任务`() {
-        val ledger = ledger(spec("s1"))
+    fun `执行中外部界面变化将步骤标为不确定并拒绝恢复重发`() {
+        val ledger = ledger(spec("s1"), spec("s2"))
         ledger.gate("s1", facts(), 1_000L)
         val blocked = ledger.markExternalChange()
         assertEquals(AutomationTaskStatus.BLOCKED, blocked.status)
         assertEquals(AutomationTaskCodes.MANUAL_PREEMPTED, blocked.lastCode)
-        assertTrue(ledger.resume(listOf("s1"), facts(digest = "d1")) is AutomationTaskGate.Proceed)
+        assertEquals(AutomationTaskStepStatus.UNKNOWN, blocked.steps[0].status)
+        assertNull(blocked.steps[0].startedAtMs)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.resume(listOf("s1", "s2"), facts(digest = "d1")).refusedCode())
+        assertEquals(AutomationTaskCodes.RECORD_INVALID, ledger.record("s1", 1, AutomationTaskStepOutcome(ok = true), 1_100L).lastCode)
+        assertEquals(AutomationTaskStatus.BLOCKED, ledger.snapshot().status)
+        assertEquals(AutomationTaskStepStatus.UNKNOWN, ledger.cancel().steps[0].status)
+    }
+
+    @Test
+    fun `步骤之间的外部变化重新核对后可以恢复`() {
+        val ledger = ledger(spec("s1"), spec("s2"))
+        ledger.gate("s1", facts(), 1_000L)
+        ledger.record("s1", 1, AutomationTaskStepOutcome(ok = true, verified = true), 1_100L)
+        assertEquals(AutomationTaskStatus.BLOCKED, ledger.markExternalChange().status)
+        assertTrue(ledger.resume(listOf("s1", "s2"), facts(digest = "d2")) is AutomationTaskGate.Proceed)
+        assertTrue(ledger.gate("s2", facts(digest = "d2"), 1_200L) is AutomationTaskGate.Proceed)
     }
 
     @Test
