@@ -863,6 +863,27 @@ test('插件包内的普通 package.json 不被误当作依赖清单', t => {
   assert.doesNotThrow(() => manager.update('test-plugin'))
 })
 
+test('合法 npm 依赖别名按真实包平台与版本核验，未声明或版本不符不放行', t => {
+  function setup(declaration, actual, extra = {}) {
+    return fixture(t, (id, directory) => {
+      installer(id, directory)
+      const manifest = path.join(directory, 'node_modules/test-plugin/package.json')
+      const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'))
+      pkg.dependencies = { 'alias-dep': declaration }
+      fs.writeFileSync(manifest, JSON.stringify(pkg))
+      const dep = stagedPackage(path.join(directory, 'node_modules'), 'alias-dep', '1.2.0')
+      fs.writeFileSync(path.join(dep, 'package.json'), JSON.stringify({ name: actual, version: '1.2.0', ...extra }))
+    })
+  }
+  const accepted = setup('npm:real-dep@^1.0.0', 'real-dep')
+  assert.doesNotThrow(() => accepted.manager.update('test-plugin'))
+  assert.equal(fs.existsSync(path.join(accepted.root, 'root/.dsh/profiles/web/node_modules/alias-dep')), false)
+  assert.throws(() => setup('npm:other-dep@^1.0.0', 'real-dep').manager.update('test-plugin'), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => setup('npm:real-dep@^2.0.0', 'real-dep').manager.update('test-plugin'), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => setup('npm:real-dep@^1.0.0', 'real-dep', { cpu: [process.arch === 'arm64' ? 'x64' : 'arm64'] }).manager.update('test-plugin'), /PLUGIN_PLATFORM_UNSUPPORTED/)
+  assert.throws(() => setup('npm:@deepseek-ai/dsh-tools@^1.0.0', '@deepseek-ai/dsh-tools').manager.update('test-plugin'), /PLUGIN_DEPENDENCY_UNSUPPORTED/)
+})
+
 // ---------------------------------------------------------------------------
 // 模块图探测（只读）：访客里到底有几份 dsh-tools
 //

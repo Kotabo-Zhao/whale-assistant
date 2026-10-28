@@ -2013,6 +2013,8 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     // 遇到无法检查的目录、链接或超限时拒绝事务，而不是默默跳过。
     const stack = [{ directory: stageModules, depth: 0 }]
     let scanned = 0
+    const aliases = new Map()
+    const mismatchedNames = []
     while (stack.length) {
       const { directory: current, depth } = stack.pop()
       if (depth > 40) fail('PLUGIN_SCAN_UNAVAILABLE', id)
@@ -2048,11 +2050,29 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
           const packageId = packageParts.length === 1 ? packageParts[0]
             : packageParts.length === 2 && packageParts[0].startsWith('@') ? packageParts.join('/') : null
           if (packageId) {
-            const platformError = npmMetadataCheck(pkg, packageId, pkg.version, process.platform, process.arch)
-            if (typeof pkg.version !== 'string' || !parseVersion(pkg.version)) fail('PLUGIN_METADATA_UNAVAILABLE', packageId)
+            if (typeof pkg.name !== 'string' || pkg.name.length > 214 || !NAME.test(pkg.name) || typeof pkg.version !== 'string' || !parseVersion(pkg.version)) fail('PLUGIN_METADATA_UNAVAILABLE', packageId)
+            const platformError = npmMetadataCheck(pkg, pkg.name, pkg.version, process.platform, process.arch)
             if (platformError) fail(platformError, packageId)
+            if (packageId !== pkg.name) mismatchedNames.push({ packageId, name: pkg.name, version: pkg.version })
+            for (const declarations of [pkg.dependencies, pkg.optionalDependencies]) {
+              if (!declarations || typeof declarations !== 'object' || Array.isArray(declarations)) continue
+              for (const [slot, spec] of Object.entries(declarations)) {
+                if (typeof slot !== 'string' || slot.length > 214 || !NAME.test(slot) || typeof spec !== 'string' || spec.length > 512) continue
+                const alias = spec.match(/^npm:((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*)(?:@(.+))?$/)
+                if (!alias) continue
+                if (!aliases.has(slot)) aliases.set(slot, [])
+                aliases.get(slot).push({ name: alias[1], range: alias[2] ?? '*' })
+              }
+            }
           }
         }
+      }
+    }
+    for (const item of mismatchedNames) {
+      // A renamed Harness singleton would bypass runtime deduplication.
+      if (item.name.startsWith(RUNTIME_SCOPE) || protectedPackage(item.packageId)) fail('PLUGIN_DEPENDENCY_UNSUPPORTED', item.packageId)
+      if (!(aliases.get(item.packageId) ?? []).some(alias => alias.name === item.name && satisfiesRange(item.version, alias.range))) {
+        fail('PLUGIN_METADATA_UNAVAILABLE', item.packageId)
       }
     }
     const selected = read(path.join(stageModules, id, 'package.json'))
@@ -2101,7 +2121,12 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
         continue
       }
       const pkg = read(path.join(source, 'package.json'))
-      if (pkg.name !== name) fail('PLUGIN_UPDATE_FAILED')
+      // Verified aliases stay in the transaction's private node_modules; do not publish
+      // a misleading alias as a shared package or overwrite an existing plugin.
+      if (pkg.name !== name) {
+        if (name === id || !mismatchedNames.some(item => item.packageId === name && item.name === pkg.name && item.version === pkg.version)) fail('PLUGIN_UPDATE_FAILED')
+        continue
+      }
       if (protectedPackage(name)) {
         if (!installed || read(path.join(installed, 'package.json')).version !== pkg.version) {
           fail('PLUGIN_DEPENDENCY_UNSUPPORTED', `${name} ${pkg.version} != ${installed ? read(path.join(installed, 'package.json')).version : 'missing'}`)

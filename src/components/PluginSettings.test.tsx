@@ -133,7 +133,7 @@ describe('应用外层插件管理', () => {
     bridge.managePlugins.mockRejectedValueOnce({ code: 'PLUGIN_PLATFORM_UNSUPPORTED', message: 'example-plugin' })
     const update = screen.getAllByRole('button', { name: '更新所属插件包' }).find(button => !(button as HTMLButtonElement).disabled)!
     fireEvent.click(update)
-    expect(await screen.findByRole('alert')).toHaveTextContent('插件声明不支持当前运行环境的平台或处理器，已保留原版本')
+    expect(await screen.findByRole('alert')).toHaveTextContent('插件或依赖声明不支持当前运行环境的平台或处理器，已保留原版本')
   })
   it('英文界面翻译管理操作', async () => {
     saveLanguage('en')
