@@ -8,6 +8,33 @@ import org.junit.Test
 import java.nio.file.Files
 
 class CompanionMemoryEngineTest {
+    @Test fun editedPendingMemoryIsConfirmedAtomicallyAndStaleChangesAreRejected() {
+        val id = "00000000-0000-0000-0000-000000000001"
+        val rows = JSONArray().put(JSONObject().put("id", id).put("text", "候选原文").put("status", "pending").put("source", "assistant_tool"))
+        val before = rows.toString()
+        assertFalse(CompanionMemoryApproval.approve(rows, id, 100, "已过期的文本"))
+        assertFalse(CompanionMemoryApproval.approveEdited(rows, id, "已过期的文本", "修改内容", 100))
+        assertEquals(before, rows.toString())
+        assertTrue(CompanionMemoryApproval.approveEdited(rows, id, "候选原文", "  修改内容  ", 123))
+        val row = rows.getJSONObject(0)
+        assertEquals("修改内容", row.getString("text"))
+        assertEquals("confirmed", row.getString("status"))
+        assertEquals("user_edit", row.getString("source"))
+        assertEquals(123L, row.getLong("confirmedAt"))
+        assertFalse(CompanionMemoryApproval.approveEdited(rows, id, "修改内容", "再次修改", 124))
+        assertEquals("修改内容", row.getString("text"))
+    }
+    @Test fun editedApprovalRejectsSensitiveAndDuplicateWithoutChangingPending() {
+        val id = "00000000-0000-0000-0000-000000000001"
+        val rows = JSONArray().put(JSONObject().put("id", id).put("text", "候选").put("status", "pending"))
+            .put(JSONObject().put("id", "00000000-0000-0000-0000-000000000002").put("text", "已有记忆").put("status", "confirmed"))
+        val before = rows.toString()
+        for (text in listOf("", "密码 123456", "已有记忆")) {
+            assertThrows(Exception::class.java) { CompanionMemoryApproval.approveEdited(rows, id, "候选", text, 123) }
+        }
+        assertEquals(before, rows.toString())
+    }
+
     @Test fun userAuthoredNotificationMemoryIsConfirmedAndDoesNotCopyNotificationMetadata() {
         val rows = JSONArray()
         assertEquals(UserMemoryResult.ADDED, CompanionUserMemory.add(rows, "  我偏好提前一天提醒  ", "user_notification", 123L))

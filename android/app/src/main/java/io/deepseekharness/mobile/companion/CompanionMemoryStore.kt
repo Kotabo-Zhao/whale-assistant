@@ -38,9 +38,15 @@ class CompanionMemoryStore(context: Context) {
         if (additions.length() > 0) write(combined)
         additions.length()
     }
-    fun approveForUser(id: String): Boolean = synchronized(lock) {
+    fun approveForUser(id: String, expectedText: String): Boolean = synchronized(lock) {
         val rows = load()
-        if (!CompanionMemoryApproval.approve(rows, id, System.currentTimeMillis())) return@synchronized false
+        if (!CompanionMemoryApproval.approve(rows, id, System.currentTimeMillis(), expectedText)) return@synchronized false
+        write(rows)
+        true
+    }
+    fun approveEditedForUser(id: String, expectedText: String, edited: String): Boolean = synchronized(lock) {
+        val rows = load()
+        if (!CompanionMemoryApproval.approveEdited(rows, id, expectedText, edited, System.currentTimeMillis())) return@synchronized false
         write(rows)
         true
     }
@@ -251,10 +257,20 @@ internal object CompanionMemoryImport {
 }
 
 internal object CompanionMemoryApproval {
-    fun approve(rows: JSONArray, id: String, now: Long): Boolean {
+    fun approve(rows: JSONArray, id: String, now: Long, expectedText: String? = null): Boolean {
         val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id } ?: return false
-        if (row.optString("status") != "pending") return false
+        if (row.optString("status") != "pending" || (expectedText != null && row.optString("text") != expectedText)) return false
         row.put("status", "confirmed").put("confirmedAt", now)
+        return true
+    }
+    fun approveEdited(rows: JSONArray, id: String, expectedText: String, edited: String, now: Long): Boolean {
+        val value = edited.trim()
+        require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value)) { "内容为空、过长或可能含敏感信息" }
+        val all = (0 until rows.length()).map { rows.getJSONObject(it) }
+        val row = all.firstOrNull { it.optString("id") == id } ?: return false
+        if (row.optString("status") != "pending" || row.optString("text") != expectedText) return false
+        require(all.none { it !== row && it.optString("text") == value }) { "相同内容的记忆已存在，请先核对" }
+        row.put("text", value).put("source", "user_edit").put("updatedAt", now).put("confirmedAt", now).put("status", "confirmed")
         return true
     }
 }

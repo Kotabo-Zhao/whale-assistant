@@ -799,8 +799,16 @@ class CompanionActivity : AppCompatActivity() {
                     .setMessage(labels[index]).setNegativeButton("关闭", null)
                     .setNeutralButton(if (records.getJSONObject(index).optString("status") == "pending") "确认记住" else "编辑") { _, _ ->
                         if (records.getJSONObject(index).optString("status") == "pending") {
-                            runCatching { memory.approveForUser(id) }.onSuccess { if (it) { render(); paragraph("已确认记忆。") } else paragraph("记忆已变化，请重新查看。") }
-                                .onFailure { paragraph("确认失败，原数据已保留。") }
+                            val original = records.getJSONObject(index).getString("text")
+                            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("确认方式")
+                                .setItems(arrayOf("直接确认", "编辑后确认")) { _, action ->
+                                    if (action == 0) {
+                                        runMemoryIo("正在确认记忆…", { memory.approveForUser(id, original) }) { result ->
+                                            result.onSuccess { if (it) { render(); paragraph("已确认记忆。") } else paragraph("记忆已变化，请重新查看。") }
+                                                .onFailure { paragraph("确认失败，原数据已保留。") }
+                                        }
+                                    } else editPendingMemory(memory, id, original)
+                                }.setNegativeButton("取消", null).show()
                         } else {
 
                         val edit = android.widget.EditText(this).apply { setText(records.getJSONObject(index).getString("text")) }
@@ -818,6 +826,31 @@ class CompanionActivity : AppCompatActivity() {
                             }.show()
                     }.show()
             }.setNegativeButton("关闭", null).show()
+    }
+
+    private fun editPendingMemory(memory: CompanionMemoryStore, id: String, original: String) {
+        val edit = android.widget.EditText(this).apply {
+            setText(original); setSelection(length()); minLines = 2
+            filters = arrayOf(android.text.InputFilter.LengthFilter(600))
+        }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("编辑并确认记忆")
+            .setMessage("确认后内容可供助手检索，并可能发送给当前模型服务。")
+            .setView(edit).setNegativeButton("取消", null).setPositiveButton("确认记住", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (memoryBusy) { edit.error = "记忆文件操作正在进行，请稍候。"; return@setOnClickListener }
+                val text = edit.text.toString()
+                dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                runMemoryIo("正在确认记忆…", { memory.approveEditedForUser(id, original, text) }) { result ->
+                    dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
+                    result.onSuccess { saved ->
+                        if (saved) { dialog.dismiss(); render(); paragraph("已确认记忆。") }
+                        else edit.error = "候选已变化，请关闭并重新查看。"
+                    }.onFailure { edit.error = it.message ?: "确认失败，原数据已保留。" }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun copyNotificationSummary() {
