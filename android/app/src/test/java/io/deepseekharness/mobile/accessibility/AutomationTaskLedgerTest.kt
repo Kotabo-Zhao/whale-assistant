@@ -161,18 +161,31 @@ class AutomationTaskLedgerTest {
 
     @Test
     fun `包变化仅靠调用者声称不能算验证`() {
-        val ledger = ledger(spec("back", action = AutomationTaskActions.BACK, verify = AutomationTaskActions.VERIFY_PACKAGE_CHANGED))
+        val ledger = ledger(spec("back", action = AutomationTaskActions.BACK, target = AutomationTaskActions.BACK_TARGET, verify = AutomationTaskActions.VERIFY_PACKAGE_CHANGED))
         ledger.gate("back", facts(), 1000L)
         val state = ledger.snapshot()
         val outcome = AutomationTaskEvidence.constrain(state.taskId, state.steps[0], AutomationTaskStepOutcome(ok = true, verified = true), "other", null, 1200L)
         assertFalse(outcome.verified)
         assertEquals(AutomationTaskStepStatus.UNKNOWN, ledger.record("back", 1, outcome, 1200L).steps[0].status)
-        val noVerification = ledger(spec("back", action = AutomationTaskActions.BACK, verify = AutomationTaskActions.VERIFY_NONE))
+        val noVerification = ledger(spec("back", action = AutomationTaskActions.BACK, target = AutomationTaskActions.BACK_TARGET, verify = AutomationTaskActions.VERIFY_NONE))
         noVerification.gate("back", facts(), 1000L)
         val state2 = noVerification.snapshot()
         val unchecked = AutomationTaskEvidence.constrain(state2.taskId, state2.steps[0], AutomationTaskStepOutcome(ok = true), "d1", null, 1200L)
         assertFalse(unchecked.ok)
         assertEquals(AutomationTaskStepStatus.UNKNOWN, noVerification.record("back", 1, unchecked, 1200L).steps[0].status)
+        assertTrue(AutomationTaskPlan.validate(spec("bad-back", action = AutomationTaskActions.BACK, target = "wrong"), mutableSetOf())!!.contains("system:back"))
+        val successful = ledger(spec("back", action = AutomationTaskActions.BACK, target = AutomationTaskActions.BACK_TARGET, verify = AutomationTaskActions.VERIFY_PACKAGE_CHANGED))
+        successful.gate("back", facts(), 1000L)
+        val current = successful.snapshot()
+        val receipt = AutomationTaskEvidence.receipt(current, "com.example.app", "back", AutomationTaskActions.BACK_TARGET, 1100L)
+        val claimed = AutomationTaskStepOutcome(ok = true, verified = true)
+        assertEquals(AutomationTaskCodes.BUSY, AutomationTaskActionPolicy.refusal(current, "com.example.app", "back", AutomationTaskActions.BACK_TARGET, 1200L, receipt))
+        assertEquals(AutomationTaskCodes.STEP_OUT_OF_ORDER, AutomationTaskActionPolicy.refusal(current, "com.example.app", "back", "wrong", 1200L, null))
+        assertFalse(AutomationTaskEvidence.constrain(current.taskId, current.steps[0], claimed, "d2", receipt, 1200L, expectedPackage = "com.example.app", observedPackage = null).verified)
+        assertFalse(AutomationTaskEvidence.constrain(current.taskId, current.steps[0], claimed, "d2", receipt, 1200L, expectedPackage = "com.example.app", observedPackage = "com.example.app").verified)
+        val confirmed = AutomationTaskEvidence.constrain(current.taskId, current.steps[0], claimed, "d2", receipt, 1200L, expectedPackage = "com.example.app", observedPackage = "com.other.app")
+        assertTrue(confirmed.verified)
+        assertEquals(AutomationTaskStepStatus.OK, successful.record("back", 1, confirmed, 1200L).steps[0].status)
     }
 
     @Test

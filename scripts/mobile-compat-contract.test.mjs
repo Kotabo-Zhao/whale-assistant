@@ -453,6 +453,7 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
       'mobile_device_ui_dump',
       'mobile_accessibility_tree',
       'mobile_accessibility_action',
+      'mobile_accessibility_back',
       'mobile_device_task',
       'mobile_device_tap',
       'mobile_device_input_text',

@@ -43,6 +43,14 @@ test('手机提醒工具通过授权桥传递明确时间并拒绝不合法参�
   await assert.rejects(f.tools.get('mobile_reminder_delete').execute({ id: '../bad' }, {}), /REMINDER_INPUT_INVALID/)
 })
 
+test('任务返回工具通过受限无障碍桥发送空参数', async t => {
+  const f = fixture(t, () => ok('已执行'))
+  const tool = f.tools.get('mobile_accessibility_back')
+  assert.ok(tool)
+  await tool.execute({}, {})
+  assert.deepEqual(f.requests.map(r => [r.command, r.param]), [['accessibilityBack', '']])
+})
+
 test('日历工具通过只读本机桥查询，使用空参数', async t => {
   const f = fixture(t, () => ok('{"events":[],"truncated":false}'))
   const tool = f.tools.get('mobile_calendar_today')

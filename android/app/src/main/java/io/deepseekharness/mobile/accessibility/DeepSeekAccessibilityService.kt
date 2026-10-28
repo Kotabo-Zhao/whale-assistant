@@ -133,7 +133,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     @Synchronized
     fun execute(command: String, param: String): DeviceCommandResult {
         val result = executeChecked(command, param)
-        val event = if (command in setOf("accessibilityAction", "tap", "inputText")) AuditEvent.ACCESSIBILITY_ACTION else AuditEvent.ACCESSIBILITY_READ
+        val event = if (command in setOf("accessibilityAction", "accessibilityBack", "tap", "inputText")) AuditEvent.ACCESSIBILITY_ACTION else AuditEvent.ACCESSIBILITY_READ
         val auditResult = when {
             result.ok -> AuditResult.SUCCEEDED
             result.errorCode?.let(CONFIRMATION_CANCEL_CODES::contains) == true -> AuditResult.CANCELLED
@@ -146,7 +146,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     private fun executeChecked(command: String, param: String): DeviceCommandResult {
         val now = SystemClock.elapsedRealtime()
         if (isLockedOrScreenOff()) return failure("ACCESSIBILITY_DEVICE_LOCKED", "设备已锁定或屏幕未交互")
-        if (now - lastActionAt < ACTION_INTERVAL_MS && command in setOf("accessibilityAction", "tap", "inputText")) {
+        if (now - lastActionAt < ACTION_INTERVAL_MS && command in setOf("accessibilityAction", "accessibilityBack", "tap", "inputText")) {
             return failure("ACCESSIBILITY_RATE_LIMITED", "无障碍动作过于频繁，请稍后再试")
         }
         val root = rootInActiveWindow ?: return failure("ACCESSIBILITY_WINDOW_UNAVAILABLE", "当前没有可读取的应用窗口")
@@ -158,6 +158,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         return when (command) {
             "accessibilityTree" -> if (param.isBlank()) tree(root, packageName)
             else failure("ACCESSIBILITY_ACTION_INVALID", "无障碍层级读取不接受参数")
+            "accessibilityBack" -> taskBack(packageName, param)
             "accessibilityAction" -> action(root, packageName, param).also {
                 if (it.ok) {
                     lastActionAt = now
@@ -175,6 +176,24 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             // 计划式执行的入口：只做闸门与记账，动作仍各走各的命令（详见 [automationTask]）。
             "automationTask" -> automationTask(root, packageName, param)
             else -> failure("DEVICE_COMMAND_INVALID", "无障碍命令不受支持")
+        }
+    }
+
+    /** A global back is only allowed for the currently gated task step. */
+    private fun taskBack(packageName: String, param: String): DeviceCommandResult {
+        if (param.isNotEmpty()) return failure("ACCESSIBILITY_ACTION_INVALID", "返回动作不接受参数")
+        return synchronized(automationTaskLedger) {
+            val snapshot = automationTaskLedger.snapshot()
+            if (snapshot.taskId.isEmpty() || snapshot.status != AutomationTaskStatus.RUNNING) return@synchronized failure(AutomationTaskCodes.STEP_OUT_OF_ORDER, "请先规划并放行返回步骤")
+            val dispatchAt = SystemClock.elapsedRealtime()
+            val refusal = AutomationTaskActionPolicy.refusal(snapshot, packageName, AutomationTaskActions.BACK,
+                AutomationTaskActions.BACK_TARGET, dispatchAt, automationTaskReceipt)
+            if (refusal != null) return@synchronized failure(refusal, "任务未放行返回动作或状态已变化")
+            if (!performGlobalAction(GLOBAL_ACTION_BACK)) return@synchronized failure("ACCESSIBILITY_ACTION_REJECTED", "系统未接受返回动作")
+            lastActionAt = dispatchAt
+            noteAutomationTaskAction(dispatchAt)
+            automationTaskReceipt = AutomationTaskEvidence.receipt(snapshot, packageName, AutomationTaskActions.BACK, AutomationTaskActions.BACK_TARGET, dispatchAt)
+            DeviceCommandResult(true, 0, "系统已接受返回动作，请重新读取界面核验", false, null)
         }
     }
 
@@ -1383,7 +1402,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                         else AutomationTaskEvidence.textDigest(node.text?.toString())
                     }.getOrNull()
                 } else null
-                val outcome = AutomationTaskEvidence.constrain(current.taskId, step, request.outcome, digest, automationTaskReceipt, now, targetPresent, observedTextDigest)
+                val outcome = AutomationTaskEvidence.constrain(current.taskId, step, request.outcome, digest, automationTaskReceipt, now, targetPresent, observedTextDigest, current.packageName, packageName)
                 ledger.record(request.stepId, request.attempt, outcome, now).let { snapshot ->
                     if (snapshot.lastCode == AutomationTaskCodes.RECORD_INVALID) {
                         taskFailure(

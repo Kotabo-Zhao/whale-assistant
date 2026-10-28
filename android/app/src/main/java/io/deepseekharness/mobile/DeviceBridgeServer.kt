@@ -314,6 +314,7 @@ class DeviceBridgeServer(
                     if (commandName in setOf(
                             "accessibilityTree",
                             "accessibilityAction",
+                            "accessibilityBack",
                             "tap",
                             "inputText",
                             "automationTask",

@@ -92,6 +92,7 @@ internal object AutomationTaskActions {
     const val SET_TEXT = "setText"
     const val SCROLL = "scroll"
     const val BACK = "back"
+    const val BACK_TARGET = "system:back"
     const val WAIT = "wait"
 
     val ALL = listOf(CLICK, SET_TEXT, SCROLL, BACK, WAIT)
@@ -224,23 +225,21 @@ internal object AutomationTaskEvidence {
         return AutomationTaskActionReceipt(snapshot.taskId, step.id, step.attemptsUsed, nowMs,
             if (action == AutomationTaskActions.SET_TEXT) textDigest(text) else null)
     }
-    fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long, targetPresent: Boolean? = null, observedTextDigest: String? = null): AutomationTaskStepOutcome {
+    fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long, targetPresent: Boolean? = null, observedTextDigest: String? = null, expectedPackage: String? = null, observedPackage: String? = null): AutomationTaskStepOutcome {
         if (step == null || !outcome.ok) return outcome
         val started = step.startedAtMs
         val matched = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
             receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs
         // Even when no visual verification was requested, click/text/scroll require proof of dispatch.
-        if (step.action in setOf(AutomationTaskActions.CLICK, AutomationTaskActions.SET_TEXT, AutomationTaskActions.SCROLL) && !matched) {
+        if (step.action in setOf(AutomationTaskActions.CLICK, AutomationTaskActions.SET_TEXT, AutomationTaskActions.SCROLL, AutomationTaskActions.BACK) && !matched) {
             return outcome.copy(ok = false, verified = false, code = AutomationTaskCodes.NOT_VERIFIED)
         }
-        // No bound global-back receipt/foreground evidence exists yet, even if verification was disabled.
-        if (step.action == AutomationTaskActions.BACK) return outcome.copy(ok = false, verified = false, code = AutomationTaskCodes.NOT_VERIFIED)
-        if (step.verify == AutomationTaskActions.VERIFY_PACKAGE_CHANGED) return outcome.copy(verified = false)
         if (step.verify == AutomationTaskActions.VERIFY_NONE) return outcome
         val observed = when (step.verify) {
             AutomationTaskActions.VERIFY_WINDOW_CHANGED -> step.startedDigest != null && observedDigest.isNotEmpty() && step.startedDigest != observedDigest
             AutomationTaskActions.VERIFY_TARGET_GONE -> targetPresent == false
             AutomationTaskActions.VERIFY_TEXT_APPLIED -> receipt?.textDigest != null && observedTextDigest == receipt.textDigest
+            AutomationTaskActions.VERIFY_PACKAGE_CHANGED -> !expectedPackage.isNullOrBlank() && !observedPackage.isNullOrBlank() && expectedPackage != observedPackage
             else -> false
         }
         return outcome.copy(verified = outcome.verified && matched && observed)
@@ -672,6 +671,7 @@ internal object AutomationTaskPlan {
         if (spec.action !in AutomationTaskActions.ALL) return "步骤 ${spec.id} 的动作不受支持"
         if (spec.verify !in AutomationTaskActions.verifyModes(spec.action)) return "步骤 ${spec.id} 的校验模式与动作不匹配"
         if (spec.action != AutomationTaskActions.WAIT && spec.target.isBlank()) return "步骤 ${spec.id} 缺少目标"
+        if (spec.action == AutomationTaskActions.BACK && spec.target != AutomationTaskActions.BACK_TARGET) return "返回步骤目标必须是 system:back"
         if (spec.target.length > MAX_TARGET_CHARS) return "步骤 ${spec.id} 的目标过长"
         if (spec.action == AutomationTaskActions.WAIT && spec.target.isNotEmpty()) return "等待步骤不接受目标"
         if (spec.timeoutMs !in MIN_TIMEOUT_MS..MAX_TIMEOUT_MS) return "步骤 ${spec.id} 的超时不在 $MIN_TIMEOUT_MS..$MAX_TIMEOUT_MS 毫秒内"
