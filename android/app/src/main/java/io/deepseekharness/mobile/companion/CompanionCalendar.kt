@@ -36,6 +36,31 @@ internal object CompanionCalendar {
           catch (_: Exception) { Snapshot(State.UNAVAILABLE) }
     }
 
+    data class Upcoming(val eventId: Long, val start: Long)
+    /** Query only future timed instances; works across midnight and never reads event titles. */
+    fun upcoming(context: Context, now: Long, windowMs: Long = 15L * 60 * 1000): List<Upcoming>? {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) return null
+        if (windowMs <= 0 || windowMs > 60L * 60 * 1000 || now > Long.MAX_VALUE - windowMs) return null
+        val end = now + windowMs
+        return try {
+            val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().apply {
+                ContentUris.appendId(this, now); ContentUris.appendId(this, end)
+            }.build()
+            val columns = arrayOf(CalendarContract.Instances.EVENT_ID, CalendarContract.Instances.BEGIN)
+            val selection = "${CalendarContract.Calendars.VISIBLE}=1 AND (${CalendarContract.Events.STATUS} IS NULL OR ${CalendarContract.Events.STATUS} != ?) AND ${CalendarContract.Instances.ALL_DAY}=0 AND ${CalendarContract.Instances.BEGIN}>? AND ${CalendarContract.Instances.BEGIN}<=?"
+            val cursor = context.contentResolver.query(uri, columns, selection,
+                arrayOf(CalendarContract.Events.STATUS_CANCELED.toString(), now.toString(), end.toString()), "${CalendarContract.Instances.BEGIN} ASC") ?: return null
+            cursor.use {
+                val rows = mutableListOf<Upcoming>()
+                while (rows.size < MAX_EVENTS && it.moveToNext()) {
+                    val item = Upcoming(it.getLong(0), it.getLong(1))
+                    if (item.eventId > 0 && item.start in (now + 1)..end) rows.add(item)
+                }
+                rows
+            }
+        } catch (_: Exception) { null }
+    }
+
     fun read(context: Context, now: Long = System.currentTimeMillis(), zone: TimeZone = TimeZone.getDefault()): Snapshot = snapshot(
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     ) {
@@ -76,5 +101,21 @@ internal object CompanionCalendarModel {
         return org.json.JSONObject().put("schemaVersion", 1).put("source", "device_calendar")
             .put("checkedAtMs", now).put("timeZone", zone.id).put("dayStartMs", start).put("dayEndMs", end)
             .put("events", rows).put("truncated", snapshot.truncated).toString()
+    }
+}
+
+/** Non-sensitive stable identifiers avoid repeating the same occurrence across service restarts. */
+internal object CompanionCalendarHintPolicy {
+    fun key(event: CompanionCalendar.Upcoming): String = CompanionNotificationDedup.digest("${event.eventId}:${event.start}")!!
+    fun fresh(events: List<CompanionCalendar.Upcoming>, shown: Set<String>, now: Long): List<String> =
+        events.asSequence().filter { it.eventId > 0 && it.start > now && it.start - now <= 15L * 60 * 1000 }
+            .map(::key).filter { it !in shown }.distinct().take(CompanionCalendar.MAX_EVENTS).toList()
+    fun remember(existing: List<String>, newKeys: List<String>): List<String> =
+        (existing.filter { CompanionNotificationTarget.validDigest(it) && it !in newKeys } + newKeys.filter(CompanionNotificationTarget::validDigest)).takeLast(100)
+    fun parse(raw: String): List<String> {
+        require(raw.length <= 8000)
+        val rows = org.json.JSONArray(raw)
+        require(rows.length() <= 100)
+        return (0 until rows.length()).map { rows.getString(it).also { key -> require(CompanionNotificationTarget.validDigest(key)) } }
     }
 }

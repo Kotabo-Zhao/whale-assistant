@@ -54,4 +54,17 @@ class CompanionCalendarTest {
         assertEquals("会议", result.getJSONArray("events").getJSONObject(0).getString("title"))
         assertThrows(io.deepseekharness.mobile.runtime.RuntimeFailure::class.java) { CompanionCalendarModel.execute(true, "unexpected", 1000L, zone) { error("must not read") } }
     }
+    @Test fun hintsOnlyFutureOccurrencesAndDeduplicatesWithoutSavingTitles() {
+        val now = 1000000L
+        val first = CompanionCalendar.Upcoming(10, now + 60000)
+        val next = CompanionCalendar.Upcoming(10, now + 120000)
+        val events = listOf(first, first, next, CompanionCalendar.Upcoming(0, now + 1), CompanionCalendar.Upcoming(11, now - 1), CompanionCalendar.Upcoming(12, now + 900001))
+        val keys = CompanionCalendarHintPolicy.fresh(events, emptySet(), now)
+        assertEquals(2, keys.size); assertNotEquals(keys[0], keys[1])
+        assertEquals(0, CompanionCalendarHintPolicy.fresh(events, keys.toSet(), now).size)
+        assertEquals(1, CompanionCalendarHintPolicy.fresh(events, setOf(keys[0]), now).size)
+        val saved = CompanionCalendarHintPolicy.remember(emptyList(), keys)
+        assertEquals(saved, CompanionCalendarHintPolicy.parse(org.json.JSONArray(saved).toString()))
+        assertThrows(Exception::class.java) { CompanionCalendarHintPolicy.parse("[\"bad\"]") }
+    }
 }

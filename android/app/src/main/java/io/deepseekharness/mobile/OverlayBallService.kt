@@ -84,6 +84,15 @@ class OverlayBallService : Service() {
     private var companionAnimator: android.animation.ObjectAnimator? = null
     private var hintView: View? = null
     private val hintHandler = Handler(Looper.getMainLooper())
+    private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
+    private var calendarQueryRunning = false
+    @Volatile private var calendarServiceDestroyed = false
+    private val calendarTick = object : Runnable {
+        override fun run() {
+            checkCalendarHint()
+            hintHandler.postDelayed(this, 5L * 60 * 1000)
+        }
+    }
     private var lastHintAt = 0L
     private var lastRestAt = SystemClock.elapsedRealtime()
     private val reminderTick = object : Runnable {
@@ -149,6 +158,7 @@ class OverlayBallService : Service() {
     override fun onCreate() {
         super.onCreate()
         activeService = this
+        hintHandler.postDelayed(calendarTick, 5L * 1000)
         hintHandler.postDelayed(reminderTick, 15L * 60 * 1000)
         runCatching { ensureNotificationChannel() }
         windowManager = getSystemService(WindowManager::class.java)
@@ -268,6 +278,8 @@ class OverlayBallService : Service() {
     }
 
     override fun onDestroy() {
+        calendarServiceDestroyed = true
+        calendarExecutor.shutdownNow()
         hintHandler.removeCallbacksAndMessages(null)
         removeCompanionHint()
         detachConversation()
@@ -318,13 +330,40 @@ class OverlayBallService : Service() {
         runCatching { manager.notify(0x44534803, notification) }.onSuccess { prefs.edit().putLong("battery_notified_at", now).apply() }
     }
 
-    private fun showCompanionHint(message: String) {
-        if (CompanionStore(this).inQuietHours()) return
-        if (!ballAttached || ballView == null || stopIfOverlayPermissionRevoked()) return
-        if (getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false) return
-        if (getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return
+    private fun checkCalendarHint() {
+        val store = CompanionStore(this)
+        if (calendarQueryRunning || !store.calendarHints || store.inQuietHours() || !ballAttached || ballView == null ||
+            getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false ||
+            getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return
+        calendarQueryRunning = true
+        val app = applicationContext
+        calendarExecutor.execute {
+            val events = io.deepseekharness.mobile.companion.CompanionCalendar.upcoming(app, System.currentTimeMillis())
+            if (calendarServiceDestroyed) return@execute
+            hintHandler.post {
+                calendarQueryRunning = false
+                if (calendarServiceDestroyed || events == null || !CompanionStore(this).calendarHints) return@post
+                val prefs = getSharedPreferences("companion_calendar_hints_v1", Context.MODE_PRIVATE)
+                val shown = runCatching { io.deepseekharness.mobile.companion.CompanionCalendarHintPolicy.parse(prefs.getString("shown", "[]") ?: "[]") }.getOrNull() ?: return@post
+                val keys = io.deepseekharness.mobile.companion.CompanionCalendarHintPolicy.fresh(events, shown.toSet(), System.currentTimeMillis())
+                if (keys.isEmpty()) return@post
+                val text = if (keys.size == 1) "15 分钟内有日程，点击查看。" else "15 分钟内有 ${keys.size} 项日程，点击查看。"
+                if (showCompanionHint(text) {
+                        runCatching { startActivity(Intent(this, io.deepseekharness.mobile.companion.CompanionActivity::class.java).putExtra("open_calendar_brief", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }) {
+                    prefs.edit().putString("shown", org.json.JSONArray(io.deepseekharness.mobile.companion.CompanionCalendarHintPolicy.remember(shown, keys)).toString()).apply()
+                }
+            }
+        }
+    }
+
+    private fun showCompanionHint(message: String, onTap: (() -> Unit)? = null): Boolean {
+        if (CompanionStore(this).inQuietHours()) return false
+        if (!ballAttached || ballView == null || stopIfOverlayPermissionRevoked()) return false
+        if (getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false) return false
+        if (getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return false
         val now = SystemClock.elapsedRealtime()
-        if (lastHintAt != 0L && now - lastHintAt < 120_000) return
+        if (lastHintAt != 0L && now - lastHintAt < 120_000) return false
         val density = resources.displayMetrics.density
         val width = (220 * density).toInt().coerceAtMost(resources.displayMetrics.widthPixels)
         val bubble = TextView(overlayPalette()).apply {
@@ -333,7 +372,7 @@ class OverlayBallService : Service() {
             setTextColor(overlayColor(R.color.overlay_panel_foreground))
             setPadding((14 * density).toInt(), (10 * density).toInt(), (14 * density).toInt(), (10 * density).toInt())
             background = overlayPalette().getDrawable(R.drawable.bg_overlay_action)
-            setOnClickListener { removeCompanionHint() }
+            setOnClickListener { removeCompanionHint(); onTap?.invoke() }
         }
         val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -348,7 +387,9 @@ class OverlayBallService : Service() {
             hintView = bubble
             lastHintAt = now
             hintHandler.postDelayed({ if (hintView === bubble) removeCompanionHint() }, 7000)
+            return true
         }
+        return false
     }
 
     /**

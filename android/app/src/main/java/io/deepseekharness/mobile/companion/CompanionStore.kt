@@ -15,6 +15,9 @@ class CompanionStore(context: Context) {
     var calendarModelAccess: Boolean
         get() = prefs.getBoolean("calendar_model_access", false)
         set(value) { prefs.edit().putBoolean("calendar_model_access", value).apply() }
+    var calendarHints: Boolean
+        get() = prefs.getBoolean("calendar_hints", false)
+        set(value) { prefs.edit().putBoolean("calendar_hints", value).apply() }
     var reminders: Boolean
         get() = prefs.getBoolean("reminders", false)
         set(value) { prefs.edit().putBoolean("reminders", value).apply() }

@@ -145,7 +145,13 @@ class CompanionActivity : AppCompatActivity() {
         setContentView(ScrollView(this).apply { addView(content) })
     }
 
-    override fun onResume() { super.onResume(); render() }
+    override fun onResume() {
+        super.onResume(); render()
+        if (intent?.getBooleanExtra("open_calendar_brief", false) == true) {
+            intent?.removeExtra("open_calendar_brief")
+            showBrief()
+        }
+    }
 
     private fun render() {
         content.removeAllViews()
@@ -230,6 +236,16 @@ class CompanionActivity : AppCompatActivity() {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("读取日历用于简报")
                 .setMessage("授权后，仅在你打开简报时读取当天可见日历；不会修改日程或自动发送给模型。可随时在系统设置撤销。")
                 .setNegativeButton("取消", null).setPositiveButton("继续") { _, _ -> calendarPermission.launch(android.Manifest.permission.READ_CALENDAR) }.show()
+        }
+        toggle("日程临近时显示桌面气泡", store.calendarHints) { store.calendarHints = it }
+        paragraph("仅悬浮助手运行且手机解锁时，大约每 5 分钟检查未来 15 分钟内的非全天日程，气泡不显示标题。需要日历读取授权，遵守免打扰；系统省电或服务停止可能导致漏提醒。")
+        button("清除日程气泡去重记录") {
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清除日程气泡去重记录？")
+                .setMessage("这只清除本机保存的日程标识摘要；仍在提醒时间范围内的日程可能再次出现气泡。")
+                .setNegativeButton("取消", null).setPositiveButton("清除") { _, _ ->
+                    val ok = getSharedPreferences("companion_calendar_hints_v1", Context.MODE_PRIVATE).edit().remove("shown").commit()
+                    android.widget.Toast.makeText(this, if (ok) "去重记录已清除。" else "清除失败，请重试。", android.widget.Toast.LENGTH_SHORT).show()
+                }.show()
         }
         button("查看本地简报") { showBrief() }
         button("查看通知候选事项") { showNotificationCandidates() }
