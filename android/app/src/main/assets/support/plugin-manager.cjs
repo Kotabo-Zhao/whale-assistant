@@ -201,7 +201,7 @@ function fail(code, detail) {
 // 本段不依赖任何外部包，因此可以在没有网络与 npm 的环境里完整单测。
 // ---------------------------------------------------------------------------
 
-const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
 
 function parseVersion(text) {
   if (typeof text !== 'string' || text.length === 0 || text.length > 64) return null
@@ -209,7 +209,9 @@ function parseVersion(text) {
   if (!match) return null
   const numbers = [Number(match[1]), Number(match[2]), Number(match[3])]
   if (numbers.some(value => !Number.isSafeInteger(value))) return null
-  return { numbers, prerelease: match[4] ? match[4].split('.') : [] }
+  const prerelease = match[4] ? match[4].split('.') : []
+  if (prerelease.some(part => /^\d+$/.test(part) && part.length > 1 && part.startsWith('0'))) return null
+  return { numbers, prerelease }
 }
 
 function comparePrerelease(left, right) {
@@ -225,12 +227,13 @@ function comparePrerelease(left, right) {
     if (a === undefined) return -1
     if (b === undefined) return 1
     if (a === b) continue
-    const aNumber = /^\d+$/.test(a) ? Number(a) : null
-    const bNumber = /^\d+$/.test(b) ? Number(b) : null
-    if (aNumber !== null && bNumber !== null) return aNumber < bNumber ? -1 : 1
+    const aNumber = /^\d+$/.test(a)
+    const bNumber = /^\d+$/.test(b)
+    // Compare digits as strings so large valid numeric identifiers do not lose precision.
+    if (aNumber && bNumber) return a.length !== b.length ? (a.length < b.length ? -1 : 1) : (a < b ? -1 : 1)
     // 数字标识符优先级低于字母标识符
-    if (aNumber !== null) return -1
-    if (bNumber !== null) return 1
+    if (aNumber) return -1
+    if (bNumber) return 1
     return a < b ? -1 : 1
   }
   return 0
@@ -255,6 +258,7 @@ function expandRangeClause(clause) {
   for (const part of clause.split(/\s+/).filter(Boolean)) {
     const caret = /^\^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?$/.exec(part)
     if (caret) {
+      if (caret.slice(1, 4).some(value => value !== undefined && value.length > 1 && value.startsWith('0'))) { expanded.push(part); continue }
       const major = Number(caret[1])
       const minor = Number(caret[2] ?? 0)
       const patch = Number(caret[3] ?? 0)
@@ -266,6 +270,7 @@ function expandRangeClause(clause) {
     }
     const tilde = /^~(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?$/.exec(part)
     if (tilde) {
+      if (tilde.slice(1, 4).some(value => value !== undefined && value.length > 1 && value.startsWith('0'))) { expanded.push(part); continue }
       const major = Number(tilde[1])
       const minor = Number(tilde[2] ?? 0)
       const patch = Number(tilde[3] ?? 0)
@@ -275,6 +280,7 @@ function expandRangeClause(clause) {
     }
     const partial = /^(\d+)(?:\.(\d+|x|\*))?(?:\.(\d+|x|\*))?$/.exec(part)
     if (partial) {
+      if (partial.slice(1, 4).some(value => value !== undefined && /^\d+$/.test(value) && value.length > 1 && value.startsWith('0'))) { expanded.push(part); continue }
       const major = Number(partial[1])
       const minor = partial[2]
       const patch = partial[3]

@@ -335,6 +335,18 @@ test('版本比较遵循 semver 的预发布优先级', () => {
   assert.equal(parseVersion('x'.repeat(80)), null)
 })
 
+test('非法版本与范围不可被规范化放行，超大预发布数字排序准确', () => {
+  for (const version of ['01.2.3', '1.02.3', '1.2.03', '1.2.3-alpha..1', '1.2.3-01', '1.2.3-rc.01', '1.2.3+foo..bar']) {
+    assert.equal(parseVersion(version), null, version)
+    assert.equal(satisfiesRange(version, '*'), false, version)
+  }
+  for (const range of ['^01.2.3', '~1.02', '01.2', '1.02.x']) assert.equal(satisfiesRange('1.2.3', range), false, range)
+  assert.equal(compareVersions('1.2.3-9007199254740993', '1.2.3-9007199254740992'), 1)
+  assert.equal(compareVersions('1.2.3-9007199254740992', '1.2.3-9007199254740993'), -1)
+  assert.equal(compareVersions('1.2.3-99999999999999999', '1.2.3-100000000000000000'), -1)
+  assert.ok(parseVersion('1.2.3+build.01'))
+})
+
 test('根目录路径校验兼容真实 Ubuntu 根路径', () => {
   assert.equal(within(path.parse(process.cwd()).root, process.cwd()), true)
   assert.equal(within('/sandbox', '/sandbox/child'), true)
