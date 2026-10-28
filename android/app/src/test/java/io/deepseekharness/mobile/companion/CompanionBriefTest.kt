@@ -48,6 +48,20 @@ class CompanionBriefTest {
         assertFalse(CompanionCandidateNotifications.due(1000L, 2000L))
         assertTrue(CompanionCandidateNotifications.due(1801000L, 1000L))
     }
+    @Test fun suggestsOnlyOneUnambiguousFutureExplicitLocalTime() {
+        val zone = java.time.ZoneId.of("Asia/Shanghai")
+        val now = java.time.Instant.parse("2026-01-01T00:00:00Z").toEpochMilli()
+        val expected = java.time.ZonedDateTime.of(2026, 12, 3, 14, 30, 0, 0, zone).toInstant().toEpochMilli()
+        assertEquals(expected, CompanionNotificationTimeSuggestion.find("会议 2026-12-03 14:30", now, zone))
+        assertEquals(expected, CompanionNotificationTimeSuggestion.find("会议 2026年12月3日 14:30", now, zone))
+        assertNull(CompanionNotificationTimeSuggestion.find("明天下午三点", now, zone))
+        assertNull(CompanionNotificationTimeSuggestion.find("2026-02-30 14:30", now, zone))
+        assertNull(CompanionNotificationTimeSuggestion.find("2025-12-03 14:30", now, zone))
+        assertNull(CompanionNotificationTimeSuggestion.find("2026-12-03 14:30 或 2026-12-04 14:30", now, zone))
+        val newYork = java.time.ZoneId.of("America/New_York")
+        assertNull(CompanionNotificationTimeSuggestion.find("2026-11-01 01:30", now, newYork))
+        assertNull(CompanionNotificationTimeSuggestion.find("2026-03-08 02:30", now, newYork))
+    }
     @Test fun sourceAppMustBeAValidPackageAndMatchResolvedLauncher() {
         org.junit.Assert.assertTrue(CompanionSourcePolicy.matchesResolved("com.example.reader", "com.example.reader"))
         org.junit.Assert.assertFalse(CompanionSourcePolicy.matchesResolved("com.example.reader", "com.other.app"))

@@ -566,14 +566,17 @@ class CompanionActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun createReminder(initialText: String = "") {
+    private fun createReminder(initialText: String = "", suggestedTime: Long? = null) {
         val input = android.widget.EditText(this).apply { hint = "提醒内容"; setSingleLine(true); setText(initialText.take(200)) }
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("新建提醒").setView(input)
-        if (initialText.length > 200) dialog.setMessage("原摘要超过 200 字，已截取前 200 字；请核对和编辑提醒内容。")
+        val notes = mutableListOf<String>()
+        if (initialText.length > 200) notes.add("原摘要超过 200 字，已截取前 200 字；请核对和编辑提醒内容。")
+        if (suggestedTime != null) notes.add("通知含明确日期时间，已作为本地时区的选择建议；请核对日期、时区和具体时间。")
+        if (notes.isNotEmpty()) dialog.setMessage(notes.joinToString("\n"))
         dialog.setNegativeButton("取消", null).setPositiveButton("选择时间") { _, _ ->
                 val value = input.text.toString().trim()
                 if (value.isBlank()) { paragraph("提醒内容不能为空。"); return@setPositiveButton }
-                val selected = Calendar.getInstance().apply { add(Calendar.MINUTE, 5) }
+                val selected = Calendar.getInstance().apply { if (suggestedTime != null) timeInMillis = suggestedTime else add(Calendar.MINUTE, 5) }
                 android.app.DatePickerDialog(this, { _, year, month, day ->
                     selected.set(Calendar.YEAR, year); selected.set(Calendar.MONTH, month); selected.set(Calendar.DAY_OF_MONTH, day)
                     android.app.TimePickerDialog(this, { _, hour, minute ->
@@ -780,7 +783,10 @@ class CompanionActivity : AppCompatActivity() {
                                 } else openNotificationSource(item.packageName)
                             }.setNegativeButton("取消", null).show()
                     }
-                    .setPositiveButton("创建提醒") { _, _ -> createReminder(content) }.show()
+                    .setPositiveButton("创建提醒") { _, _ ->
+                        val suggestion = CompanionNotificationTimeSuggestion.find(content, System.currentTimeMillis(), java.time.ZoneId.systemDefault())
+                        createReminder(content, suggestion)
+                    }.show()
             }.setNegativeButton("关闭", null).show()
     }
 

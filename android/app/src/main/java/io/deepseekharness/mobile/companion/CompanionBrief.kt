@@ -59,3 +59,20 @@ internal object CompanionSourcePolicy {
     fun validPackage(value: String): Boolean = value.length <= 160 && packagePattern.matches(value)
     fun matchesResolved(value: String, resolvedPackage: String?): Boolean = validPackage(value) && resolvedPackage == value
 }
+
+/** A single explicit local date and time is only a picker suggestion, never a scheduled alarm. */
+internal object CompanionNotificationTimeSuggestion {
+    private val explicit = Regex("(?<![0-9])([0-9]{4})[-年]([0-9]{1,2})[-月]([0-9]{1,2})(?:日)?[ T]+([0-9]{1,2}):([0-9]{2})(?![0-9:])")
+    fun find(text: String, now: Long, zone: java.time.ZoneId): Long? {
+        val matches = explicit.findAll(text).take(2).toList()
+        if (matches.size != 1) return null
+        return try {
+            val values = matches.single().groupValues.drop(1).map(String::toInt)
+            val local = java.time.LocalDateTime.of(values[0], values[1], values[2], values[3], values[4])
+            val offsets = zone.rules.getValidOffsets(local)
+            if (offsets.size != 1) return null
+            val millis = local.toInstant(offsets.single()).toEpochMilli()
+            millis.takeIf { it > now && it - now > 10_000 }
+        } catch (_: Exception) { null }
+    }
+}
