@@ -33,6 +33,10 @@ class CompanionStore(context: Context) {
     var notificationModelAccess: Boolean
         get() = prefs.getBoolean("notification_model_access", false)
         set(value) { prefs.edit().putBoolean("notification_model_access", value).apply() }
+    /** Separate consent for sharing excerpts with the configured model. */
+    var knowledgeModelAccess: Boolean
+        get() = prefs.getBoolean("knowledge_model_access", false)
+        set(value) { prefs.edit().putBoolean("knowledge_model_access", value).apply() }
     /** Explicit separate consent for sharing calendar titles with the configured model. */
     var calendarModelAccess: Boolean
         get() = prefs.getBoolean("calendar_model_access", false)

@@ -83,6 +83,17 @@ test('日历工具通过只读本机桥查询，使用空参数', async t => {
   assert.deepEqual(f.requests.map(r => [r.command, r.param]), [['companionCalendar', '']])
 })
 
+test('本地资料工具按关键词经过设备桥并拒绝无效查询', async t => {
+  const f = fixture(t, () => ok('{"items":[],"truncated":false}'))
+  const tool = f.tools.get('mobile_knowledge_search')
+  await tool.execute({ query: '  会议 ', limit: 2 }, {})
+  assert.deepEqual(f.requests, [{ command: 'companionKnowledge', param: '{"query":"会议","limit":2}' }])
+  await assert.rejects(tool.execute({ query: ' ' }, {}), /KNOWLEDGE_INPUT_INVALID/)
+  await assert.rejects(tool.execute({ query: '会议', limit: 4 }, {}), /KNOWLEDGE_INPUT_INVALID/)
+  assert.equal(f.requests.length, 1)
+  assert.ok(f.prompts.some(value => JSON.stringify(value).includes('mobile_knowledge_search')))
+})
+
 test('长期记忆工具通过本机桥保存、检索和删除，并验证输入', async t => {
   const f = fixture(t, () => ok('{"items":[]}'))
   await f.tools.get('mobile_memory_save').execute({ text: '喜欢蓝色' }, {})

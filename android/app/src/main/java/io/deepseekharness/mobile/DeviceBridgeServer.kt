@@ -242,6 +242,16 @@ class DeviceBridgeServer(
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return
                     }
+                    if (commandName == "companionKnowledge") {
+                        if (param.length > 1024) throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料查询参数过长")
+                        val context = appContext ?: throw RuntimeFailure("KNOWLEDGE_UNAVAILABLE", "资料服务不可用")
+                        val store = io.deepseekharness.mobile.companion.CompanionStore(context)
+                        val result = io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, param) {
+                            io.deepseekharness.mobile.companion.CompanionKnowledgeStore(context).search(it)
+                        }
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                        return
+                    }
                     if (commandName == "companionCalendar") {
                         val context = appContext ?: throw RuntimeFailure("CALENDAR_UNAVAILABLE", "日历服务不可用")
                         val zone = java.util.TimeZone.getDefault()

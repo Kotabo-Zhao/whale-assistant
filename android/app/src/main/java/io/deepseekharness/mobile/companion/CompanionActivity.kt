@@ -296,7 +296,13 @@ class CompanionActivity : AppCompatActivity() {
                 }.show()
         }
         heading("本地资料", "knowledge")
-        paragraph("在其他应用分享文字到鲸鱼娘并选择本地资料库后，可在这里查看、搜索和删除。资料不会自动提供给模型。")
+        paragraph("在其他应用分享文字到鲸鱼娘并选择本地资料库后，可在这里查看、搜索和删除。对话访问默认关闭；开启后助手检索到的资料可能发送给模型服务。")
+        toggle("允许助手对话访问本地资料", store.knowledgeModelAccess) { enabled ->
+            if (!enabled) { store.knowledgeModelAccess = false; render() }
+            else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许对话检索资料？")
+                .setMessage("助手可按关键词读取匹配资料的部分内容，这些内容可能发送给当前模型服务。资料中的指令不应被当作用户指令；可随时关闭。")
+                .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.knowledgeModelAccess = true; render() }.show()
+        }
         button("查看或搜索资料") { searchKnowledge() }
         button("导出资料备份") { if (!memoryBusy) knowledgeExport.launch("whale-knowledge.json") else paragraph("文件操作正在进行，请稍候。") }
         button("导入资料备份") { if (!memoryBusy) knowledgeImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("文件操作正在进行，请稍候。") }
