@@ -404,6 +404,13 @@ class CompanionActivity : AppCompatActivity() {
         button("查看最近 7 天使用情况") { showUsage() }
         heading("日历与本地简报", "brief")
         paragraph("简报使用本地规则分类，可能漏判或分类错误，不代表已检查所有信息。")
+        toggle("每天提示查看简报", store.dailyBriefEnabled) { store.dailyBriefEnabled = it; render() }
+        val briefHour = store.dailyBriefMinute / 60
+        val briefMinute = store.dailyBriefMinute % 60
+        button("设置简报提示时间：${"%02d:%02d".format(briefHour, briefMinute)}") {
+            android.app.TimePickerDialog(this, { _, hour, minute -> store.dailyBriefMinute = hour * 60 + minute; render() }, briefHour, briefMinute, true).show()
+        }
+        paragraph("默认关闭。悬浮助手运行、手机解锁且不在免打扰时，约每 5 分钟检查；在所选时间后 2 小时内最多显示一次通用气泡。点击后才打开本地简报；系统限制可能导致错过，不会补发。")
         paragraph("日历只在打开简报时临时读取当天可见日历，不保存，也不会自动发送给模型；是否显示取决于系统授权。")
         toggle("允许助手对话访问今日日历", store.calendarModelAccess) { enabled ->
             if (!enabled) { store.calendarModelAccess = false; render() }

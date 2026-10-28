@@ -41,6 +41,15 @@ class CompanionStore(context: Context) {
     var calendarModelAccess: Boolean
         get() = prefs.getBoolean("calendar_model_access", false)
         set(value) { prefs.edit().putBoolean("calendar_model_access", value).apply() }
+    var dailyBriefEnabled: Boolean
+        get() = prefs.getBoolean("daily_brief_enabled", false)
+        set(value) { prefs.edit().putBoolean("daily_brief_enabled", value).apply() }
+    var dailyBriefMinute: Int
+        get() = prefs.getInt("daily_brief_minute", 8 * 60).takeIf { it in 0 until 1440 } ?: 8 * 60
+        set(value) { require(value in 0 until 1440); prefs.edit().putInt("daily_brief_minute", value).apply() }
+    var dailyBriefLastDay: String?
+        get() = prefs.getString("daily_brief_last_day", null)
+        set(value) { prefs.edit().putString("daily_brief_last_day", value).apply() }
     var calendarHints: Boolean
         get() = prefs.getBoolean("calendar_hints", false)
         set(value) { prefs.edit().putBoolean("calendar_hints", value).apply() }

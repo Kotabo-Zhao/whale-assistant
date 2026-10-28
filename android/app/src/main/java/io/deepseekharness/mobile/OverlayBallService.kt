@@ -92,6 +92,7 @@ class OverlayBallService : Service() {
         override fun run() {
             checkCalendarHint()
             checkUsageSuggestion()
+            checkDailyBriefHint()
             hintHandler.postDelayed(this, 5L * 60 * 1000)
         }
     }
@@ -361,6 +362,20 @@ class OverlayBallService : Service() {
                 }
             }
         }
+    }
+
+    private fun checkDailyBriefHint() {
+        val store = CompanionStore(this)
+        val now = java.util.Calendar.getInstance()
+        val ready = ballAttached && ballView != null &&
+            getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == false &&
+            getSystemService(android.os.PowerManager::class.java)?.isInteractive == true
+        if (!io.deepseekharness.mobile.companion.CompanionDailyBriefPolicy.due(
+                store.dailyBriefEnabled, store.inQuietHours(now), ready, now, store.dailyBriefMinute, store.dailyBriefLastDay)) return
+        if (showCompanionHint("今天的简报可以查看了。") {
+                runCatching { startActivity(Intent(this, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
+                    .putExtra("open_calendar_brief", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }) store.dailyBriefLastDay = io.deepseekharness.mobile.companion.CompanionDailyBriefPolicy.dayKey(now)
     }
 
     private fun checkCalendarHint() {
