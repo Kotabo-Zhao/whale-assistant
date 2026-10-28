@@ -432,7 +432,7 @@ class CompanionActivity : AppCompatActivity() {
         button("查看常用应用建议") { showUsageSuggestions() }
         button("查看最近 7 天使用情况") { showUsage() }
         heading("日历与本地简报", "brief")
-        paragraph("简报使用本地规则分类，可能漏判或分类错误，不代表已检查所有信息。")
+        paragraph("查看简报时会读取可用的日历、提醒、通知和近 7 天使用情况；使用统计需要单独授权，仅在本机展示。分类可能漏判或出错。")
         toggle("每天提示查看简报", store.dailyBriefEnabled) { store.dailyBriefEnabled = it; render() }
         val briefHour = store.dailyBriefMinute / 60
         val briefMinute = store.dailyBriefMinute % 60
@@ -1132,6 +1132,9 @@ class CompanionActivity : AppCompatActivity() {
             val calendar = CompanionCalendar.read(app, checkedAt, zone)
             val once = runCatching { CompanionBriefReminders.read(CompanionReminder(app).list(), false, checkedAt, zone.toZoneId()) }
             val repeating = runCatching { CompanionBriefReminders.read(CompanionRecurringReminder(app).list(), true, checkedAt, zone.toZoneId()) }
+            val usage = CompanionUsage.brief(CompanionUsage.loadSummary(app, checkedAt)) { pkg ->
+                app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString()
+            }
             memoryHandler.post {
                 briefBusy = false
                 if (isFinishing || isDestroyed) return@post
@@ -1149,7 +1152,7 @@ class CompanionActivity : AppCompatActivity() {
                 val onceText = briefReminderText(once, zone)
                 val repeatingText = briefReminderText(repeating, zone)
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地简报")
-                    .setMessage("今天的可见日历（${zone.id}，读取开始于 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }.format(Date(checkedAt))}）：\n$calendarText\n\n今天的一次性提醒：\n$onceText\n\n今天的重复提醒（仅显示下一次）：\n$repeatingText\n\n$notifications\n\n已交给系统不保证送达；通知分类可能遗漏重要事项。天气尚未接入。")
+                    .setMessage("今天的可见日历（${zone.id}，读取开始于 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }.format(Date(checkedAt))}）：\n$calendarText\n\n今天的一次性提醒：\n$onceText\n\n今天的重复提醒（仅显示下一次）：\n$repeatingText\n\n最近约 7 天使用情况：\n$usage\n\n$notifications\n\n已交给系统不保证送达；通知分类可能遗漏重要事项。天气尚未接入。")
                     .setNeutralButton("提醒操作") { _, _ ->
                         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择操作")
                             .setItems(arrayOf("管理一次性提醒", "管理重复提醒", "从日程创建提醒")) { _, choice ->

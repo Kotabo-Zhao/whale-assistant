@@ -12,6 +12,17 @@ internal object CompanionUsage {
     data class Candidate(val packageName: String, val foregroundMs: Long)
     enum class State { OK, NO_PERMISSION, UNAVAILABLE }
     data class Snapshot(val state: State, val candidates: List<Candidate> = emptyList())
+    /** Formatting is local and bounded; unavailable data is never reported as zero use. */
+    fun brief(snapshot: Snapshot, label: (String) -> String): String = when (snapshot.state) {
+        State.NO_PERMISSION -> "未授权使用情况访问；可在助手设置中授权。"
+        State.UNAVAILABLE -> "系统使用情况暂不可用。"
+        State.OK -> if (snapshot.candidates.isEmpty()) "系统没有返回可用的使用记录。" else
+            snapshot.candidates.take(3).joinToString("\n") { candidate ->
+                val name = runCatching { label(candidate.packageName) }.getOrDefault(candidate.packageName)
+                    .ifBlank { candidate.packageName }
+                "$name · 约 ${candidate.foregroundMs / 60_000} 分钟"
+            } + "\n仅显示使用时长最高的 3 个应用；系统统计可能不完整。"
+    }
     fun rank(rows: List<Candidate>, existing: Set<String>, own: String): List<Candidate> {
         if (existing.size >= CompanionShortcutPolicy.MAX_SHORTCUTS) return emptyList()
         val totals = linkedMapOf<String, Long>()

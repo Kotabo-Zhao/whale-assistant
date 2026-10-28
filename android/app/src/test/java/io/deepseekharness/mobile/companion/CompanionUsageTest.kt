@@ -4,6 +4,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionUsageTest {
+    @Test fun briefDistinguishesUnavailableFromEmptyAndLimitsVisibleApps() {
+        var calls = 0
+        val label: (String) -> String = { calls++; if (it == "com.example.b") error("missing label") else "名称:$it" }
+        assertTrue(CompanionUsage.brief(CompanionUsage.Snapshot(CompanionUsage.State.NO_PERMISSION), label).contains("未授权"))
+        assertTrue(CompanionUsage.brief(CompanionUsage.Snapshot(CompanionUsage.State.UNAVAILABLE), label).contains("不可用"))
+        assertTrue(CompanionUsage.brief(CompanionUsage.Snapshot(CompanionUsage.State.OK), label).contains("没有返回"))
+        assertEquals(0, calls)
+        val rows = listOf("a", "b", "c", "d").mapIndexed { index, name ->
+            CompanionUsage.Candidate("com.example.$name", (4 - index) * 60_000L)
+        }
+        val result = CompanionUsage.brief(CompanionUsage.Snapshot(CompanionUsage.State.OK, rows), label)
+        assertEquals(3, calls)
+        assertTrue(result.contains("名称:com.example.a · 约 4 分钟"))
+        assertTrue(result.contains("com.example.b · 约 3 分钟"))
+        assertFalse(result.contains("com.example.d"))
+        assertTrue(result.contains("可能不完整"))
+    }
     @Test fun rankCombinesValidUseExcludesExistingAndDoesNotInferAttributes() {
         val rows = listOf(CompanionUsage.Candidate("com.example.app", 15 * 60000L), CompanionUsage.Candidate("com.example.app", 10 * 60000L),
             CompanionUsage.Candidate("com.example.existing", 100 * 60000L), CompanionUsage.Candidate("com.example.self", 100 * 60000L),
