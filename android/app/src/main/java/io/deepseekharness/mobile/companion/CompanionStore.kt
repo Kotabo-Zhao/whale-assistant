@@ -95,8 +95,8 @@ class CompanionStore(context: Context) {
         val records = read(now)
         val key = CompanionNotificationDedup.digest(notificationKey)
         val contentHash = CompanionNotificationDedup.contentDigest(title, text)
-        val shortTitle = title.take(160)
-        val shortText = text.take(400)
+        val shortTitle = CompanionNotificationRecords.truncate(title, 160)
+        val shortText = CompanionNotificationRecords.truncate(text, 400)
         for (index in 0 until records.length()) {
             val prior = records.optJSONObject(index) ?: continue
             if (prior.optString("package") == packageName.take(200) && CompanionNotificationDedup.isDuplicate(
@@ -144,6 +144,12 @@ class CompanionStore(context: Context) {
 
 /** Corrupt data must not be mistaken for an empty inbox or replaced by the next notification. */
 internal object CompanionNotificationRecords {
+    fun truncate(value: String, maximum: Int): String {
+        require(maximum >= 0)
+        var end = minOf(value.length, maximum)
+        if (end > 0 && end < value.length && Character.isHighSurrogate(value[end - 1]) && Character.isLowSurrogate(value[end])) end--
+        return value.substring(0, end)
+    }
     fun withoutPackage(rows: JSONArray, packageName: String): Pair<JSONArray, Int> {
         require(CompanionSourcePolicy.validPackage(packageName)) { "应用包名无效" }
         val kept = JSONArray()
