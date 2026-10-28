@@ -37,6 +37,8 @@ class CompanionActivity : AppCompatActivity() {
     private val memoryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val memoryHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var memoryBusy = false
+    private val readinessExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-readiness").apply { isDaemon = true } }
+    @Volatile private var readinessGeneration = 0L
 
     private fun <T> runMemoryIo(message: String, work: () -> T, done: (Result<T>) -> Unit) {
         if (memoryBusy || isFinishing || isDestroyed) {
@@ -60,6 +62,8 @@ class CompanionActivity : AppCompatActivity() {
         super.onDestroy()
         // A confirmed write may finish; do not show its result on a destroyed activity.
         memoryExecutor.shutdown()
+        readinessGeneration++
+        readinessExecutor.shutdownNow()
     }
 
     private val memoryImport = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -140,6 +144,7 @@ class CompanionActivity : AppCompatActivity() {
     private fun render() {
         content.removeAllViews()
         hero()
+        readinessCard()
         paragraph("通知与使用数据只在本机处理，不会自动发送给模型。系统和应用可能限制读取；锁屏或敏感内容不会显示在桌面气泡。")
         button("语音输入任务") { startVoiceInput() }
         paragraph("使用手机提供的语音识别服务；识别结果需自行确认并粘贴到对话，服务可能联网。")
@@ -201,6 +206,43 @@ class CompanionActivity : AppCompatActivity() {
         }
         renderRecords()
         button("返回") { finish() }
+    }
+
+    private fun readinessCard() {
+        heading("助手能力状态")
+        val status = TextView(this).apply {
+            text = "正在读取状态…"; textSize = 14f; setTextColor(ink)
+            setLineSpacing(dp(5).toFloat(), 1f); setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = surface(if (dark) "#172B40" else "#FFFFFF", if (dark) "#294660" else "#DCEAF5")
+        }
+        content.addView(status)
+        val generation = ++readinessGeneration
+        val app = applicationContext
+        readinessExecutor.execute {
+            if (generation != readinessGeneration) return@execute
+            val facts = CompanionReadinessFacts(
+                runCatching { Settings.canDrawOverlays(app) }.getOrNull(), io.deepseekharness.mobile.OverlayBallService.isRunning,
+                runCatching { androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(app).contains(app.packageName) }.getOrNull(),
+                runCatching { androidx.core.app.NotificationManagerCompat.from(app).areNotificationsEnabled() }.getOrNull(),
+                runCatching { io.deepseekharness.mobile.accessibility.AccessibilityAutomationStore.serviceStatus(app) }.getOrNull(),
+                runCatching { app.getSystemService(android.os.PowerManager::class.java)?.isIgnoringBatteryOptimizations(app.packageName) }.getOrNull(),
+                runCatching { io.deepseekharness.mobile.runtime.RuntimeHost.controllerOrNull()?.shizukuState() }.getOrNull(),
+            )
+            val text = CompanionReadiness.describe(facts)
+            memoryHandler.post { if (!isFinishing && !isDestroyed && generation == readinessGeneration) status.text = text }
+        }
+        button("打开悬浮窗权限") {
+            runCatching { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:$packageName"))) }
+                .onFailure { paragraph("无法打开悬浮窗设置，请手动前往系统设置。") }
+        }
+        button("打开无障碍设置") { openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS) }
+        button("打开应用通知设置") {
+            runCatching { startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }
+                .onFailure { paragraph("无法打开通知设置，请手动前往系统设置。") }
+        }
+        button("打开电池优化设置") { openSettings(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) }
+        button("打开 Shizuku") { openNotificationSource("moe.shizuku.privileged.api") }
+        paragraph("状态是当前取样，不保证后台常驻、提醒准时或任务执行成功。")
     }
 
     private fun chooseQuietTime(start: Boolean) {
@@ -377,7 +419,7 @@ class CompanionActivity : AppCompatActivity() {
             launch.setPackage(packageName)
             startActivity(launch)
         }.isSuccess
-        if (!opened) android.widget.Toast.makeText(this, "无法打开来源应用，它可能已卸载或没有启动入口。", android.widget.Toast.LENGTH_LONG).show()
+        if (!opened) android.widget.Toast.makeText(this, "无法打开应用，它可能已卸载或没有启动入口。", android.widget.Toast.LENGTH_LONG).show()
     }
 
     private fun showMemories() {
