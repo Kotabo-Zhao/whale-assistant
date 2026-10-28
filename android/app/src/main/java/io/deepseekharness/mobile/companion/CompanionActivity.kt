@@ -175,6 +175,12 @@ class CompanionActivity : AppCompatActivity() {
         if (intent?.getBooleanExtra("open_voice_input", false) == true) {
             intent?.removeExtra("open_voice_input")
             startVoiceInput()
+        } else if (intent?.getBooleanExtra("open_recurring_reminders", false) == true) {
+            intent?.removeExtra("open_recurring_reminders")
+            showRecurringReminders()
+        } else if (intent?.getBooleanExtra("open_pending_memories", false) == true) {
+            intent?.removeExtra("open_pending_memories")
+            showMemories()
         } else if (intent?.getBooleanExtra("open_calendar_brief", false) == true) {
             intent?.removeExtra("open_calendar_brief")
             showBrief()

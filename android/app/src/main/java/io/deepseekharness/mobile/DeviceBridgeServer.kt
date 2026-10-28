@@ -257,7 +257,7 @@ class DeviceBridgeServer(
                         val context = appContext ?: throw RuntimeFailure("MEMORY_UNAVAILABLE", "记忆服务不可用")
                         val result = io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(param)
                         if (io.deepseekharness.mobile.companion.CompanionMemoryHint.shouldNotify(param, result)) {
-                            OverlayBallService.companionHint("有一条记忆待确认，可在助手设置中查看。")
+                            OverlayBallService.companionPendingMemoryHint()
                         }
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return

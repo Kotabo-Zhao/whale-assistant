@@ -129,7 +129,11 @@ internal class CompanionRecurringReminder(context: Context) {
             val manager = app.getSystemService(NotificationManager::class.java) ?: error("notification unavailable")
             manager.createNotificationChannel(NotificationChannel(CompanionReminderHealth.CHANNEL, "鲸鱼娘提醒", NotificationManager.IMPORTANCE_DEFAULT))
             check(CompanionReminderHealth.read(app) == CompanionReminderHealth.State.READY)
-            val open = PendingIntent.getActivity(app, 0, Intent(app, CompanionActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val openIntent = Intent(app, CompanionActivity::class.java)
+                .setAction("io.deepseekharness.mobile.SHOW_RECURRING")
+                .setData(Uri.parse("whale-reminder-view://local/$id"))
+                .putExtra("open_recurring_reminders", true)
+            val open = PendingIntent.getActivity(app, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val notification = NotificationCompat.Builder(app, CompanionReminderHealth.CHANNEL).setSmallIcon(R.drawable.ic_overlay_ball)
                 .setContentTitle("鲸鱼娘重复提醒").setContentText(row.getString("text")).setContentIntent(open).setAutoCancel(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build()
@@ -137,7 +141,7 @@ internal class CompanionRecurringReminder(context: Context) {
         }
         row.put("last", if (result.isSuccess) "submitted" else "failed")
         save(rows)
-        if (result.isSuccess) OverlayBallService.companionHint("有一条提醒，请查看通知。")
+        if (result.isSuccess) OverlayBallService.companionRecurringConversationHint()
     }
     private fun next(row: JSONObject, now: Long) = CompanionRecurringPolicy.next(now, row.getInt("hour"), row.getInt("minute"), row.getInt("weekday"), ZoneId.systemDefault())
     private fun schedule(row: JSONObject) {

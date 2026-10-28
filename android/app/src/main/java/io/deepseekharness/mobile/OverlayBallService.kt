@@ -1789,6 +1789,26 @@ class OverlayBallService : Service() {
 
     companion object {
         @Volatile private var activeService: OverlayBallService? = null
+        /** Reminder bubble opens chat only after a user tap; it never inserts or sends a message. */
+        internal fun companionRecurringConversationHint() {
+            Handler(Looper.getMainLooper()).post {
+                activeService?.let { service ->
+                    service.showCompanionHint("提醒到了，要和我聊聊吗？点击打开对话。") {
+                        if (service.conversationView == null && !service.conversationOpening) service.toggleConversation()
+                    }
+                }
+            }
+        }
+        internal fun companionPendingMemoryHint() {
+            Handler(Looper.getMainLooper()).post {
+                activeService?.let { service ->
+                    service.showCompanionHint("有一条记忆待确认，点击查看。") {
+                        runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
+                            .putExtra("open_pending_memories", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
+                }
+            }
+        }
         internal fun companionMemorySuggestionHint() {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
