@@ -57,7 +57,7 @@ class MainActivity : BridgeActivity() {
         super.onCreate(savedInstanceState)
         io.deepseekharness.mobile.companion.CompanionRecurringReminder.requestRecovery(applicationContext)
         AppWindowInsets.apply(this)
-        handleExternalFileIntent(intent)
+        handleExternalFileIntent(intent, acceptText = savedInstanceState == null)
         applySystemFontScale()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -163,7 +163,7 @@ class MainActivity : BridgeActivity() {
     }
 
     /** 从外部 Intent 拿到用户选中的 content URI，复制进私有 inbox 目录。 */
-    private fun handleExternalFileIntent(intent: Intent) {
+    private fun handleExternalFileIntent(intent: Intent, acceptText: Boolean = true) {
         // 普通桌面启动使用 ACTION_MAIN（或没有 action），不属于外部文件导入。
         // 只有系统明确发起的查看/分享 Intent 才进入 URI 校验，否则每次打开应用都会
         // 因为没有 URI 错误地弹出“仅支持通过系统文件提供方导入文件”。
@@ -200,11 +200,46 @@ class MainActivity : BridgeActivity() {
             .take(MAX_IMPORT_FILES)
             .toList()
         if (acceptedUris.isEmpty()) {
+            if (action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+                if (acceptText) reviewSharedText(runCatching { intent.getCharSequenceExtra(Intent.EXTRA_TEXT) }.getOrNull())
+                return
+            }
             Toast.makeText(this, "仅支持通过系统文件提供方导入文件", Toast.LENGTH_SHORT).show()
             return
         }
         fallbackMimeTypes = acceptedMimeTypes(intent)
         enqueueFileImport(acceptedUris, allowPermissionFallback = true)
+    }
+
+    private fun reviewSharedText(value: CharSequence?) {
+        val bytes = SharedTextImport.encode(value)
+        if (bytes == null) { showImportToast("分享文字为空或超过大小限制。") ; return }
+        val text = String(bytes, Charsets.UTF_8)
+        val preview = text.take(600) + if (text.length > 600) "\n…（预览已截断，保存的是完整内容）" else ""
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("保存分享的文字？")
+            .setMessage("$preview\n\n确认后保存到本机收件箱，运行环境及当前或后续对话可能读取并发送给模型；保存本身不会启动对话。请检查内容后再保存。")
+            .setNegativeButton("取消", null).setPositiveButton("保存") { _, _ ->
+                try {
+                    importExecutor.execute {
+                        val status = runCatching {
+                            val inbox = RuntimeSharedInbox(RuntimeStore(applicationContext))
+                            val dir = inbox.stagingDirectory()
+                            inbox.withPendingFile { pending ->
+                                Files.newOutputStream(pending.toPath(), StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { it.write(bytes) }
+                                val target = File(dir, "${UUID.randomUUID()}-shared-text.txt")
+                                RuntimeSharedInbox.withLock { Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE) }
+                            }
+                            inbox.deliver()
+                        }
+                        runOnUiThread {
+                            if (!isFinishing && !isDestroyed) showImportToast(status.fold(
+                                { if (it) "文字已保存到应用收件箱。" else "文字已安全暂存，运行环境准备完成后可在收件箱使用。" },
+                                { "无法保存分享文字，请重试。" },
+                            ))
+                        }
+                    }
+                } catch (_: Exception) { showImportToast("导入任务无法启动，请重试。") }
+            }.show()
     }
 
     private fun enqueueFileImport(uris: List<Uri>, allowPermissionFallback: Boolean) {
