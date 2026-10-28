@@ -24,6 +24,51 @@ export function parseMarketCatalog(value: unknown): Entry[] {
   return entries
 }
 
+/** JSON parsing can be expensive on a large catalog; use a worker when the WebView supports it. */
+export function parseCatalogData(data: Uint8Array): Entry[] {
+  return parseMarketCatalog(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data)))
+}
+
+export async function parseCatalogOffThread(data: Uint8Array, signal: AbortSignal): Promise<Entry[]> {
+  if (signal.aborted) throw new Error('目录读取已取消')
+  if (typeof Worker === 'undefined') return parseCatalogData(data)
+  let worker: Worker
+  try { worker = new Worker(new URL('./marketCatalog.worker.ts', import.meta.url), { type: 'module' }) }
+  catch { return parseCatalogData(data) }
+  return new Promise<Entry[]>((resolve, reject) => {
+    let finished = false
+    const finish = (value: Entry[] | null, error?: Error) => {
+      if (finished) return
+      finished = true
+      signal.removeEventListener('abort', abort)
+      worker.terminate()
+      if (error) reject(error)
+      else resolve(value ?? [])
+    }
+    const abort = () => finish(null, new Error('目录读取已取消'))
+    signal.addEventListener('abort', abort, { once: true })
+    worker.onmessage = event => {
+      const message: unknown = event.data
+      if (!message || typeof message !== 'object' || !('ok' in message) || message.ok !== true || !('entries' in message) || !Array.isArray(message.entries)) {
+        finish(null, new Error('目录格式无效')); return
+      }
+      finish(message.entries as Entry[])
+    }
+    worker.onerror = () => {
+      if (signal.aborted) { abort(); return }
+      try { finish(parseCatalogData(data)) } catch { finish(null, new Error('目录格式无效')) }
+    }
+    try {
+      // Keep the original for a fallback if a WebView cannot start workers.
+      const copy = data.slice().buffer
+      worker.postMessage(copy, [copy])
+    } catch {
+      try { finish(parseCatalogData(data)) } catch { finish(null, new Error('目录格式无效')) }
+    }
+    if (signal.aborted) abort()
+  })
+}
+
 export async function fetchCatalog(signal: AbortSignal): Promise<Entry[]> {
   const response = await fetch(CATALOG_URL, { signal, credentials: 'omit', redirect: 'error' })
   if (!response.ok || !response.body) throw new Error('目录不可用')
@@ -42,7 +87,7 @@ export async function fetchCatalog(signal: AbortSignal): Promise<Entry[]> {
   const data = new Uint8Array(size)
   let offset = 0
   for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.byteLength }
-  return parseMarketCatalog(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data)))
+  return parseCatalogOffThread(data, signal)
 }
 
 

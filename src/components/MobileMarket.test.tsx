@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { MobileMarket } from './MobileMarket'
-import { fetchPackagePreview, parseMarketCatalog, parsePackagePreview } from './marketCatalog'
+import { fetchCatalog, fetchPackagePreview, parseCatalogData, parseCatalogOffThread, parseMarketCatalog, parsePackagePreview } from './marketCatalog'
 
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -156,4 +156,59 @@ it('更改版本后旧包声明不再显示', async () => {
   expect(screen.getByText(/demo-dependency: \^3/)).toBeVisible()
   fireEvent.change(screen.getByRole('textbox', { name: '指定版本（可选）' }), { target: { value: '1.2.3' } })
   expect(screen.queryByText('1.0.0')).not.toBeInTheDocument()
+})
+
+
+it('目录解析可交给 worker，并在取消时终止', async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '示例', npm: 'example-plugin' }] }))
+  const workers: Array<{ onmessage: ((event: MessageEvent) => void) | null; onerror: (() => void) | null; terminate: ReturnType<typeof vi.fn>; postMessage: ReturnType<typeof vi.fn> }> = []
+  class FakeWorker {
+    onmessage: ((event: MessageEvent) => void) | null = null
+    onerror: (() => void) | null = null
+    terminate = vi.fn()
+    postMessage = vi.fn()
+    constructor() { workers.push(this) }
+  }
+  vi.stubGlobal('Worker', FakeWorker)
+  const controller = new AbortController()
+  const pending = parseCatalogOffThread(bytes, controller.signal)
+  expect(workers[0].postMessage).toHaveBeenCalledOnce()
+  workers[0].onmessage?.({ data: { ok: true, entries: parseCatalogData(bytes) } } as MessageEvent)
+  expect(await pending).toEqual([{ name: '示例', npm: 'example-plugin', description: '' }])
+  expect(workers[0].terminate).toHaveBeenCalledOnce()
+  const aborter = new AbortController()
+  const cancelled = parseCatalogOffThread(bytes, aborter.signal)
+  aborter.abort()
+  await expect(cancelled).rejects.toThrow('取消')
+  expect(workers[1].terminate).toHaveBeenCalledOnce()
+})
+
+it('worker 无法运行时回退且不会把无效目录当成空列表', async () => {
+  class FailingWorker { constructor() { throw new Error('blocked') } }
+  vi.stubGlobal('Worker', FailingWorker)
+  const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ npm: 'example-plugin' }] }))
+  expect(await parseCatalogOffThread(bytes, new AbortController().signal)).toHaveLength(1)
+  await expect(parseCatalogOffThread(new TextEncoder().encode('{bad'), new AbortController().signal)).rejects.toThrow()
+})
+
+
+it('下载目录后实际使用后台解析', async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ npm: 'example-plugin' }] }))
+  let done = false
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({
+    read: () => Promise.resolve(done ? { done: true } : (done = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+  }) } }))
+  const sent = vi.fn()
+  class FakeWorker {
+    onmessage: ((event: MessageEvent) => void) | null = null
+    onerror: (() => void) | null = null
+    terminate = vi.fn()
+    postMessage(buffer: ArrayBuffer) {
+      sent()
+      queueMicrotask(() => this.onmessage?.({ data: { ok: true, entries: parseCatalogData(new Uint8Array(buffer)) } } as MessageEvent))
+    }
+  }
+  vi.stubGlobal('Worker', FakeWorker)
+  expect(await fetchCatalog(new AbortController().signal)).toHaveLength(1)
+  expect(sent).toHaveBeenCalledOnce()
 })
