@@ -139,6 +139,23 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `目标消失验证需要匹配动作且真实查询目标缺失`() {
+        val ledger = ledger(spec("s1", verify = AutomationTaskActions.VERIFY_TARGET_GONE), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        val state = ledger.snapshot()
+        val step = state.steps[0]
+        val receipt = AutomationTaskEvidence.receipt(state, "com.example.app", "click", "com.example.app:id/ok", 1100L)
+        val claimed = AutomationTaskStepOutcome(ok = true, verified = true)
+        assertFalse(AutomationTaskEvidence.constrain(state.taskId, step, claimed, "d1", receipt, 1200L, true).verified)
+        assertFalse(AutomationTaskEvidence.constrain(state.taskId, step, claimed, "d1", receipt, 1200L, null).verified)
+        assertFalse(AutomationTaskEvidence.constrain(state.taskId, step, claimed, "d1", null, 1200L, false).verified)
+        assertTrue(AutomationTaskEvidence.constrain(state.taskId, step, claimed, "d1", receipt, 1200L, false).verified)
+        val failed = AutomationTaskEvidence.constrain(state.taskId, step, claimed, "d1", receipt, 1200L, true)
+        ledger.record("s1", 1, failed, 1200L)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s2", facts(), 1300L).refusedCode())
+    }
+
+    @Test
     fun `前一步可重试失败时不能跳过直接执行下一步`() {
         val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
         ledger.gate("s1", facts(), 1000L)

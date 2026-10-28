@@ -1326,7 +1326,11 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                 val now = SystemClock.elapsedRealtime()
                 val current = ledger.snapshot()
                 val step = current.steps.firstOrNull { it.id == request.stepId }
-                val outcome = AutomationTaskEvidence.constrain(current.taskId, step, request.outcome, digest, automationTaskReceipt, now)
+                // A failed query is unknown; only a successful lookup with zero matches counts as absent.
+                val targetPresent = if (step?.verify == AutomationTaskActions.VERIFY_TARGET_GONE && step.target.isNotBlank()) {
+                    runCatching { root.findAccessibilityNodeInfosByViewId(step.target).isNotEmpty() }.getOrNull()
+                } else null
+                val outcome = AutomationTaskEvidence.constrain(current.taskId, step, request.outcome, digest, automationTaskReceipt, now, targetPresent)
                 ledger.record(request.stepId, request.attempt, outcome, now).let { snapshot ->
                     if (snapshot.lastCode == AutomationTaskCodes.RECORD_INVALID) {
                         taskFailure(

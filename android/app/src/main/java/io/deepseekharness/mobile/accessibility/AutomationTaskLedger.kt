@@ -217,14 +217,17 @@ internal object AutomationTaskEvidence {
         if (step.action != action || step.target != viewId || nowMs < step.startedAtMs!!) return null
         return AutomationTaskActionReceipt(snapshot.taskId, step.id, step.attemptsUsed, nowMs)
     }
-    fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long): AutomationTaskStepOutcome {
-        if (step?.verify != AutomationTaskActions.VERIFY_WINDOW_CHANGED || !outcome.ok) return outcome
+    fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long, targetPresent: Boolean? = null): AutomationTaskStepOutcome {
+        if (step == null || !outcome.ok || step.verify !in setOf(AutomationTaskActions.VERIFY_WINDOW_CHANGED, AutomationTaskActions.VERIFY_TARGET_GONE)) return outcome
         val started = step.startedAtMs
-        val baseline = step.startedDigest
-        val observed = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
-            receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs &&
-            baseline != null && observedDigest.isNotEmpty() && baseline != observedDigest
-        return outcome.copy(verified = outcome.verified && observed)
+        val matched = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
+            receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs
+        val observed = when (step.verify) {
+            AutomationTaskActions.VERIFY_WINDOW_CHANGED -> step.startedDigest != null && observedDigest.isNotEmpty() && step.startedDigest != observedDigest
+            AutomationTaskActions.VERIFY_TARGET_GONE -> targetPresent == false
+            else -> false
+        }
+        return outcome.copy(verified = outcome.verified && matched && observed)
     }
 }
 
