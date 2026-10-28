@@ -1275,21 +1275,45 @@ class CompanionActivity : AppCompatActivity() {
                                 }.setNegativeButton("取消", null).show()
                         } else {
 
-                        val edit = android.widget.EditText(this).apply { setText(records.getJSONObject(index).getString("text")) }
-                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("编辑记忆").setView(edit).setNegativeButton("取消", null)
-                            .setPositiveButton("保存") { _, _ ->
-                                runCatching { memory.updateForUser(id, edit.text.toString()) }
-                                    .onSuccess { if (!it) paragraph("记忆已不存在。") }
-                                    .onFailure { paragraph("保存失败：${it.message}") }
-                            }.show()
+                        editConfirmedMemory(memory, records.getJSONObject(index))
                         }
                     }.setPositiveButton("删除") { _, _ ->
                         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除这条记忆？").setMessage(labels[index])
                             .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
-                        runCatching { memory.deleteForUser(id) }.onFailure { paragraph("删除失败，原数据已保留。") }
+                        val expected = records.getJSONObject(index).toString()
+                        runMemoryIo("正在删除记忆…", { memory.deleteForUser(id, expected) }) { result ->
+                            val message = result.fold({ if (it) "记忆已删除。" else "记忆已变化或不存在，请重新查看。" }, { "删除失败，原数据已保留。" })
+                            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                        }
                             }.show()
                     }.show()
             }.setNegativeButton("关闭", null).show()
+    }
+
+    private fun editConfirmedMemory(memory: CompanionMemoryStore, row: org.json.JSONObject) {
+        val id = row.getString("id")
+        val expected = row.toString()
+        val edit = android.widget.EditText(this).apply { setText(row.getString("text")); minLines = 2; filters = arrayOf(android.text.InputFilter.LengthFilter(600)) }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("编辑记忆")
+            .setMessage("保存后内容可供助手检索，并可能发送给所选模型服务。")
+            .setView(edit).setNegativeButton("取消", null).setPositiveButton("保存", null).create()
+        dialog.setOnShowListener {
+            val save = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+            save.setOnClickListener {
+                val value = edit.text.toString().trim()
+                if (value.isEmpty() || CompanionStore.sensitive(value)) { edit.error = "请填写内容，并移除可能的敏感信息。"; return@setOnClickListener }
+                if (memoryBusy) { edit.error = "记忆文件操作正在进行，请稍候。"; return@setOnClickListener }
+                save.isEnabled = false; edit.isEnabled = false
+                runMemoryIo("正在保存记忆…", { memory.updateForUser(id, expected, value) }) { result ->
+                    save.isEnabled = true; edit.isEnabled = true
+                    result.onSuccess { updated ->
+                        if (updated) { dialog.dismiss(); android.widget.Toast.makeText(this, "记忆已更新。", android.widget.Toast.LENGTH_LONG).show() }
+                        else edit.error = "记忆已变化或不存在，请复制修改内容后重新查看。"
+                    }.onFailure { edit.error = it.message ?: "保存失败，原数据已保留。" }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun editPendingMemory(memory: CompanionMemoryStore, id: String, original: String) {

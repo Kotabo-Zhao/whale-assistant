@@ -50,11 +50,11 @@ class CompanionMemoryStore(context: Context) {
         write(rows)
         true
     }
-    fun deleteForUser(id: String): Boolean = synchronized(lock) {
-        val rows = load(); val kept = JSONArray(); var removed = false
-        for (index in 0 until rows.length()) { val row = rows.getJSONObject(index); if (row.getString("id") == id) removed = true else kept.put(row) }
-        if (removed) write(kept)
-        removed
+    fun deleteForUser(id: String, expected: String): Boolean = synchronized(lock) {
+        val rows = load()
+        val kept = CompanionUserMemory.delete(rows, id, expected) ?: return@synchronized false
+        write(kept)
+        true
     }
     fun clearForUser() = synchronized(lock) { write(JSONArray()) }
     /** Explicit user-authored memory; does not ingest notification text automatically. */
@@ -64,12 +64,9 @@ class CompanionMemoryStore(context: Context) {
         if (result == UserMemoryResult.ADDED) write(rows)
         result
     }
-    fun updateForUser(id: String, text: String): Boolean = synchronized(lock) {
-        val value = text.trim()
-        require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value)) { "内容为空、过长或可能含敏感信息" }
+    fun updateForUser(id: String, expected: String, text: String): Boolean = synchronized(lock) {
         val rows = load()
-        val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("id") == id } ?: return@synchronized false
-        row.put("text", value).put("source", "user_edit").put("updatedAt", System.currentTimeMillis())
+        if (!CompanionUserMemory.update(rows, id, expected, text, System.currentTimeMillis())) return@synchronized false
         write(rows)
         true
     }
@@ -107,6 +104,24 @@ internal enum class UserMemoryResult { ADDED, EXISTING_PENDING, EXISTING_CONFIRM
 
 /** Manual confirmation is explicit; no notification metadata or content is copied implicitly. */
 internal object CompanionUserMemory {
+    /** Use the displayed full record as an optimistic concurrency token. */
+    fun update(rows: JSONArray, id: String, expected: String, text: String, now: Long): Boolean {
+        val index = (0 until rows.length()).firstOrNull { rows.getJSONObject(it).getString("id") == id } ?: return false
+        val row = rows.getJSONObject(index)
+        if (row.toString() != expected || row.optString("status") == "pending") return false
+        val value = text.trim()
+        require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value) && now > 0) { "内容为空、过长或可能含敏感信息" }
+        require((0 until rows.length()).none { it != index && rows.getJSONObject(it).getString("text") == value }) { "已有相同记忆" }
+        row.put("text", value).put("source", "user_edit").put("updatedAt", now)
+        return true
+    }
+    fun delete(rows: JSONArray, id: String, expected: String): JSONArray? {
+        val found = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("id") == id } ?: return null
+        if (found.toString() != expected) return null
+        val kept = JSONArray()
+        for (i in 0 until rows.length()) if (rows.getJSONObject(i).getString("id") != id) kept.put(rows.getJSONObject(i))
+        return kept
+    }
     fun add(rows: JSONArray, text: String, source: String, now: Long): UserMemoryResult {
         val value = text.trim()
         require(source in setOf("user_edit", "user_notification")) { "记忆来源无效" }

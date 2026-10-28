@@ -8,6 +8,27 @@ import org.junit.Test
 import java.nio.file.Files
 
 class CompanionMemoryEngineTest {
+    @Test fun confirmedMemoryEditsAndDeletesAreBoundToReviewedRecord() {
+        val rows = JSONArray()
+        CompanionUserMemory.add(rows, "原记忆", "user_notification", 100L)
+        CompanionUserMemory.add(rows, "另一条", "user_edit", 101L)
+        val row = rows.getJSONObject(0)
+        val id = row.getString("id")
+        val reviewed = row.toString()
+        assertThrows(Exception::class.java) { CompanionUserMemory.update(rows, id, reviewed, "另一条", 102L) }
+        assertEquals(reviewed, row.toString())
+        row.put("confirmedAt", 103L)
+        assertFalse(CompanionUserMemory.update(rows, id, reviewed, "更新", 104L))
+        assertNull(CompanionUserMemory.delete(rows, id, reviewed))
+        assertTrue(CompanionUserMemory.update(rows, id, row.toString(), " 更新 ", 105L))
+        assertEquals("更新", row.getString("text")); assertEquals("user_edit", row.getString("source"))
+        assertEquals(105L, row.getLong("updatedAt")); assertEquals(100L, row.getLong("createdAt"))
+        val kept = CompanionUserMemory.delete(rows, id, row.toString())!!
+        assertEquals(1, kept.length()); assertEquals(2, rows.length())
+        assertEquals(1, JSONArray(CompanionMemoryImport.plan(CompanionMemoryExport.encode(kept), JSONArray()).additions).length())
+        row.put("status", "pending")
+        assertFalse(CompanionUserMemory.update(rows, id, row.toString(), "不应确认", 106L))
+    }
     @Test fun editedPendingMemoryIsConfirmedAtomicallyAndStaleChangesAreRejected() {
         val id = "00000000-0000-0000-0000-000000000001"
         val rows = JSONArray().put(JSONObject().put("id", id).put("text", "候选原文").put("status", "pending").put("source", "assistant_tool"))
