@@ -260,9 +260,23 @@ internal object CompanionMemorySearch {
         }
         return result
     }
-    fun relatedAnchor(text: String, query: String): Int = terms(query)
-        .sortedWith(compareByDescending<String> { it.length }.thenBy { it })
-        .firstNotNullOfOrNull { term -> text.indexOf(term, ignoreCase = true).takeIf { it >= 0 } } ?: 0
+    fun relatedAnchor(text: String, query: String): Int {
+        val keywords = terms(query).sortedWith(compareByDescending<String> { it.length }.thenBy { it })
+        // Select the first occurrence of each matching term as a candidate. Score the
+        // same bounded window the model will receive, counting distinct matching terms.
+        // This keeps an isolated early match from hiding a denser relevant passage.
+        val candidates = keywords.mapNotNull { term -> text.indexOf(term, ignoreCase = true).takeIf { it >= 0 } }.distinct()
+        var best = 0
+        var bestScore = 0
+        for (at in candidates) {
+            val start = (at - 200).coerceAtLeast(0)
+            val end = minOf(text.length, start + 1000)
+            val window = text.substring(start, end)
+            val score = keywords.count { window.contains(it, ignoreCase = true) }
+            if (score > bestScore) { best = at; bestScore = score }
+        }
+        return best
+    }
     fun find(rows: List<JSONObject>, query: String): Result {
         val newestFirst = rows.asReversed()
         if (query.isEmpty()) return Result(newestFirst.take(10), "recent", newestFirst.size)

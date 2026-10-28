@@ -43,6 +43,16 @@ class CompanionKnowledgeModelTest {
         assertEquals("none", absent.getString("matchMode"))
         assertEquals(0, absent.getJSONArray("items").length())
     }
+    @Test fun relatedExcerptPrefersAClusterOfQueryTermsOverAnIsolatedEarlyTerm() {
+        val text = "其他偏好" + "x".repeat(2000) + "咖啡偏好是拿铁" + "z".repeat(1200)
+        val rows = JSONArray().put(JSONObject().put("text", text).put("createdAt", 1).put("source", "text_file"))
+        val result = JSONObject(CompanionKnowledgeModel.execute(true, "{\"query\":\"我的咖啡偏好是什么\"}") { rows })
+        assertEquals("related", result.getString("matchMode"))
+        val excerpt = result.getJSONArray("items").getJSONObject(0).getString("excerpt")
+        assertTrue(excerpt.contains("咖啡偏好是拿铁"))
+        assertFalse(excerpt.contains("其他偏好"))
+        assertTrue(excerpt.length <= 1000)
+    }
     @Test fun invalidSearchDoesNotLoadData() {
         for (param in listOf("{}", "{\"query\":\"\"}", "{\"query\":\"x\",\"limit\":4}", "{\"query\":\"x\",\"limit\":1.5}")) {
             assertThrows(RuntimeFailure::class.java) { CompanionKnowledgeModel.execute(true, param) { fail("must not load"); JSONArray() } }
