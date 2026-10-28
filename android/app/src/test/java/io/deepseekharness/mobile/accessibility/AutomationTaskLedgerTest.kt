@@ -146,10 +146,25 @@ class AutomationTaskLedgerTest {
         assertFalse(AutomationTaskEvidence.constrain(snapshot.taskId, step, claimed, "d2", null, 1200L).verified)
         assertFalse(AutomationTaskEvidence.constrain("other-task", step, claimed, "d2", receipt, 1200L).verified)
         assertFalse(AutomationTaskEvidence.constrain(snapshot.taskId, step.copy(attemptsUsed = 2), claimed, "d2", receipt, 1200L).verified)
-        assertTrue(AutomationTaskEvidence.constrain(snapshot.taskId, step, claimed, "d2", receipt, 1200L).verified)
+        assertFalse(AutomationTaskEvidence.constrain(snapshot.taskId, step, claimed, "d2", receipt, 1200L).verified)
+        assertFalse(AutomationTaskEvidence.constrain(snapshot.taskId, step, claimed, "d2", receipt, 1200L, expectedPackage = "com.example.app", observedPackage = "com.other.app").verified)
+        assertTrue(AutomationTaskEvidence.constrain(snapshot.taskId, step, claimed, "d2", receipt, 1200L, expectedPackage = "com.example.app", observedPackage = "com.example.app").verified)
         assertFalse(AutomationTaskEvidence.constrain(snapshot.taskId, step, claimed.copy(verified = false), "d2", receipt, 1200L).verified)
         val constrained = AutomationTaskEvidence.constrain(snapshot.taskId, step, claimed, "d1", receipt, 1200L)
         ledger.record("s1", 1, constrained, 1200L)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s2", facts(), 1300L).refusedCode())
+    }
+
+    @Test
+    fun `窗口变化来自其他应用时不能放行后续步骤`() {
+        val ledger = ledger(spec("s1"), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        val state = ledger.snapshot()
+        val receipt = AutomationTaskEvidence.receipt(state, "com.example.app", "click", "com.example.app:id/ok", 1100L)
+        val outcome = AutomationTaskEvidence.constrain(state.taskId, state.steps[0], AutomationTaskStepOutcome(ok = true, verified = true),
+            "different-window", receipt, 1200L, expectedPackage = "com.example.app", observedPackage = "com.other.app")
+        assertFalse(outcome.verified)
+        assertEquals(AutomationTaskStepStatus.UNKNOWN, ledger.record("s1", 1, outcome, 1200L).steps[0].status)
         assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.gate("s2", facts(), 1300L).refusedCode())
     }
 

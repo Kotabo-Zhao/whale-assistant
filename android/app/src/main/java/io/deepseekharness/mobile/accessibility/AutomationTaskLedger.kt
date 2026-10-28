@@ -254,7 +254,7 @@ internal object AutomationTaskEvidence {
         // Absence or text in a different app cannot establish what happened in the target app.
         val samePackage = !expectedPackage.isNullOrBlank() && expectedPackage == observedPackage
         val observed = when (step.verify) {
-            AutomationTaskActions.VERIFY_WINDOW_CHANGED -> step.startedDigest != null && observedDigest.isNotEmpty() && step.startedDigest != observedDigest
+            AutomationTaskActions.VERIFY_WINDOW_CHANGED -> samePackage && step.startedDigest != null && observedDigest.isNotEmpty() && step.startedDigest != observedDigest
             AutomationTaskActions.VERIFY_TARGET_GONE -> samePackage && targetPresent == false
             AutomationTaskActions.VERIFY_TEXT_APPLIED -> samePackage && receipt?.textDigest != null && observedTextDigest == receipt.textDigest
             AutomationTaskActions.VERIFY_PACKAGE_CHANGED -> !expectedPackage.isNullOrBlank() && !observedPackage.isNullOrBlank() && expectedPackage != observedPackage
