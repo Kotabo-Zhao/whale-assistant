@@ -57,9 +57,13 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         val page = voicePage
         voiceGate = null
         voicePage = null
-        if (result.resultCode == Activity.RESULT_OK && expected != null && page != null && current(expected) && visible() && web?.url == page) {
-            val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
-            if (text.isNotBlank() && text.length <= 2000) reviewVoice(text, expected, page) else voiceUnavailable()
+        val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+        val samePage = expected != null && page != null && current(expected) && visible() && web?.url == page
+        when (HarnessVoiceResultPolicy.decide(result.resultCode == Activity.RESULT_OK, text, samePage)) {
+            HarnessVoiceResultPolicy.Decision.CANCELLED -> Unit
+            HarnessVoiceResultPolicy.Decision.INVALID -> voiceUnavailable()
+            HarnessVoiceResultPolicy.Decision.REVIEW -> reviewVoice(text, checkNotNull(expected), checkNotNull(page))
+            HarnessVoiceResultPolicy.Decision.COPY -> if (!activity.isFinishing && !activity.isDestroyed) voiceCopyFallback(text)
         }
     }
 
