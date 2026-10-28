@@ -1,7 +1,5 @@
 package io.deepseekharness.mobile.companion
 
-import android.app.AppOpsManager
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -45,6 +43,7 @@ class CompanionActivity : AppCompatActivity() {
     private var notificationDeleteBusy = false
     private var briefBusy = false
     private var usageBusy = false
+    private val usageExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-usage").apply { isDaemon = true } }
     private val calendarPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         android.widget.Toast.makeText(this, if (granted) "已授权；可打开简报查看日历。" else "日历未授权；简报仍可查看通知。", android.widget.Toast.LENGTH_LONG).show()
     }
@@ -75,6 +74,7 @@ class CompanionActivity : AppCompatActivity() {
         memoryCountGeneration++
         memoryExecutor.shutdown()
         briefExecutor.shutdownNow()
+        usageExecutor.shutdownNow()
         readinessGeneration++
         readinessExecutor.shutdownNow()
     }
@@ -544,36 +544,40 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun showUsage() {
-        val appOps = getSystemService(AppOpsManager::class.java)
-        val allowed = appOps?.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), packageName) == AppOpsManager.MODE_ALLOWED
-        if (!allowed) { paragraph("没有使用情况访问权限，请先到系统设置中授权。 "); return }
-        val manager = getSystemService(UsageStatsManager::class.java)
-        if (manager == null) { paragraph("无法读取使用情况。"); return }
-        val now = System.currentTimeMillis()
-        val data = runCatching { manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 7L * 24 * 60 * 60 * 1000, now) }.getOrNull()
-        if (data == null) { paragraph("系统未返回使用情况。"); return }
-        val totals = data.groupBy { it.packageName }.mapValues { entry -> entry.value.sumOf { it.totalTimeInForeground } }
-            .filterValues { it > 0 }.entries.sortedByDescending { it.value }.take(10)
-        if (totals.isEmpty()) { paragraph("系统没有返回可用的使用记录。"); return }
-        val entries = totals.toList()
-        val labels = entries.map { (pkg, millis) ->
-            val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
-            "$label · ${millis / 60000} 分钟\n$pkg"
-        }.toTypedArray()
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("使用情况（选择应用加入快捷方式）")
-            .setItems(labels) { _, index ->
-                val pkg = entries[index].key
-                val launch = runCatching { packageManager.getLaunchIntentForPackage(pkg) }.getOrNull()
-                if (!CompanionSourcePolicy.matchesResolved(pkg, launch?.component?.packageName)) {
-                    paragraph("这个应用没有可用的启动入口。")
-                } else {
-                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle("加入常用应用？").setMessage(labels[index])
-                        .setNegativeButton("取消", null).setPositiveButton("加入") { _, _ ->
-                            runCatching { store.addShortcut(pkg) }.onSuccess { render() }
-                                .onFailure { paragraph("无法添加快捷方式，请检查是否已达到 6 个上限。") }
-                        }.show()
+        if (usageBusy) { android.widget.Toast.makeText(this, "正在读取使用情况，请稍候。", android.widget.Toast.LENGTH_SHORT).show(); return }
+        usageBusy = true
+        android.widget.Toast.makeText(this, "正在读取使用情况…", android.widget.Toast.LENGTH_SHORT).show()
+        val app = applicationContext
+        usageExecutor.execute {
+            val snapshot = CompanionUsage.loadSummary(app)
+            val labels = snapshot.candidates.map { candidate ->
+                val label = runCatching { app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(candidate.packageName, 0)).toString() }.getOrDefault(candidate.packageName)
+                "$label · 约 ${candidate.foregroundMs / 60000} 分钟\n${candidate.packageName}"
+            }.toTypedArray()
+            memoryHandler.post {
+                usageBusy = false
+                if (isFinishing || isDestroyed) return@post
+                when (snapshot.state) {
+                    CompanionUsage.State.NO_PERMISSION -> android.widget.Toast.makeText(this, "没有使用情况访问权限，请先到系统设置中授权。", android.widget.Toast.LENGTH_LONG).show()
+                    CompanionUsage.State.UNAVAILABLE -> android.widget.Toast.makeText(this, "系统使用情况暂不可用。", android.widget.Toast.LENGTH_LONG).show()
+                    CompanionUsage.State.OK -> {
+                        if (labels.isEmpty()) { android.widget.Toast.makeText(this, "系统没有返回可用的使用记录。", android.widget.Toast.LENGTH_LONG).show(); return@post }
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("约 7 天使用情况（选择应用）")
+                            .setItems(labels) { _, index ->
+                                val pkg = snapshot.candidates[index].packageName
+                                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("加入常用应用？").setMessage(labels[index] + "\n\n系统统计可能不完整；时长是近似值。")
+                                    .setNegativeButton("取消", null).setPositiveButton("加入") { _, _ ->
+                                        val launch = runCatching { packageManager.getLaunchIntentForPackage(pkg) }.getOrNull()
+                                        if (!CompanionSourcePolicy.matchesResolved(pkg, launch?.component?.packageName)) {
+                                            android.widget.Toast.makeText(this, "这个应用没有可用的启动入口。", android.widget.Toast.LENGTH_LONG).show()
+                                        } else runCatching { store.addShortcut(pkg) }.onSuccess { render() }
+                                            .onFailure { android.widget.Toast.makeText(this, "无法添加快捷方式，请检查是否已达到 6 个上限。", android.widget.Toast.LENGTH_LONG).show() }
+                                    }.show()
+                            }.setNegativeButton("关闭", null).show()
+                    }
                 }
-            }.setNegativeButton("关闭", null).show()
+            }
+        }
     }
 
     private fun manageShortcuts() {

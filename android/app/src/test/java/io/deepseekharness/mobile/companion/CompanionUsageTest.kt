@@ -13,6 +13,16 @@ class CompanionUsageTest {
         assertTrue(CompanionUsage.rank(emptyList(), emptySet(), "self").isEmpty())
         assertTrue(CompanionUsage.rank(rows, (0..5).map { "com.example.slot$it" }.toSet(), "self").isEmpty())
     }
+    @Test fun summaryAggregatesMultipleIntervalsAndSaturatesOverflow() {
+        val rows = listOf(CompanionUsage.Candidate("com.example.alpha", 100), CompanionUsage.Candidate("com.example.alpha", 50),
+            CompanionUsage.Candidate("com.example.beta", Long.MAX_VALUE), CompanionUsage.Candidate("com.example.beta", 5),
+            CompanionUsage.Candidate("invalid/path", 500), CompanionUsage.Candidate("com.example.negative", -1))
+        val result = CompanionUsage.summary(rows)
+        assertEquals(listOf("com.example.beta", "com.example.alpha"), result.map { it.packageName })
+        assertEquals(Long.MAX_VALUE, result[0].foregroundMs)
+        assertEquals(150L, result[1].foregroundMs)
+        assertEquals(10, CompanionUsage.summary((1..11).map { CompanionUsage.Candidate("com.example.app$it", it.toLong()) }).size)
+    }
     @Test fun hintsAreBoundedAndClockChangesDoNotBlockForever() {
         val now = 1000000000L
         assertTrue(CompanionUsageHintPolicy.due(now, 0, 0))
