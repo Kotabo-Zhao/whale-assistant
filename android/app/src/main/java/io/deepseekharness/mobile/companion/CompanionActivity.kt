@@ -53,6 +53,8 @@ class CompanionActivity : AppCompatActivity() {
         toggle("收集通知摘要", store.notificationCapture) { store.notificationCapture = it; render() }
         paragraph("开启后记录通知来源、标题和正文，最多 50 条；只在读取或新增时清理超过 7 天的记录。验证码与密码使用简单规则过滤，不能保证识别所有敏感内容。")
         button("打开系统通知读取授权") { openSettings(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS) }
+        button("设置不采集通知的应用") { selectExcludedApps() }
+        paragraph("可从已记录过的应用中选择不再采集的来源；已有记录不会自动删除。")
         toggle("桌面休息提醒", store.reminders) { store.reminders = it }
         paragraph("悬浮助手运行且设备已解锁时，约每 90 分钟显示一次休息提示；低电量时可发系统通知（需通知权限）。系统可能停止后台服务。")
         heading("手机使用情况")
@@ -60,6 +62,8 @@ class CompanionActivity : AppCompatActivity() {
         button("打开使用情况访问授权") { openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS) }
         button("查看最近 7 天使用情况") { showUsage() }
         heading("本地通知记录")
+        paragraph("简报使用本地规则分类，可能漏判或分类错误，不代表已检查所有信息。")
+        button("查看本地通知简报") { showBrief() }
         button("查看通知习惯摘要") { showNotificationSummary() }
         button("复制通知习惯摘要") { copyNotificationSummary() }
         button("刷新通知记录") { renderRecords() }
@@ -84,6 +88,23 @@ class CompanionActivity : AppCompatActivity() {
             val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
             paragraph("$label · ${millis / 60000} 分钟")
         }
+    }
+
+    private fun selectExcludedApps() {
+        val excluded = store.excludedPackages()
+        val records = store.read()
+        val packages = (excluded + (0 until records.length()).mapNotNull { records.optJSONObject(it)?.optString("package")?.takeIf(String::isNotBlank) }).sorted()
+        if (packages.isEmpty()) { paragraph("暂无可选择的通知来源。开启采集并收到通知后可在这里设置。 "); return }
+        val checked = BooleanArray(packages.size) { packages[it] in excluded }
+        val labels = packages.map { pkg ->
+            val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+            "$label ($pkg)"
+        }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择不采集的应用")
+            .setMultiChoiceItems(labels, checked) { _, index, value -> checked[index] = value }
+            .setNegativeButton("取消", null)
+            .setPositiveButton("保存") { _, _ -> store.setExcludedPackages(packages.filterIndexed { index, _ -> checked[index] }.toSet()) }
+            .show()
     }
 
     private fun renderRecords() {
@@ -116,11 +137,29 @@ class CompanionActivity : AppCompatActivity() {
         }
     }
 
+    private fun showBrief() {
+        val records = store.read()
+        if (records.length() == 0) {
+            paragraph("没有可用的本地通知记录；请检查采集开关和通知读取权限。")
+            return
+        }
+        val lines = CompanionBrief.counts(records).entries.joinToString("\n") { "${it.key}：${it.value} 条" }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地通知简报")
+            .setMessage("最近保留的 ${records.length()} 条通知：\n$lines\n\n分类由本地规则生成，可能遗漏重要事项。原始通知可在下方查看。")
+            .setPositiveButton("关闭", null).show()
+    }
+
     private fun showMemories() {
         val memory = CompanionMemoryStore(this)
         val records = runCatching { memory.listForUser() }.getOrElse { paragraph("无法读取长期记忆，原数据已保留。"); return }
         if (records.length() == 0) { paragraph("还没有长期记忆。"); return }
-        val labels = Array(records.length()) { records.getJSONObject(it).getString("text") }
+        val labels = Array(records.length()) {
+            val row = records.getJSONObject(it)
+            val source = if (row.optString("source") == "assistant_tool") "助手记忆工具" else "来源未知"
+            val time = row.optLong("createdAt", 0)
+            val date = if (time > 0) DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(time)) else "时间未知"
+            "${row.getString("text")}\n来源：$source · $date"
+        }
         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择要删除的记忆")
             .setItems(labels) { _, index ->
                 val id = records.getJSONObject(index).getString("id")

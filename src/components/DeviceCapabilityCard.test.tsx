@@ -123,6 +123,7 @@ describe('设备能力卡片', () => {
     })
 
     await findRow('Shizuku（设备 Shell） 需要一步设置 · Shizuku 没有在运行 · 下一步：打开 Shizuku')
+    expect(screen.getByText(/配对完成后，还需在 Shizuku 应用中点击/u)).toBeInTheDocument()
   })
 
   it('依赖未满足的行说明缺的是哪一环，并给出替代方式', async () => {

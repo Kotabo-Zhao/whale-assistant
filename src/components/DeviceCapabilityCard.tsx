@@ -215,6 +215,8 @@ export function DeviceCapabilityCard({ bridge = runtimeBridge, onOpenDeviceShell
         </>}
       </p>)}
     </div>}
+    {report?.capabilities.some(entry => entry.id === 'shizuku' && entry.reason === 'SHIZUKU_NOT_RUNNING') &&
+      <p className="settings-note">{t('无线调试配对完成后，还需在 Shizuku 应用中点击「启动」；如果启动失败，可关闭再开启无线调试后重试。')}</p>}
     {report !== null && <div className="device-capability-footer"><span className="settings-note">{t('取样时间：{0}', new Date(report.atMs).toLocaleTimeString())} · {t('连接状态变化后会自动重新检测。')}</span><RefreshAction refreshing={refreshing} label={t('重新检测')} onClick={() => { void refresh(true) }} /></div>}
     {failed && <p className="device-capability-error" role="alert">{t('无法读取设备能力清单')} <RefreshAction refreshing={refreshing} label={t('重试')} onClick={() => { void refresh(true) }} /></p>}
   </section>

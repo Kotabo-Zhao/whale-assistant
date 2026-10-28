@@ -74,7 +74,8 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                 val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("text") == text }
                 if (existing != null) return JSONObject().put("id", existing.getString("id")).put("alreadyExists", true).toString()
                 if (rows.length() >= 100) throw RuntimeFailure("MEMORY_FULL", "记忆已满，请先删除不需要的条目")
-                val row = JSONObject().put("id", UUID.randomUUID().toString()).put("text", text).put("createdAt", System.currentTimeMillis())
+                val row = JSONObject().put("id", UUID.randomUUID().toString()).put("text", text)
+                    .put("createdAt", System.currentTimeMillis()).put("source", "assistant_tool")
                 rows.put(row); write(rows)
                 JSONObject().put("id", row.getString("id")).put("alreadyExists", false).toString()
             }

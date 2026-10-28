@@ -21,9 +21,17 @@ class CompanionMemoryEngineTest {
             assertEquals(id, duplicate.getString("id"))
             val results = JSONObject(engine().execute(JSONObject().put("op", "search").put("query", "蓝色").toString()))
             assertEquals(id, results.getJSONArray("items").getJSONObject(0).getString("id"))
+            assertEquals("assistant_tool", results.getJSONArray("items").getJSONObject(0).getString("source"))
             assertTrue(JSONObject(engine().execute(JSONObject().put("op", "delete").put("id", id).toString())).getBoolean("removed"))
             assertEquals(0, JSONArray(path.toFile().readText()).length())
         } finally { Files.deleteIfExists(path) }
+    }
+
+    @Test fun readsLegacyMemoryWithoutSource() {
+        val legacy = JSONArray().put(JSONObject().put("id", "00000000-0000-0000-0000-000000000001").put("text", "旧偏好"))
+        val engine = CompanionMemoryEngine({ legacy }, { })
+        val result = JSONObject(engine.execute(JSONObject().put("op", "search").put("query", "旧偏好").toString()))
+        assertEquals("旧偏好", result.getJSONArray("items").getJSONObject(0).getString("text"))
     }
 
     @Test fun rejectsSensitiveAndOversizedMemories() {
