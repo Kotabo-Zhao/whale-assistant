@@ -994,18 +994,18 @@ class CompanionActivity : AppCompatActivity() {
         runMemoryIo("正在重新读取日程…", {
             val now = System.currentTimeMillis()
             val zone = java.util.TimeZone.getDefault()
-            val snapshot = CompanionCalendar.read(applicationContext, now, zone)
+            val snapshot = CompanionCalendar.readReminderCandidates(applicationContext, now, zone)
             Triple(snapshot, CompanionCalendarReminderPolicy.candidates(snapshot.events, now), zone)
         }) { result ->
             result.onFailure { android.widget.Toast.makeText(this, "无法读取日程，请检查权限和系统日历。", android.widget.Toast.LENGTH_LONG).show() }.onSuccess { (snapshot, candidates, zone) ->
                 if (snapshot.state != CompanionCalendar.State.OK) {
                     android.widget.Toast.makeText(this, if (snapshot.state == CompanionCalendar.State.NO_PERMISSION) "日历未授权，请先授权。" else "日历读取失败，请检查系统日历。", android.widget.Toast.LENGTH_LONG).show()
                 } else if (candidates.isEmpty()) {
-                    android.widget.Toast.makeText(this, "当天没有可选的未来非全天日程；此列表最多读取前 20 项。", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(this, "当天没有可选的未来非全天日程；仅显示最早的 20 项。", android.widget.Toast.LENGTH_LONG).show()
                 } else {
                     val formatter = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }
                     val labels = candidates.map { "${formatter.format(Date(it.event.start))} · ${it.event.title}" }.toTypedArray()
-                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择未来日程（${zone.id}${if (snapshot.truncated) "，仅前 20 项" else ""}）")
+                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择未来日程（${zone.id}${if (snapshot.truncated) "，仅最早 20 项" else ""}）")
                         .setItems(labels) { _, index ->
                             val item = candidates[index]
                             createReminder(item.event.title, item.suggestedAt,

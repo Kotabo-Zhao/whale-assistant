@@ -61,7 +61,19 @@ internal object CompanionCalendar {
         } catch (_: Exception) { null }
     }
 
-    fun read(context: Context, now: Long = System.currentTimeMillis(), zone: TimeZone = TimeZone.getDefault()): Snapshot = snapshot(
+    fun read(context: Context, now: Long = System.currentTimeMillis(), zone: TimeZone = TimeZone.getDefault()): Snapshot =
+        readDay(context, now, zone, false)
+
+    /** Query future timed instances before applying the display limit, so past events cannot crowd them out. */
+    fun readReminderCandidates(context: Context, now: Long, zone: TimeZone): Snapshot =
+        readDay(context, now, zone, true)
+
+    internal fun daySelection(futureOnly: Boolean): String {
+        val visible = "${CalendarContract.Calendars.VISIBLE}=1 AND (${CalendarContract.Events.STATUS} IS NULL OR ${CalendarContract.Events.STATUS} != ?)"
+        return if (futureOnly) "$visible AND ${CalendarContract.Instances.ALL_DAY}=0 AND ${CalendarContract.Instances.BEGIN}>? AND ${CalendarContract.Instances.BEGIN}<?" else visible
+    }
+
+    private fun readDay(context: Context, now: Long, zone: TimeZone, futureOnly: Boolean): Snapshot = snapshot(
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     ) {
             val (start, end) = dayRange(now, zone)
@@ -70,8 +82,9 @@ internal object CompanionCalendar {
             }.build()
             val columns = arrayOf(CalendarContract.Instances.TITLE, CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.ALL_DAY)
             val cursor = context.contentResolver.query(uri, columns,
-                "${CalendarContract.Calendars.VISIBLE}=1 AND (${CalendarContract.Events.STATUS} IS NULL OR ${CalendarContract.Events.STATUS} != ?)",
-                arrayOf(CalendarContract.Events.STATUS_CANCELED.toString()), "${CalendarContract.Instances.BEGIN} ASC")
+                daySelection(futureOnly),
+                if (futureOnly) arrayOf(CalendarContract.Events.STATUS_CANCELED.toString(), now.toString(), end.toString())
+                else arrayOf(CalendarContract.Events.STATUS_CANCELED.toString()), "${CalendarContract.Instances.BEGIN} ASC")
                 ?: return@snapshot null
             cursor.use {
                 val items = mutableListOf<Event>()

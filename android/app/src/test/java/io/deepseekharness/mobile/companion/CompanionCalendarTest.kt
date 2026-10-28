@@ -32,6 +32,14 @@ class CompanionCalendarTest {
         assertEquals(20, snapshot.events.size); assertTrue(snapshot.truncated)
         assertEquals("事件 0", snapshot.events.first().title)
     }
+    @Test fun reminderQueryFiltersBeforeTheLimit() {
+        val normal = CompanionCalendar.daySelection(false)
+        val future = CompanionCalendar.daySelection(true)
+        assertFalse(normal.contains("begin>?", ignoreCase = true))
+        assertTrue(future.contains("begin>?", ignoreCase = true))
+        assertTrue(future.contains("begin<?", ignoreCase = true))
+        assertTrue(future.contains("allDay=0", ignoreCase = true))
+    }
     @Test fun modelRequiresSeparateConsentAndPermissionAndReportsSnapshot() {
         val zone = TimeZone.getTimeZone("Asia/Shanghai")
         var called = false
