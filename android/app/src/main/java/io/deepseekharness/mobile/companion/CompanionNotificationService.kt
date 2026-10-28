@@ -15,6 +15,6 @@ class CompanionNotificationService : NotificationListenerService() {
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
         if (title.isBlank() && text.isBlank()) return
         if (CompanionStore.sensitive("$title $text")) return
-        if (store.record(sbn.packageName, title, text, notificationKey = sbn.key)) OverlayBallService.companionHint("有一条新通知，可以在助手设置中查看。")
+        if (runCatching { store.record(sbn.packageName, title, text, notificationKey = sbn.key) }.getOrDefault(false)) OverlayBallService.companionHint("有一条新通知，可以在助手设置中查看。")
     }
 }

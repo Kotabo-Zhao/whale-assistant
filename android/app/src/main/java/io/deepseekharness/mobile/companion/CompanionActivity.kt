@@ -187,7 +187,11 @@ class CompanionActivity : AppCompatActivity() {
         button("查看通知习惯摘要") { showNotificationSummary() }
         button("复制通知习惯摘要") { copyNotificationSummary() }
         button("刷新通知记录") { renderRecords() }
-        button("清除全部本地通知记录") { store.clear(); render() }
+        button("清除全部本地通知记录") {
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清除全部通知记录？")
+                .setMessage("此操作无法撤销，包括可能损坏的记录。")
+                .setNegativeButton("取消", null).setPositiveButton("清除") { _, _ -> store.clear(); render() }.show()
+        }
         renderRecords()
         button("返回") { finish() }
     }
@@ -225,9 +229,14 @@ class CompanionActivity : AppCompatActivity() {
         runCatching { voiceInput.launch(intent) }.onFailure { paragraph("系统没有可用的语音识别服务，请使用文字输入。") }
     }
 
+    private fun recordsOrNull(): org.json.JSONArray? = runCatching { store.read() }.getOrElse {
+        paragraph("通知记录无法读取，原数据已保留；新通知暂不写入。")
+        null
+    }
+
     private fun selectExcludedApps() {
         val excluded = store.excludedPackages()
-        val records = store.read()
+        val records = recordsOrNull() ?: return
         val packages = (excluded + (0 until records.length()).mapNotNull { records.optJSONObject(it)?.optString("package")?.takeIf(String::isNotBlank) }).sorted()
         if (packages.isEmpty()) { paragraph("暂无可选择的通知来源。开启采集并收到通知后可在这里设置。 "); return }
         val checked = BooleanArray(packages.size) { packages[it] in excluded }
@@ -283,7 +292,7 @@ class CompanionActivity : AppCompatActivity() {
         // Rebuild to avoid appending duplicate lists on repeated refresh.
         if (content.findViewWithTag<LinearLayout>("records") != null) content.removeView(content.findViewWithTag("records"))
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "records" }
-        val records = store.read()
+        val records = recordsOrNull() ?: return
         if (records.length() == 0) list.addView(TextView(this).apply { text = "暂无记录"; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(8)) })
         for (index in records.length() - 1 downTo 0) {
             val row = records.optJSONObject(index) ?: continue
@@ -298,7 +307,7 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun showNotificationSummary() {
-        val records = store.read()
+        val records = recordsOrNull() ?: return
         if (records.length() == 0) { paragraph("还没有足够的通知记录。"); return }
         val counts = mutableMapOf<String, Int>()
         for (index in 0 until records.length()) {
@@ -313,7 +322,7 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun showBrief() {
-        val records = store.read()
+        val records = recordsOrNull() ?: return
         if (records.length() == 0) {
             paragraph("没有可用的本地通知记录；请检查采集开关和通知读取权限。")
             return
@@ -365,7 +374,7 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun copyNotificationSummary() {
-        val records = store.read()
+        val records = recordsOrNull() ?: return
         if (records.length() == 0) { paragraph("没有可复制的通知摘要。"); return }
         val counts = mutableMapOf<String, Int>()
         for (index in 0 until records.length()) {

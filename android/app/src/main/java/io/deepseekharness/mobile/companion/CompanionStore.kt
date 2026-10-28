@@ -57,7 +57,7 @@ class CompanionStore(context: Context) {
 
     fun read(now: Long = System.currentTimeMillis()): JSONArray = synchronized(lock) {
         val result = JSONArray()
-        val stored = runCatching { JSONArray(prefs.getString("records", "[]")) }.getOrDefault(JSONArray())
+        val stored = CompanionNotificationRecords.parse(prefs.getString("records", "[]") ?: throw IllegalStateException("记录为空"))
         for (index in 0 until stored.length()) {
             val item = stored.optJSONObject(index) ?: continue
             val time = item.optLong("time", 0)
@@ -75,5 +75,19 @@ class CompanionStore(context: Context) {
         const val RETENTION_MS = 7L * 24 * 60 * 60 * 1000
         private val sensitivePattern = Regex("(?i)验证码|校验码|动态码|密码|口令|密钥|令牌|verification code|one.time password|otp|password|passcode|api[ _-]?key|access[ _-]?token|\\bsk-[a-z0-9_-]{12,}|\\b\\d{4,8}\\b")
         fun sensitive(value: String): Boolean = sensitivePattern.containsMatchIn(value)
+    }
+}
+
+/** Corrupt data must not be mistaken for an empty inbox or replaced by the next notification. */
+internal object CompanionNotificationRecords {
+    fun parse(raw: String): JSONArray {
+        require(raw.length <= 256_000) { "通知记录过大" }
+        val rows = JSONArray(raw)
+        require(rows.length() <= CompanionStore.MAX_RECORDS) { "通知记录过多" }
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: error("通知记录格式无效")
+            require(row.opt("package") is String && row.opt("title") is String && row.opt("text") is String && row.opt("time") is Number) { "通知记录格式无效" }
+        }
+        return rows
     }
 }
