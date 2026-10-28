@@ -125,6 +125,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         // 与 [AutomationReevalToken] 的身份比对配对：置空之后，已排期的重新判定会发现"令牌不是自己"而放弃。
         automationReevalToken.set(null)
         automationTaskActionAt = 0L
+        automationTaskReceipt = null
         serviceRef.compareAndSet(this, null)
         super.onDestroy()
     }
@@ -412,7 +413,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         return if (success) {
             lastActionAt = now
             noteAutomationTaskAction(now)
-            automationTaskReceipt = AutomationTaskEvidence.receipt(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, now)
+            automationTaskReceipt = AutomationTaskEvidence.receipt(automationTaskLedger.snapshot(), packageName, request.action, request.viewId, now, request.text)
             DeviceCommandResult(true, 0, "操作已执行", false, null)
         } else failure("ACCESSIBILITY_ACTION_REJECTED", "目标节点不允许此操作")
     }
@@ -1307,7 +1308,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                 taskFailure(request.code, request.message, null, false)
             is AutomationTaskRequest.Plan ->
                 when (val gate = ledger.plan(request.taskId, request.packageName, digest, request.steps).also {
-                    if (it is AutomationTaskGate.Proceed) automationTaskActionAt = 0L
+                    if (it is AutomationTaskGate.Proceed) { automationTaskActionAt = 0L; automationTaskReceipt = null }
                 }) {
                     is AutomationTaskGate.Proceed -> taskAccepted(gate, ledger.snapshot())
                     is AutomationTaskGate.Refused ->
@@ -1330,7 +1331,15 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                 val targetPresent = if (step?.verify == AutomationTaskActions.VERIFY_TARGET_GONE && step.target.isNotBlank()) {
                     runCatching { root.findAccessibilityNodeInfosByViewId(step.target).isNotEmpty() }.getOrNull()
                 } else null
-                val outcome = AutomationTaskEvidence.constrain(current.taskId, step, request.outcome, digest, automationTaskReceipt, now, targetPresent)
+                // Compare a transient digest only; never include editable text in the ledger or response.
+                val observedTextDigest = if (step?.verify == AutomationTaskActions.VERIFY_TEXT_APPLIED && step.target.isNotBlank()) {
+                    runCatching {
+                        val node = findByViewId(root, step.target)
+                        if (node == null || node.isPassword || !node.isEditable || node.packageName?.toString() != packageName) null
+                        else AutomationTaskEvidence.textDigest(node.text?.toString())
+                    }.getOrNull()
+                } else null
+                val outcome = AutomationTaskEvidence.constrain(current.taskId, step, request.outcome, digest, automationTaskReceipt, now, targetPresent, observedTextDigest)
                 ledger.record(request.stepId, request.attempt, outcome, now).let { snapshot ->
                     if (snapshot.lastCode == AutomationTaskCodes.RECORD_INVALID) {
                         taskFailure(
@@ -1340,6 +1349,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                             false,
                         )
                     } else {
+                        automationTaskReceipt = null
                         DeviceCommandResult(true, 0, AutomationTaskWire.done(snapshot), false, null)
                     }
                 }
@@ -1348,13 +1358,16 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                 when (val gate = ledger.resume(request.stepIds, facts)) {
                     is AutomationTaskGate.Proceed -> {
                         automationTaskActionAt = 0L
+                        automationTaskReceipt = null
                         taskAccepted(gate, ledger.snapshot())
                     }
                     is AutomationTaskGate.Refused ->
                         taskFailure(gate.code, gate.message, ledger.snapshot(), gate.retryable)
                 }
-            AutomationTaskRequest.Cancel ->
+            AutomationTaskRequest.Cancel -> {
+                automationTaskReceipt = null
                 DeviceCommandResult(true, 0, AutomationTaskWire.done(ledger.cancel()), false, null)
+            }
             AutomationTaskRequest.Status ->
                 DeviceCommandResult(true, 0, AutomationTaskWire.done(ledger.snapshot()), false, null)
         }

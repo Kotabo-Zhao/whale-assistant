@@ -208,23 +208,29 @@ internal data class AutomationTaskStepOutcome(
 )
 
 /** A successful action matches a task only if its actual app, action and view ID equal the in-flight step. */
-internal data class AutomationTaskActionReceipt(val taskId: String, val stepId: String, val attempt: Int, val atMs: Long)
+internal data class AutomationTaskActionReceipt(val taskId: String, val stepId: String, val attempt: Int, val atMs: Long, val textDigest: String? = null)
 
 internal object AutomationTaskEvidence {
-    fun receipt(snapshot: AutomationTaskSnapshot, packageName: String, action: String, viewId: String, nowMs: Long): AutomationTaskActionReceipt? {
+    fun textDigest(text: String?): String? = text?.takeIf { it.length <= 512 }?.let { value ->
+        java.security.MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+    fun receipt(snapshot: AutomationTaskSnapshot, packageName: String, action: String, viewId: String, nowMs: Long, text: String? = null): AutomationTaskActionReceipt? {
         if (snapshot.status != AutomationTaskStatus.RUNNING || snapshot.packageName != packageName) return null
         val step = snapshot.steps.singleOrNull { it.status == AutomationTaskStepStatus.PENDING && it.startedAtMs != null } ?: return null
         if (step.action != action || step.target != viewId || nowMs < step.startedAtMs!!) return null
-        return AutomationTaskActionReceipt(snapshot.taskId, step.id, step.attemptsUsed, nowMs)
+        return AutomationTaskActionReceipt(snapshot.taskId, step.id, step.attemptsUsed, nowMs,
+            if (action == AutomationTaskActions.SET_TEXT) textDigest(text) else null)
     }
-    fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long, targetPresent: Boolean? = null): AutomationTaskStepOutcome {
-        if (step == null || !outcome.ok || step.verify !in setOf(AutomationTaskActions.VERIFY_WINDOW_CHANGED, AutomationTaskActions.VERIFY_TARGET_GONE)) return outcome
+    fun constrain(taskId: String, step: AutomationTaskStepState?, outcome: AutomationTaskStepOutcome, observedDigest: String, receipt: AutomationTaskActionReceipt?, nowMs: Long, targetPresent: Boolean? = null, observedTextDigest: String? = null): AutomationTaskStepOutcome {
+        if (step == null || !outcome.ok || step.verify !in setOf(AutomationTaskActions.VERIFY_WINDOW_CHANGED, AutomationTaskActions.VERIFY_TARGET_GONE, AutomationTaskActions.VERIFY_TEXT_APPLIED)) return outcome
         val started = step.startedAtMs
         val matched = started != null && receipt != null && receipt.taskId == taskId && receipt.stepId == step.id &&
             receipt.attempt == step.attemptsUsed && receipt.atMs >= started && receipt.atMs <= nowMs
         val observed = when (step.verify) {
             AutomationTaskActions.VERIFY_WINDOW_CHANGED -> step.startedDigest != null && observedDigest.isNotEmpty() && step.startedDigest != observedDigest
             AutomationTaskActions.VERIFY_TARGET_GONE -> targetPresent == false
+            AutomationTaskActions.VERIFY_TEXT_APPLIED -> receipt?.textDigest != null && observedTextDigest == receipt.textDigest
             else -> false
         }
         return outcome.copy(verified = outcome.verified && matched && observed)

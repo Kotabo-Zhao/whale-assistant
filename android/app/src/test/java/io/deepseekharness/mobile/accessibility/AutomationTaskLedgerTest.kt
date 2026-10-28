@@ -156,6 +156,23 @@ class AutomationTaskLedgerTest {
     }
 
     @Test
+    fun `文字写入验证必须匹配同一步动作和目标节点实际内容`() {
+        val ledger = ledger(spec("s1", action = AutomationTaskActions.SET_TEXT), spec("s2"))
+        ledger.gate("s1", facts(), 1000L)
+        val state = ledger.snapshot()
+        val step = state.steps[0]
+        val receipt = AutomationTaskEvidence.receipt(state, "com.example.app", "setText", "com.example.app:id/ok", 1100L, "你好 🐋")
+        val claimed = AutomationTaskStepOutcome(ok = true, verified = true)
+        val correct = AutomationTaskEvidence.textDigest("你好 🐋")
+        assertTrue(AutomationTaskEvidence.constrain(state.taskId, step, claimed, "d1", receipt, 1200L, observedTextDigest = correct).verified)
+        assertFalse(AutomationTaskEvidence.constrain(state.taskId, step, claimed, "d1", receipt, 1200L, observedTextDigest = null).verified)
+        assertFalse(AutomationTaskEvidence.constrain(state.taskId, step, claimed, "d1", receipt, 1200L, observedTextDigest = AutomationTaskEvidence.textDigest("不同" )).verified)
+        assertFalse(AutomationTaskEvidence.constrain(state.taskId, step, claimed, "d1", null, 1200L, observedTextDigest = correct).verified)
+        assertFalse(receipt.toString().contains("你好"))
+        assertNull(AutomationTaskEvidence.textDigest("a".repeat(513)))
+    }
+
+    @Test
     fun `前一步可重试失败时不能跳过直接执行下一步`() {
         val ledger = ledger(spec("s1", maxAttempts = 2), spec("s2"))
         ledger.gate("s1", facts(), 1000L)
