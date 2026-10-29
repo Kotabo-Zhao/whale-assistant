@@ -261,7 +261,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     <div className="screen-heading management-heading">
       <div><p className="eyebrow">{t('应用管理')}</p><h1>{t('插件管理')}</h1></div>
       <div className="heading-actions">
-        <button className="button button-secondary compact-button" type="button" disabled={busy} onClick={() => { void run({ operation: 'list' }) }}><RefreshCw size={18} />{t('刷新')}</button>
+        <button className="button button-secondary compact-button" type="button" disabled={busy || proposalBusy} onClick={() => { void run({ operation: 'list' }); void refreshProposal() }}><RefreshCw size={18} />{t('刷新')}</button>
         <button className="icon-button" type="button" title={t('返回设置')} aria-label={t('返回设置')} onClick={onBack} disabled={busy}><ArrowLeft size={19} /></button>
       </div>
     </div>
@@ -271,6 +271,20 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       <button type="button" role="tab" aria-selected={workspaceView === 'installed'} onClick={() => setWorkspaceView('installed')}>{t('管理已安装')}</button>
     </nav>
     <div className="plugin-stop"><span>{t('修改插件前请先停止 Harness 和 Ubuntu 终端；改动在下次启动时生效。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={busy} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
+    {(proposal || proposalError) && <section className="plugin-import" aria-label={t('商店待处理请求')}>
+      <h2>{t('商店待处理请求')}</h2>
+      <p>{t('商店请求需停止运行环境并由你确认后才会执行。来源与安卓兼容性仍需核对。')}</p>
+      <button className="button button-secondary compact-button" type="button" disabled={proposalBusy} onClick={() => { void refreshProposal() }}>{t('刷新请求')}</button>
+      {proposalError && <p role="alert">{t('无法读取或清除安装请求，请稍后重试。')}</p>}
+      {proposal && <div>{proposal.kind === 'update' && <p>{t('更新请求：手机会重新选择兼容版本，可能与商店建议版本不同。')}{proposal.suggestedVersion && <> {t('商店建议版本')}：<code>{proposal.suggestedVersion}</code></>}</p>}<p><strong>{t('待确认包名')}：</strong><code>{proposal.packageName}</code></p>
+        <button className="button button-secondary compact-button" type="button" disabled={proposalBusy || busy} onClick={() => { void handleProposal(false) }}>{t('忽略请求')}</button>{' '}
+        <button className="button button-primary compact-button" type="button" disabled={proposalBusy || locked} onClick={() => { void handleProposal(true) }}>{t(proposal.kind === 'update' ? '确认更新请求' : '确认安装请求')}</button>
+      </div>}
+    </section>}
+    <div hidden={workspaceView !== 'market'}>
+    <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }, name) }}
+      installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail } : null} installed={installedMarketPackages} onManage={manageMarketPackage} />
+    </div>
     <div hidden={workspaceView !== 'market'}>
     <section className="plugin-market" aria-labelledby="plugin-market-title">
       <div className="plugin-market-icon" aria-hidden="true"><Package size={24} /></div>
@@ -283,20 +297,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       <button className="button button-primary compact-button" type="button" disabled={locked || !catalog || marketplaceInstalled} onClick={() => { void run({ operation: 'import', source: 'dshmarket' }) }}>{marketplaceInstalled ? t('插件市场已安装') : t('安装插件市场')}</button>
     </section>
     </div>
-    <section className="plugin-import" aria-label={t('商店待处理请求')}>
-      <h2>{t('商店待处理请求')}</h2>
-      <p>{t('商店请求需停止运行环境并由你确认后才会执行。来源与安卓兼容性仍需核对。')}</p>
-      <button className="button button-secondary compact-button" type="button" disabled={proposalBusy} onClick={() => { void refreshProposal() }}>{t('刷新请求')}</button>
-      {proposalError && <p role="alert">{t('无法读取或清除安装请求，请稍后重试。')}</p>}
-      {proposal && <div>{proposal.kind === 'update' && <p>{t('更新请求：手机会重新选择兼容版本，可能与商店建议版本不同。')}{proposal.suggestedVersion && <> {t('商店建议版本')}：<code>{proposal.suggestedVersion}</code></>}</p>}<p><strong>{t('待确认包名')}：</strong><code>{proposal.packageName}</code></p>
-        <button className="button button-secondary compact-button" type="button" disabled={proposalBusy || busy} onClick={() => { void handleProposal(false) }}>{t('忽略请求')}</button>{' '}
-        <button className="button button-primary compact-button" type="button" disabled={proposalBusy || locked} onClick={() => { void handleProposal(true) }}>{t(proposal.kind === 'update' ? '确认更新请求' : '确认安装请求')}</button>
-      </div>}
-    </section>
-    <div hidden={workspaceView !== 'market'}>
-    <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }, name) }}
-      installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail } : null} installed={installedMarketPackages} onManage={manageMarketPackage} />
-    </div>
+
     {notice && <p className="plugin-notice" role={failed ? 'alert' : 'status'}>{t(notice)}{noticeDetail !== '' && `（${noticeDetail}）`}</p>}
     {busy && <p role="status">{t('正在处理插件，请稍候')}</p>}
     <div hidden={workspaceView !== 'installed'}>
