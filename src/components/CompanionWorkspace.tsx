@@ -43,7 +43,7 @@ export function CompanionWorkspace() {
   }, [panel, revision])
   const run = async (request: Record<string, unknown>, success: string) => {
     setBusy(true); setMessage('')
-    try { const result = await runtimeBridge.companionDashboard(request); if (result.ok === false) { setMessage('相同内容已存在，未重复保存。'); return result } setRevision(v => v + 1); setMessage(success); return result }
+    try { const result = await runtimeBridge.companionDashboard(request); if (result.result === 'STALE') { setMessage('记忆已变化，请重新核对。'); return null } if (result.ok === false || result.result === 'EXISTING_PENDING' || result.result === 'EXISTING_CONFIRMED') { setMessage('相同内容已存在或等待确认，未重复保存。'); return null } setRevision(v => v + 1); setMessage(success); return result }
     catch { setMessage('操作未完成，数据可能已变化或输入不符合要求；请刷新后重试。'); return null }
     finally { setBusy(false) }
   }
@@ -62,8 +62,7 @@ export function CompanionWorkspace() {
     const row = review.row
     const operation = review.action === 'add' ? 'memoryAdd' : review.action === 'approve' ? 'memoryApprove' : row?.status === 'pending' ? 'memoryApproveEdit' : 'memoryEdit'
     const result = await run({ operation, text: text.trim(), snapshot: review.snapshot, ...(row ? { id: row.id, expectedText: row.text, expected: expected(row) } : {}) }, '记忆已处理。')
-    if (result && result.result === 'STALE') setMessage('记忆已变化，请重新核对。')
-    if (result && result.result === 'EXISTING_PENDING') setMessage('相同记忆正在等待确认。')
+    if (!result) setReview(null)
   }
   const readFile = async (file: File, kind: 'memory' | 'knowledge' | 'text') => {
     if (file.size > (kind === 'memory' ? 256000 : kind === 'text' ? 32000 : 512000)) { setMessage('文件超过大小上限。'); return }
