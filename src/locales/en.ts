@@ -1,5 +1,7 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "自动记住对话中的偏好": "Automatically remember conversation preferences",
+  "开启后助手提出的长期事实会直接保存，无需逐条确认；可能记错，可随时查看、修改或删除。": "When enabled, the assistant saves proposed long-term facts without individual confirmation. It can make mistakes; review, edit or delete them anytime.",
   "自动整理应用使用习惯": "Automatically summarize app usage",
   "需要系统使用情况访问权限和悬浮助手运行；本机汇总近 7 天使用时长，不读取应用内部内容。检索时可能发送给模型。": "Requires system usage access and the floating assistant. Summarizes the past seven days locally without reading app contents; retrieved data may be sent to your model.",
   "自动记住其他应用通知": "Automatically remember notifications from other apps",

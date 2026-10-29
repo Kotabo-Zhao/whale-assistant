@@ -22,6 +22,10 @@ class CompanionStore(context: Context) {
     var automaticNotificationMemory: Boolean
         get() = prefs.getBoolean("automatic_notification_memory", false)
         set(value) { prefs.edit().putBoolean("automatic_notification_memory", value).apply() }
+    /** Explicit opt-in for assistant-proposed memories to be saved without per-item review. */
+    var automaticAssistantMemory: Boolean
+        get() = prefs.getBoolean("automatic_assistant_memory", false)
+        set(value) { prefs.edit().putBoolean("automatic_assistant_memory", value).apply() }
     /** Separate opt-in for aggregate app usage; system access permission is also required. */
     var automaticUsageMemory: Boolean
         get() = prefs.getBoolean("automatic_usage_memory", false)

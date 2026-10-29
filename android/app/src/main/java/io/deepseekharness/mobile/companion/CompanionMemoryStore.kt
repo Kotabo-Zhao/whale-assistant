@@ -20,7 +20,7 @@ class CompanionMemoryStore(context: Context) {
 
     fun execute(param: String): String = synchronized(lock) {
         if (!enabled) throw RuntimeFailure("MEMORY_DISABLED", "用户已关闭长期记忆")
-        CompanionMemoryEngine(::load, ::write).execute(param)
+        CompanionMemoryEngine(::load, ::write, prefs.getBoolean("automatic_assistant_memory", false)).execute(param)
     }
 
     /** UI management remains available even when model access is disabled. */
@@ -194,7 +194,7 @@ internal object CompanionUserMemory {
 }
 
 /** Pure operation layer; store serializes access and provides atomic persistence. */
-internal class CompanionMemoryEngine(private val load: () -> JSONArray, private val write: (JSONArray) -> Unit) {
+internal class CompanionMemoryEngine(private val load: () -> JSONArray, private val write: (JSONArray) -> Unit, private val automaticAssistantMemory: Boolean = false) {
     fun execute(param: String): String {
         val request = try { JSONObject(param) } catch (_: Exception) { throw invalid() }
         val op = request.opt("op") as? String ?: throw invalid()
@@ -208,9 +208,9 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                     .put("pending", existing.optString("status") == "pending").toString()
                 if (rows.length() >= 100) throw RuntimeFailure("MEMORY_FULL", "记忆已满，请先删除不需要的条目")
                 val row = JSONObject().put("id", UUID.randomUUID().toString()).put("text", text)
-                    .put("createdAt", System.currentTimeMillis()).put("source", "assistant_tool").put("status", "pending")
+                    .put("createdAt", System.currentTimeMillis()).put("source", "assistant_tool").put("status", if (automaticAssistantMemory) "confirmed" else "pending")
                 rows.put(row); write(rows)
-                JSONObject().put("id", row.getString("id")).put("alreadyExists", false).put("pending", true).toString()
+                JSONObject().put("id", row.getString("id")).put("alreadyExists", false).put("pending", !automaticAssistantMemory).toString()
             }
             "search" -> {
                 val query = (request.opt("query") as? String)?.trim() ?: throw invalid()

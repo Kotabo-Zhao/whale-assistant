@@ -1591,6 +1591,7 @@ export interface CompanionQuickSettings {
   notificationMemorySuggestions: boolean
   automaticNotificationMemory: boolean
   automaticUsageMemory: boolean
+  automaticAssistantMemory: boolean
   reminders: boolean
   quietHoursEnabled: boolean
 }

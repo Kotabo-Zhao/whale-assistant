@@ -9,7 +9,7 @@ const bridge = vi.hoisted(() => ({
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { CompanionSettingsButton } from './CompanionSettingsButton'
 
-const defaults = { memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, automaticNotificationMemory: false, automaticUsageMemory: false, reminders: false, quietHoursEnabled: false }
+const defaults = { memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, automaticNotificationMemory: false, automaticUsageMemory: false, automaticAssistantMemory: false, reminders: false, quietHoursEnabled: false }
 beforeEach(() => {
   saveLanguage('zh-CN'); vi.clearAllMocks()
   bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] })
