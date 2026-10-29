@@ -93,11 +93,13 @@ class OverlayBallService : Service() {
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
     private var calendarQueryRunning = false
     private var usageQueryRunning = false
+    private var usageMemoryRunning = false
     @Volatile private var calendarServiceDestroyed = false
     private val calendarTick = object : Runnable {
         override fun run() {
             checkCalendarHint()
             checkUsageSuggestion()
+            checkUsageMemory()
             checkDailyBriefHint()
             hintHandler.postDelayed(this, 5L * 60 * 1000)
         }
@@ -348,6 +350,30 @@ class OverlayBallService : Service() {
             .setContentTitle("鲸鱼娘提醒").setContentText("电量较低，记得充电。")
             .setContentIntent(open).setAutoCancel(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build()
         runCatching { manager.notify(0x44534803, notification) }.onSuccess { prefs.edit().putLong("battery_notified_at", now).apply() }
+    }
+
+    private fun checkUsageMemory() {
+        val store = CompanionStore(this)
+        if (!store.automaticUsageMemory || usageMemoryRunning || calendarServiceDestroyed) return
+        val prefs = getSharedPreferences("companion_usage_memory_v1", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val last = prefs.getLong("checked", 0L)
+        if (last > 0 && now >= last && now - last < 6L * 60 * 60 * 1000) return
+        usageMemoryRunning = true
+        val app = applicationContext
+        calendarExecutor.execute {
+            try {
+                val snapshot = io.deepseekharness.mobile.companion.CompanionUsage.loadSummary(app, now)
+                val current = CompanionStore(app)
+                val memory = io.deepseekharness.mobile.companion.CompanionMemoryStore(app)
+                if (!calendarServiceDestroyed && current.automaticUsageMemory && memory.enabled && snapshot.state == io.deepseekharness.mobile.companion.CompanionUsage.State.OK) {
+                    val text = io.deepseekharness.mobile.companion.CompanionUsageMemory.summary(snapshot, app.packageName, current.excludedPackages(), if (current.notificationCapture && current.automaticNotificationMemory) current.read(now) else org.json.JSONArray())
+                    if (text != null) memory.updateUsageSummary(text, now)
+                    prefs.edit().putLong("checked", now).apply()
+                }
+            } catch (_: Exception) { /* Keep previous memory and retry later. */ }
+            finally { hintHandler.post { usageMemoryRunning = false } }
+        }
     }
 
     private fun checkUsageSuggestion() {

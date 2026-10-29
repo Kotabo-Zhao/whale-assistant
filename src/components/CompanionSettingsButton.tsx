@@ -9,6 +9,7 @@ import { CompanionWorkspace } from './CompanionWorkspace'
 const options: { key: keyof CompanionQuickSettings; title: string; hint: string }[] = [
   { key: 'memoryEnabled', title: '允许使用长期记忆', hint: '已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。' },
   { key: 'knowledgeModelAccess', title: '允许对话检索本地资料', hint: '开启后检索到的资料可能发送给当前模型服务。' },
+  { key: 'automaticUsageMemory', title: '自动整理应用使用习惯', hint: '需要系统使用情况访问权限和悬浮助手运行；本机汇总近 7 天使用时长，不读取应用内部内容。检索时可能发送给模型。' },
   { key: 'automaticNotificationMemory', title: '自动记住其他应用通知', hint: '需要开启通知摘要及系统通知读取权限。符合条件的新通知会自动作为未经核实的记忆保存在本机；检索时可能发送给模型。' },
   { key: 'notificationMemorySuggestions', title: '从通知中寻找记忆候选', hint: '仅在本机生成候选，需要核对后才能保存。' },
   { key: 'notificationCapture', title: '收集通知摘要', hint: '保存在本机；还需要授予系统通知读取权限，敏感信息过滤并不完整。' },
@@ -52,7 +53,7 @@ export function CompanionSettingsButton({ disabled }: { disabled: boolean }) {
     <p className="plugin-hint">{t('语音输入使用系统识别服务，核对后填入草稿，不会自动发送；朗读前会先展示内容。')}</p>
     <p className="plugin-hint">{t('先按需打开下面的功能；关闭时已有数据不会自动删除。部分功能还需要系统权限，可在桌面设置中检查。')}</p>
     {['记忆与资料', '通知与提醒'].map((group, index) => <details key={group} className="companion-settings-group"><summary><strong>{t(group)}</strong><small>{t(index === 0 ? '管理助手能记住和使用的信息' : '选择哪些提醒可以出现')}</small></summary>
-    {options.slice(index === 0 ? 0 : 3, index === 0 ? 3 : undefined).map(option => <label className="toggle-row" key={option.key}>
+    {options.slice(index === 0 ? 0 : 4, index === 0 ? 4 : undefined).map(option => <label className="toggle-row" key={option.key}>
       <span><strong>{t(option.title)}</strong><small>{t(option.hint)}</small></span>
       <input type="checkbox" role="switch" checked={settings?.[option.key] ?? false} disabled={disabled || working || settings === null}
         onChange={event => { const value = event.target.checked; if (option.key === 'knowledgeModelAccess' && value && !window.confirm('允许助手检索资料？相关内容可能发送给当前模型服务。')) return; void update(option.key, value) }} />

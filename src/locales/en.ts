@@ -1,5 +1,7 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "自动整理应用使用习惯": "Automatically summarize app usage",
+  "需要系统使用情况访问权限和悬浮助手运行；本机汇总近 7 天使用时长，不读取应用内部内容。检索时可能发送给模型。": "Requires system usage access and the floating assistant. Summarizes the past seven days locally without reading app contents; retrieved data may be sent to your model.",
   "自动记住其他应用通知": "Automatically remember notifications from other apps",
   "需要开启通知摘要及系统通知读取权限。符合条件的新通知会自动作为未经核实的记忆保存在本机；检索时可能发送给模型。": "Requires notification collection and system notification access. Eligible new notifications are saved locally as unverified memories and may be sent to your model when retrieved.",
   "商店安装会自动停止运行中的对话和终端，改动在下次启动时生效。": "Store installation stops the running conversation and terminals; changes take effect next time.",

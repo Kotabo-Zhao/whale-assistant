@@ -1590,6 +1590,7 @@ export interface CompanionQuickSettings {
   knowledgeModelAccess: boolean
   notificationMemorySuggestions: boolean
   automaticNotificationMemory: boolean
+  automaticUsageMemory: boolean
   reminders: boolean
   quietHoursEnabled: boolean
 }

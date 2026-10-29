@@ -52,6 +52,13 @@ class CompanionMemoryStore(context: Context) {
         write(rows)
         true
     }
+    /** Only replace the automatically maintained summary; never overwrite user-authored memories. */
+    internal fun updateUsageSummary(text: String, now: Long): Boolean = synchronized(lock) {
+        val rows = load()
+        val changed = CompanionUsageMemory.upsert(rows, text, now)
+        if (changed) write(rows)
+        changed
+    }
     fun deleteForUser(id: String, expected: String): Boolean = synchronized(lock) {
         val rows = load()
         val kept = CompanionUserMemory.delete(rows, id, expected) ?: return@synchronized false
@@ -168,7 +175,7 @@ internal object CompanionUserMemory {
     }
     fun add(rows: JSONArray, text: String, source: String, now: Long): UserMemoryResult {
         val value = text.trim()
-        require(source in setOf("user_edit", "user_notification", "auto_notification")) { "记忆来源无效" }
+        require(source in setOf("user_edit", "user_notification", "auto_notification", "auto_usage")) { "记忆来源无效" }
         require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value)) { "内容为空、过长或可能含敏感信息" }
         val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("text") == value }
         if (existing != null) return if (existing.optString("status") == "pending") UserMemoryResult.EXISTING_PENDING else UserMemoryResult.EXISTING_CONFIRMED
@@ -239,7 +246,7 @@ internal object CompanionMemorySearch {
     data class Result(val items: List<JSONObject>, val mode: String, val matchedCount: Int)
     /** Only intentionally supported fields leave the local store. */
     fun publicItem(row: JSONObject): JSONObject {
-        val knownSources = setOf("assistant_tool", "user_edit", "user_notification", "auto_notification")
+        val knownSources = setOf("assistant_tool", "user_edit", "user_notification", "auto_notification", "auto_usage")
         val source = (row.opt("source") as? String)?.takeIf { it in knownSources } ?: "unknown"
         val result = JSONObject().put("id", row.getString("id")).put("text", row.getString("text"))
             .put("source", source).put("status", "confirmed")
@@ -348,7 +355,7 @@ internal object CompanionMemoryImport {
             require(status in setOf("confirmed", "pending")) { "记忆状态无效" }
             if (status == "pending") copy.put("status", "pending")
             val source = row.optString("source", "")
-            if (source in setOf("assistant_tool", "user_edit", "user_notification", "auto_notification")) copy.put("source", source)
+            if (source in setOf("assistant_tool", "user_edit", "user_notification", "auto_notification", "auto_usage")) copy.put("source", source)
             for (key in listOf("createdAt", "updatedAt", "confirmedAt")) {
                 val value = row.opt(key)
                 if (value is Number && value.toLong() >= 0) copy.put(key, value.toLong())
