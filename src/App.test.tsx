@@ -37,25 +37,30 @@ async function flushOnHide(): Promise<void> {
 describe('App conversation gate', () => {
   beforeEach(beforeEachAppTest)
 
-  it('安卓启动已配置的助手时自动进入对话，重新渲染不重复打开', async () => {
+  it('安卓启动后停留在首页，只有用户点击才打开对话', async () => {
     const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
     try {
       const view = render(<App />)
-      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
-      expect(bridge.startHarness).toHaveBeenCalledTimes(1)
+      await arriveAtShell()
+      expect(bridge.startHarness).not.toHaveBeenCalled()
+      expect(bridge.openHarness).not.toHaveBeenCalled()
       view.rerender(<App />)
       fireEvent.focus(window)
       await act(async () => { await Promise.resolve() })
-      expect(bridge.openHarness).toHaveBeenCalledTimes(1)
+      expect(bridge.openHarness).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: '打开对话' }))
+      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
+      expect(screen.getByText('你好，我是你的手机助手')).toBeInTheDocument()
     } finally { native.mockRestore() }
   })
 
-  it('自动进入失败后不循环重试，用户仍可手动重试', async () => {
+  it('手动打开失败后不会自动重试，用户可以再次尝试', async () => {
     const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
     bridge.startHarness.mockRejectedValueOnce(new Error('启动失败'))
     try {
       render(<App />)
-      await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
+      await arriveAtShell()
+      fireEvent.click(screen.getByRole('button', { name: '打开对话' }))
       const retry = await screen.findByRole('button', { name: /打开对话|打开 Harness/ })
       await waitFor(() => expect(retry).toBeEnabled())
       fireEvent.focus(window)

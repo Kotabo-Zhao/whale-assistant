@@ -14,7 +14,6 @@ import type { FilesRoot } from './screens/FilesScreen'
 import { PermissionGuideDialog, ResetDialog, UpdateDialog } from './screens/Dialogs'
 import { keepAliveGuideResolved, overlayFailureGuide, overlayGuideResolved, type PermissionGuide } from './ui/permissionGuide'
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import { Capacitor } from '@capacitor/core'
 import { triggerHaptic } from './platform/haptics'
 import { errorMessage, runtimeErrorMessage, type NoticeTone } from './ui/messages'
 import { formatRecordedAt } from './ui/formatTime'
@@ -923,9 +922,17 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
   return (
     <div className="screen conversation-gate">
       {/* 运行阶段徽章只保留页头那一处：同一屏里重复两个相同状态纯属噪声。 */}
-      <div className="screen-heading">
+      <div className="home-welcome">
+        <div className="home-welcome-copy">
+          <p className="home-kicker">WHALE ASSISTANT · YOUR SPACE</p>
+          <h2>{t("你好，我是你的手机助手")}</h2>
+          <p>{t("从这里开始对话、管理任务与探索插件。")}</p>
+        </div>
+        <span className="home-welcome-mark" aria-hidden="true"><img src={appMark} alt="" /></span>
+      </div>
+      <div className="screen-heading home-section-heading">
         <div>
-          <p className="eyebrow">{t("Harness 对话")}</p>
+          <p className="eyebrow">{t("你的工作台")}</p>
           <h1>{updateRequired ? t("更新运行环境") : runtime.phase === 'error' ? t("运行环境需要处理") : installed ? (launchingHarness ? t("正在进入对话") : stoppingHarness ? t("正在停止运行环境") : t("对话已就绪")) : t("准备运行环境")}</h1>
         </div>
       </div>
@@ -4655,9 +4662,7 @@ export function App() {
           launchRuntime = nextRuntime
           setRuntime(nextRuntime)
         }
-        // HarnessActivity 覆盖在 MainActivity 之上；把设置留在底页，原生"管理"按钮
-        // 就能回到正确的管理界面，而不是覆盖 HarnessActivity。
-        setActiveView('settings')
+        // 对话作为同一应用内的子页面打开，保留当前底层页面。
         await withBridgeTimeout(runtimeBridge.openHarness(targetSessionId), ACTION_WATCHDOG_MS)
         // 先打开页面，再刷新可选状态，避免它抢占原生运行时锁。
         void runtimeBridge.getKeepAliveState()
@@ -4720,18 +4725,6 @@ export function App() {
 
   /** 常规打开入口：没有本机模型凭据时会被拦下并跳转到「模型与密钥」。 */
   const launchHarness = useCallback((sessionId?: string) => openHarness(false, sessionId), [openHarness])
-
-  // 用户希望打开手机助手后直接进入对话。每个外壳实例只尝试一次：返回管理页、
-  // 停止服务或启动失败后不会自动重开；首次配置、待更新和缺凭据时仍保留原来的入口。
-  const directConversationAttempted = useRef(false)
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform() || directConversationAttempted.current || booting || onboardingOpen || language === null) return
-    if (activeView !== ROOT_VIEW) { directConversationAttempted.current = true; return }
-    if (settings === null || busy !== null || document.visibilityState !== 'visible') return
-    if (runtime.updateAvailable || !['ready', 'running'].includes(runtime.phase) || !hasConfiguredModelCredential(settings)) return
-    directConversationAttempted.current = true
-    launchHarness()
-  }, [activeView, booting, onboardingOpen, language, settings, busy, runtime, launchHarness])
 
   /** 用户已确认「密钥在 Harness 里配置过」时的放行入口，只在显式按钮上使用。 */
   const launchHarnessConfirmed = useCallback((sessionId?: string) => openHarness(true, sessionId), [openHarness])
