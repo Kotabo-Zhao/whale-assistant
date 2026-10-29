@@ -65,8 +65,8 @@ import java.util.UUID
  * 悬浮球前台服务。
  *
  * 职责边界：
- *  - 显示可拖动的球；短按展开二级球（对话 / 副屏 / 回到应用 / 隐藏球 / 关闭无障碍），
- *    长按直接展开同源 Harness 对话小窗；
+ *  - 显示可拖动的球；短按直接展开同源 Harness 悬浮对话，
+ *    长按展开二级球（对话 / 副屏 / 回到应用 / 隐藏球 / 关闭无障碍）；
  *  - 不执行 Shell 命令，也不连接 Shizuku；小窗仅在已授权会话存活时使用内存中的一次性凭据；
  *  - 通知内容固定，不含 URL、端口、密码、终端输出或其他用户数据；
  *  - 明确不承诺常驻：Android 与厂商系统的内存回收、强制停止、电池与后台策略
@@ -584,17 +584,12 @@ class OverlayBallService : Service() {
         params.x = x
         params.y = y
 
-        // 触摸与无障碍操作共用语义点击入口，TalkBack 可直接点击或长按球体。
-        // 短按＝展开/收起二级球：二级球上给出「会话」与「副屏」两个入口，以及
-        // 回到应用 / 隐藏悬浮球 / 关闭无障碍。短按是最高频的动作，因此把「选择去哪里」
-        // 放在短按上，而不是继续沿用「短按直接进对话」——那会让副屏没有同等入口。
+        // 单击直接在当前应用上方展开对话；长按保留副屏等快捷操作。
         view.setOnClickListener {
-            if (!stopIfOverlayPermissionRevoked()) toggleSecondaryChoices()
+            if (!stopIfOverlayPermissionRevoked()) toggleConversation()
         }
         view.setOnLongClickListener {
-            // 长按＝直接打开 Harness 对话小窗（原来短按的动作搬到长按），
-            // 让熟手不必经二级球绕一次。
-            if (!stopIfOverlayPermissionRevoked()) toggleConversation()
+            if (!stopIfOverlayPermissionRevoked()) toggleSecondaryChoices()
             true
         }
         view.setOnTouchListener { touched, event -> handleTouch(touched, event, layoutParams.width) }
@@ -701,7 +696,7 @@ class OverlayBallService : Service() {
     }
 
     /**
-     * 触摸处理：短按弹二级球、长按直接回对话、拖动移动球。
+     * 触摸处理：短按打开对话、长按弹二级球、拖动移动球。
      *
      * 判定复用 [OverlayBallPolicy]，与单测覆盖的是同一套规则。
      */

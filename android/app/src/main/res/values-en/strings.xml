@@ -65,9 +65,9 @@
     <string name="overlay_conversation_close">Close</string>
     <string name="overlay_conversation_unavailable">Chat is not running. Tap to open Harness in the app.</string>
     <string name="overlay_ball_channel_name">Floating ball</string>
-    <string name="overlay_ball_channel_description">Shows a floating ball above other apps; tap it to open a shortcut menu (chat / virtual screen)</string>
+    <string name="overlay_ball_channel_description">Shows the assistant above other apps; tap for chat or long-press for shortcuts</string>
     <string name="overlay_ball_notification_title">Floating ball is on</string>
-    <string name="overlay_ball_notification_text">Tap to open the shortcut menu: chat or virtual screen</string>
+    <string name="overlay_ball_notification_text">Tap for chat; long-press for shortcuts</string>
     <string name="overlay_ball_menu_return">Return to app</string>
     <string name="overlay_ball_menu_hide">Hide floating ball</string>
     <string name="overlay_ball_secondary_voice_description">Speak a task and review it before adding it to chat</string>
