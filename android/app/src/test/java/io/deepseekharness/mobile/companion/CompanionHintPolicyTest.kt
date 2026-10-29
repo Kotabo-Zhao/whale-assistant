@@ -25,5 +25,9 @@ class CompanionHintPolicyTest {
         org.junit.Assert.assertNull(queue.take(499_999L))
         assertTrue(queue.offer("cleared", 500_000L)); queue.clear()
         assertFalse(queue.isNotEmpty())
+        for (index in 1..5) assertTrue(queue.offer("old$index", 1_000L))
+        assertTrue(queue.offer("new reminder", 301_001L))
+        org.junit.Assert.assertEquals("new reminder", queue.take(301_001L))
+        assertFalse(queue.isNotEmpty())
     }
 }
