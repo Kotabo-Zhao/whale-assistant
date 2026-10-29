@@ -106,6 +106,22 @@ describe('App conversation gate', () => {
     } finally { native.mockRestore() }
   })
 
+  it('未配置密钥时从账号登录进入后，切换标签仍可恢复运行中的对话', async () => {
+    const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
+    bridge.getSettings.mockResolvedValue({ ...settings, configuredModelProviders: [], deepSeekAccountConfigured: false })
+    try {
+      render(<App />)
+      await arriveAtSettingsHome()
+      await openSettingsPage('模型与密钥')
+      fireEvent.click(screen.getByRole('button', { name: '登录 DeepSeek 账号' }))
+      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
+      await act(async () => { window.dispatchEvent(new CustomEvent('dsh-native-tab', { detail: 'plugins' })); await Promise.resolve() })
+      fireEvent.click(within(screen.getByRole('navigation', { name: '底部导航' })).getByRole('button', { name: '对话' }))
+      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(2))
+      expect(bridge.startHarness).toHaveBeenCalledTimes(1)
+    } finally { native.mockRestore() }
+  })
+
   it('安卓启动时没有模型凭据不自动进入对话', async () => {
     const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
     bridge.getSettings.mockResolvedValue({ ...settings, configuredModelProviders: [], deepSeekAccountConfigured: false })

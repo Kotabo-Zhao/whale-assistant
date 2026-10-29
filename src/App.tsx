@@ -4614,6 +4614,8 @@ export function App() {
    * （引导页与「模型与密钥」页的「我已在 Harness 内配置过」按钮）：
    * **绝不要把事件对象或其它真值直接传进来**，否则等于默认绕过门禁。
    */
+  // 仅在本进程中确实打开过对话后允许恢复已运行的会话；不据此跳过首次启动门禁。
+  const harnessOpenedRef = useRef(false)
   const openHarness = useCallback((skipCredentialGate: boolean, sessionId?: string, tabOnly = false) => {
     if (busyRef.current !== null) return
     /*
@@ -4680,6 +4682,7 @@ export function App() {
         // 标签页启动过程中若已切走，不要让迟到的启动覆盖用户当前页面。
         if (tabOnly && activeViewRef.current !== 'harness') return
         await withBridgeTimeout((tabOnly ? runtimeBridge.openHarness(targetSessionId, true) : runtimeBridge.openHarness(targetSessionId)), ACTION_WATCHDOG_MS)
+        harnessOpenedRef.current = true
         // 先打开页面，再刷新可选状态，避免它抢占原生运行时锁。
         void runtimeBridge.getKeepAliveState()
           .then(setKeepAlive)
@@ -4753,9 +4756,10 @@ export function App() {
     if (!Capacitor.isNativePlatform() || harnessTabAttempted.current || booting || onboardingOpen || settings === null) return
     if (busy === 'launch') { harnessTabAttempted.current = true; return }
     if (busy !== null) return
-    if (runtime.updateAvailable || !['ready', 'running'].includes(runtime.phase) || !hasConfiguredModelCredential(settings)) return
+    const canRestore = harnessOpenedRef.current && runtime.phase === 'running'
+    if (runtime.updateAvailable || !['ready', 'running'].includes(runtime.phase) || (!hasConfiguredModelCredential(settings) && !canRestore)) return
     harnessTabAttempted.current = true
-    openHarness(false, undefined, true)
+    openHarness(canRestore, undefined, true)
   }, [activeView, booting, onboardingOpen, settings, busy, runtime, openHarness])
 
   const openSettings = useCallback((page: SettingsPage) => {
