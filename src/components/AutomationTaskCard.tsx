@@ -59,7 +59,7 @@ function failureCode(error: unknown): string {
  *    「读不到」，不表示「已经收口」。把前者显示成后者，用户会以为刚才那串动作已经结束了。
  *  - **这里只读 + 一个停止按钮**：卡片不新建任务、不改步骤、不替模型续跑。叫停是人的动作，
  *    模型侧没有这条路（`cancelAutomationTask` 只在原生桥与设置页之间）。
- *  - **停止不撤回已经发出去的那一步**：它只把剩下的步骤标成跳过，界面上写明白，
+ *  - **停止不撤回已经发出去的那一步**：未开始的步骤才标成跳过，界面上写明白，
  *    免得用户以为按一下就什么都没发生过。
  *  - 卡片不写入任何浏览器存储，也不自动轮询——需要最新状态时点「重新读取」。
  */
@@ -145,9 +145,11 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
         {step.attempts > 1 ? t(' · 已试 {0} 次', String(step.attempts)) : ''}
         {step.code !== null ? `（${step.code}）` : ''}
       </p>)}
-      <p className="settings-note">{t('停止只把剩下的步骤标成跳过，已经发出去的那一步不会撤回。')}</p>
+      <p className="settings-note">{t('停止会跳过未开始的步骤；已发出的操作不会撤回，结果可能需要检查。')}</p>
       <button className="button button-secondary" type="button" onClick={() => { void stop() }} disabled={busy}>{t('停止这个任务')}</button>
-      {stopped && <p className="settings-note">{t('已经停止，剩下的步骤都标成了跳过。')}</p>}
+      {stopped && <p className="settings-note">{t(task.steps.some(step => step.status === 'unknown')
+        ? '已经停止，但有步骤结果不确定；请检查目标应用，不要直接重发。'
+        : '已经停止，未开始的步骤已跳过。')}</p>}
     </>}
     {stopFailed !== null && <p role="alert">
       {CANCEL_FAILURE_NOTES[stopFailed] !== undefined ? t(CANCEL_FAILURE_NOTES[stopFailed]) : t('停止失败（{0}）', stopFailed)}

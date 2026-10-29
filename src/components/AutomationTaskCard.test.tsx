@@ -155,12 +155,12 @@ describe('自动化任务卡片', () => {
     card(bridge)
 
     await findRow('目标应用：com.example.chat · 正在执行')
-    row('停止只把剩下的步骤标成跳过，已经发出去的那一步不会撤回。')
+    row('停止会跳过未开始的步骤；已发出的操作不会撤回，结果可能需要检查。')
     fireEvent.click(screen.getByRole('button', { name: '停止这个任务' }))
 
     await findRow('目标应用：com.example.chat · 已经停止')
     row('输入文字 · 已跳过（任务停止）')
-    row('已经停止，剩下的步骤都标成了跳过。')
+    row('已经停止，未开始的步骤已跳过。')
     expect(bridge.cancelAutomationTask).toHaveBeenCalledWith('12345678-1234-4abc-8def-123456789abc')
   })
 
@@ -179,6 +179,18 @@ describe('自动化任务卡片', () => {
 
     await screen.findByText('现在没有正在执行的任务。')
     expect(cancel).toHaveBeenCalledTimes(2)
+  })
+
+  it('停止时在途步骤结果不确定，明确提示检查现场而非声称全部跳过', async () => {
+    const cancelled = task({ status: 'cancelled', pendingSteps: 0,
+      steps: [step('s1', { status: 'unknown', code: 'AUTOMATION_TASK_NEEDS_CHECK' }), step('s2', { status: 'skipped' })] })
+    card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: task() }),
+      cancelAutomationTask: vi.fn().mockResolvedValue({ connected: true, task: cancelled, interrupted: true }) })
+    await findRow('目标应用：com.example.chat · 正在执行')
+    fireEvent.click(screen.getByRole('button', { name: '停止这个任务' }))
+    expect(await screen.findByText('已经停止，但有步骤结果不确定；请检查目标应用，不要直接重发。')).toBeVisible()
+    expect(screen.queryByText('已经停止，未开始的步骤已跳过。')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '已检查现场，清除中断提示' })).toBeVisible()
   })
 
   it('没登记过的取消失败码照原样显示，不编原因', async () => {
@@ -242,7 +254,7 @@ describe('自动化任务卡片', () => {
     await findRow('目标应用：com.example.chat · 正在执行')
     fireEvent.click(screen.getByRole('button', { name: '停止这个任务' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('未确认任务已停止')
-    expect(screen.queryByText('已经停止，剩下的步骤都标成了跳过。')).toBeNull()
+    expect(screen.queryByText('已经停止，未开始的步骤已跳过。')).toBeNull()
   })
 
   it('「重新读取」会再读一次，任务状态跟着变', async () => {
