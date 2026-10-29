@@ -7,7 +7,7 @@ import { validatePluginRequest } from '../platform/plugins'
 const PAGE_SIZE = 30
 const declaration = (value: string) => ['未声明', '声明格式无法识别', '无'].includes(value) ? t(value) : value
 
-type InstallState = { name: string; busy: boolean; failed: boolean; notice: string; detail: string }
+type InstallState = { name: string; busy: boolean; failed: boolean; notice: string; detail: string; progress?: string }
 export function MobileMarket({ locked, onInstall, installState = null, installed = new Map(), onManage }: { locked: boolean; onInstall: (name: string) => void; installState?: InstallState | null; installed?: ReadonlyMap<string, string | null> | null; onManage?: (name: string) => void }) {
   useLanguage()
   const [entries, setEntries] = useState<Entry[] | null>(null)
@@ -105,7 +105,7 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
     {installState && <div className={`mobile-market-result ${installState.failed ? 'mobile-market-result-error' : ''}`}
       role={installState.failed ? 'alert' : 'status'} aria-live={installState.failed ? 'assertive' : 'polite'}>
       <strong>{t('插件安装')} · <code>{installState.name}</code></strong>
-      <p>{installState.busy ? t('正在检查并安装，请稍候。') : t(installState.notice)}{!installState.busy && installState.detail && `（${installState.detail}）`}</p>
+      <p>{installState.busy ? t(installState.progress || '正在检查并安装，请稍候。') : t(installState.notice)}{!installState.busy && installState.detail && `（${installState.detail}）`}</p>
     </div>}
     {review && review.npm && <div ref={reviewRegion} tabIndex={-1} className="mobile-market-review" role="region" aria-labelledby="mobile-market-review-title">
       <h3 id="mobile-market-review-title">{t('确认安装插件')}</h3>
@@ -132,7 +132,7 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
         <p>{t('脚本名称')}：{declaration(preview.scripts)}</p>
         <p>{t('以上只是包作者声明，并非安全或安卓兼容认证；安装时会再次检查，不运行安装脚本。')}</p>
       </div>}
-      {locked && <p role="status">{t('请先停止运行环境再安装。')}</p>}
+      {locked && <p role="status">{t('当前操作完成后即可安装。')}</p>}
       <div className="mobile-market-review-actions">
         <button className="button button-secondary compact-button" type="button" onClick={() => setReview(null)}>{t('取消')}</button>
         <button className="button button-primary compact-button" type="button" disabled={locked || !versionValid} onClick={() => {
@@ -156,7 +156,7 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
         <label>{t('排序')}<select value={sort} onChange={event => { setSort(event.target.value); setPage(0) }}><option value="catalog">{t('目录顺序')}</option><option value="downloads">{t('下载量从高到低')}</option><option value="name">{t('名称')}</option></select></label>
       </div>
       <div ref={resultsRegion} tabIndex={-1} aria-busy={query !== deferredQuery}>
-        <p className="plugin-hint" role="status" aria-live="polite">{matches.length === 0 ? t('没有匹配的插件。') : t('共 {0} 个结果，第 {1}/{2} 页。', matches.length, currentPage + 1, pageCount)}{locked ? t('请先停止运行环境再安装。') : ''}</p>
+        <p className="plugin-hint" role="status" aria-live="polite">{matches.length === 0 ? t('没有匹配的插件。') : t('共 {0} 个结果，第 {1}/{2} 页。', matches.length, currentPage + 1, pageCount)}{locked ? t('当前操作完成后即可安装。') : ''}</p>
         {visible.length > 0 && <ul className="mobile-market-list">{visible.map(item => <li key={item.npm ?? item.sourceUrl}>
           <div><strong>{item.name}</strong><code>{item.npm ?? t('无 npm 安装包')}</code>{item.description && <p>{item.description}</p>}
             <small>{item.downloads === undefined ? t('下载量暂无数据') : `${t('下载量')}：${item.downloads.toLocaleString()}${item.downloadsStart && item.downloadsEnd ? ` (${item.downloadsStart} – ${item.downloadsEnd})` : ''}`}</small>

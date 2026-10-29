@@ -148,6 +148,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const [proposalBusy, setProposalBusy] = useState(false)
   const [proposalError, setProposalError] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
   const [marketAttempt, setMarketAttempt] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   /** 受控详情（包名与版本差异），与 notice 分开保存：notice 要能被 t() 整条查表翻译。 */
@@ -168,11 +169,12 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     if (pending.current) return false
     setMarketAttempt(marketPackage ?? null)
     pending.current = true
-    setBusy(true); setNotice(''); setNoticeDetail(''); setFailed(false)
+    setBusy(true); setProgress('正在准备插件操作'); setNotice(''); setNoticeDetail(''); setFailed(false)
     try {
       if (prepare) await prepare()
       // 离开页面后不启动尚未开始的写入；已进入原生的事务由原生负责收尾。
       if (!active.current) return false
+      setProgress(request.operation === 'list' ? '正在读取已安装插件' : request.operation === 'import' || request.operation === 'update' ? '正在检查兼容性并安装插件' : '正在保存插件更改')
       const result = await bridge.managePlugins(request)
       if (active.current) {
         setCatalog(result)
@@ -220,7 +222,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   useEffect(() => { setStopped(false) }, [runtime.phase])
   const stop = async (): Promise<void> => {
     if (pending.current) return
-    pending.current = true; setMarketAttempt(null); setBusy(true); setNotice(''); setNoticeDetail('')
+    pending.current = true; setMarketAttempt(null); setBusy(true); setProgress('正在停止对话与终端'); setNotice(''); setNoticeDetail('')
     try {
       await bridge.stopRuntime()
       if (active.current) { setStopped(true); setNotice('运行环境已停止，可以管理插件'); setFailed(false) }
@@ -231,6 +233,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     return run(request, marketPackage, async () => {
       if (stopped) return
       try {
+        setProgress('正在停止对话与终端')
         await bridge.stopRuntime()
         if (active.current) setStopped(true)
       } catch {
@@ -300,12 +303,12 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     </section>}
     <div hidden={workspaceView !== 'market'}>
     <MobileMarket locked={marketLocked} onInstall={name => { void installFromMarket(name) }}
-      installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail } : null} installed={installedMarketPackages} onManage={manageMarketPackage} />
+      installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail, progress } : null} installed={installedMarketPackages} onManage={manageMarketPackage} />
     </div>
 
 
-    {notice && <p className="plugin-notice" role={failed ? 'alert' : 'status'}>{t(notice)}{noticeDetail !== '' && `（${noticeDetail}）`}</p>}
-    {busy && <p role="status">{t('正在处理插件，请稍候')}</p>}
+    {notice && !(workspaceView === 'market' && marketAttempt) && <p className="plugin-notice" role={failed ? 'alert' : 'status'}>{t(notice)}{noticeDetail !== '' && `（${noticeDetail}）`}</p>}
+    {busy && !(workspaceView === 'market' && marketAttempt) && <div className="plugin-operation-progress" role="status" aria-live="polite"><RefreshCw size={18} aria-hidden="true" /><span>{t(progress)}</span></div>}
     <div hidden={workspaceView !== 'installed'}>
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
     <section className="plugin-import" aria-labelledby="plugin-import-title">

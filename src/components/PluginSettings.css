@@ -135,3 +135,9 @@
 .plugin-screen [hidden] { display: none !important; }
 .plugin-workspace-nav button[aria-selected="false"] { background: var(--surface-muted); color: var(--muted); border-color: var(--line); }
 .plugin-workspace-nav button[aria-selected="true"] { box-shadow: 0 2px 10px var(--shadow-color); }
+
+/* 安装状态不使用虚构百分比，长包名和大字体均允许自然换行。 */
+.plugin-operation-progress { display: flex; align-items: center; gap: 10px; margin: 14px 0; padding: 14px 16px; border: 1px solid var(--blue-line); border-radius: var(--radius-card); background: var(--blue-soft); color: var(--ink); }
+.plugin-operation-progress svg { flex-shrink: 0; color: var(--blue); }
+.mobile-market-result code { overflow-wrap: anywhere; }
+.plugin-workspace-nav button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
