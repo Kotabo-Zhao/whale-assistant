@@ -51,8 +51,7 @@ class CompanionNotificationService : NotificationListenerService() {
                     val settings = CompanionStore(app)
                     val memory = CompanionMemoryStore(app)
                     if (settings.automaticNotificationMemory && settings.notificationCapture && memory.enabled && sourcePackage !in settings.excludedPackages()) {
-                        val value = CompanionAutomaticMemory.fromNotification(sourcePackage, title, text)
-                        if (value != null) runCatching { memory.addForUser(value, "auto_notification") }
+                        runCatching { memory.updateNotificationSummary(sourcePackage, title, text, System.currentTimeMillis()) }
                     }
                 }
             }
