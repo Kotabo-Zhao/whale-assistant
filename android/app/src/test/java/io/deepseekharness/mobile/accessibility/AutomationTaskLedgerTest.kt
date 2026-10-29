@@ -618,7 +618,23 @@ class AutomationTaskLedgerTest {
         assertEquals(AutomationTaskCodes.RECORD_INVALID, result.lastCode)
         assertEquals(AutomationTaskCodes.CANCELLED, ledger.snapshot().lastCode)
         assertEquals(AutomationTaskStatus.CANCELLED, ledger.snapshot().status)
-        assertEquals(AutomationTaskStepStatus.SKIPPED, ledger.snapshot().steps.single().status)
+        assertEquals(AutomationTaskStepStatus.UNKNOWN, ledger.snapshot().steps.single().status)
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, ledger.snapshot().steps.single().code)
+        assertTrue(AutomationTaskInterruptionStore.requiresReview(ledger.snapshot()))
+    }
+
+    @Test
+    fun `取消在途步骤时结果不确定而后续未开始步骤跳过`() {
+        val ledger = ledger(spec("s1"), spec("s2"))
+        ledger.gate("s1", facts(), 1_000L)
+        val snapshot = ledger.cancel()
+        assertEquals(AutomationTaskStatus.CANCELLED, snapshot.status)
+        assertEquals(listOf(AutomationTaskStepStatus.UNKNOWN, AutomationTaskStepStatus.SKIPPED), snapshot.steps.map { it.status })
+        assertEquals(AutomationTaskCodes.NEEDS_CHECK, snapshot.steps.first().code)
+        assertEquals(AutomationTaskCodes.CANCELLED, snapshot.steps.last().code)
+        assertTrue(snapshot.lastMessage!!.contains("结果不确定"))
+        assertTrue(AutomationTaskInterruptionStore.requiresReview(snapshot))
+        assertEquals(AutomationTaskCodes.CANCELLED, ledger.gate("s1", facts(), 1_100L).refusedCode())
     }
 
     @Test

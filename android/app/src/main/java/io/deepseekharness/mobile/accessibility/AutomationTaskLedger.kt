@@ -546,16 +546,17 @@ internal class AutomationTaskLedger {
         return snapshot()
     }
 
-    /** 取消：未收口的步骤记 `skipped` + [AutomationTaskCodes.CANCELLED]。 */
+    /** Cancel unstarted steps; an in-flight action may already have taken effect. */
     @Synchronized
     fun cancel(): AutomationTaskSnapshot {
         steps = steps.map { step ->
             if (AutomationTaskStepStatus.settled(step.status)) step
+            else if (step.startedAtMs != null) step.copy(status = AutomationTaskStepStatus.UNKNOWN, code = AutomationTaskCodes.NEEDS_CHECK, startedAtMs = null)
             else step.copy(status = AutomationTaskStepStatus.SKIPPED, code = AutomationTaskCodes.CANCELLED)
         }.toMutableList()
         if (taskId != null) status = AutomationTaskStatus.CANCELLED
         lastCode = AutomationTaskCodes.CANCELLED
-        lastMessage = "任务已取消"
+        lastMessage = if (steps.any { it.status == AutomationTaskStepStatus.UNKNOWN }) "任务已取消，但有步骤结果不确定，请检查现场。" else "任务已取消"
         return snapshot()
     }
 
