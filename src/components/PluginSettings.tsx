@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown, Package, RefreshCw, X } from 'lucide-react'
 import { t, useLanguage } from '../i18n'
 import type { MarketProposal, PluginCatalog, PluginRecoveryState, PluginRequest, RuntimeBridge, RuntimeState } from '../platform/types'
@@ -10,6 +10,7 @@ const GENERIC_PLUGIN_FAILURE = '插件操作失败，请检查运行时状态后
 
 const errorMessages: Record<string, string> = {
   RUNTIME_BUSY: '请先停止 Harness 和 Ubuntu 终端',
+  PLUGIN_STOP_FAILED: '停止运行环境失败，请重试',
   RUNTIME_NOT_INSTALLED: '请先安装 Ubuntu 运行时',
   PLUGIN_PROTECTED: '此核心组件受保护，随运行时更新',
   PLUGIN_UPDATE_FAILED: '插件更新失败，已保留原版本。请检查网络后重试。',
@@ -163,12 +164,15 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const pluginListRef = useRef<HTMLDivElement | null>(null)
   const active = useRef(true)
   const pending = useRef(false)
-  const run = useCallback(async (request: PluginRequest, marketPackage?: string): Promise<boolean> => {
+  const run = useCallback(async (request: PluginRequest, marketPackage?: string, prepare?: () => Promise<void>): Promise<boolean> => {
     if (pending.current) return false
     setMarketAttempt(marketPackage ?? null)
     pending.current = true
     setBusy(true); setNotice(''); setNoticeDetail(''); setFailed(false)
     try {
+      if (prepare) await prepare()
+      // 离开页面后不启动尚未开始的写入；已进入原生的事务由原生负责收尾。
+      if (!active.current) return false
       const result = await bridge.managePlugins(request)
       if (active.current) {
         setCatalog(result)
@@ -224,15 +228,17 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     finally { pending.current = false; if (active.current) setBusy(false) }
   }
   const installFromMarket = async (name: string) => {
-    if (pending.current || busy) return
-    if (!stopped) {
-      pending.current = true; setBusy(true); setMarketAttempt(name); setNotice(''); setFailed(false)
-      try { await bridge.stopRuntime(); if (active.current) setStopped(true) }
-      catch { if (active.current) { setNotice('停止运行环境失败，请重试'); setFailed(true); setBusy(false) }; pending.current = false; return }
-      pending.current = false; if (active.current) setBusy(false)
-    }
-    await run({ operation: 'import', source: name }, name)
+    await run({ operation: 'import', source: name }, name, async () => {
+      if (stopped) return
+      try {
+        await bridge.stopRuntime()
+        if (active.current) setStopped(true)
+      } catch {
+        throw Object.assign(new Error('停止运行环境失败，请重试'), { code: 'PLUGIN_STOP_FAILED' })
+      }
+    })
   }
+
   const marketLocked = busy || (!stopped && ['stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
   const locked = busy || (!stopped && ['running', 'stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
   /** 显式重试一次修复：与自愈共用同一个原生入口，但不受它的代次闸门与冷却窗口约束。 */
@@ -242,9 +248,9 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   /** 已启用却在当前运行时里解析不到的插件包：升级抹掉链接后，列表就是这个样子。 */
   const unresolved = catalog?.plugins.filter(group => group.enabled && !group.installed && !group.official).length ?? 0
 
-  const installedMarketPackages = catalog === null ? null : new Map(
+  const installedMarketPackages = useMemo(() => catalog === null ? null : new Map(
     catalog.plugins.filter(group => group.installed).map(group => [group.id, group.version ?? null] as const),
-  )
+  ), [catalog])
   const manageMarketPackage = (name: string) => { setWorkspaceView('installed'); setFilterTab('all'); setQuery(name); setManageTarget(name) }
   useEffect(() => {
     if (!manageTarget) return
