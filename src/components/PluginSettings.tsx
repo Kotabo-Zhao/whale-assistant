@@ -211,7 +211,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     if (!proposal || proposalBusy || busy) return
     setProposalBusy(true)
     try {
-      if (install && !await run(proposal.kind === 'update' ? { operation: 'update', id: proposal.packageName } : { operation: 'import', source: proposal.packageName })) return
+      if (install && !await runManaged(proposal.kind === 'update' ? { operation: 'update', id: proposal.packageName } : { operation: 'import', source: proposal.packageName })) return
       await bridge.dismissMarketProposal(proposal.id)
       await refreshProposal()
     } catch { if (active.current) setProposalError(true) }
@@ -227,8 +227,8 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     } catch { if (active.current) { setNotice('停止运行环境失败，请重试'); setFailed(true) } }
     finally { pending.current = false; if (active.current) setBusy(false) }
   }
-  const installFromMarket = async (name: string) => {
-    await run({ operation: 'import', source: name }, name, async () => {
+  const runManaged = async (request: PluginRequest, marketPackage?: string) => {
+    return run(request, marketPackage, async () => {
       if (stopped) return
       try {
         await bridge.stopRuntime()
@@ -239,6 +239,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     })
   }
 
+  const installFromMarket = (name: string) => runManaged({ operation: 'import', source: name }, name)
   const marketLocked = busy || (!stopped && ['stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
   const locked = busy || (!stopped && ['running', 'stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
   /** 显式重试一次修复：与自愈共用同一个原生入口，但不受它的代次闸门与冷却窗口约束。 */
@@ -286,15 +287,15 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       <button type="button" role="tab" aria-selected={workspaceView === 'market'} onClick={() => setWorkspaceView('market')}>{t('浏览商店')}</button>
       <button type="button" role="tab" aria-selected={workspaceView === 'installed'} onClick={() => setWorkspaceView('installed')}>{t('管理已安装')}</button>
     </nav>
-    <div className="plugin-stop"><span>{t(workspaceView === 'market' ? '商店安装会自动停止运行中的对话和终端，改动在下次启动时生效。' : '修改插件前请先停止 Harness 和 Ubuntu 终端；改动在下次启动时生效。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={busy} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
+    <div className="plugin-stop"><span>{t('安装、导入和更新会自动停止对话与终端，下次启动生效。启用、回滚与修复前请先停止运行环境。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={busy} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
     {(proposal || proposalError) && <section className="plugin-import" aria-label={t('商店待处理请求')}>
       <h2>{t('商店待处理请求')}</h2>
-      <p>{t('商店请求需停止运行环境并由你确认后才会执行。来源与安卓兼容性仍需核对。')}</p>
+      <p>{t('这是旧商店留下的请求。确认后会自动停止运行环境，并使用同一个安装器检查兼容性。')}</p>
       <button className="button button-secondary compact-button" type="button" disabled={proposalBusy} onClick={() => { void refreshProposal() }}>{t('刷新请求')}</button>
       {proposalError && <p role="alert">{t('无法读取或清除安装请求，请稍后重试。')}</p>}
       {proposal && <div>{proposal.kind === 'update' && <p>{t('更新请求：手机会重新选择兼容版本，可能与商店建议版本不同。')}{proposal.suggestedVersion && <> {t('商店建议版本')}：<code>{proposal.suggestedVersion}</code></>}</p>}<p><strong>{t('待确认包名')}：</strong><code>{proposal.packageName}</code></p>
         <button className="button button-secondary compact-button" type="button" disabled={proposalBusy || busy} onClick={() => { void handleProposal(false) }}>{t('忽略请求')}</button>{' '}
-        <button className="button button-primary compact-button" type="button" disabled={proposalBusy || locked} onClick={() => { void handleProposal(true) }}>{t(proposal.kind === 'update' ? '确认更新请求' : '确认安装请求')}</button>
+        <button className="button button-primary compact-button" type="button" disabled={proposalBusy || marketLocked} onClick={() => { void handleProposal(true) }}>{t(proposal.kind === 'update' ? '确认更新请求' : '确认安装请求')}</button>
       </div>}
     </section>}
     <div hidden={workspaceView !== 'market'}>
@@ -312,7 +313,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       <p className="plugin-description">{t('支持 npm 包名、精确版本（如 example-plugin@1.2.3）、HTTPS 压缩包直链和 git+https 仓库地址。导入时不执行安装脚本，并检查运行环境要求；指定版本不保证安卓兼容。')}</p>
       <div className="plugin-import-row">
         <input type="text" aria-label={t('插件来源')} placeholder={t('例如插件包名，或 https://…/plugin.tgz')} value={source} disabled={busy} onChange={event => setSource(event.target.value)} />
-        <button className="button compact-button" type="button" disabled={busy || locked || source.trim() === ''} onClick={() => { void run({ operation: 'import', source: source.trim(), ...(expected.trim() === '' ? {} : { id: expected.trim() }) }) }}>{t('导入')}</button>
+        <button className="button compact-button" type="button" disabled={marketLocked || source.trim() === ''} onClick={() => { void runManaged({ operation: 'import', source: source.trim(), ...(expected.trim() === '' ? {} : { id: expected.trim() }) }) }}>{t('导入')}</button>
       </div>
       <label className="plugin-import-expected">
         <span>{t('预期包名（可选）')}</span>
@@ -394,7 +395,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
           <div className="plugin-file-actions">
             <label><input type="checkbox" aria-label={t('启用文件 {0}', group.id)} checked={group.enabled} disabled={locked || group.protected} onChange={event => { void run({ operation: 'enable', id: group.id, enabled: event.target.checked }) }} />{t('启用整个文件')}</label>
             <div className="plugin-file-buttons">
-              <button className="button button-secondary compact-button" disabled={locked || group.official} type="button" onClick={() => { void run({ operation: 'update', id: group.id }) }}>{t('更新所属插件包')}</button>
+              <button className="button button-secondary compact-button" disabled={marketLocked || group.official} type="button" onClick={() => { void runManaged({ operation: 'update', id: group.id }) }}>{t('更新所属插件包')}</button>
               {/* 回滚只动这一个包，且只回退到最近一次更新前保留的那一版；没有上一版时保持禁用，由下方提示说明原因。 */}
               <button className="button button-secondary compact-button" disabled={locked || group.protected || (group.rollback ?? null) === null} type="button" onClick={() => { void run({ operation: 'rollback', id: group.id }) }}>{t('回滚到上一版本')}</button>
             </div>

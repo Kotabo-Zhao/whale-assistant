@@ -113,16 +113,15 @@ describe('应用外层插件管理', () => {
     await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'update', id: 'example-plugin' }))
     await waitFor(() => expect(bridge.dismissMarketProposal).toHaveBeenCalledWith(proposal.id))
   })
-  it('运行中不能确认更新，更新失败时保留请求', async () => {
+  it('运行中确认更新会自动停止，更新失败时保留请求', async () => {
     const proposal = { id: '00000000-0000-0000-0000-000000000004', packageName: 'example-plugin', createdAt: 1000, kind: 'update' as const, suggestedVersion: null }
     const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(new Error('failed')), stopRuntime: vi.fn().mockResolvedValue({ ...runtime, phase: 'ready' }), getMarketProposal: vi.fn().mockResolvedValue(proposal), dismissMarketProposal: vi.fn() }
     render(<PluginSettings bridge={bridge} runtime={{ ...runtime, phase: 'running' }} onBack={() => {}} />)
     const confirm = await screen.findByRole('button', { name: '确认更新请求' })
-    expect(confirm).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: '停止运行环境' }))
     await waitFor(() => expect(confirm).toBeEnabled())
     fireEvent.click(confirm)
     await screen.findByRole('alert')
+    expect(bridge.stopRuntime).toHaveBeenCalledTimes(1)
     expect(bridge.dismissMarketProposal).not.toHaveBeenCalled()
   })
   it('安装失败时保留商店请求', async () => {
