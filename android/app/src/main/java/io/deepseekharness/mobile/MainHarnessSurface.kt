@@ -204,11 +204,8 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         view.webChromeClient = nextChrome
         web = view
         container = root
-        root.findViewById<View>(R.id.harness_companion).setOnClickListener {
-            activity.startActivity(Intent(activity, io.deepseekharness.mobile.companion.CompanionActivity::class.java))
-        }
-        root.findViewById<View>(R.id.harness_voice).setOnClickListener { startVoice() }
-        root.findViewById<View>(R.id.harness_speak).setOnClickListener { readAloud() }
+        // 操作入口统一收进助手设置；保留按钮 ID 供旧版独立对话页兼容。
+        root.findViewById<View>(R.id.harness_tools).visibility = View.GONE
         root.findViewById<View>(R.id.harness_manage).setOnClickListener { showAssistantTab("conversation") }
         root.findViewById<View>(R.id.harness_tab_home).setOnClickListener { showAssistantTab("conversation") }
         root.findViewById<View>(R.id.harness_tab_plugins).setOnClickListener { showAssistantTab("plugins") }
@@ -265,6 +262,15 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
             if (params?.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) multiple.launch(types) else single.launch(types)
             true
         } catch (_: Throwable) { deliver(emptyList()); false }
+    }
+
+    fun runAssistantTool(tool: String): Boolean {
+        if (tool != "voice" && tool != "speak") return false
+        if (web?.url == null || !authorized()) return false
+        container?.visibility = View.VISIBLE
+        returnAfterManage = false
+        when (tool) { "voice" -> startVoice(); "speak" -> readAloud() }
+        return true
     }
 
     private fun startVoice() {

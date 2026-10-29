@@ -1582,6 +1582,15 @@ export interface RuntimeWorkspaceFileList {
 
 export interface MarketProposal { id: string; packageName: string; createdAt: number; kind: 'install' | 'update'; suggestedVersion: string | null }
 
+export interface CompanionQuickSettings {
+  memoryEnabled: boolean
+  notificationBubbles: boolean
+  candidateNotifications: boolean
+  notificationCapture: boolean
+  reminders: boolean
+  quietHoursEnabled: boolean
+}
+
 export interface RuntimeBridge {
   listHarnessReleases: () => Promise<HarnessReleaseList>
   manageHarnessVersions: (operation: HarnessVersionOperation, version?: string) => Promise<HarnessVersionsState>
@@ -1874,6 +1883,9 @@ export interface RuntimeBridge {
   /** 跳转到系统「显示在其他应用上层」设置页。该权限只能由用户手动开启。 */
   openOverlaySettings: () => Promise<void>
   openCompanionSettings: () => Promise<void>
+  getCompanionQuickSettings: () => Promise<CompanionQuickSettings>
+  setCompanionQuickSetting: (field: keyof CompanionQuickSettings, value: boolean) => Promise<CompanionQuickSettings>
+  runHarnessAssistantTool: (tool: 'voice' | 'speak') => Promise<void>
   insertTaskDraft: (text: string) => Promise<void>
   /**
    * 外置投递区状态：用户可见路径、访客挂载点、可用性与 inbox 计数。

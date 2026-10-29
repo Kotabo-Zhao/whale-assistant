@@ -19,6 +19,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, vi } from 'vitest'
 import { ALWAYS_ALLOWED_ACCESSIBILITY_PACKAGES } from '../platform/types'
 import type {
+  CompanionQuickSettings,
   DiagnosticLogState,
   KeepAliveState,
   MailboxState,
@@ -174,6 +175,9 @@ export const bridge = {
   getMarketProposal: vi.fn(),
   dismissMarketProposal: vi.fn(),
   openCompanionSettings: vi.fn(),
+  getCompanionQuickSettings: vi.fn(),
+  setCompanionQuickSetting: vi.fn(),
+  runHarnessAssistantTool: vi.fn(),
   insertTaskDraft: vi.fn(),
   cancelAutomationTask: vi.fn(),
   clearRuntimeCache: vi.fn(),
@@ -627,6 +631,9 @@ export function beforeEachAppTest(): void {
   bridge.getMarketProposal.mockResolvedValue(null)
   bridge.dismissMarketProposal.mockResolvedValue(false)
   bridge.openCompanionSettings.mockResolvedValue(undefined)
+  bridge.getCompanionQuickSettings.mockResolvedValue({ memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, reminders: false, quietHoursEnabled: false })
+  bridge.setCompanionQuickSetting.mockImplementation((field: keyof CompanionQuickSettings, value: boolean) => Promise.resolve({ memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, reminders: false, quietHoursEnabled: false, [field]: value }))
+  bridge.runHarnessAssistantTool.mockResolvedValue(undefined)
   bridge.cancelAutomationTask.mockResolvedValue({ connected: true, task: null })
   // 默认「没有任何快照」：多数用例只关心别的页面，不该被一份假快照影响；
   // 关心快照的用例自己覆盖这四条桩。上限取值与原生侧一致（3 份 / 512 MiB）。

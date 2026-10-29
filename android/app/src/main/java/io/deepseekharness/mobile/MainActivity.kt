@@ -147,6 +147,8 @@ class MainActivity : BridgeActivity() {
         )
     }
 
+    internal fun runHarnessAssistantTool(tool: String): Boolean = harnessSurface.runAssistantTool(tool)
+
     internal fun discardHarnessSurface() { harnessSurface.discard() }
 
     /** Called after a user edits and chooses a task in the local management UI. */

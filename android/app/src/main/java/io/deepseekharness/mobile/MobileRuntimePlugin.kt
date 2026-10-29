@@ -3935,6 +3935,53 @@ class MobileRuntimePlugin : Plugin() {
         }
     }
 
+    private fun companionSettingsSnapshot(): JSObject {
+        val store = io.deepseekharness.mobile.companion.CompanionStore(context)
+        val memory = io.deepseekharness.mobile.companion.CompanionMemoryStore(context)
+        return JSObject().put("memoryEnabled", memory.enabled)
+            .put("notificationBubbles", store.notificationBubbles)
+            .put("candidateNotifications", store.candidateNotifications)
+            .put("notificationCapture", store.notificationCapture)
+            .put("reminders", store.reminders)
+            .put("quietHoursEnabled", store.quietHoursEnabled)
+    }
+
+    @PluginMethod
+    fun getCompanionQuickSettings(call: PluginCall) { execute(call) { companionSettingsSnapshot() } }
+
+    @PluginMethod
+    fun setCompanionQuickSetting(call: PluginCall) {
+        val field = call.getString("field")
+        val value = call.getBoolean("value")
+        if (value == null || field !in setOf("memoryEnabled", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled")) {
+            call.reject("无效的助手设置", "COMPANION_SETTING_INVALID"); return
+        }
+        execute(call) {
+            val store = io.deepseekharness.mobile.companion.CompanionStore(context)
+            when (field) {
+                "memoryEnabled" -> io.deepseekharness.mobile.companion.CompanionMemoryStore(context).enabled = value
+                "notificationBubbles" -> store.notificationBubbles = value
+                "candidateNotifications" -> store.candidateNotifications = value
+                "notificationCapture" -> store.notificationCapture = value
+                "reminders" -> store.reminders = value
+                "quietHoursEnabled" -> store.quietHoursEnabled = value
+            }
+            companionSettingsSnapshot()
+        }
+    }
+
+    @PluginMethod
+    fun runHarnessAssistantTool(call: PluginCall) {
+        val tool = call.getString("tool")
+        if (tool != "voice" && tool != "speak") { call.reject("无效的语音操作", "HARNESS_TOOL_INVALID"); return }
+        val host = activity as? MainActivity ?: run { call.reject("请先打开对话", "HARNESS_TOOL_UNAVAILABLE"); return }
+        host.runOnUiThread {
+            if (destroying.get()) { rejectRuntimeClosed(call); return@runOnUiThread }
+            if (host.runHarnessAssistantTool(tool)) call.resolve()
+            else call.reject("请先打开对话标签并等待就绪", "HARNESS_TOOL_UNAVAILABLE")
+        }
+    }
+
     @PluginMethod
     fun openCompanionSettings(call: PluginCall) {
         execute(call) {
