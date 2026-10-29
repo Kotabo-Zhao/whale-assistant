@@ -4,9 +4,12 @@ import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
 import type { CompanionQuickSettings } from '../platform/types'
 import './CompanionSettingsButton.css'
+import { CompanionWorkspace } from './CompanionWorkspace'
 
 const options: { key: keyof CompanionQuickSettings; title: string; hint: string }[] = [
   { key: 'memoryEnabled', title: '允许使用长期记忆', hint: '已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。' },
+  { key: 'knowledgeModelAccess', title: '允许对话检索本地资料', hint: '开启后检索到的资料可能发送给当前模型服务。' },
+  { key: 'notificationMemorySuggestions', title: '从通知中寻找记忆候选', hint: '仅在本机生成候选，需要核对后才能保存。' },
   { key: 'notificationCapture', title: '收集通知摘要', hint: '保存在本机；还需要授予系统通知读取权限，敏感信息过滤并不完整。' },
   { key: 'notificationBubbles', title: '通知桌面气泡', hint: '通知到达时在悬浮助手显示气泡，需要悬浮窗权限。' },
   { key: 'candidateNotifications', title: '重要事项通知', hint: '识别可能的待办并发送系统通知，识别结果可能有误。' },
@@ -49,11 +52,12 @@ export function CompanionSettingsButton({ disabled }: { disabled: boolean }) {
     {options.map(option => <label className="toggle-row" key={option.key}>
       <span><strong>{t(option.title)}</strong><small>{t(option.hint)}</small></span>
       <input type="checkbox" role="switch" checked={settings?.[option.key] ?? false} disabled={disabled || working || settings === null}
-        onChange={event => { void update(option.key, event.target.checked) }} />
+        onChange={event => { const value = event.target.checked; if (option.key === 'knowledgeModelAccess' && value && !window.confirm('允许助手检索资料？相关内容可能发送给当前模型服务。')) return; void update(option.key, value) }} />
     </label>)}
+    <CompanionWorkspace />
     <button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => {
       setMessage(''); void runtimeBridge.openCompanionSettings().catch(() => setMessage('无法打开助手设置，请在安卓应用中重试'))
-    }}>{t('更多提醒、资料与记忆管理')}</button>
+    }}>{t('更多通知与桌面设置')}</button>
     {message && <p className="status-text-error" role="alert">{t(message)}</p>}
   </section>
 }

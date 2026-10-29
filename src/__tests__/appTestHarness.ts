@@ -174,6 +174,8 @@ export const bridge = {
   acknowledgeInterruptedTask: vi.fn(),
   getMarketProposal: vi.fn(),
   dismissMarketProposal: vi.fn(),
+  companionDashboard: vi.fn(),
+  exportCompanionBackup: vi.fn(),
   openCompanionSettings: vi.fn(),
   getCompanionQuickSettings: vi.fn(),
   setCompanionQuickSetting: vi.fn(),
@@ -630,9 +632,11 @@ export function beforeEachAppTest(): void {
   bridge.acknowledgeInterruptedTask.mockResolvedValue({ connected: true, task: null })
   bridge.getMarketProposal.mockResolvedValue(null)
   bridge.dismissMarketProposal.mockResolvedValue(false)
+  bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] })
+  bridge.exportCompanionBackup.mockResolvedValue(undefined)
   bridge.openCompanionSettings.mockResolvedValue(undefined)
-  bridge.getCompanionQuickSettings.mockResolvedValue({ memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, reminders: false, quietHoursEnabled: false })
-  bridge.setCompanionQuickSetting.mockImplementation((field: keyof CompanionQuickSettings, value: boolean) => Promise.resolve({ memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, reminders: false, quietHoursEnabled: false, [field]: value }))
+  bridge.getCompanionQuickSettings.mockResolvedValue({ memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, reminders: false, quietHoursEnabled: false })
+  bridge.setCompanionQuickSetting.mockImplementation((field: keyof CompanionQuickSettings, value: boolean) => Promise.resolve({ memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, reminders: false, quietHoursEnabled: false, [field]: value }))
   bridge.runHarnessAssistantTool.mockResolvedValue(undefined)
   bridge.cancelAutomationTask.mockResolvedValue({ connected: true, task: null })
   // 默认「没有任何快照」：多数用例只关心别的页面，不该被一份假快照影响；

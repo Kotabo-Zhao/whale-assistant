@@ -3,15 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { saveLanguage } from '../i18n'
 
 const bridge = vi.hoisted(() => ({
-  getCompanionQuickSettings: vi.fn(), setCompanionQuickSetting: vi.fn(),
+  companionDashboard: vi.fn(), getCompanionQuickSettings: vi.fn(), setCompanionQuickSetting: vi.fn(),
   runHarnessAssistantTool: vi.fn(), openCompanionSettings: vi.fn(),
 }))
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { CompanionSettingsButton } from './CompanionSettingsButton'
 
-const defaults = { memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, reminders: false, quietHoursEnabled: false }
+const defaults = { memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, reminders: false, quietHoursEnabled: false }
 beforeEach(() => {
   saveLanguage('zh-CN'); vi.clearAllMocks()
+  bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] })
   bridge.getCompanionQuickSettings.mockResolvedValue(defaults)
   bridge.setCompanionQuickSetting.mockResolvedValue({ ...defaults, memoryEnabled: true })
   bridge.runHarnessAssistantTool.mockResolvedValue(undefined)

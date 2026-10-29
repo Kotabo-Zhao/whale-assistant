@@ -230,6 +230,8 @@ interface NativeRuntimePlugin {
   openApplicationSettings(): Promise<void>
   overlayBallState(): Promise<unknown>
   openOverlaySettings(): Promise<void>
+  companionDashboard(options: { request: Record<string, unknown> }): Promise<Record<string, unknown>>
+  exportCompanionBackup(options: { kind: 'memory' | 'knowledge' }): Promise<void>
   openCompanionSettings(): Promise<void>
   getCompanionQuickSettings(): Promise<CompanionQuickSettings>
   setCompanionQuickSetting(options: { field: keyof CompanionQuickSettings; value: boolean }): Promise<CompanionQuickSettings>
@@ -571,6 +573,8 @@ function createNativeBridge(): RuntimeBridge {
     openApplicationSettings: () => NativeRuntime.openApplicationSettings(),
     getOverlayBallState: () => NativeRuntime.overlayBallState().then(validateOverlayBallState),
     openOverlaySettings: () => NativeRuntime.openOverlaySettings(),
+    companionDashboard: request => NativeRuntime.companionDashboard({ request }),
+    exportCompanionBackup: kind => NativeRuntime.exportCompanionBackup({ kind }),
     openCompanionSettings: () => NativeRuntime.openCompanionSettings(),
     getCompanionQuickSettings: () => NativeRuntime.getCompanionQuickSettings(),
     setCompanionQuickSetting: (field, value) => NativeRuntime.setCompanionQuickSetting({ field, value }),

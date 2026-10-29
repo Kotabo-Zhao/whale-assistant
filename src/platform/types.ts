@@ -1587,6 +1587,8 @@ export interface CompanionQuickSettings {
   notificationBubbles: boolean
   candidateNotifications: boolean
   notificationCapture: boolean
+  knowledgeModelAccess: boolean
+  notificationMemorySuggestions: boolean
   reminders: boolean
   quietHoursEnabled: boolean
 }
@@ -1882,6 +1884,8 @@ export interface RuntimeBridge {
   getOverlayBallState: () => Promise<OverlayBallState>
   /** 跳转到系统「显示在其他应用上层」设置页。该权限只能由用户手动开启。 */
   openOverlaySettings: () => Promise<void>
+  companionDashboard: (request: Record<string, unknown>) => Promise<Record<string, unknown>>
+  exportCompanionBackup: (kind: 'memory' | 'knowledge') => Promise<void>
   openCompanionSettings: () => Promise<void>
   getCompanionQuickSettings: () => Promise<CompanionQuickSettings>
   setCompanionQuickSetting: (field: keyof CompanionQuickSettings, value: boolean) => Promise<CompanionQuickSettings>

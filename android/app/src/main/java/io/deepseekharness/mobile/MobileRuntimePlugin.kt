@@ -3935,6 +3935,46 @@ class MobileRuntimePlugin : Plugin() {
         }
     }
 
+    @PluginMethod
+    fun companionDashboard(call: PluginCall) {
+        val request = call.getObject("request") ?: run { call.reject("缺少操作参数", "COMPANION_INPUT_INVALID"); return }
+        execute(call) {
+            JSObject.fromJSONObject(io.deepseekharness.mobile.companion.CompanionDashboard(context).execute(request))
+        }
+    }
+
+    @PluginMethod
+    fun exportCompanionBackup(call: PluginCall) {
+        val kind = call.getString("kind")
+        if (kind != "memory" && kind != "knowledge") { call.reject("备份类型无效", "COMPANION_INPUT_INVALID"); return }
+        val host = activity ?: run { call.reject("文件选择器不可用", "COMPANION_PICKER_UNAVAILABLE"); return }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+            putExtra(Intent.EXTRA_TITLE, if (kind == "memory") "whale-memory.json" else "whale-knowledge.json")
+        }
+        host.runOnUiThread {
+            try { startActivityForResult(call, intent, "companionBackupPicked") }
+            catch (_: Exception) { call.reject("文件选择器不可用", "COMPANION_PICKER_UNAVAILABLE") }
+        }
+    }
+
+    @ActivityCallback
+    private fun companionBackupPicked(call: PluginCall?, result: ActivityResult) {
+        if (call == null) return
+        val uri = result.data?.data
+        if (result.resultCode != android.app.Activity.RESULT_OK || uri == null) {
+            call.reject("已取消导出", "COMPANION_EXPORT_CANCELLED"); return
+        }
+        val kind = call.getString("kind") ?: run { call.reject("备份类型无效", "COMPANION_INPUT_INVALID"); return }
+        execute(call) {
+            val bytes = io.deepseekharness.mobile.companion.CompanionDashboard(context).export(kind)
+            val stream = context.contentResolver.openOutputStream(uri, "wt") ?: error("无法打开保存位置")
+            stream.use { it.write(bytes); it.flush() }
+            JSObject().put("ok", true)
+        }
+    }
+
     private fun companionSettingsSnapshot(): JSObject {
         val store = io.deepseekharness.mobile.companion.CompanionStore(context)
         val memory = io.deepseekharness.mobile.companion.CompanionMemoryStore(context)
@@ -3942,6 +3982,8 @@ class MobileRuntimePlugin : Plugin() {
             .put("notificationBubbles", store.notificationBubbles)
             .put("candidateNotifications", store.candidateNotifications)
             .put("notificationCapture", store.notificationCapture)
+            .put("knowledgeModelAccess", store.knowledgeModelAccess)
+            .put("notificationMemorySuggestions", store.notificationMemorySuggestions)
             .put("reminders", store.reminders)
             .put("quietHoursEnabled", store.quietHoursEnabled)
     }
@@ -3953,7 +3995,7 @@ class MobileRuntimePlugin : Plugin() {
     fun setCompanionQuickSetting(call: PluginCall) {
         val field = call.getString("field")
         val value = call.getBoolean("value")
-        if (value == null || field !in setOf("memoryEnabled", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled")) {
+        if (value == null || field !in setOf("memoryEnabled", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled", "knowledgeModelAccess", "notificationMemorySuggestions")) {
             call.reject("无效的助手设置", "COMPANION_SETTING_INVALID"); return
         }
         execute(call) {
@@ -3963,6 +4005,8 @@ class MobileRuntimePlugin : Plugin() {
                 "notificationBubbles" -> store.notificationBubbles = value
                 "candidateNotifications" -> store.candidateNotifications = value
                 "notificationCapture" -> store.notificationCapture = value
+                "knowledgeModelAccess" -> store.knowledgeModelAccess = value
+                "notificationMemorySuggestions" -> store.notificationMemorySuggestions = value
                 "reminders" -> store.reminders = value
                 "quietHoursEnabled" -> store.quietHoursEnabled = value
             }
