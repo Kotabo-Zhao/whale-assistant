@@ -78,6 +78,7 @@ export const bridge = {
   requestShizukuPermission: vi.fn(),
   connectShizuku: vi.fn(),
   openShizuku: vi.fn(),
+  openDeveloperSettings: vi.fn().mockResolvedValue(undefined),
   getAccessibilityAutomationState: vi.fn(),
   listInstalledApplications: vi.fn().mockResolvedValue({ apps: [], total: 0, nextOffset: null }),
   getDeviceShellAccess: vi.fn().mockResolvedValue({ enabled: false }),

@@ -1,6 +1,6 @@
 # Android architecture
 
-The APK combines a Capacitor management surface with a native Harness activity. The installed Ubuntu environment runs `dsh web` on Android loopback behind the packaged mobile-auth Node preload. The packaged frontend uses the official Harness distribution and its plugin loader, with a small Android stylesheet for safe areas and input sizing. There is one root frontend and no separate mobile conversation implementation. Once the runtime is ready, app startup opens `/` in the internal navigation-restricted WebView. Returning from the native Harness toolbar lands on Settings, where service, model provider credentials, runtime, terminal, reset, source, and Shizuku controls are grouped.
+当前个人分支使用 Capacitor 主界面与原生内嵌 Harness 对话区域。对话标签直接进入运行时页面，仍遵守凭据、运行环境更新和生命周期守卫；独立 HarnessActivity 保留为兼容入口。Ubuntu 内的 dsh web 仅监听回环地址，继续使用既有鉴权。首页本地概览通过 CompanionDashboard 读取统计和提醒，不调用模型。助手设置入口已进入设置首页，管理工作台首次展开时加载。插件目录与已安装管理共用安装操作入口；目前安装会停止运行环境，尚不具备等待任务结束和自动恢复对话的完整维护事务。
 
 ## Runtime installation
 

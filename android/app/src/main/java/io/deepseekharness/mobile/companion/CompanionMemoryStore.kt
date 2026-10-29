@@ -55,6 +55,8 @@ class CompanionMemoryStore(context: Context) {
     /** Merge only the automatic record for this source; preserve all user and assistant records. */
     internal fun updateNotificationSummary(packageName: String, title: String, text: String, now: Long): Boolean = synchronized(lock) {
         val rows = load()
+        if (prefs.getBoolean("automatic_memory_suppressed_all", false) ||
+            prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().contains("notification:$packageName")) return@synchronized false
         val changed = CompanionNotificationMemory.upsert(rows, packageName, title, text, now)
         if (changed) write(rows)
         changed
@@ -62,6 +64,8 @@ class CompanionMemoryStore(context: Context) {
     /** Only replace the automatically maintained summary; never overwrite user-authored memories. */
     internal fun updateUsageSummary(text: String, now: Long): Boolean = synchronized(lock) {
         val rows = load()
+        if (prefs.getBoolean("automatic_memory_suppressed_all", false) ||
+            prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().contains("usage")) return@synchronized false
         val changed = CompanionUsageMemory.upsert(rows, text, now)
         if (changed) write(rows)
         changed
@@ -69,10 +73,23 @@ class CompanionMemoryStore(context: Context) {
     fun deleteForUser(id: String, expected: String): Boolean = synchronized(lock) {
         val rows = load()
         val kept = CompanionUserMemory.delete(rows, id, expected) ?: return@synchronized false
+        val removed = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
+        val key = removed?.let { CompanionAutomaticMemoryDeletion.sourceKey(it) }
+        if (key != null) {
+            val blocked = prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().toMutableSet()
+            blocked.add(key)
+            check(prefs.edit().putStringSet("automatic_memory_suppressed_sources", blocked).commit()) { "无法保存自动整理暂停状态" }
+        }
         write(kept)
         true
     }
-    fun clearForUser() = synchronized(lock) { write(JSONArray()) }
+    fun clearForUser() = synchronized(lock) {
+        check(prefs.edit().putBoolean("automatic_memory_suppressed_all", true).commit()) { "无法保存自动整理暂停状态" }
+        write(JSONArray())
+    }
+    fun resumeAutomaticSources() = synchronized(lock) {
+        check(prefs.edit().remove("automatic_memory_suppressed_all").remove("automatic_memory_suppressed_sources").commit()) { "无法恢复自动整理" }
+    }
     /** Explicit user-authored memory; does not ingest notification text automatically. */
     internal fun reviewForUser(text: String, excludeId: String? = null): MemorySimilarityReview = synchronized(lock) {
         CompanionMemorySimilarity.review(load(), text, excludeId)
@@ -412,4 +429,13 @@ internal object CompanionMemoryHint {
         val output = JSONObject(result)
         input.optString("op") == "save" && output.optBoolean("pending", false) && !output.optBoolean("alreadyExists", true)
     } catch (_: Exception) { false }
+}
+
+/** Deleting a derived summary must not recreate it on the next capture tick. */
+internal object CompanionAutomaticMemoryDeletion {
+    fun sourceKey(row: JSONObject): String? = when (row.optString("source")) {
+        "auto_usage" -> "usage"
+        "auto_notification_group" -> row.optString("sourcePackage").takeIf(CompanionSourcePolicy::validPackage)?.let { "notification:$it" }
+        else -> null
+    }
 }

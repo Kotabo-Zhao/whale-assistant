@@ -1,3 +1,4 @@
+import { AssistantOverview } from './components/AssistantOverview'
 import type { AppView } from './ui/appNavigation'
 import { AppSidebar, BottomNavigation } from './components/AppNavigation'
 import { Capacitor } from '@capacitor/core'
@@ -831,6 +832,7 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
         </div>
         <span className="home-welcome-mark" aria-hidden="true"><img src={appMark} alt="" /></span>
       </div>
+      <AssistantOverview />
       <div className="screen-heading home-section-heading">
         <div>
           <p className="eyebrow">{t("你的工作台")}</p>
@@ -1215,6 +1217,7 @@ interface SettingsHomeScreenProps {
 function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onLaunch, onOpenPage, onOpenView }: SettingsHomeScreenProps) {
   /** 过滤词只活在组件里：离开设置首页即清空，下次进来不该被上次的搜索框卡住。 */
   const [query, setQuery] = useState('')
+  const [assistantOpened, setAssistantOpened] = useState(false)
   /** 已确认的查找词：只有点搜索图标或按回车才落地。输入过程本身不筛选——
       移动端输入法组合中途触发筛选，列表刷新会把候选词条顶掉，搜索看起来就是「不能用」。 */
   const [appliedQuery, setAppliedQuery] = useState('')
@@ -1272,6 +1275,7 @@ function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onL
         </button>
       </div>
 
+      <details className="assistant-settings-entry" onToggle={event => { if (event.currentTarget.open) setAssistantOpened(true) }}><summary><strong>鲸鱼娘与个人助手</strong><small>语音、自动记忆、通知、提醒及资料管理</small></summary>{assistantOpened && <CompanionSettingsButton disabled={busy !== null} />}</details>
       <LanguageSettings />
 
       {/* 搜索框固定在入口列表上方：入口一多，用户第一反应是找框，而不是往下翻。

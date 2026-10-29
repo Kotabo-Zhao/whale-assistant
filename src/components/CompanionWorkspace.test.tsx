@@ -52,3 +52,22 @@ describe('助手工作台', () => {
     await waitFor(() => expect(bridge.exportCompanionBackup).toHaveBeenCalledWith('knowledge'))
   })
 })
+
+it('刷新不清空正在编辑的资料，读取失败保留原记录', async () => {
+  bridge.companionDashboard.mockResolvedValue({ items: [{ id: 'k1', text: '已有资料' }] })
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  await screen.findByText('已有资料')
+  fireEvent.change(screen.getByLabelText('资料内容'), { target: { value: '未保存的草稿' } })
+  bridge.companionDashboard.mockRejectedValueOnce(new Error('unavailable'))
+  fireEvent.click(screen.getByRole('button', { name: '刷新助手数据' }))
+  await screen.findByText('无法读取数据，原有内容已保留。')
+  expect(screen.getByText('已有资料')).toBeInTheDocument()
+  expect(screen.getByLabelText('资料内容')).toHaveValue('未保存的草稿')
+})
+it('损坏的列表响应显示读取失败而不是空列表', async () => {
+  bridge.companionDashboard.mockResolvedValue({ items: 'broken' })
+  render(<CompanionWorkspace />)
+  await screen.findByText('无法读取数据，原有内容已保留。')
+  expect(screen.queryByText('当前分类还没有内容，可以在下方添加或导入。')).not.toBeInTheDocument()
+})

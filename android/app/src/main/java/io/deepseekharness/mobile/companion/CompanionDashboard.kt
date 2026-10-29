@@ -24,6 +24,19 @@ internal class CompanionDashboard(private val context: Context) {
         fun text(key: String) = request.getString(key)
         fun success(ok: Boolean): JSONObject { require(ok) { "内容已变化，请刷新后重试" }; return JSONObject().put("ok", true) }
         return when (op) {
+            "overview" -> {
+                val store = CompanionStore(context)
+                val records = store.read()
+                val counts = CompanionBrief.counts(records)
+                JSONObject().put("generatedAt", System.currentTimeMillis())
+                    .put("captureEnabled", store.notificationCapture)
+                    .put("notificationCount", records.length())
+                    .put("categories", JSONObject(counts))
+                    .put("memoryCount", memory.listForUser().length())
+                    .put("knowledgeCount", knowledge.search("").length())
+                    .put("reminders", reminder.list()).put("recurring", recurring.list())
+            }
+
             "memoryList" -> {
                 val store = CompanionStore(context)
                 val suggestions = if (store.notificationMemorySuggestions)
@@ -44,6 +57,7 @@ internal class CompanionDashboard(private val context: Context) {
             "memoryApproveEdit" -> success(memory.approveEditedForUser(text("id"), text("expectedText"), text("text"), text("snapshot")))
             "memoryEdit" -> success(memory.updateForUser(text("id"), text("expected"), text("text"), text("snapshot")))
             "memoryDelete" -> success(memory.deleteForUser(text("id"), text("expected")))
+            "memoryResumeAutomatic" -> { memory.resumeAutomaticSources(); JSONObject().put("ok", true) }
             "memoryClear" -> { require(request.optBoolean("confirmed")); memory.clearForUser(); JSONObject().put("ok", true) }
             "knowledgeList" -> JSONObject().put("items", knowledge.search(request.optString("query")))
             "knowledgeAdd" -> JSONObject().put("ok", knowledge.add(text("text"), "text_file"))

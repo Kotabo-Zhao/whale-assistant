@@ -2074,4 +2074,11 @@ export const english: Readonly<Record<string, string>> = {
   "忽略请求": "Dismiss request",
   "已检查现场，清除中断提示": "I checked the app; clear warning",
   "无法清除中断提示，请先停止任务或稍后重试。": "Could not clear the warning. Stop the task first or retry later.",
+  "当前操作完成后即可安装。": "Installation is available after the current operation finishes.",
+  "安装、导入和更新会自动停止对话与终端，下次启动生效。启用、回滚与修复前请先停止运行环境。": "Installing, importing and updating stop conversations and terminals. Changes apply on the next start. Stop the runtime before enabling, rolling back or repairing plugins.",
+  "这是旧商店留下的请求。确认后会自动停止运行环境，并使用同一个安装器检查兼容性。": "This request came from the previous store. Confirming stops the runtime and checks compatibility with the shared installer.",
+  "重试读取": "Retry loading",
+  "没有符合筛选条件的插件": "No plugins match these filters",
+  "可以更换关键词，或清除搜索与分类条件。": "Try another keyword or clear the search and category filters.",
+  "清除筛选": "Clear filters",
 }

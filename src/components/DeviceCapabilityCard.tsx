@@ -213,7 +213,7 @@ export function DeviceCapabilityCard({ bridge = runtimeBridge, onOpenDeviceShell
       else if (kind === 'grant') await bridge.requestShizukuPermission()
       else await bridge.connectShizuku()
       if (mounted.current && kind !== 'open' && kind !== 'developer') await refresh(true)
-    } catch { if (mounted.current) kind === 'developer' ? setDeveloperSettingsError(true) : setActionError(true) }
+    } catch { if (mounted.current) { if (kind === 'developer') setDeveloperSettingsError(true); else setActionError(true) } }
     finally { actionInFlight.current = false; if (mounted.current) setActionBusy(false) }
   }
 

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Mic, Volume2, SlidersHorizontal } from 'lucide-react'
 import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
 import type { CompanionQuickSettings } from '../platform/types'
 import './CompanionSettingsButton.css'
-import { CompanionWorkspace } from './CompanionWorkspace'
+const CompanionWorkspace = lazy(() => import('./CompanionWorkspace').then(module => ({ default: module.CompanionWorkspace })))
 
 const options: { key: keyof CompanionQuickSettings; title: string; hint: string }[] = [
   { key: 'memoryEnabled', title: '允许使用长期记忆', hint: '已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。' },
@@ -24,6 +24,7 @@ export function CompanionSettingsButton({ disabled }: { disabled: boolean }) {
   const [settings, setSettings] = useState<CompanionQuickSettings | null>(null)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState('')
+  const [workspaceOpened, setWorkspaceOpened] = useState(false)
   useEffect(() => {
     let live = true
     void Promise.resolve().then(() => runtimeBridge.getCompanionQuickSettings())
@@ -60,7 +61,7 @@ export function CompanionSettingsButton({ disabled }: { disabled: boolean }) {
         onChange={event => { const value = event.target.checked; if (option.key === 'knowledgeModelAccess' && value && !window.confirm('允许助手检索资料？相关内容可能发送给当前模型服务。')) return; void update(option.key, value) }} />
     </label>)}
     </details>)}
-    <details className="companion-settings-group"><summary><strong>{t('管理提醒、资料与记忆')}</strong><small>{t('查看、编辑以及导入导出本地内容')}</small></summary><CompanionWorkspace /></details>
+    <details className="companion-settings-group" onToggle={event => { if (event.currentTarget.open) setWorkspaceOpened(true) }}><summary><strong>{t('管理提醒、资料与记忆')}</strong><small>{t('查看、编辑以及导入导出本地内容')}</small></summary>{workspaceOpened && <Suspense fallback={<p>正在加载助手工作台…</p>}><CompanionWorkspace /></Suspense>}</details>
     <button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => {
       setMessage(''); void runtimeBridge.openCompanionSettings().catch(() => setMessage('无法打开助手设置，请在安卓应用中重试'))
     }}>{t('更多通知与桌面设置')}</button>
