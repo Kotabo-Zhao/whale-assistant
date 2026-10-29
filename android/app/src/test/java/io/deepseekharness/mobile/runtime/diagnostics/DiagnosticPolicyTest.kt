@@ -24,6 +24,14 @@ class DiagnosticPolicyTest {
     ): String = DiagnosticPolicy.recordLine(instant, level, event, fields)
 
     @Test
+    fun guestProbeEvidenceUsesOnlyWhitelistedFields() {
+        val result = line(fields = mapOf("phase" to "guest_probe", "result" to "failed", "code" to "PROOT_GUEST_EXEC_FAILED", "reason" to "mentions_permission_denied", "count" to "3"))
+        assertTrue(result.contains("phase=guest_probe"))
+        assertTrue(result.contains("reason=mentions_permission_denied"))
+        assertTrue(result.contains("count=3"))
+    }
+
+    @Test
     fun writesFixedOrderedFields() {
         val result = line(fields = mapOf("phase" to "running", "count" to "2"))
         assertEquals("2026-09-12T10:20:30Z|INFO|RUNTIME_PHASE|phase=running|count=2\n", result)

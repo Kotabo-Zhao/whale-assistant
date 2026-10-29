@@ -149,6 +149,7 @@ class RuntimeLaunchResolver(
             errorCode,
             message,
         )
+        recordGuestProbeFailure(outcome.failureResults, failure.code)
         // Keep a bounded, redacted probe tail for device diagnostics. Probe commands do not
         // print credentials, but redaction protects against future dependency error messages.
         android.util.Log.w(
@@ -174,7 +175,11 @@ class RuntimeLaunchResolver(
             commandCanFail = false,
             externalCancellation,
         )
-        val profile = outcome.profile ?: throw guestStartFailure(outcome.failureResults)
+        val profile = outcome.profile ?: run {
+            val failure = guestStartFailure(outcome.failureResults)
+            recordGuestProbeFailure(outcome.failureResults, failure.code)
+            throw failure
+        }
         return CachedProfile(key, profile)
     }
 
@@ -402,6 +407,14 @@ class RuntimeLaunchResolver(
         }
     }
 
+    private fun recordGuestProbeFailure(results: List<ProcessProbeResult>, code: String) {
+        store.diagnostics.record(
+            DiagnosticLevel.ERROR, DiagnosticEvent.RUNTIME_PHASE,
+            mapOf("phase" to "guest_probe", "result" to "failed", "code" to code,
+                "reason" to RuntimeDiagnostics.probeEvidence(results.firstOrNull()), "count" to results.size.toString()),
+        )
+    }
+
     private fun guestStartFailure(results: List<ProcessProbeResult>): RuntimeFailure {
         val failure = results.firstNotNullOfOrNull(RuntimeDiagnostics::prootFailure)
             ?: ClassifiedFailure("PROOT_GUEST_START_FAILED", "PRoot 无法启动 Ubuntu 用户空间")
@@ -507,6 +520,25 @@ internal object RuntimeDiagnostics {
             "proot error" in output || "execve(" in output || "loader" in output ->
                 ClassifiedFailure("PROOT_GUEST_EXEC_FAILED", "PRoot 无法加载 Ubuntu 程序")
             else -> null
+        }
+    }
+
+    /** Fixed evidence labels only: never persist guest output, paths or credentials. */
+    fun probeEvidence(result: ProcessProbeResult?): String {
+        if (result == null) return "no_result"
+        if (result.startError != null) return "start_error"
+        if (result.timedOut) return "timed_out"
+        val line = result.output.lineSequence().map { it.trim().lowercase() }
+            .firstOrNull { it.startsWith("proot error:") || it.startsWith("proot fatal error:") }
+            ?: result.output.lineSequence().firstOrNull { it.isNotBlank() }?.trim()?.lowercase().orEmpty()
+        return when {
+            line.isEmpty() -> "empty_output"
+            "permission denied" in line || "eacces" in line -> "mentions_permission_denied"
+            "no such file" in line || "enoent" in line || "not found" in line -> "mentions_missing_file"
+            "text file busy" in line || "etxtbsy" in line -> "mentions_text_file_busy"
+            "no space left" in line || "enospc" in line -> "mentions_no_space"
+            "operation not permitted" in line || "eperm" in line -> "mentions_operation_denied"
+            else -> "other_output"
         }
     }
 

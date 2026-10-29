@@ -240,6 +240,17 @@ class RuntimeSupervisor(
                 clearHarnessState()
                 throw error
             }
+            // This failure occurs after guest preflight and credentials preparation. Persist
+            // only a fixed output-derived evidence label; raw output remains in the runtime log.
+            if (error.code == "PROOT_GUEST_EXEC_FAILED") {
+                val evidence = RuntimeDiagnostics.probeEvidence(
+                    ProcessProbeResult(exitCode = null, timedOut = false, output = output.snapshot()),
+                )
+                store.diagnostics.record(
+                    DiagnosticLevel.ERROR, DiagnosticEvent.RUNTIME_PHASE,
+                    mapOf("phase" to "harness_guest", "result" to "failed", "code" to error.code, "reason" to evidence),
+                )
+            }
             // 回收进程放在统一出口里执行：先置阶段并写诊断记录，再回收。
             // terminate 自己可能抛（HARNESS_STOP_TIMEOUT），那条异常会盖掉真正的启动失败原因，
             // 所以失败码必须已经落进诊断时间线。

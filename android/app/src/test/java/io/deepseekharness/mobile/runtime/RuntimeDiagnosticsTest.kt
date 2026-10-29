@@ -51,6 +51,21 @@ class RuntimeDiagnosticsTest {
     }
 
     @Test
+    fun `guest probe evidence is bounded and ignores proot explanatory lines`() {
+        fun evidence(output: String) = RuntimeDiagnostics.probeEvidence(ProcessProbeResult(1, false, output))
+        assertEquals("mentions_permission_denied", evidence("proot error: execve(\"/private/secret\"): Permission denied"))
+        assertEquals("mentions_permission_denied", evidence("starting Harness\nproot error: execve(\"/private/secret\"): Permission denied\npossible cause: No such file"))
+        assertEquals("mentions_missing_file", evidence("proot error: execve(\"/private/secret\"): No such file or directory"))
+        assertEquals("mentions_text_file_busy", evidence("proot error: execve(\"/private/secret\"): Text file busy"))
+        assertEquals("mentions_no_space", evidence("proot error: No space left on device"))
+        assertEquals("other_output", evidence("proot error: unknown failure\npossible cause: Permission denied"))
+        assertEquals("empty_output", evidence(""))
+        assertEquals("timed_out", RuntimeDiagnostics.probeEvidence(ProcessProbeResult(null, true, "")))
+        assertEquals("start_error", RuntimeDiagnostics.probeEvidence(ProcessProbeResult(null, false, "", IllegalStateException("secret"))))
+        assertEquals("no_result", RuntimeDiagnostics.probeEvidence(null))
+    }
+
+    @Test
     fun `uses a fixed error for required bind failures`() {
         val failure = RuntimeDiagnostics.requiredBindFailure()
 
