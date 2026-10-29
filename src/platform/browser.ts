@@ -371,6 +371,7 @@ export function createBrowserBridge(): RuntimeBridge {
       return Promise.resolve({ ...shizuku })
     },
     openShizuku: () => Promise.resolve(),
+    openDeveloperSettings: () => Promise.reject(new Error('ANDROID_SETTINGS_UNAVAILABLE')),
     getAccessibilityAutomationState: (): Promise<AccessibilityAutomationState> => Promise.resolve(accessibilitySnapshot()),
     // 白名单的修改必须带验证密码（与原生侧同一语义）；未设置密码时放行。
     setAccessibilityAutomationPackages: (packages: string[], password?: string, whitelistEnabled?: boolean): Promise<AccessibilityAutomationState> => {

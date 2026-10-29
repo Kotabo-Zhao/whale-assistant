@@ -431,6 +431,8 @@ export const english: Readonly<Record<string, string>> = {
   "Shizuku 操作失败，请检查服务和权限后重试。": "Shizuku operation failed. Check its service and permissions and try again.",
   "Shizuku 服务不会自动启动：请在 Shizuku App 内通过无线调试或 adb 启动服务（设备重启后需重新启动）。": "Start Shizuku using wireless debugging or adb in the Shizuku app. Restart it after rebooting the device.",
   "打开 Shizuku": "Open Shizuku",
+  "打开开发者选项": "Open developer options",
+  "无法打开开发者选项，请在手机设置中查找。": "Could not open developer options. Find them in your phone settings.",
   "连接 Shizuku": "Connect Shizuku",
   "请求授权": "Request permission",
   "正在读取设置": "Loading settings",

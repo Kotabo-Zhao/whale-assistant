@@ -164,6 +164,7 @@ interface NativeRuntimePlugin {
   requestShizukuPermission(): Promise<ShizukuState>
   connectShizuku(): Promise<ShizukuState>
   openShizuku(): Promise<void>
+  openDeveloperSettings(): Promise<void>
   openVirtualScreen(): Promise<void>
   /** 副屏设置：读全量、写局部；写请求只带这次要改的字段。 */
   getVirtualScreenSettings(): Promise<unknown>
@@ -409,6 +410,7 @@ function createNativeBridge(): RuntimeBridge {
     requestShizukuPermission: () => NativeRuntime.requestShizukuPermission().then(validateShizukuState),
     connectShizuku: () => NativeRuntime.connectShizuku().then(validateShizukuState),
     openShizuku: () => NativeRuntime.openShizuku(),
+    openDeveloperSettings: () => NativeRuntime.openDeveloperSettings(),
     openVirtualScreen: () => NativeRuntime.openVirtualScreen(),
     // 副屏：读回来的两份一律过校验（字段缺失就抛错，不补默认值，否则「读不到」会被显示成默认设置）；
     // 发出去的两条在过桥前自检，档位/方向/自动跟随与宽高 DPI 的非法取值在这里就被拒绝。

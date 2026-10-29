@@ -2081,6 +2081,17 @@ class MobileRuntimePlugin : Plugin() {
         }
     }
 
+    /** Open Android's developer options; the user controls wireless debugging and Shizuku. */
+    @PluginMethod
+    fun openDeveloperSettings(call: PluginCall) {
+        activity?.runOnUiThread {
+            resolveWhileActive(call) {
+                activity.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+                null
+            }
+        } ?: call.reject("当前没有可用的页面", "ACTIVITY_UNAVAILABLE")
+    }
+
     /** 仅壳内入口；不接受外部包名或命令，目标应用在原生页面选择。 */
     @PluginMethod
     fun openVirtualScreen(call: PluginCall) {

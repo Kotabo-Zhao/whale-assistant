@@ -49,6 +49,17 @@ async function findRow(text: string): Promise<HTMLElement> {
 }
 
 describe('设备能力卡片', () => {
+  it('Shizuku 未运行时提供开发者选项入口，打开失败给出明确提示', async () => {
+    const open = vi.fn().mockRejectedValue(new Error('unavailable'))
+    card({ getDeviceCapabilities: vi.fn().mockResolvedValue(report([
+      entry('shizuku', { state: 'needs_action', reason: 'SHIZUKU_NOT_RUNNING', action: 'open_shizuku' }),
+    ])), openDeveloperSettings: open })
+    fireEvent.click(await screen.findByRole('button', { name: '打开开发者选项' }))
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1))
+    expect(await screen.findByRole('alert')).toHaveTextContent('无法打开开发者选项，请在手机设置中查找。')
+    expect(screen.getByText(/无线调试配对完成后/u)).toBeVisible()
+  })
+
   it('手动重测显示等待状态并禁用重复点击，失败后可重试', async () => {
     let rejectRefresh!: (error: Error) => void
     const query = vi.fn().mockResolvedValueOnce(report())

@@ -158,6 +158,7 @@ export function DeviceCapabilityCard({ bridge = runtimeBridge, onOpenDeviceShell
   const [refreshing, setRefreshing] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
   const [actionError, setActionError] = useState(false)
+  const [developerSettingsError, setDeveloperSettingsError] = useState(false)
   const actionInFlight = useRef(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
@@ -202,16 +203,17 @@ export function DeviceCapabilityCard({ bridge = runtimeBridge, onOpenDeviceShell
   const report = load.status === 'ready' ? load.report : null
   const failed = load.status === 'failed'
   const shizuku = report?.capabilities.find(entry => entry.id === 'shizuku')
-  const takeShizukuAction = async (kind: 'open' | 'grant' | 'connect') => {
+  const takeShizukuAction = async (kind: 'open' | 'grant' | 'connect' | 'developer') => {
     if (actionInFlight.current) return
     actionInFlight.current = true
-    setActionBusy(true); setActionError(false)
+    setActionBusy(true); setActionError(false); setDeveloperSettingsError(false)
     try {
       if (kind === 'open') await bridge.openShizuku()
+      else if (kind === 'developer') await bridge.openDeveloperSettings()
       else if (kind === 'grant') await bridge.requestShizukuPermission()
       else await bridge.connectShizuku()
-      if (mounted.current && kind !== 'open') await refresh(true)
-    } catch { if (mounted.current) setActionError(true) }
+      if (mounted.current && kind !== 'open' && kind !== 'developer') await refresh(true)
+    } catch { if (mounted.current) kind === 'developer' ? setDeveloperSettingsError(true) : setActionError(true) }
     finally { actionInFlight.current = false; if (mounted.current) setActionBusy(false) }
   }
 
@@ -242,7 +244,10 @@ export function DeviceCapabilityCard({ bridge = runtimeBridge, onOpenDeviceShell
         <button className="button button-secondary compact-button" type="button" disabled={actionBusy} onClick={() => { void takeShizukuAction('grant') }}>{t('授予 Shizuku 权限')}</button>}
       {shizuku.action === 'connect_shizuku' &&
         <button className="button button-secondary compact-button" type="button" disabled={actionBusy} onClick={() => { void takeShizukuAction('connect') }}>{t('连接 Shizuku')}</button>}
+      {shizuku.reason === 'SHIZUKU_NOT_RUNNING' &&
+        <button className="button button-secondary compact-button" type="button" disabled={actionBusy} onClick={() => { void takeShizukuAction('developer') }}>{t('打开开发者选项')}</button>}
       {actionError && <p role="alert">{t('Shizuku 操作失败，请检查服务和权限后重试。')}</p>}
+      {developerSettingsError && <p role="alert">{t('无法打开开发者选项，请在手机设置中查找。')}</p>}
     </div>}
     {report?.capabilities.some(entry => entry.id === 'shizuku' && entry.reason === 'SHIZUKU_NOT_RUNNING') &&
       <p className="settings-note">{t('无线调试配对完成后，还需在 Shizuku 应用中点击「启动」；如果启动失败，可关闭再开启无线调试后重试。')}</p>}

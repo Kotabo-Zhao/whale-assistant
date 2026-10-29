@@ -1693,6 +1693,7 @@ export interface RuntimeBridge {
   requestShizukuPermission: () => Promise<ShizukuState>
   connectShizuku: () => Promise<ShizukuState>
   openShizuku: () => Promise<void>
+  openDeveloperSettings: () => Promise<void>
   /** 打开目标应用副屏选择和预览页；仅安卓可用。 */
   openVirtualScreen: () => Promise<void>
   /**
