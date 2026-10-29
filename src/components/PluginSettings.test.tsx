@@ -30,8 +30,25 @@ describe('应用外层插件管理', () => {
       fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
       await screen.findByText('目录示例')
       fireEvent.click(screen.getByRole('button', { name: '安装' }))
-      fireEvent.click(screen.getByRole('button', { name: '确认安装' }))
       await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: 'catalog-example' }))
+    } finally { mock.mockRestore() }
+  })
+  it('运行中点击安装时先停止运行环境，再调用同一安装器', async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '目录示例', npm: 'catalog-example' }] }))
+    let done = false
+    const mock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, body: { getReader: () => ({
+      read: () => Promise.resolve(done ? { done: true } : (done = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+    }) } } as unknown as Response)
+    try {
+      const bridge = setup({ ...runtime, phase: 'running' })
+      await screen.findByText('example-plugin')
+      fireEvent.click(screen.getByRole('tab', { name: '浏览商店' }))
+      fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+      await screen.findByText('目录示例')
+      fireEvent.click(screen.getByRole('button', { name: '安装' }))
+      await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: 'catalog-example' }))
+      expect(bridge.stopRuntime).toHaveBeenCalledTimes(1)
+      expect(bridge.stopRuntime.mock.invocationCallOrder[0]).toBeLessThan(bridge.managePlugins.mock.invocationCallOrder[1])
     } finally { mock.mockRestore() }
   })
   it('社区目录标记已安装插件，并跳转到同一份插件管理记录', async () => {
@@ -69,7 +86,6 @@ describe('应用外层插件管理', () => {
       fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
       await screen.findByText('目录示例')
       fireEvent.click(screen.getByRole('button', { name: '安装' }))
-      fireEvent.click(screen.getByRole('button', { name: '确认安装' }))
       const market = screen.getByRole('region', { name: '手机插件目录' })
       const error = await within(market).findByRole('alert')
       expect(error).toHaveTextContent('仍有旧版本未检查')
@@ -174,14 +190,6 @@ describe('应用外层插件管理', () => {
   })
 })
 describe('插件导入与回滚', () => {
-  it('从发现入口安装市场时使用现有受控导入', async () => {
-    const bridge = setup()
-    fireEvent.click(screen.getByRole('tab', { name: '浏览商店' }))
-    const button = await screen.findByRole('button', { name: '安装插件市场' })
-    await waitFor(() => expect(button).toBeEnabled())
-    fireEvent.click(button)
-    await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: 'dshmarket' }))
-  })
   it('按包名导入：来源为空时按钮禁用，成功后提示并清空输入', async () => {
     const bridge = setup()
     const button = await screen.findByRole('button', { name: '导入' })

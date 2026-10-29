@@ -49,12 +49,15 @@ export function CompanionSettingsButton({ disabled }: { disabled: boolean }) {
       <button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => { void tool('speak') }}><Volume2 size={18} />{t('朗读当前回复')}</button>
     </div>
     <p className="plugin-hint">{t('语音输入使用系统识别服务，核对后填入草稿，不会自动发送；朗读前会先展示内容。')}</p>
-    {options.map(option => <label className="toggle-row" key={option.key}>
+    <p className="plugin-hint">{t('先按需打开下面的功能；关闭时已有数据不会自动删除。部分功能还需要系统权限，可在桌面设置中检查。')}</p>
+    {['记忆与资料', '通知与提醒'].map((group, index) => <details key={group} className="companion-settings-group"><summary><strong>{t(group)}</strong><small>{t(index === 0 ? '管理助手能记住和使用的信息' : '选择哪些提醒可以出现')}</small></summary>
+    {options.slice(index === 0 ? 0 : 2, index === 0 ? 2 : undefined).map(option => <label className="toggle-row" key={option.key}>
       <span><strong>{t(option.title)}</strong><small>{t(option.hint)}</small></span>
       <input type="checkbox" role="switch" checked={settings?.[option.key] ?? false} disabled={disabled || working || settings === null}
         onChange={event => { const value = event.target.checked; if (option.key === 'knowledgeModelAccess' && value && !window.confirm('允许助手检索资料？相关内容可能发送给当前模型服务。')) return; void update(option.key, value) }} />
     </label>)}
-    <CompanionWorkspace />
+    </details>)}
+    <details className="companion-settings-group"><summary><strong>{t('管理提醒、资料与记忆')}</strong><small>{t('查看、编辑以及导入导出本地内容')}</small></summary><CompanionWorkspace /></details>
     <button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => {
       setMessage(''); void runtimeBridge.openCompanionSettings().catch(() => setMessage('无法打开助手设置，请在安卓应用中重试'))
     }}>{t('更多通知与桌面设置')}</button>

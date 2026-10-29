@@ -14,6 +14,7 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [availability, setAvailability] = useState('all')
+  const [sort, setSort] = useState('catalog')
   const deferredQuery = useDeferredValue(query)
   const [page, setPage] = useState(0)
   const [review, setReview] = useState<Entry | null>(null)
@@ -48,8 +49,8 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
       if (availability === 'available' && (isInstalled || item.npm === null)) return false
       if (availability === 'source' && item.npm !== null) return false
       return terms.every(term => text.includes(term))
-    }).map(row => row.item)
-  }, [searchIndex, deferredQuery, category, availability, installed])
+    }).map(row => row.item).sort((a, b) => sort === 'downloads' ? (b.downloads ?? -1) - (a.downloads ?? -1) : sort === 'name' ? a.name.localeCompare(b.name, 'zh-CN') : 0)
+  }, [searchIndex, deferredQuery, category, availability, installed, sort])
   const pageCount = Math.ceil(matches.length / PAGE_SIZE)
   const currentPage = Math.min(page, Math.max(0, pageCount - 1))
   const visible = matches.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
@@ -94,7 +95,7 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
   }
   return <section className="mobile-market" aria-labelledby="mobile-market-title">
     <h2 id="mobile-market-title">{t('手机插件目录')}</h2>
-    <p>{t('这里使用 Harness 插件市场的社区目录；发现、安装和已安装插件管理集中在此处。安装不运行安装脚本，安卓兼容性仍需验证。')}</p>
+    <p>{t('点击安装即可开始；运行中的对话会先停止，插件在下次启动后生效。安装器自动选择兼容版本，不执行安装脚本。插件仍可能联网或读取数据，请选择信任的来源。')}</p>
     <p className="plugin-hint">{t('最多读取目录前 20000 条；没有 npm 安装包的条目仅供浏览，不支持直接安装。')}</p>
     <button className="button button-secondary compact-button" type="button" disabled={status === 'loading'} onClick={() => { void load() }}>
       {status === 'loading' ? t('正在获取目录…') : entries ? t('刷新目录') : t('加载插件目录')}
@@ -152,11 +153,13 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
         <label>{t('安装状态')}<select value={availability} onChange={event => { setAvailability(event.target.value); setPage(0); setReview(null) }}>
           <option value="all">{t('全部插件')}</option><option value="installed" disabled={installed === null}>{t('已安装')}</option><option value="available" disabled={installed === null}>{t('可安装')}</option><option value="source">{t('仅浏览')}</option>
         </select></label>
+        <label>{t('排序')}<select value={sort} onChange={event => { setSort(event.target.value); setPage(0) }}><option value="catalog">{t('目录顺序')}</option><option value="downloads">{t('下载量从高到低')}</option><option value="name">{t('名称')}</option></select></label>
       </div>
       <div ref={resultsRegion} tabIndex={-1} aria-busy={query !== deferredQuery}>
         <p className="plugin-hint" role="status" aria-live="polite">{matches.length === 0 ? t('没有匹配的插件。') : t('共 {0} 个结果，第 {1}/{2} 页。', matches.length, currentPage + 1, pageCount)}{locked ? t('请先停止运行环境再安装。') : ''}</p>
         {visible.length > 0 && <ul className="mobile-market-list">{visible.map(item => <li key={item.npm ?? item.sourceUrl}>
           <div><strong>{item.name}</strong><code>{item.npm ?? t('无 npm 安装包')}</code>{item.description && <p>{item.description}</p>}
+            <small>{item.downloads === undefined ? t('下载量暂无数据') : `${t('下载量')}：${item.downloads.toLocaleString()}${item.downloadsStart && item.downloadsEnd ? ` (${item.downloadsStart} – ${item.downloadsEnd})` : ''}`}</small>
             {item.categoryLabel && <span className="plugin-status-badge status-preserved">{item.categoryLabel}</span>}{' '}
             {item.npm && installed?.has(item.npm) && <span className="plugin-status-badge status-active">{t('已安装')}{installed.get(item.npm) ? ` · ${installed.get(item.npm)}` : ''}</span>}
           </div>
@@ -164,7 +167,7 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
             ? item.sourceUrl && <a className="button button-secondary compact-button" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">{t('查看来源')}</a>
             : installed?.has(item.npm) && onManage
               ? <button className="button button-secondary compact-button" type="button" onClick={() => { if (item.npm) onManage(item.npm) }}>{t('管理')}</button>
-              : <button className="button button-secondary compact-button" type="button" disabled={locked || query !== deferredQuery || installed === null} onClick={() => { setVersion(''); setReview(item) }}>{t('安装')}</button>}
+              : <div><button className="button button-primary compact-button" type="button" disabled={locked || query !== deferredQuery || installed === null} onClick={() => { if (item.npm) onInstall(item.npm) }}>{t('安装')}</button>{' '}<button className="button button-secondary compact-button" type="button" onClick={() => { setVersion(''); setReview(item) }}>{t('版本与详情')}</button></div>}
         </li>)}</ul>}
       </div>
       {pageCount > 1 && <nav className="mobile-market-pagination" aria-label={t('插件目录分页')}>

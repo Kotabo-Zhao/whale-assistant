@@ -223,6 +223,17 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     } catch { if (active.current) { setNotice('停止运行环境失败，请重试'); setFailed(true) } }
     finally { pending.current = false; if (active.current) setBusy(false) }
   }
+  const installFromMarket = async (name: string) => {
+    if (pending.current || busy) return
+    if (!stopped) {
+      pending.current = true; setBusy(true); setMarketAttempt(name); setNotice(''); setFailed(false)
+      try { await bridge.stopRuntime(); if (active.current) setStopped(true) }
+      catch { if (active.current) { setNotice('停止运行环境失败，请重试'); setFailed(true); setBusy(false) }; pending.current = false; return }
+      pending.current = false; if (active.current) setBusy(false)
+    }
+    await run({ operation: 'import', source: name }, name)
+  }
+  const marketLocked = busy || (!stopped && ['stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
   const locked = busy || (!stopped && ['running', 'stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
   /** 显式重试一次修复：与自愈共用同一个原生入口，但不受它的代次闸门与冷却窗口约束。 */
   const repair = useCallback(() => { void run({ operation: 'repair' }) }, [run])
@@ -230,7 +241,6 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const prune = useCallback(() => { void run({ operation: 'prune' }) }, [run])
   /** 已启用却在当前运行时里解析不到的插件包：升级抹掉链接后，列表就是这个样子。 */
   const unresolved = catalog?.plugins.filter(group => group.enabled && !group.installed && !group.official).length ?? 0
-  const marketplaceInstalled = catalog?.plugins.some(group => group.id === 'dshmarket' && group.installed) ?? false
 
   const installedMarketPackages = catalog === null ? null : new Map(
     catalog.plugins.filter(group => group.installed).map(group => [group.id, group.version ?? null] as const),
@@ -270,7 +280,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       <button type="button" role="tab" aria-selected={workspaceView === 'market'} onClick={() => setWorkspaceView('market')}>{t('浏览商店')}</button>
       <button type="button" role="tab" aria-selected={workspaceView === 'installed'} onClick={() => setWorkspaceView('installed')}>{t('管理已安装')}</button>
     </nav>
-    <div className="plugin-stop"><span>{t('修改插件前请先停止 Harness 和 Ubuntu 终端；改动在下次启动时生效。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={busy} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
+    <div className="plugin-stop"><span>{t(workspaceView === 'market' ? '商店安装会自动停止运行中的对话和终端，改动在下次启动时生效。' : '修改插件前请先停止 Harness 和 Ubuntu 终端；改动在下次启动时生效。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={busy} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
     {(proposal || proposalError) && <section className="plugin-import" aria-label={t('商店待处理请求')}>
       <h2>{t('商店待处理请求')}</h2>
       <p>{t('商店请求需停止运行环境并由你确认后才会执行。来源与安卓兼容性仍需核对。')}</p>
@@ -282,21 +292,10 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       </div>}
     </section>}
     <div hidden={workspaceView !== 'market'}>
-    <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }, name) }}
+    <MobileMarket locked={marketLocked} onInstall={name => { void installFromMarket(name) }}
       installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail } : null} installed={installedMarketPackages} onManage={manageMarketPackage} />
     </div>
-    <div hidden={workspaceView !== 'market'}>
-    <section className="plugin-market" aria-labelledby="plugin-market-title">
-      <div className="plugin-market-icon" aria-hidden="true"><Package size={24} /></div>
-      <div className="plugin-market-copy">
-        <span className="plugin-market-kicker">DISCOVER</span>
-        <h2 id="plugin-market-title">{t('发现插件')}</h2>
-        <p>{t('在此浏览 Harness 插件市场的社区目录，并统一管理已安装扩展。插件由第三方提供，请了解来源和权限。')}</p>
-        <small>{t('市场安装后重启对话生效；移动端兼容性取决于插件。')}</small>
-      </div>
-      <button className="button button-primary compact-button" type="button" disabled={locked || !catalog || marketplaceInstalled} onClick={() => { void run({ operation: 'import', source: 'dshmarket' }) }}>{marketplaceInstalled ? t('插件市场已安装') : t('安装插件市场')}</button>
-    </section>
-    </div>
+
 
     {notice && <p className="plugin-notice" role={failed ? 'alert' : 'status'}>{t(notice)}{noticeDetail !== '' && `（${noticeDetail}）`}</p>}
     {busy && <p role="status">{t('正在处理插件，请稍候')}</p>}

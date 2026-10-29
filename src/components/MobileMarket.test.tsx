@@ -66,9 +66,6 @@ it('只在用户点击后读取目录，并将安装交给受控入口', async (
   fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
   await screen.findByText('示例')
   fireEvent.click(screen.getByRole('button', { name: '安装' }))
-  expect(install).not.toHaveBeenCalled()
-  expect(screen.getByRole('region', { name: '确认安装插件' })).toHaveTextContent('example-plugin')
-  fireEvent.click(screen.getByRole('button', { name: '确认安装' }))
   expect(install).toHaveBeenCalledWith('example-plugin')
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
 })
@@ -94,10 +91,10 @@ it('取消确认或运行环境锁定不会触发安装', async () => {
   const install = vi.fn()
   const view = render(<MobileMarket locked={false} onInstall={install} />)
   fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
-  fireEvent.click(await screen.findByRole('button', { name: '安装' }))
+  fireEvent.click(await screen.findByRole('button', { name: '版本与详情' }))
   fireEvent.click(screen.getByRole('button', { name: '取消' }))
   expect(install).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: '安装' }))
+  fireEvent.click(screen.getByRole('button', { name: '版本与详情' }))
   view.rerender(<MobileMarket locked onInstall={install} />)
   expect(screen.getByRole('button', { name: '确认安装' })).toBeDisabled()
   expect(install).not.toHaveBeenCalled()
@@ -120,7 +117,7 @@ it('目录可指定精确版本，拒绝范围或标签', async () => {
   const install = vi.fn()
   render(<MobileMarket locked={false} onInstall={install} />)
   fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
-  fireEvent.click(await screen.findByRole('button', { name: '安装' }))
+  fireEvent.click(await screen.findByRole('button', { name: '版本与详情' }))
   const input = screen.getByRole('textbox', { name: '指定版本（可选）' })
   fireEvent.change(input, { target: { value: 'latest' } })
   expect(screen.getByRole('button', { name: '确认安装' })).toBeDisabled()
@@ -228,7 +225,7 @@ it('更改版本后旧包声明不再显示', async () => {
   }))
   render(<MobileMarket locked={false} onInstall={vi.fn()} />)
   fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
-  fireEvent.click(await screen.findByRole('button', { name: '安装' }))
+  fireEvent.click(await screen.findByRole('button', { name: '版本与详情' }))
   fireEvent.click(screen.getByRole('button', { name: '查看 npm 包声明' }))
   expect(await screen.findByText('1.0.0')).toBeVisible()
   expect(screen.getByText(/并非安全或安卓兼容认证/)).toBeVisible()
@@ -291,4 +288,26 @@ it('下载目录后实际使用后台解析', async () => {
   vi.stubGlobal('Worker', FakeWorker)
   expect(await fetchCatalog(new AbortController().signal)).toHaveLength(1)
   expect(sent).toHaveBeenCalledOnce()
+})
+
+
+it('显示目录提供的下载量及统计区间，并按下载量排序', async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [
+    { name: '低下载', npm: 'low-plugin', downloads: 3, downloadsStart: '2026-09-29', downloadsEnd: '2026-10-28' },
+    { name: '无数据', npm: 'unknown-plugin' },
+    { name: '高下载', npm: 'high-plugin', downloads: 2000 },
+  ] }))
+  let complete = false
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({
+    read: () => Promise.resolve(complete ? { done: true } : (complete = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+  }) } }))
+  render(<MobileMarket locked={false} onInstall={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+  await screen.findByText('低下载')
+  expect(screen.getByText(/2026-09-29/)).toHaveTextContent('下载量：3')
+  expect(screen.getByText('下载量暂无数据')).toBeVisible()
+  fireEvent.change(screen.getByRole('combobox', { name: '排序' }), { target: { value: 'downloads' } })
+  const items = screen.getAllByRole('listitem')
+  expect(items[0]).toHaveTextContent('高下载')
+  expect(items[2]).toHaveTextContent('无数据')
 })

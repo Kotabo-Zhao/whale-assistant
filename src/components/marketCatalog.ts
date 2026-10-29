@@ -4,7 +4,7 @@ import { validatePluginRequest } from '../platform/plugins'
 
 const PACKAGE = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/
 
-export type Entry = { name: string; npm: string | null; description: string; category?: string; categoryLabel?: string; sourceUrl?: string }
+export type Entry = { name: string; npm: string | null; description: string; category?: string; categoryLabel?: string; sourceUrl?: string; downloads?: number; downloadsStart?: string; downloadsEnd?: string }
 
 /** 目录是第三方数据；只呈现有限文本和经校验的 npm 包名。 */
 export function parseMarketCatalog(value: unknown): Entry[] {
@@ -35,7 +35,10 @@ export function parseMarketCatalog(value: unknown): Entry[] {
     const categoryLabel = label && typeof label.zh === 'string' ? label.zh.slice(0, 60) : category
     entries.push({ npm, name: typeof row.name === 'string' ? row.name.slice(0, 120) : npm ?? '未命名插件',
       description: (typeof description.zh === 'string' ? description.zh : typeof description.en === 'string' ? description.en : '').slice(0, 240),
-      ...(category ? { category, categoryLabel } : {}), ...(!npm && sourceUrl ? { sourceUrl } : {}) })
+      ...(category ? { category, categoryLabel } : {}), ...(!npm && sourceUrl ? { sourceUrl } : {}),
+      ...(typeof row.downloads === 'number' && Number.isSafeInteger(row.downloads) && row.downloads >= 0 ? { downloads: row.downloads } : {}),
+      ...(typeof row.downloadsStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.downloadsStart) ? { downloadsStart: row.downloadsStart } : {}),
+      ...(typeof row.downloadsEnd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.downloadsEnd) ? { downloadsEnd: row.downloadsEnd } : {}) })
     seen.add(key)
   }
   return entries
