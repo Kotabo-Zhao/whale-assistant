@@ -16,6 +16,43 @@ it('仅接收合法 npm 包名，去重并限制目录文字长度', () => {
   expect(() => parseMarketCatalog({ plugins: 'bad' })).toThrow()
 })
 
+it('保留目录分类及仅浏览来源，同时拒绝非可信来源和无效包名', () => {
+  const items = parseMarketCatalog({ categories: { memory: { zh: '记忆' } }, plugins: [
+    { name: '记忆插件', npm: 'memory-plugin', category: 'memory' },
+    { name: '源码插件', npm: null, category: 'memory', url: 'https://github.com/example/plugin' },
+    { name: '非法来源', npm: null, url: 'https://github.com.attacker.test/example/plugin' },
+  ] })
+  expect(items).toHaveLength(2)
+  expect(items[0]).toMatchObject({ category: 'memory', categoryLabel: '记忆' })
+  expect(items[1]).toMatchObject({ npm: null, sourceUrl: 'https://github.com/example/plugin' })
+})
+
+it('目录按分类及安装状态筛选，并显示不能直接安装的源码条目', async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ categories: { memory: { zh: '记忆' }, tools: { zh: '工具' } }, plugins: [
+    { name: '已安装记忆', npm: 'memory-plugin', category: 'memory' },
+    { name: '待安装工具', npm: 'tool-plugin', category: 'tools' },
+    { name: '源码插件', npm: null, url: 'https://github.com/example/source', category: 'tools' },
+  ] }))
+  let complete = false
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => ({
+    read: () => Promise.resolve(complete ? { done: true } : (complete = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+  }) } }))
+  const manage = vi.fn()
+  render(<MobileMarket locked={false} onInstall={vi.fn()} installed={new Map([['memory-plugin', '1.0.0']])} onManage={manage} />)
+  fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+  await screen.findByText('已安装记忆')
+  fireEvent.change(screen.getByRole('combobox', { name: '插件分类' }), { target: { value: 'tools' } })
+  expect(screen.queryByText('已安装记忆')).not.toBeInTheDocument()
+  expect(screen.getByText('待安装工具')).toBeInTheDocument()
+  fireEvent.change(screen.getByRole('combobox', { name: '安装状态' }), { target: { value: 'source' } })
+  expect(screen.queryByText('待安装工具')).not.toBeInTheDocument()
+  expect(screen.getByRole('link', { name: '查看来源' })).toHaveAttribute('href', 'https://github.com/example/source')
+  fireEvent.change(screen.getByRole('combobox', { name: '插件分类' }), { target: { value: 'all' } })
+  fireEvent.change(screen.getByRole('combobox', { name: '安装状态' }), { target: { value: 'installed' } })
+  fireEvent.click(screen.getByRole('button', { name: '管理' }))
+  expect(manage).toHaveBeenCalledWith('memory-plugin')
+})
+
 it('只在用户点击后读取目录，并将安装交给受控入口', async () => {
   const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '示例', npm: 'example-plugin' }] }))
   let complete = false

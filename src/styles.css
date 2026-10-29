@@ -2470,7 +2470,7 @@ button:disabled {
   .mobile-session-entry { display: inline-flex; flex-shrink: 0; color: var(--blue); }
   .bottom-navigation {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
     padding: 5px max(8px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
     border-top: 1px solid var(--line);
@@ -2481,7 +2481,7 @@ button:disabled {
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-direction: column;
+    flex-direction: row;
     gap: 4px;
     min-width: 0;
     min-height: 54px;
@@ -2494,6 +2494,7 @@ button:disabled {
     cursor: pointer;
   }
 
+  .bottom-navigation-item svg { flex: none; width: 16px; height: 16px; }
   .bottom-navigation-item span {
     overflow: hidden;
     max-width: 100%;

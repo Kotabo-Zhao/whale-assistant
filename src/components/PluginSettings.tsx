@@ -160,6 +160,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const [query, setQuery] = useState('')
   const [manageTarget, setManageTarget] = useState<string | null>(null)
   const pluginListRef = useRef<HTMLDivElement | null>(null)
+  const marketRef = useRef<HTMLDivElement | null>(null)
   const active = useRef(true)
   const pending = useRef(false)
   const run = useCallback(async (request: PluginRequest, marketPackage?: string): Promise<boolean> => {
@@ -264,7 +265,11 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         <button className="icon-button" type="button" title={t('返回设置')} aria-label={t('返回设置')} onClick={onBack} disabled={busy}><ArrowLeft size={19} /></button>
       </div>
     </div>
-    <p className="plugin-description">{t('无需启动 Harness 即可管理插件：每个条目是一个插件包，展开后可调整其中的子插件。')}</p>
+    <p className="plugin-description">{t('浏览社区插件、安装并管理已有插件，都在这里完成。')}</p>
+    <nav className="plugin-workspace-nav" aria-label={t('插件工作台')}>
+      <button type="button" onClick={() => marketRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>{t('浏览商店')}</button>
+      <button type="button" onClick={() => pluginListRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>{t('管理已安装')}</button>
+    </nav>
     <div className="plugin-stop"><span>{t('修改插件前请先停止 Harness 和 Ubuntu 终端；改动在下次启动时生效。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={busy} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
     <section className="plugin-market" aria-labelledby="plugin-market-title">
       <div className="plugin-market-icon" aria-hidden="true"><Package size={24} /></div>
@@ -286,8 +291,10 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         <button className="button button-primary compact-button" type="button" disabled={proposalBusy || locked} onClick={() => { void handleProposal(true) }}>{t(proposal.kind === 'update' ? '确认更新请求' : '确认安装请求')}</button>
       </div>}
     </section>
+    <div ref={marketRef}>
     <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }, name) }}
       installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail } : null} installed={installedMarketPackages} onManage={manageMarketPackage} />
+    </div>
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
     <section className="plugin-import" aria-labelledby="plugin-import-title">
       <h2 id="plugin-import-title">{t('通过 npm 包名或链接导入')}</h2>

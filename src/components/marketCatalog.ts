@@ -4,22 +4,39 @@ import { validatePluginRequest } from '../platform/plugins'
 
 const PACKAGE = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/
 
-export type Entry = { name: string; npm: string; description: string }
+export type Entry = { name: string; npm: string | null; description: string; category?: string; categoryLabel?: string; sourceUrl?: string }
 
 /** 目录是第三方数据；只呈现有限文本和经校验的 npm 包名。 */
 export function parseMarketCatalog(value: unknown): Entry[] {
   if (!value || typeof value !== 'object' || !('plugins' in value) || !Array.isArray(value.plugins)) throw new Error('目录格式无效')
   const entries: Entry[] = []
   const seen = new Set<string>()
+  const categories = 'categories' in value && value.categories && typeof value.categories === 'object' && !Array.isArray(value.categories)
+    ? value.categories as Record<string, unknown> : {}
   for (const raw of value.plugins.slice(0, 20000)) {
     if (!raw || typeof raw !== 'object') continue
     const row = raw as Record<string, unknown>
-    const npm = typeof row.npm === 'string' ? row.npm : ''
-    if (npm.length > 214 || !PACKAGE.test(npm) || seen.has(npm)) continue
+    const npm = typeof row.npm === 'string' && row.npm.length <= 214 && PACKAGE.test(row.npm) ? row.npm : null
+    // Non-npm entries remain browsable only with a well-formed public GitHub project URL.
+    // Explicitly malformed package names are rejected rather than treated as installable.
+    if (row.npm != null && npm === null) continue
+    let sourceUrl: string | undefined
+    try {
+      if (typeof row.url === 'string') {
+        const source = new URL(row.url)
+        if (source.protocol === 'https:' && source.hostname === 'github.com' && !source.username && !source.password && !source.port && /^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/.test(source.pathname) && !source.search && !source.hash) sourceUrl = source.href
+      }
+    } catch { /* Ignore malformed untrusted source URLs. */ }
+    const key = npm ?? sourceUrl
+    if (!key || seen.has(key)) continue
     const description = row.description && typeof row.description === 'object' ? row.description as Record<string, unknown> : {}
-    entries.push({ npm, name: typeof row.name === 'string' ? row.name.slice(0, 120) : npm,
-      description: (typeof description.zh === 'string' ? description.zh : typeof description.en === 'string' ? description.en : '').slice(0, 240) })
-    seen.add(npm)
+    const category = typeof row.category === 'string' && /^[a-z0-9_-]{1,40}$/.test(row.category) ? row.category : undefined
+    const label = category && categories[category] && typeof categories[category] === 'object' ? categories[category] as Record<string, unknown> : null
+    const categoryLabel = label && typeof label.zh === 'string' ? label.zh.slice(0, 60) : category
+    entries.push({ npm, name: typeof row.name === 'string' ? row.name.slice(0, 120) : npm ?? '未命名插件',
+      description: (typeof description.zh === 'string' ? description.zh : typeof description.en === 'string' ? description.en : '').slice(0, 240),
+      ...(category ? { category, categoryLabel } : {}), ...(!npm && sourceUrl ? { sourceUrl } : {}) })
+    seen.add(key)
   }
   return entries
 }
