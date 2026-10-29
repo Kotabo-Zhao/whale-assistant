@@ -196,11 +196,21 @@ describe('自动化任务卡片', () => {
 
   it('任务在停止请求到达前结束时提示重新读取，不提供重复停止', async () => {
     card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: task() }),
-      cancelAutomationTask: vi.fn().mockRejectedValue(new Error('AUTOMATION_TASK_ALREADY_SETTLED')) })
+      cancelAutomationTask: vi.fn().mockRejectedValue({ code: 'AUTOMATION_TASK_ALREADY_SETTLED', message: '任务已经结束，请重新读取状态' }) })
     await findRow('目标应用：com.example.chat · 正在执行')
     fireEvent.click(screen.getByRole('button', { name: '停止这个任务' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('任务已经结束，请重新读取状态')
     expect(screen.getAllByRole('button', { name: '重新读取' }).length).toBeGreaterThan(0)
+  })
+
+  it('无法识别的原生错误消息不会直接暴露在界面', async () => {
+    card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: task() }),
+      cancelAutomationTask: vi.fn().mockRejectedValue({ code: 'bad code', message: '私有路径 /data/user/0/example' }) })
+    await findRow('目标应用：com.example.chat · 正在执行')
+    fireEvent.click(screen.getByRole('button', { name: '停止这个任务' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('停止失败（UNKNOWN）')
+    expect(alert).not.toHaveTextContent('/data/user/0/example')
   })
 
   it('没登记过的取消失败码照原样显示，不编原因', async () => {

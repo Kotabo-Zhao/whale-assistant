@@ -49,7 +49,11 @@ const CANCEL_FAILURE_NOTES: Record<string, string> = {
 
 /** 受控码从错误里取出来；取不到就给 `UNKNOWN`，不假装知道原因。 */
 function failureCode(error: unknown): string {
-  return error instanceof Error && error.message !== '' ? error.message : 'UNKNOWN'
+  if (!error || typeof error !== 'object') return 'UNKNOWN'
+  const controlled = (value: unknown): value is string => typeof value === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/u.test(value)
+  if ('code' in error && controlled(error.code)) return error.code
+  if ('message' in error && controlled(error.message)) return error.message
+  return 'UNKNOWN'
 }
 
 /**
