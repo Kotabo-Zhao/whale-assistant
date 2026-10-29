@@ -11,6 +11,7 @@ class CompanionNotificationService : NotificationListenerService() {
     override fun onDestroy() { if (current === this) current = null; super.onDestroy() }
 
     companion object {
+        private val memoryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
         @Volatile private var current: CompanionNotificationService? = null
         internal fun isConnected(): Boolean = current != null
 
@@ -43,6 +44,18 @@ class CompanionNotificationService : NotificationListenerService() {
         if (title.isBlank() && text.isBlank()) return
         if (CompanionStore.sensitive("$title $text")) return
         if (runCatching { store.record(sbn.packageName, title, text, notificationKey = sbn.key) }.getOrDefault(false)) {
+            if (store.automaticNotificationMemory) {
+                val app = applicationContext
+                val sourcePackage = sbn.packageName
+                memoryExecutor.execute {
+                    val settings = CompanionStore(app)
+                    val memory = CompanionMemoryStore(app)
+                    if (settings.automaticNotificationMemory && settings.notificationCapture && memory.enabled && sourcePackage !in settings.excludedPackages()) {
+                        val value = CompanionAutomaticMemory.fromNotification(sourcePackage, title, text)
+                        if (value != null) runCatching { memory.addForUser(value, "auto_notification") }
+                    }
+                }
+            }
             val candidate = CompanionBrief.candidateReason(title, text) != null
             if (store.notificationBubbles) {
                 if (store.notificationMemorySuggestions && CompanionMemorySuggestions.extract(text) != null) OverlayBallService.companionMemorySuggestionHint()

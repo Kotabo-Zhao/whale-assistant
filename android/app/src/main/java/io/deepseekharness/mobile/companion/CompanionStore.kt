@@ -18,6 +18,10 @@ class CompanionStore(context: Context) {
     var notificationMemorySuggestions: Boolean
         get() = prefs.getBoolean("notification_memory_suggestions", false)
         set(value) { prefs.edit().putBoolean("notification_memory_suggestions", value).apply() }
+    /** Explicit opt-in to store eligible notification excerpts as unverified, searchable memories. */
+    var automaticNotificationMemory: Boolean
+        get() = prefs.getBoolean("automatic_notification_memory", false)
+        set(value) { prefs.edit().putBoolean("automatic_notification_memory", value).apply() }
     fun dismissedMemorySuggestions(): Set<String> = prefs.getStringSet("dismissed_memory_suggestions", emptySet())?.toSet() ?: emptySet()
     fun dismissMemorySuggestion(id: String) = synchronized(lock) {
         require(CompanionNotificationTarget.validDigest(id))

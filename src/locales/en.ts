@@ -1,5 +1,7 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "自动记住其他应用通知": "Automatically remember notifications from other apps",
+  "需要开启通知摘要及系统通知读取权限。符合条件的新通知会自动作为未经核实的记忆保存在本机；检索时可能发送给模型。": "Requires notification collection and system notification access. Eligible new notifications are saved locally as unverified memories and may be sent to your model when retrieved.",
   "商店安装会自动停止运行中的对话和终端，改动在下次启动时生效。": "Store installation stops the running conversation and terminals; changes take effect next time.",
   "你好，我是你的手机助手": "Hello, I am your phone assistant",
   "从这里开始对话、管理任务与探索插件。": "Start conversations, manage tasks and explore plugins here.",

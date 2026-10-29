@@ -9,7 +9,7 @@ const bridge = vi.hoisted(() => ({
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { CompanionSettingsButton } from './CompanionSettingsButton'
 
-const defaults = { memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, reminders: false, quietHoursEnabled: false }
+const defaults = { memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, automaticNotificationMemory: false, reminders: false, quietHoursEnabled: false }
 beforeEach(() => {
   saveLanguage('zh-CN'); vi.clearAllMocks()
   bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] })
@@ -25,6 +25,14 @@ describe('助手设置与语音入口', () => {
     fireEvent.click(toggle)
     await waitFor(() => expect(bridge.setCompanionQuickSetting).toHaveBeenCalledWith('memoryEnabled', true))
     await waitFor(() => expect(toggle).toBeChecked())
+  })
+  it('自动通知记忆需要单独开启，并通过原生设置保存', async () => {
+    render(<CompanionSettingsButton disabled={false} />)
+    const toggle = screen.getByRole('switch', { name: /自动记住其他应用通知/ })
+    await waitFor(() => expect(toggle).toBeEnabled())
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+    await waitFor(() => expect(bridge.setCompanionQuickSetting).toHaveBeenCalledWith('automaticNotificationMemory', true))
   })
   it('语音和朗读走当前对话，未就绪时显示提示', async () => {
     render(<CompanionSettingsButton disabled={false} />)

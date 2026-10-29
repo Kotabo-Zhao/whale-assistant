@@ -3984,6 +3984,7 @@ class MobileRuntimePlugin : Plugin() {
             .put("notificationCapture", store.notificationCapture)
             .put("knowledgeModelAccess", store.knowledgeModelAccess)
             .put("notificationMemorySuggestions", store.notificationMemorySuggestions)
+            .put("automaticNotificationMemory", store.automaticNotificationMemory)
             .put("reminders", store.reminders)
             .put("quietHoursEnabled", store.quietHoursEnabled)
     }
@@ -3995,7 +3996,7 @@ class MobileRuntimePlugin : Plugin() {
     fun setCompanionQuickSetting(call: PluginCall) {
         val field = call.getString("field")
         val value = call.getBoolean("value")
-        if (value == null || field !in setOf("memoryEnabled", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled", "knowledgeModelAccess", "notificationMemorySuggestions")) {
+        if (value == null || field !in setOf("memoryEnabled", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled", "knowledgeModelAccess", "notificationMemorySuggestions", "automaticNotificationMemory")) {
             call.reject("无效的助手设置", "COMPANION_SETTING_INVALID"); return
         }
         execute(call) {
@@ -4007,6 +4008,7 @@ class MobileRuntimePlugin : Plugin() {
                 "notificationCapture" -> store.notificationCapture = value
                 "knowledgeModelAccess" -> store.knowledgeModelAccess = value
                 "notificationMemorySuggestions" -> store.notificationMemorySuggestions = value
+                "automaticNotificationMemory" -> store.automaticNotificationMemory = value
                 "reminders" -> store.reminders = value
                 "quietHoursEnabled" -> store.quietHoursEnabled = value
             }
