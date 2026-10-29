@@ -22,6 +22,7 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'failed'>('idle')
   const previewRequest = useRef<AbortController | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
+  const [received, setReceived] = useState(0)
   const request = useRef<AbortController | null>(null)
   const reviewRegion = useRef<HTMLDivElement | null>(null)
   const resultsRegion = useRef<HTMLDivElement | null>(null)
@@ -80,10 +81,11 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
     request.current = controller
     setReview(null)
     setPage(0)
-    setStatus('loading')
-    const timeout = window.setTimeout(() => controller.abort(), 30000)
+    setStatus('loading'); setReceived(0)
+    let lastUpdate = 0
+    const timeout = window.setTimeout(() => controller.abort(), 180000)
     try {
-      const next = await fetchCatalog(controller.signal)
+      const next = await fetchCatalog(controller.signal, bytes => { const now = Date.now(); if (request.current === controller && now - lastUpdate >= 250) { lastUpdate = now; setReceived(bytes) } })
       if (request.current !== controller) return
       setEntries(next); setStatus('ready')
     } catch {
@@ -97,6 +99,7 @@ export function MobileMarket({ locked, onInstall, installState = null, installed
     <button className="button button-secondary compact-button" type="button" disabled={status === 'loading'} onClick={() => { void load() }}>
       {status === 'loading' ? t('正在获取目录…') : entries ? t('刷新目录') : t('加载插件目录')}
     </button>
+    {status === 'loading' && <p className="plugin-hint" role="status">{t('正在下载目录，已接收 {0} MB；网络较慢时可能需要几分钟。', (received / 1048576).toFixed(1))}</p>}
     {status === 'failed' && <p role="alert">{t('目录获取失败，请检查网络后重试。')}</p>}
     {installState && <div className={`mobile-market-result ${installState.failed ? 'mobile-market-result-error' : ''}`}
       role={installState.failed ? 'alert' : 'status'} aria-live={installState.failed ? 'assertive' : 'polite'}>

@@ -26,6 +26,7 @@ describe('应用外层插件管理', () => {
     try {
       const bridge = setup()
       await screen.findByText('example-plugin')
+      fireEvent.click(screen.getByRole('tab', { name: '浏览商店' }))
       fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
       await screen.findByText('目录示例')
       fireEvent.click(screen.getByRole('button', { name: '安装' }))
@@ -42,6 +43,7 @@ describe('应用外层插件管理', () => {
     try {
       setup()
       await screen.findByText('example-plugin')
+      fireEvent.click(screen.getByRole('tab', { name: '浏览商店' }))
       fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
       await screen.findByText('示例商店条目')
       const market = within(screen.getByRole('region', { name: '手机插件目录' }))
@@ -63,6 +65,7 @@ describe('应用外层插件管理', () => {
       const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(failure) }
       render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
       await screen.findByText('example-plugin')
+      fireEvent.click(screen.getByRole('tab', { name: '浏览商店' }))
       fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
       await screen.findByText('目录示例')
       fireEvent.click(screen.getByRole('button', { name: '安装' }))
@@ -173,6 +176,7 @@ describe('应用外层插件管理', () => {
 describe('插件导入与回滚', () => {
   it('从发现入口安装市场时使用现有受控导入', async () => {
     const bridge = setup()
+    fireEvent.click(screen.getByRole('tab', { name: '浏览商店' }))
     const button = await screen.findByRole('button', { name: '安装插件市场' })
     await waitFor(() => expect(button).toBeEnabled())
     fireEvent.click(button)

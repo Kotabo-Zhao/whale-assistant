@@ -142,6 +142,7 @@ function RecoveryNotice({ recovery, unresolved, locked, onRepair, onPrune }: {
 export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBridge; runtime: RuntimeState; onBack: () => void }) {
   useLanguage()
   const [catalog, setCatalog] = useState<PluginCatalog | null>(null)
+  const [workspaceView, setWorkspaceView] = useState<'market' | 'installed'>('installed')
   const [proposal, setProposal] = useState<MarketProposal | null>(null)
   const [proposalBusy, setProposalBusy] = useState(false)
   const [proposalError, setProposalError] = useState(false)
@@ -160,7 +161,6 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const [query, setQuery] = useState('')
   const [manageTarget, setManageTarget] = useState<string | null>(null)
   const pluginListRef = useRef<HTMLDivElement | null>(null)
-  const marketRef = useRef<HTMLDivElement | null>(null)
   const active = useRef(true)
   const pending = useRef(false)
   const run = useCallback(async (request: PluginRequest, marketPackage?: string): Promise<boolean> => {
@@ -235,7 +235,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const installedMarketPackages = catalog === null ? null : new Map(
     catalog.plugins.filter(group => group.installed).map(group => [group.id, group.version ?? null] as const),
   )
-  const manageMarketPackage = (name: string) => { setFilterTab('all'); setQuery(name); setManageTarget(name) }
+  const manageMarketPackage = (name: string) => { setWorkspaceView('installed'); setFilterTab('all'); setQuery(name); setManageTarget(name) }
   useEffect(() => {
     if (!manageTarget) return
     const target = Array.from(pluginListRef.current?.querySelectorAll<HTMLDetailsElement>('details[data-plugin-id]') ?? [])
@@ -266,11 +266,12 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       </div>
     </div>
     <p className="plugin-description">{t('浏览社区插件、安装并管理已有插件，都在这里完成。')}</p>
-    <nav className="plugin-workspace-nav" aria-label={t('插件工作台')}>
-      <button type="button" onClick={() => marketRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>{t('浏览商店')}</button>
-      <button type="button" onClick={() => pluginListRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>{t('管理已安装')}</button>
+    <nav className="plugin-workspace-nav" aria-label={t('插件工作台')} role="tablist">
+      <button type="button" role="tab" aria-selected={workspaceView === 'market'} onClick={() => setWorkspaceView('market')}>{t('浏览商店')}</button>
+      <button type="button" role="tab" aria-selected={workspaceView === 'installed'} onClick={() => setWorkspaceView('installed')}>{t('管理已安装')}</button>
     </nav>
     <div className="plugin-stop"><span>{t('修改插件前请先停止 Harness 和 Ubuntu 终端；改动在下次启动时生效。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={busy} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
+    <div hidden={workspaceView !== 'market'}>
     <section className="plugin-market" aria-labelledby="plugin-market-title">
       <div className="plugin-market-icon" aria-hidden="true"><Package size={24} /></div>
       <div className="plugin-market-copy">
@@ -281,6 +282,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       </div>
       <button className="button button-primary compact-button" type="button" disabled={locked || !catalog || marketplaceInstalled} onClick={() => { void run({ operation: 'import', source: 'dshmarket' }) }}>{marketplaceInstalled ? t('插件市场已安装') : t('安装插件市场')}</button>
     </section>
+    </div>
     <section className="plugin-import" aria-label={t('商店待处理请求')}>
       <h2>{t('商店待处理请求')}</h2>
       <p>{t('商店请求需停止运行环境并由你确认后才会执行。来源与安卓兼容性仍需核对。')}</p>
@@ -291,10 +293,13 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         <button className="button button-primary compact-button" type="button" disabled={proposalBusy || locked} onClick={() => { void handleProposal(true) }}>{t(proposal.kind === 'update' ? '确认更新请求' : '确认安装请求')}</button>
       </div>}
     </section>
-    <div ref={marketRef}>
+    <div hidden={workspaceView !== 'market'}>
     <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }, name) }}
       installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail } : null} installed={installedMarketPackages} onManage={manageMarketPackage} />
     </div>
+    {notice && <p className="plugin-notice" role={failed ? 'alert' : 'status'}>{t(notice)}{noticeDetail !== '' && `（${noticeDetail}）`}</p>}
+    {busy && <p role="status">{t('正在处理插件，请稍候')}</p>}
+    <div hidden={workspaceView !== 'installed'}>
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
     <section className="plugin-import" aria-labelledby="plugin-import-title">
       <h2 id="plugin-import-title">{t('通过 npm 包名或链接导入')}</h2>
@@ -309,9 +314,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       </label>
       <p className="plugin-hint">{t('通过链接导入时，可填写预期包名，以核对安装结果；如果链接中有多个插件包，可用它指定要安装的包。')}</p>
     </section>
-    {notice && <p className="plugin-notice" role={failed ? 'alert' : 'status'}>{t(notice)}{noticeDetail !== '' && `（${noticeDetail}）`}</p>}
     {catalog && <RecoveryNotice recovery={catalog.recovery} unresolved={unresolved} locked={locked} onRepair={repair} onPrune={prune} />}
-    {busy && <p role="status">{t('正在处理插件，请稍候')}</p>}
 
     {/* 搜索与分类过滤 */}
     <div className="plugin-filter-bar">
@@ -408,6 +411,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         </details>)}
       </section>
     })}
+    </div>
     </div>
   </div>
 }

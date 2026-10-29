@@ -131,3 +131,7 @@
 
 .plugin-workspace-nav { display: flex; gap: 8px; margin: 14px 0; }
 .plugin-workspace-nav button { flex: 1; min-height: 44px; border: 1px solid var(--blue-line); border-radius: 12px; background: var(--blue-soft); color: var(--blue); font: inherit; font-weight: 600; cursor: pointer; }
+
+.plugin-screen [hidden] { display: none !important; }
+.plugin-workspace-nav button[aria-selected="false"] { background: var(--surface-muted); color: var(--muted); border-color: var(--line); }
+.plugin-workspace-nav button[aria-selected="true"] { box-shadow: 0 2px 10px var(--shadow-color); }

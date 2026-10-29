@@ -88,7 +88,7 @@ export async function parseCatalogOffThread(data: Uint8Array, signal: AbortSigna
   })
 }
 
-export async function fetchCatalog(signal: AbortSignal): Promise<Entry[]> {
+export async function fetchCatalog(signal: AbortSignal, onProgress?: (bytes: number) => void): Promise<Entry[]> {
   const response = await fetch(CATALOG_URL, { signal, credentials: 'omit', redirect: 'error' })
   if (!response.ok || !response.body) throw new Error('目录不可用')
   const reader = response.body.getReader()
@@ -99,6 +99,7 @@ export async function fetchCatalog(signal: AbortSignal): Promise<Entry[]> {
       const chunk = await reader.read()
       if (chunk.done) break
       size += chunk.value.byteLength
+      onProgress?.(size)
       if (size > MAX_BYTES) { await reader.cancel(); throw new Error('目录过大') }
       chunks.push(chunk.value)
     }
