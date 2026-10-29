@@ -33,6 +33,25 @@ describe('应用外层插件管理', () => {
       await waitFor(() => expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'import', source: 'catalog-example' }))
     } finally { mock.mockRestore() }
   })
+  it('社区目录标记已安装插件，并跳转到同一份插件管理记录', async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '示例商店条目', npm: 'example-plugin' }] }))
+    let done = false
+    const mock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, body: { getReader: () => ({
+      read: () => Promise.resolve(done ? { done: true } : (done = true, { done: false, value: bytes })), releaseLock: () => {}, cancel: () => {},
+    }) } } as unknown as Response)
+    try {
+      setup()
+      await screen.findByText('example-plugin')
+      fireEvent.click(screen.getByRole('button', { name: '加载插件目录' }))
+      await screen.findByText('示例商店条目')
+      const market = within(screen.getByRole('region', { name: '手机插件目录' }))
+      expect(market.getByText('已安装 · 1.0.0')).toHaveTextContent('1.0.0')
+      fireEvent.click(market.getByRole('button', { name: '管理' }))
+      const entry = screen.getByText('config/plugins.yml · 1.0.0').closest('details')
+      expect(entry).toHaveAttribute('open')
+      expect(screen.getByRole('searchbox', { name: '搜索插件' })).toHaveValue('example-plugin')
+    } finally { mock.mockRestore() }
+  })
   it('目录安装失败时在目录内显示原生兼容检查结果', async () => {
     const bytes = new TextEncoder().encode(JSON.stringify({ plugins: [{ name: '目录示例', npm: 'catalog-example' }] }))
     let done = false

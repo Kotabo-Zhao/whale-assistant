@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import appMark from './assets/app-mark.png'
 import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
@@ -154,6 +155,7 @@ const RuntimeVersionsScreen = lazy(() => import('./screens/RuntimeVersionsScreen
 
 type AppView =
   | 'conversation'
+  | 'harness'
   | 'sessions'
   | 'settings'
   | 'settings-models'
@@ -375,6 +377,7 @@ function matchesSettingsHomeQuery(entry: SettingsHomeEntry, query: string): bool
 /** 外壳视图的全部取值：历史状态与地址片段只接受这里的值，其余一律回落到主视图。 */
 const APP_VIEWS: AppView[] = [
   'conversation',
+  'harness',
   'sessions',
   'settings',
   'settings-models',
@@ -765,7 +768,8 @@ function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
         <span>{t('会话')}</span>
       </button>
       <nav className="sidebar-nav">
-        {item('conversation', '对话', <MessageSquare size={20} />, activeView === 'conversation')}
+        {item('conversation', '首页', <MessageSquare size={20} />, activeView === 'conversation')}
+        {item('harness', '对话', <MessageSquare size={20} />, activeView === 'harness')}
         {item('plugins', '插件管理', <Blocks size={20} />, activeView === 'plugins')}
       </nav>
       <div className="sidebar-bottom">
@@ -779,6 +783,7 @@ function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
 function BottomNavigation({ activeView, onNavigate }: AppSidebarProps) {
   const items: { view: AppView; label: string; icon: ReactNode; active: boolean }[] = [
     { view: 'conversation', label: '首页', icon: <MessageSquare size={20} />, active: activeView === 'conversation' || activeView === 'sessions' },
+    { view: 'harness', label: '对话', icon: <MessageSquare size={20} />, active: activeView === 'harness' },
     { view: 'plugins', label: '插件', icon: <Blocks size={20} />, active: activeView === 'plugins' },
     { view: 'settings', label: '设置', icon: <Settings2 size={20} />, active: isSettingsView(activeView) || activeView === 'environment' || activeView === 'terminal' || activeView === 'versions' || activeView === 'files' },
   ]
@@ -3868,6 +3873,16 @@ export function App() {
     pushViewEntry(next)
   }, [])
 
+  // 原生对话页的标签只发送固定视图名，不接收来自访客 WebView 的导航指令。
+  useEffect(() => {
+    const navigate = (event: Event) => {
+      const target = (event as CustomEvent<unknown>).detail
+      if (target === 'conversation' || target === 'plugins' || target === 'settings') setActiveView(target)
+    }
+    window.addEventListener('dsh-native-tab', navigate)
+    return () => window.removeEventListener('dsh-native-tab', navigate)
+  }, [setActiveView])
+
   /**
    * 屏幕内返回按钮：回到上一级视图。
    *
@@ -4599,7 +4614,7 @@ export function App() {
    * （引导页与「模型与密钥」页的「我已在 Harness 内配置过」按钮）：
    * **绝不要把事件对象或其它真值直接传进来**，否则等于默认绕过门禁。
    */
-  const openHarness = useCallback((skipCredentialGate: boolean, sessionId?: string) => {
+  const openHarness = useCallback((skipCredentialGate: boolean, sessionId?: string, tabOnly = false) => {
     if (busyRef.current !== null) return
     /*
      * 只认字符串会话标识。`onClick={onLaunch}` 这种裸传写法会把 React 合成事件当成
@@ -4662,8 +4677,9 @@ export function App() {
           launchRuntime = nextRuntime
           setRuntime(nextRuntime)
         }
-        // 对话作为同一应用内的子页面打开，保留当前底层页面。
-        await withBridgeTimeout(runtimeBridge.openHarness(targetSessionId), ACTION_WATCHDOG_MS)
+        // 标签页启动过程中若已切走，不要让迟到的启动覆盖用户当前页面。
+        if (tabOnly && activeViewRef.current !== 'harness') return
+        await withBridgeTimeout((tabOnly ? runtimeBridge.openHarness(targetSessionId, true) : runtimeBridge.openHarness(targetSessionId)), ACTION_WATCHDOG_MS)
         // 先打开页面，再刷新可选状态，避免它抢占原生运行时锁。
         void runtimeBridge.getKeepAliveState()
           .then(setKeepAlive)
@@ -4704,6 +4720,7 @@ export function App() {
           await launchSequence()
         }
       } catch (error) {
+        if (tabOnly && activeViewRef.current !== 'harness') return
         setActiveView('conversation')
         // 错误后的状态刷新不能阻止释放打开按钮，尤其是桥本身无响应时。
         const revision = runtimeStateRevision.current
@@ -4729,12 +4746,17 @@ export function App() {
   /** 用户已确认「密钥在 Harness 里配置过」时的放行入口，只在显式按钮上使用。 */
   const launchHarnessConfirmed = useCallback((sessionId?: string) => openHarness(true, sessionId), [openHarness])
 
-  /*
-   * 这里原本有一条「打开应用就自动进 Harness」的 effect，靠设置里的 `autoLaunch`
-   * 判断，而原生存储把它写死成 true——于是没有开关也会直接跳进 Harness，冷启动
-   * 还会占住忙锁，用户从 Harness 返回后点不回来。
-   * 入口只留用户显式点击：开机停在对话门禁页，`打开 Harness` 才是唯一开门动作。
-   */
+  // 每次进入对话标签自动装载一次；失败后保留手动重试，避免无限循环。
+  const harnessTabAttempted = useRef(false)
+  useEffect(() => {
+    if (activeView !== 'harness') { harnessTabAttempted.current = false; return }
+    if (!Capacitor.isNativePlatform() || harnessTabAttempted.current || booting || onboardingOpen || settings === null) return
+    if (busy === 'launch') { harnessTabAttempted.current = true; return }
+    if (busy !== null) return
+    if (runtime.updateAvailable || !['ready', 'running'].includes(runtime.phase) || !hasConfiguredModelCredential(settings)) return
+    harnessTabAttempted.current = true
+    openHarness(false, undefined, true)
+  }, [activeView, booting, onboardingOpen, settings, busy, runtime, openHarness])
 
   const openSettings = useCallback((page: SettingsPage) => {
     // 最新设置读完之前不展示可编辑的旧草稿，避免迟到响应清空刚输入的内容。
@@ -5418,6 +5440,8 @@ export function App() {
 
   const screen = (() => {
     switch (activeView) {
+      case 'harness':
+        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onUpdate={requestRuntimeUpdate} />
       case 'conversation':
         return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onUpdate={requestRuntimeUpdate} />
       case 'sessions':

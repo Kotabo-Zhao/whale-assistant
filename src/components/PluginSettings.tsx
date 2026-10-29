@@ -158,6 +158,8 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   type FilterTab = 'all' | 'enabled' | 'relinkable' | 'thirdParty'
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
   const [query, setQuery] = useState('')
+  const [manageTarget, setManageTarget] = useState<string | null>(null)
+  const pluginListRef = useRef<HTMLDivElement | null>(null)
   const active = useRef(true)
   const pending = useRef(false)
   const run = useCallback(async (request: PluginRequest, marketPackage?: string): Promise<boolean> => {
@@ -229,6 +231,17 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const unresolved = catalog?.plugins.filter(group => group.enabled && !group.installed && !group.official).length ?? 0
   const marketplaceInstalled = catalog?.plugins.some(group => group.id === 'dshmarket' && group.installed) ?? false
 
+  const installedMarketPackages = catalog === null ? null : new Map(
+    catalog.plugins.filter(group => group.installed).map(group => [group.id, group.version ?? null] as const),
+  )
+  const manageMarketPackage = (name: string) => { setFilterTab('all'); setQuery(name); setManageTarget(name) }
+  useEffect(() => {
+    if (!manageTarget) return
+    const target = Array.from(pluginListRef.current?.querySelectorAll<HTMLDetailsElement>('details[data-plugin-id]') ?? [])
+      .find(item => item.dataset.pluginId === manageTarget)
+    if (target) { target.open = true; target.scrollIntoView?.({ block: 'start' }); target.querySelector<HTMLElement>('summary')?.focus(); setManageTarget(null) }
+  }, [manageTarget, query, filterTab, catalog])
+
   const matchesFilter = (group: PluginCatalog['plugins'][number]) => {
     if (filterTab === 'enabled' && !group.enabled) return false
     if (filterTab === 'relinkable' && (group.installed || !group.preserved?.exists)) return false
@@ -258,7 +271,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       <div className="plugin-market-copy">
         <span className="plugin-market-kicker">DISCOVER</span>
         <h2 id="plugin-market-title">{t('发现插件')}</h2>
-        <p>{t('安装社区插件市场，在对话中浏览和搜索扩展。插件由第三方提供，安装前请了解来源和权限。')}</p>
+        <p>{t('在此浏览 Harness 插件市场的社区目录，并统一管理已安装扩展。插件由第三方提供，请了解来源和权限。')}</p>
         <small>{t('市场安装后重启对话生效；移动端兼容性取决于插件。')}</small>
       </div>
       <button className="button button-primary compact-button" type="button" disabled={locked || !catalog || marketplaceInstalled} onClick={() => { void run({ operation: 'import', source: 'dshmarket' }) }}>{marketplaceInstalled ? t('插件市场已安装') : t('安装插件市场')}</button>
@@ -274,7 +287,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       </div>}
     </section>
     <MobileMarket locked={locked} onInstall={name => { void run({ operation: 'import', source: name }, name) }}
-      installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail } : null} />
+      installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail } : null} installed={installedMarketPackages} onManage={manageMarketPackage} />
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
     <section className="plugin-import" aria-labelledby="plugin-import-title">
       <h2 id="plugin-import-title">{t('通过 npm 包名或链接导入')}</h2>
@@ -331,13 +344,14 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       </div>
     </div>
 
+    <div ref={pluginListRef}>
     {catalog?.plugins.length === 0 && <p>{t('暂无插件。安装运行环境后点击「刷新」。')}</p>}
     {[true, false].map(official => {
       const groups = catalog?.plugins.filter(group => group.official === official && matchesFilter(group)) ?? []
       return <section key={String(official)} className="plugin-category" aria-label={t(official ? '官方插件' : '第三方插件')}>
         <h2>{t(official ? '官方插件' : '第三方插件')}</h2>
         {official && <p className="plugin-description">{t('官方包随运行时更新，避免覆盖 Android 兼容修补。安全组件不可禁用。')}</p>}
-        {groups.map(group => <details className="plugin-file" key={group.id}>
+        {groups.map(group => <details className="plugin-file" data-plugin-id={group.id} key={group.id}>
           <summary>
             <Package className="plugin-summary-icon" size={20} />
             <span className="plugin-summary-copy">
@@ -387,5 +401,6 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         </details>)}
       </section>
     })}
+    </div>
   </div>
 }

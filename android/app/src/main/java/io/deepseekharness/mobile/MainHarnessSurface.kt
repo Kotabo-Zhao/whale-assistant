@@ -82,6 +82,13 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         }.getOrNull() ?: return false
         if (!AppAuthenticationState.claimHarnessAccess(owner, access)) return false
         active = WeakReference(this)
+        // Reuse the live page only for the same runtime credentials and the default session.
+        // Explicit session requests still go through the normal authenticated load path.
+        if (sessionId == null && web != null && boundAccess == access && entry != null) {
+            container?.visibility = View.VISIBLE
+            returnAfterManage = false
+            return true
+        }
         val view = ensureView()
         gate.cancel()
         val nextGate = HarnessPageLoadGate()
@@ -114,6 +121,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
                         loaded.clearHistory()
                     }
                     HarnessThemeBridge.apply(loaded)
+                    HarnessVisualStyle.apply(loaded)
                     HarnessPolyfill.apply(loaded)
                     HarnessWorkspaceShare.apply(loaded)
                 }
@@ -140,7 +148,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         if (!visible()) return false
         stopSpeech()
         val view = web
-        if (view != null && view.canGoBack()) view.goBack() else hide()
+        if (view != null && view.canGoBack()) view.goBack() else showAssistantTab("conversation")
         return true
     }
 
@@ -201,13 +209,18 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         }
         root.findViewById<View>(R.id.harness_voice).setOnClickListener { startVoice() }
         root.findViewById<View>(R.id.harness_speak).setOnClickListener { readAloud() }
-        root.findViewById<View>(R.id.harness_manage).setOnClickListener {
-            hide(returnToConversation = true)
-            Toast.makeText(activity, R.string.harness_manage_return_hint, Toast.LENGTH_SHORT).show()
-        }
+        root.findViewById<View>(R.id.harness_manage).setOnClickListener { showAssistantTab("conversation") }
+        root.findViewById<View>(R.id.harness_tab_home).setOnClickListener { showAssistantTab("conversation") }
+        root.findViewById<View>(R.id.harness_tab_plugins).setOnClickListener { showAssistantTab("plugins") }
+        root.findViewById<View>(R.id.harness_tab_settings).setOnClickListener { showAssistantTab("settings") }
         activity.addContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         HarnessThemeBridge.attach(view)
         return view
+    }
+
+    private fun showAssistantTab(tab: String) {
+        hide()
+        activity.navigateFromHarness(tab)
     }
 
     private fun current(expected: HarnessPageLoadGate) = gate === expected && authorized()

@@ -147,7 +147,7 @@ interface NativeRuntimePlugin {
   restoreRuntimeSessionSnapshot(options: { id: string }): Promise<unknown>
   deleteRuntimeSessionSnapshot(options: { id: string }): Promise<unknown>
   startHarness(): Promise<RuntimeState>
-  openHarness(options?: { sessionId?: string }): Promise<void>
+  openHarness(options?: { sessionId?: string; tabOnly?: boolean }): Promise<void>
   openHarnessExternal(): Promise<void>
   getExternalBrowsers(): Promise<unknown>
   setExternalBrowser(options: { packageName: string | null }): Promise<void>
@@ -362,7 +362,7 @@ function createNativeBridge(): RuntimeBridge {
       .install(source === undefined ? undefined : validateRuntimeSource(source))
       .then(validateRuntimeInstallResult),
     startHarness: () => NativeRuntime.startHarness().then(validateRuntimeState),
-    openHarness: (sessionId?: string) => NativeRuntime.openHarness(sessionId ? { sessionId } : undefined),
+    openHarness: (sessionId?: string, tabOnly?: boolean) => NativeRuntime.openHarness(tabOnly ? { sessionId, tabOnly } : sessionId ? { sessionId } : undefined),
     openHarnessExternal: () => NativeRuntime.openHarnessExternal(),
     getExternalBrowsers: async () => validateExternalBrowserState(await NativeRuntime.getExternalBrowsers()),
     setExternalBrowser: packageName => {

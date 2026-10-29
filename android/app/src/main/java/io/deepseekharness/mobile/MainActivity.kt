@@ -131,6 +131,22 @@ class MainActivity : BridgeActivity() {
         return harnessSurface.open(access, sessionId)
     }
 
+    /** The check runs on the UI thread immediately before showing the isolated surface. */
+    internal fun isHarnessTabSelected(): Boolean = bridge?.webView?.url?.substringAfter('#', "") == "harness"
+
+    /** Fixed tab names only; no values from the isolated Harness page cross this boundary. */
+    internal fun navigateFromHarness(tab: String) {
+        val target = when (tab) {
+            "conversation" -> "conversation"
+            "plugins" -> "plugins"
+            "settings" -> "settings"
+            else -> return
+        }
+        bridge?.webView?.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('dsh-native-tab',{detail:'$target'}));", null,
+        )
+    }
+
     internal fun discardHarnessSurface() { harnessSurface.discard() }
 
     /** Called after a user edits and chooses a task in the local management UI. */

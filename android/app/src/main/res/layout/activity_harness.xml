@@ -45,6 +45,7 @@
         android:paddingVertical="4dp">
 
         <Button
+            style="@style/WhaleToolButton"
             android:id="@+id/harness_voice"
             android:layout_width="0dp"
             android:layout_height="48dp"
@@ -52,6 +53,7 @@
             android:text="@string/harness_voice" />
 
         <Button
+            style="@style/WhaleToolButton"
             android:id="@+id/harness_speak"
             android:layout_width="0dp"
             android:layout_height="48dp"
@@ -59,6 +61,7 @@
             android:text="@string/harness_speak" />
 
         <Button
+            style="@style/WhaleToolButton"
             android:id="@+id/harness_companion"
             android:layout_width="0dp"
             android:layout_height="48dp"
@@ -67,4 +70,22 @@
 
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="6dp"
+        android:background="@color/harness_toolbar_background">
+        <Button android:id="@+id/harness_tab_home" style="@style/WhaleTabButton"
+            android:text="@string/harness_tab_home" />
+        <Button android:id="@+id/harness_tab_active" style="@style/WhaleTabButton"
+            android:background="@drawable/bg_harness_active_tab"
+            android:text="@string/harness_tab_chat" android:textColor="@color/harness_search_focus"
+            android:contentDescription="@string/harness_tab_chat_active" />
+        <Button android:id="@+id/harness_tab_plugins" style="@style/WhaleTabButton"
+            android:text="@string/harness_tab_plugins" />
+        <Button android:id="@+id/harness_tab_settings" style="@style/WhaleTabButton"
+            android:text="@string/harness_tab_settings" />
+    </LinearLayout>
 </LinearLayout>

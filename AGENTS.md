@@ -8,7 +8,7 @@ Git 提交/发布规范见 [`.agents/rules/git-workflow.md`](.agents/rules/git-w
 
 ## 1. 手机启动直接进入对话的边界
 
-- 用户最新要求助手首页作为统一入口，Harness 是应用内子页面，因此启动后停留首页，只有用户主动操作才打开对话。不得在打开对话时把底层页面切到设置；可选的后台预启动不应切换页面。
+- 用户最新要求 Harness 常驻主界面的对话标签：切换到标签时自动启动并显示，切换其他标签时保留对话；不能要求再次点击打开。启动仍须遵守凭据、更新确认与忙锁。
 - `RuntimeSettings` 里的旧 `autoLaunch` 字段仍已整体移除；新的单次行为不得绕过模型凭据、运行环境更新确认或忙锁，首次配置和不可用状态仍需允许手动设置。
 - `openHarness` 里的运行期守卫不要删：只有非空字符串才当 `sessionId`，其余一律 `undefined`。
   按钮曾经写成 `onClick={onLaunch}`，React 合成事件被当成 `sessionId` 传给 Capacitor，

@@ -8,7 +8,7 @@ const PAGE_SIZE = 30
 const declaration = (value: string) => ['未声明', '声明格式无法识别', '无'].includes(value) ? t(value) : value
 
 type InstallState = { name: string; busy: boolean; failed: boolean; notice: string; detail: string }
-export function MobileMarket({ locked, onInstall, installState = null }: { locked: boolean; onInstall: (name: string) => void; installState?: InstallState | null }) {
+export function MobileMarket({ locked, onInstall, installState = null, installed = new Map(), onManage }: { locked: boolean; onInstall: (name: string) => void; installState?: InstallState | null; installed?: ReadonlyMap<string, string | null> | null; onManage?: (name: string) => void }) {
   useLanguage()
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [query, setQuery] = useState('')
@@ -78,7 +78,7 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
   }
   return <section className="mobile-market" aria-labelledby="mobile-market-title">
     <h2 id="mobile-market-title">{t('手机插件目录')}</h2>
-    <p>{t('浏览社区目录中的 npm 插件。安装由手机插件管理器处理，不运行安装脚本；是否能在安卓正常使用仍需验证。')}</p>
+    <p>{t('这里使用 Harness 插件市场的社区目录；发现、安装和已安装插件管理集中在此处。安装不运行安装脚本，安卓兼容性仍需验证。')}</p>
     <p className="plugin-hint">{t('最多读取目录前 20000 条，跳过无效或重复包名。')}</p>
     <button className="button button-secondary compact-button" type="button" disabled={status === 'loading'} onClick={() => { void load() }}>
       {status === 'loading' ? t('正在获取目录…') : entries ? t('刷新目录') : t('加载插件目录')}
@@ -130,8 +130,12 @@ export function MobileMarket({ locked, onInstall, installState = null }: { locke
       <div ref={resultsRegion} tabIndex={-1} aria-busy={query !== deferredQuery}>
         <p className="plugin-hint" role="status" aria-live="polite">{matches.length === 0 ? t('没有匹配的插件。') : t('共 {0} 个结果，第 {1}/{2} 页。', matches.length, currentPage + 1, pageCount)}{locked ? t('请先停止运行环境再安装。') : ''}</p>
         {visible.length > 0 && <ul className="mobile-market-list">{visible.map(item => <li key={item.npm}>
-          <div><strong>{item.name}</strong><code>{item.npm}</code>{item.description && <p>{item.description}</p>}</div>
-          <button className="button button-secondary compact-button" type="button" disabled={locked || query !== deferredQuery} onClick={() => { setVersion(''); setReview(item) }}>{t('安装')}</button>
+          <div><strong>{item.name}</strong><code>{item.npm}</code>{item.description && <p>{item.description}</p>}
+            {installed?.has(item.npm) && <span className="plugin-status-badge status-active">{t('已安装')}{installed.get(item.npm) ? ` · ${installed.get(item.npm)}` : ''}</span>}
+          </div>
+          {installed?.has(item.npm) && onManage
+            ? <button className="button button-secondary compact-button" type="button" onClick={() => onManage(item.npm)}>{t('管理')}</button>
+            : <button className="button button-secondary compact-button" type="button" disabled={locked || query !== deferredQuery || installed === null} onClick={() => { setVersion(''); setReview(item) }}>{t('安装')}</button>}
         </li>)}</ul>}
       </div>
       {pageCount > 1 && <nav className="mobile-market-pagination" aria-label={t('插件目录分页')}>

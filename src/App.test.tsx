@@ -54,6 +54,40 @@ describe('App conversation gate', () => {
     } finally { native.mockRestore() }
   })
 
+  it('切换对话标签自动启动，原生标签可返回首页', async () => {
+    const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
+    try {
+      render(<App />)
+      await arriveAtShell()
+      const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
+      fireEvent.click(nav.getByRole('button', { name: '对话' }))
+      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
+      expect(nav.getByRole('button', { name: '对话' })).toHaveAttribute('aria-current', 'page')
+      await act(async () => { window.dispatchEvent(new CustomEvent('dsh-native-tab', { detail: 'conversation' })); await Promise.resolve() })
+      expect(nav.getByRole('button', { name: '首页' })).toHaveAttribute('aria-current', 'page')
+      fireEvent.click(nav.getByRole('button', { name: '对话' }))
+      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(2))
+      expect(bridge.startHarness).toHaveBeenCalledTimes(1)
+    } finally { native.mockRestore() }
+  })
+
+  it('对话启动期间切回首页，不会在启动完成后覆盖首页', async () => {
+    const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
+    let finishStart!: (value: RuntimeState) => void
+    bridge.startHarness.mockReturnValueOnce(new Promise(resolve => { finishStart = resolve }))
+    try {
+      render(<App />)
+      await arriveAtShell()
+      const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
+      fireEvent.click(nav.getByRole('button', { name: '对话' }))
+      await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
+      fireEvent.click(nav.getByRole('button', { name: '首页' }))
+      await act(async () => { finishStart(runningState); await Promise.resolve() })
+      expect(bridge.openHarness).not.toHaveBeenCalled()
+      expect(nav.getByRole('button', { name: '首页' })).toHaveAttribute('aria-current', 'page')
+    } finally { native.mockRestore() }
+  })
+
   it('手动打开失败后不会自动重试，用户可以再次尝试', async () => {
     const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
     bridge.startHarness.mockRejectedValueOnce(new Error('启动失败'))

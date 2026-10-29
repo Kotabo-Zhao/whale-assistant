@@ -1,4 +1,10 @@
 <resources>
+    <string name="harness_tab_home">首页</string>
+    <string name="harness_tab_chat">对话</string>
+    <string name="harness_tab_chat_active">对话，当前标签</string>
+    <string name="harness_tab_plugins">插件</string>
+    <string name="harness_tab_settings">设置</string>
+
     <string name="harness_return_home">‹ 返回</string>
     <string name="harness_page_title">DeepSeek 对话</string>
     <string name="app_name">DeepSeek Harness</string>

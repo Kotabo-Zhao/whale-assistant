@@ -1260,6 +1260,9 @@ class MobileRuntimePlugin : Plugin() {
                             if (!live.get() || !harnessOpenRequests.isCurrent(request)) {
                                 throw RuntimeFailure("HARNESS_OPEN_CANCELLED", "打开请求已取消")
                             }
+                            if (call.getBoolean("tabOnly") == true && !host.isHarnessTabSelected()) {
+                                throw RuntimeFailure("HARNESS_OPEN_CANCELLED", "对话标签已切换")
+                            }
                             val opened = runCatching { host.openHarnessSurface(sessionId) }.getOrElse {
                                 host.discardHarnessSurface()
                                 false
