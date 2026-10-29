@@ -335,3 +335,31 @@ describe('插件双状态呈现与补充链接', () => {
     expect(await screen.findByText('已清理历史孤立副本，释放了存储空间')).toBeInTheDocument()
   })
 })
+
+it('搜索无结果提供清除筛选并恢复原列表', async () => {
+  setup()
+  await screen.findByText('example-plugin')
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索插件' }), { target: { value: 'no-match-xyz' } })
+  expect(screen.getByText('没有符合筛选条件的插件')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '清除筛选' }))
+  expect(screen.getByText('example-plugin')).toBeInTheDocument()
+  expect(screen.getByRole('searchbox', { name: '搜索插件' })).toHaveValue('')
+})
+it('首次读取失败不显示空列表，重试成功后解除错误', async () => {
+  const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(catalog) }
+  render(<PluginSettings bridge={bridge} runtime={runtime} onBack={vi.fn()} />)
+  await screen.findByText('暂时无法读取插件列表')
+  expect(screen.queryByText('暂无插件。安装运行环境后点击「刷新」。')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '重试读取' }))
+  await screen.findByText('example-plugin')
+  expect(screen.queryByText('暂时无法读取插件列表')).not.toBeInTheDocument()
+})
+it('刷新失败保留原记录并标明可能过期', async () => {
+  const bridge = setup()
+  await screen.findByText('example-plugin')
+  bridge.managePlugins.mockRejectedValueOnce(new Error('offline'))
+  fireEvent.click(screen.getByRole('button', { name: '刷新' }))
+  await screen.findByText('列表刷新失败')
+  expect(screen.getByText('example-plugin')).toBeInTheDocument()
+  expect(screen.getByText('下面保留上次读取的记录，可能不是最新状态。请刷新后再核对。')).toBeInTheDocument()
+})

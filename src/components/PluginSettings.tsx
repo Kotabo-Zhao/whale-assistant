@@ -143,6 +143,7 @@ function RecoveryNotice({ recovery, unresolved, locked, onRepair, onPrune }: {
 export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBridge; runtime: RuntimeState; onBack: () => void }) {
   useLanguage()
   const [catalog, setCatalog] = useState<PluginCatalog | null>(null)
+  const [catalogReadFailed, setCatalogReadFailed] = useState(false)
   const [workspaceView, setWorkspaceView] = useState<'market' | 'installed'>('installed')
   const [proposal, setProposal] = useState<MarketProposal | null>(null)
   const [proposalBusy, setProposalBusy] = useState(false)
@@ -178,6 +179,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       const result = await bridge.managePlugins(request)
       if (active.current) {
         setCatalog(result)
+        setCatalogReadFailed(false)
         if (request.operation !== 'list') setNotice(successNotices[request.operation] ?? '插件设置已保存，下次启动生效')
         // 导入成功后清空输入：同一条来源再点一次只会命中既有安装，清空更不容易误解成"导入两次"。
         if (request.operation === 'import') { setSource(''); setExpected('') }
@@ -185,6 +187,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       return true
     } catch (error) {
       if (active.current) {
+        if (request.operation === 'list') setCatalogReadFailed(true)
         const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : ''
         // 原生侧会在能定位问题时把受控详情（包名与版本差异）放进 message；
         // 与通用文案相同时不重复展示。
@@ -263,19 +266,20 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     if (target) { target.open = true; target.scrollIntoView?.({ block: 'start' }); target.querySelector<HTMLElement>('summary')?.focus(); setManageTarget(null) }
   }, [manageTarget, query, filterTab, catalog])
 
-  const matchesFilter = (group: PluginCatalog['plugins'][number]) => {
-    if (filterTab === 'enabled' && !group.enabled) return false
-    if (filterTab === 'relinkable' && (group.installed || !group.preserved?.exists)) return false
-    if (filterTab === 'thirdParty' && group.official) return false
-    if (query.trim() !== '') {
-      const q = query.trim().toLowerCase()
-      const matchId = group.id.toLowerCase().includes(q)
-      const matchFile = group.file.toLowerCase().includes(q)
-      const matchChildren = group.children.some(c => c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
-      if (!matchId && !matchFile && !matchChildren) return false
-    }
-    return true
-  }
+  // 仅目录变化时重建搜索文本；进度与提示变化不再反复遍历子插件。
+  const searchIndex = useMemo(() => (catalog?.plugins ?? []).map(group => ({
+    group,
+    text: [group.id, group.file, ...group.children.flatMap(child => [child.id, child.name])].join('\n').toLowerCase(),
+  })), [catalog])
+  const filteredGroups = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return searchIndex.filter(({ group, text }) => {
+      if (filterTab === 'enabled' && !group.enabled) return false
+      if (filterTab === 'relinkable' && (group.installed || !group.preserved?.exists)) return false
+      if (filterTab === 'thirdParty' && group.official) return false
+      return !needle || text.includes(needle)
+    }).map(({ group }) => group)
+  }, [searchIndex, query, filterTab])
 
   return <div className="screen plugin-screen">
     <div className="screen-heading management-heading">
@@ -365,9 +369,11 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     </div>
 
     <div ref={pluginListRef}>
-    {catalog?.plugins.length === 0 && <p>{t('暂无插件。安装运行环境后点击「刷新」。')}</p>}
+    {catalogReadFailed && <div className="plugin-list-state" role="status"><strong>{t(catalog ? '列表刷新失败' : '暂时无法读取插件列表')}</strong><p>{t(catalog ? '下面保留上次读取的记录，可能不是最新状态。请刷新后再核对。' : '尚未取得安装记录，不代表没有插件。请检查运行环境后重试。')}</p><button className="button button-secondary compact-button" disabled={busy} onClick={() => { void run({ operation: 'list' }) }}>{t('重试读取')}</button></div>}
+    {catalog?.plugins.length === 0 && <div className="plugin-list-state"><strong>{t('暂无插件。安装运行环境后点击「刷新」。')}</strong><button className="button button-secondary compact-button" onClick={() => setWorkspaceView('market')}>{t('浏览商店')}</button></div>}
+    {catalog && catalog.plugins.length > 0 && filteredGroups.length === 0 && <div className="plugin-list-state" role="status"><strong>{t('没有符合筛选条件的插件')}</strong><p>{t('可以更换关键词，或清除搜索与分类条件。')}</p><button className="button button-secondary compact-button" onClick={() => { setQuery(''); setFilterTab('all') }}>{t('清除筛选')}</button></div>}
     {[true, false].map(official => {
-      const groups = catalog?.plugins.filter(group => group.official === official && matchesFilter(group)) ?? []
+      const groups = filteredGroups.filter(group => group.official === official)
       return <section key={String(official)} className="plugin-category" aria-label={t(official ? '官方插件' : '第三方插件')}>
         <h2>{t(official ? '官方插件' : '第三方插件')}</h2>
         {official && <p className="plugin-description">{t('官方包随运行时更新，避免覆盖 Android 兼容修补。安全组件不可禁用。')}</p>}
