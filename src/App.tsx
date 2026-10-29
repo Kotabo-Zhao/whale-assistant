@@ -1,3 +1,5 @@
+import type { AppView } from './ui/appNavigation'
+import { AppSidebar, BottomNavigation } from './components/AppNavigation'
 import { Capacitor } from '@capacitor/core'
 import appMark from './assets/app-mark.png'
 import { t, useLanguage } from './i18n'
@@ -71,7 +73,6 @@ import {
   Trash2,
   Wifi,
   X,
-  Blocks,
   ListChecks,
   MessageSquare,
 } from 'lucide-react'
@@ -152,35 +153,6 @@ const TerminalPanel = lazy(() => import('./components/TerminalPanel').then(modul
 const PluginSettings = lazy(() => import('./components/PluginSettings').then(module => ({ default: module.PluginSettings })))
 const FilesScreen = lazy(() => import('./screens/FilesScreen').then(module => ({ default: module.FilesScreen })))
 const RuntimeVersionsScreen = lazy(() => import('./screens/RuntimeVersionsScreen').then(module => ({ default: module.RuntimeVersionsScreen })))
-
-type AppView =
-  | 'conversation'
-  | 'harness'
-  | 'sessions'
-  | 'settings'
-  | 'settings-models'
-  | 'settings-runtime'
-  | 'settings-terminal'
-  | 'settings-device-shell'
-  | 'settings-diagnostics'
-  | 'settings-automation'
-  | 'settings-automation-accessibility'
-  | 'settings-automation-subscreen'
-  | 'settings-automation-params'
-  // 三级页：与二级页共用同一个 SettingsScreen，只是 [settingsPageOf] 映射到各自的 SettingsPage。
-  | 'settings-runtime-connection'
-  | 'settings-runtime-keepalive'
-  | 'settings-terminal-typography'
-  | 'settings-terminal-background'
-  | 'settings-terminal-dsh-background'
-  | 'settings-diagnostics-log'
-  | 'settings-diagnostics-capability'
-  | 'settings-diagnostics-feedback'
-  | 'terminal'
-  | 'environment'
-  | 'plugins'
-  | 'versions'
-  | 'files'
 
 /** 设置二级页：把原先的单页设置按功能分类，避免所有选项挤在一屏里。 */
 type SettingsPage = 'models' | 'runtime' | 'terminal' | 'device-shell' | 'automation' | 'diagnostics' | 'automation-accessibility' | 'automation-subscreen' | 'automation-params'
@@ -724,82 +696,6 @@ function formatElapsedSinceBoot(atMs: number): string {
 function automationRunLabel(run: AccessibilityAutomationRun): string {
   return run.message ?? run.code
 }
-
-interface AppSidebarProps {
-  activeView: AppView
-  onNavigate: (view: AppView) => void
-}
-
-/**
- * 外壳导航轨道：窄屏保留图标，宽屏显示文字。
- *
- * 入口只负责切换外壳视图，真正的 Harness 会话仍由运行时页面管理；
- * 因此侧栏不会把会话正文、凭据或终端输出放进 DOM。
- */
-function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
-  // 「版本管理」也归在设置轨道高亮里：它是从设置首页进入的一级页，底部导航不该看起来像「没进设置」。
-  // 「文件管理」与「版本管理」是从设置首页进入的一级页：底部导航/侧栏仍算在设置里，
-  // 否则用户进到这两页会觉得「我没在设置里」。
-  const settingsActive = isSettingsView(activeView) || activeView === 'environment' || activeView === 'terminal' || activeView === 'versions' || activeView === 'files'
-  const item = (view: AppView, label: string, icon: ReactNode, active: boolean, className = '') => (
-    <button
-      className={`sidebar-item ${active ? 'is-active' : ''} ${className}`}
-      type="button"
-      aria-label={t(label)}
-      aria-current={active ? 'page' : undefined}
-      title={t(label)}
-      onClick={() => onNavigate(view)}
-    >
-      {icon}<span>{t(label)}</span>
-    </button>
-  )
-
-  return (
-    <aside className="app-sidebar" aria-label={t('应用导航')}>
-      <button
-        className={`sidebar-mark ${activeView === 'sessions' ? 'is-active' : ''}`}
-        type="button"
-        aria-label={t('会话管理')}
-        aria-current={activeView === 'sessions' ? 'page' : undefined}
-        title={t('会话管理')}
-        onClick={() => onNavigate('sessions')}
-      >
-        <img className="app-mark" src={appMark} alt="" width={26} height={26} />
-        <span>{t('会话')}</span>
-      </button>
-      <nav className="sidebar-nav">
-        {item('conversation', '首页', <MessageSquare size={20} />, activeView === 'conversation')}
-        {item('harness', '对话', <MessageSquare size={20} />, activeView === 'harness')}
-        {item('plugins', '插件管理', <Blocks size={20} />, activeView === 'plugins')}
-      </nav>
-      <div className="sidebar-bottom">
-        {item('settings', '应用设置', <Settings2 size={20} />, settingsActive)}
-      </div>
-    </aside>
-  )
-}
-
-/** 手机横竖屏使用底部导航；会话管理由页头鲸鱼入口打开。 */
-function BottomNavigation({ activeView, onNavigate }: AppSidebarProps) {
-  const items: { view: AppView; label: string; icon: ReactNode; active: boolean }[] = [
-    { view: 'conversation', label: '首页', icon: <MessageSquare size={20} />, active: activeView === 'conversation' || activeView === 'sessions' },
-    { view: 'harness', label: '对话', icon: <MessageSquare size={20} />, active: activeView === 'harness' },
-    { view: 'plugins', label: '插件', icon: <Blocks size={20} />, active: activeView === 'plugins' },
-    { view: 'settings', label: '设置', icon: <Settings2 size={20} />, active: isSettingsView(activeView) || activeView === 'environment' || activeView === 'terminal' || activeView === 'versions' || activeView === 'files' },
-  ]
-  return (
-    <nav className="bottom-navigation" aria-label={t('底部导航')}>
-      {items.map(item => (
-        <button key={item.view} type="button" className={`bottom-navigation-item ${item.active ? 'is-active' : ''}`}
-          aria-label={t(item.label)} title={t(item.label)} aria-current={item.active ? 'page' : undefined} onClick={() => onNavigate(item.view)}>
-          {item.icon}
-          <span>{t(item.label)}</span>
-        </button>
-      ))}
-    </nav>
-  )
-}
-
 
 function runtimeInstalled(runtime: RuntimeState): boolean {
   return runtime.installedVersion !== undefined || ['ready', 'running', 'stopping'].includes(runtime.phase)
