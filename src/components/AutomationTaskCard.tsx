@@ -44,6 +44,7 @@ const CANCEL_FAILURE_NOTES: Record<string, string> = {
   AUTOMATION_TASK_CHANGED: '任务已变化，请重新读取后再停止',
   TASK_IDENTITY_UNAVAILABLE: '当前任务缺少实例标识，请重新读取或更新应用',
   STOP_UNCONFIRMED: '未确认任务已停止，请重新读取状态',
+  AUTOMATION_TASK_ALREADY_SETTLED: '任务已经结束，请重新读取状态',
 }
 
 /** 受控码从错误里取出来；取不到就给 `UNKNOWN`，不假装知道原因。 */
@@ -145,8 +146,10 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
         {step.attempts > 1 ? t(' · 已试 {0} 次', String(step.attempts)) : ''}
         {step.code !== null ? `（${step.code}）` : ''}
       </p>)}
-      <p className="settings-note">{t('停止会跳过未开始的步骤；已发出的操作不会撤回，结果可能需要检查。')}</p>
-      <button className="button button-secondary" type="button" onClick={() => { void stop() }} disabled={busy}>{t('停止这个任务')}</button>
+      {!['done', 'failed', 'cancelled'].includes(task.status) && <>
+        <p className="settings-note">{t('停止会跳过未开始的步骤；已发出的操作不会撤回，结果可能需要检查。')}</p>
+        <button className="button button-secondary" type="button" onClick={() => { void stop() }} disabled={busy}>{t('停止这个任务')}</button>
+      </>}
       {stopped && <p className="settings-note">{t(task.steps.some(step => step.status === 'unknown')
         ? '已经停止，但有步骤结果不确定；请检查目标应用，不要直接重发。'
         : '已经停止，未开始的步骤已跳过。')}</p>}
@@ -154,7 +157,7 @@ export function AutomationTaskCard({ bridge = runtimeBridge }: { bridge?: Runtim
     {stopFailed !== null && <p role="alert">
       {CANCEL_FAILURE_NOTES[stopFailed] !== undefined ? t(CANCEL_FAILURE_NOTES[stopFailed]) : t('停止失败（{0}）', stopFailed)}
       {' '}
-      {['AUTOMATION_TASK_CHANGED', 'TASK_IDENTITY_UNAVAILABLE', 'STOP_UNCONFIRMED'].includes(stopFailed)
+      {['AUTOMATION_TASK_CHANGED', 'AUTOMATION_TASK_ALREADY_SETTLED', 'TASK_IDENTITY_UNAVAILABLE', 'STOP_UNCONFIRMED'].includes(stopFailed)
         ? <button className="button button-quiet" type="button" disabled={busy || refreshing} onClick={() => { void refresh() }}>{t('重新读取')}</button>
         : <button className="button button-quiet" type="button" disabled={busy || refreshing} onClick={() => { void stop() }}>{t('重试')}</button>}
     </p>}

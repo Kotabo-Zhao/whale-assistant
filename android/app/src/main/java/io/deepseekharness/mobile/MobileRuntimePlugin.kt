@@ -2786,8 +2786,8 @@ class MobileRuntimePlugin : Plugin() {
     /**
      * 权限：应用内桥接；取消当前任务（设置页的「取消任务」）。**AI 侧没有这条路。**
      *
-     * 取消只把未收口的步骤记成 `skipped` + `AUTOMATION_TASK_CANCELLED`：已经发出去的那一次动作
-     * 不会被假装没发生——它留在台账里，调用方自己回去确认现场。没有任务时按受控码拒收，
+     * 取消将未开始的步骤记成 `skipped`；在途步骤结果不确定，需用户检查现场。
+     * 终态任务不被迟到的停止请求改写。没有任务时按受控码拒收，
      * 不做「悄悄什么也没发生」的空操作。
      */
     @PluginMethod
@@ -2803,6 +2803,9 @@ class MobileRuntimePlugin : Plugin() {
                 }
                 if (!io.deepseekharness.mobile.accessibility.AutomationTaskIdentity.matches(current, call.getString("instanceId"))) {
                     throw RuntimeFailure("AUTOMATION_TASK_CHANGED", "任务已变化，请重新读取后再停止")
+                }
+                if (io.deepseekharness.mobile.accessibility.automationTaskSettled(current.status)) {
+                    throw RuntimeFailure("AUTOMATION_TASK_ALREADY_SETTLED", "任务已经结束，请重新读取状态")
                 }
                 val snapshot = service.cancelAutomationTask()
                 // 审计只记「取消被按下」这个受控码，不带包名、不带步骤标识。

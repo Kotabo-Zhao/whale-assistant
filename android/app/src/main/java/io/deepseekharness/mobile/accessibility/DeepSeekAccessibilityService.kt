@@ -1486,6 +1486,9 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                 }
             AutomationTaskRequest.Cancel -> {
                 val before = ledger.snapshot()
+                if (automationTaskSettled(before.status)) return@synchronized taskFailure(
+                    AutomationTaskCodes.ALREADY_SETTLED, "任务已经结束，请重新读取状态", before, false,
+                )
                 automationTaskReceipt = null
                 val snapshot = ledger.cancel()
                 if (!AutomationTaskInterruptionStore.requiresReview(before)) interruption.clear()

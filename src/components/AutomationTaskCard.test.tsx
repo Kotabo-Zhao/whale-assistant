@@ -191,6 +191,16 @@ describe('自动化任务卡片', () => {
     expect(await screen.findByText('已经停止，但有步骤结果不确定；请检查目标应用，不要直接重发。')).toBeVisible()
     expect(screen.queryByText('已经停止，未开始的步骤已跳过。')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '已检查现场，清除中断提示' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '停止这个任务' })).not.toBeInTheDocument()
+  })
+
+  it('任务在停止请求到达前结束时提示重新读取，不提供重复停止', async () => {
+    card({ getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: task() }),
+      cancelAutomationTask: vi.fn().mockRejectedValue(new Error('AUTOMATION_TASK_ALREADY_SETTLED')) })
+    await findRow('目标应用：com.example.chat · 正在执行')
+    fireEvent.click(screen.getByRole('button', { name: '停止这个任务' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('任务已经结束，请重新读取状态')
+    expect(screen.getAllByRole('button', { name: '重新读取' }).length).toBeGreaterThan(0)
   })
 
   it('没登记过的取消失败码照原样显示，不编原因', async () => {

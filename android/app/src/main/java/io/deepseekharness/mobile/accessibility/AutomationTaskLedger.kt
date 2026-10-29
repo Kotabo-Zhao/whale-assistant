@@ -45,6 +45,7 @@ internal object AutomationTaskCodes {
     const val STEP_UNKNOWN = "AUTOMATION_TASK_STEP_UNKNOWN"
     const val STEP_OUT_OF_ORDER = "AUTOMATION_TASK_STEP_OUT_OF_ORDER"
     const val STEP_ALREADY_SETTLED = "AUTOMATION_TASK_STEP_ALREADY_SETTLED"
+    const val ALREADY_SETTLED = "AUTOMATION_TASK_ALREADY_SETTLED"
     const val CANCELLED = "AUTOMATION_TASK_CANCELLED"
     const val RESUME_REQUIRED = "AUTOMATION_TASK_RESUME_REQUIRED"
     const val MANUAL_PREEMPTED = "AUTOMATION_TASK_MANUAL_PREEMPTED"
@@ -549,6 +550,7 @@ internal class AutomationTaskLedger {
     /** Cancel unstarted steps; an in-flight action may already have taken effect. */
     @Synchronized
     fun cancel(): AutomationTaskSnapshot {
+        if (automationTaskSettled(status)) return snapshot()
         steps = steps.map { step ->
             if (AutomationTaskStepStatus.settled(step.status)) step
             else if (step.startedAtMs != null) step.copy(status = AutomationTaskStepStatus.UNKNOWN, code = AutomationTaskCodes.NEEDS_CHECK, startedAtMs = null)

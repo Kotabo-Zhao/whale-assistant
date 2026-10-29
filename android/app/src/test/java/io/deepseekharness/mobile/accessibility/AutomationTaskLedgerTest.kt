@@ -651,6 +651,20 @@ class AutomationTaskLedgerTest {
         assertEquals(AutomationTaskStatus.CANCELLED, cancelled.snapshot().status)
     }
 
+    @Test fun `迟到取消不能把完成或失败的任务改成已取消`() {
+        val done = ledger(spec("s1"))
+        done.gate("s1", facts(), 1_000L)
+        val completed = done.record("s1", AutomationTaskStepOutcome(ok = true), 1_100L)
+        assertEquals(AutomationTaskStatus.DONE, completed.status)
+        assertEquals(completed, done.cancel())
+        val failed = ledger(spec("s1"))
+        failed.gate("s1", facts(), 1_000L)
+        val uncertain = failed.record("s1", AutomationTaskStepOutcome(ok = true, verified = false), 1_100L)
+        assertEquals(AutomationTaskStatus.FAILED, uncertain.status)
+        assertEquals(uncertain, failed.cancel())
+        assertTrue(AutomationTaskInterruptionStore.requiresReview(failed.snapshot()))
+    }
+
     @Test
     fun `同一时刻只允许一个未收口的任务`() {
         val ledger = ledger(spec("s1"))

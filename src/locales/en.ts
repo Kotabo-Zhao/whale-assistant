@@ -1914,6 +1914,7 @@ export const english: Readonly<Record<string, string>> = {
   "停止会跳过未开始的步骤；已发出的操作不会撤回，结果可能需要检查。": "Stopping skips steps that have not started. Actions already sent cannot be recalled and may need checking.",
   "已经停止，但有步骤结果不确定；请检查目标应用，不要直接重发。": "Stopped, but a step has an uncertain result. Check the target app before doing anything again.",
   "已经停止，未开始的步骤已跳过。": "Stopped; steps that had not started were skipped.",
+  "任务已经结束，请重新读取状态": "The task has already ended. Refresh its status.",
   "停止失败（{0}）": "Could not stop ({0})",
   "无障碍服务没有连上，现在叫不停它": "The accessibility service is not connected, so it cannot be stopped right now",
   "现在没有任务可停止": "There is no task to stop",
