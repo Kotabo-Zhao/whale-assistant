@@ -198,15 +198,17 @@ class UnderstandingQueueTest {
             q.ingest(source, "new", "会议改期 ${format.format(next)}", hash, now)
             val second = q.claim(now)!!
             q.commitResult(second, "new", """{"version":1,"claims":[],"items":[{"title":"项目会议","evidence_ids":["new"]}]}""")
-            assertEquals(item.id, q.listItems(10).single().id)
+            val shiftedItem = q.listItems(10).single()
+            assertEquals(item.id, shiftedItem.id)
             val shifted = next.toInstant().toEpochMilli() - 30 * 60_000L
-            assertTrue(q.itemReminderCurrent(item.id, shifted))
-            assertFalse(q.itemReminderCurrent(item.id, reminder))
+            assertTrue(q.itemReminderCurrent(item.id, shifted, shiftedItem.reminderRevision))
+            assertFalse(q.itemReminderCurrent(item.id, reminder, item.reminderRevision))
             q.ingest(source, "unclear", "会议改期，时间待定", hash, now + 1)
             val third = q.claim(now + 1)!!
             q.commitResult(third, "unclear", """{"version":1,"claims":[],"items":[{"title":"项目会议","evidence_ids":["unclear"]}]}""")
-            assertEquals(2, q.listItems(10).single().reminderStatus)
-            assertFalse(q.itemReminderCurrent(item.id, shifted))
+            val paused = q.listItems(10).single()
+            assertEquals(2, paused.reminderStatus)
+            assertFalse(q.itemReminderCurrent(item.id, shifted, paused.reminderRevision))
         }
     }
 }

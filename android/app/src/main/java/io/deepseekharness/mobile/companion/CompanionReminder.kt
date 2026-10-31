@@ -40,17 +40,18 @@ internal class CompanionReminder(private val context: Context) {
     }
 
     /** Stable item ID makes retries and rescheduling idempotent. */
-    fun upsertLinked(id: String, text: String, whenMillis: Long) = synchronized(lock) {
+    fun upsertLinked(id: String, text: String, whenMillis: Long, revision: Int) = synchronized(lock) {
         require(id.matches(Regex("[a-f0-9-]{36}")))
         require(text.isNotBlank() && text.length <= 200 && !CompanionStore.sensitive(text))
         require(CompanionReminderPolicy.isFuture(whenMillis, System.currentTimeMillis()))
-        check(UnifiedUnderstandingStore.open(context).use { it.queue.itemReminderCurrent(id, whenMillis) }) { "事项提醒已变化" }
+        require(revision > 0)
+        check(UnifiedUnderstandingStore.open(context).use { it.queue.itemReminderCurrent(id, whenMillis, revision) }) { "事项提醒已变化" }
         val rows = read()
         val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
         require(existing == null || existing.optBoolean("linkedItem", false)) { "提醒标识冲突" }
         if (existing == null) require(rows.length() < 100) { "提醒已满，请先删除" }
         val row = existing ?: JSONObject().put("id", id).put("linkedItem", true).also { rows.put(it) }
-        row.put("text", text.trim()).put("at", whenMillis).put("state", "scheduled")
+        row.put("text", text.trim()).put("at", whenMillis).put("linkedItemRevision", revision).put("state", "scheduled")
         save(rows)
         try { schedule(row) } catch (e: Exception) { row.put("state", "failed"); save(rows); throw e }
     }
@@ -60,7 +61,7 @@ internal class CompanionReminder(private val context: Context) {
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i)
             if (row.getString("id") != id) kept.put(row)
-            else if (row.optBoolean("linkedItem", false)) UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(id, row.getLong("at")) }
+            else if (row.optBoolean("linkedItem", false)) UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(id, row.getLong("at"), row.optInt("linkedItemRevision")) }
         }
         save(kept)
         alarm?.cancel(pending(id))
@@ -83,9 +84,10 @@ internal class CompanionReminder(private val context: Context) {
         }
         if (changed) save(rows)
         val desired = runCatching { UnifiedUnderstandingStore.open(context).use { it.queue.desiredItemReminders() } }.getOrNull().orEmpty()
-        for ((id, text, at) in desired) if (CompanionReminderPolicy.isFuture(at, System.currentTimeMillis())) {
-            val current = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
-            if (current == null || current.optLong("at") != at || current.optString("state") != "scheduled") runCatching { upsertLinked(id, text, at) }
+        for (desiredReminder in desired) if (CompanionReminderPolicy.isFuture(desiredReminder.dueAtMs, System.currentTimeMillis())) {
+            val current = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == desiredReminder.itemId }
+            if (current == null || current.optLong("at") != desiredReminder.dueAtMs || current.optInt("linkedItemRevision") != desiredReminder.revision || current.optString("state") != "scheduled")
+                runCatching { upsertLinked(desiredReminder.itemId, desiredReminder.title, desiredReminder.dueAtMs, desiredReminder.revision) }
         }
     }
 
@@ -118,7 +120,7 @@ internal class CompanionReminder(private val context: Context) {
         manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, row.getLong("at"), pending(row.getString("id")))
     }
     private fun linkedCurrent(row: JSONObject): Boolean = runCatching {
-        UnifiedUnderstandingStore.open(context).use { it.queue.itemReminderCurrent(row.getString("id"), row.getLong("at")) }
+        UnifiedUnderstandingStore.open(context).use { it.queue.itemReminderCurrent(row.getString("id"), row.getLong("at"), row.optInt("linkedItemRevision")) }
     }.getOrDefault(false)
     private fun pending(id: String): PendingIntent {
         val intent = Intent(context, CompanionReminderReceiver::class.java).setData(Uri.parse("dsh-reminder://local/$id"))

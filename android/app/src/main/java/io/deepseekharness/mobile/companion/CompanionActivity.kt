@@ -1324,9 +1324,11 @@ class CompanionActivity : AppCompatActivity() {
                 selected.set(Calendar.HOUR_OF_DAY, hour); selected.set(Calendar.MINUTE, minute); selected.set(Calendar.SECOND, 0); selected.set(Calendar.MILLISECOND, 0)
                 val due = selected.timeInMillis
                 runMemoryIo("正在保存关联提醒…", {
-                    val saved = UnifiedUnderstandingStore.open(this).use { it.queue.setItemReminder(item.id, item.state, due, System.currentTimeMillis()) }
-                    check(saved) { "事项已变化" }
-                    CompanionReminder(this).upsertLinked(item.id, item.title, due)
+                    val updated = UnifiedUnderstandingStore.open(this).use { store ->
+                        check(store.queue.setItemReminder(item.id, item.state, due, System.currentTimeMillis())) { "事项已变化" }
+                        store.queue.item(item.id) ?: error("事项已变化")
+                    }
+                    CompanionReminder(this).upsertLinked(item.id, item.title, due, updated.reminderRevision)
                 }) { result ->
                     android.widget.Toast.makeText(this, if (result.isSuccess) "关联提醒已安排；系统可能延迟。" else "未能确认安排结果，请重新查看事项和提醒。", android.widget.Toast.LENGTH_LONG).show()
                 }

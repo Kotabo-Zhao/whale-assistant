@@ -374,10 +374,10 @@ class DeviceBridgeServer(
                                 store.queue.item(update.id) ?: throw RuntimeFailure("TASK_CONFLICT", "事项已变化，请先重新读取")
                             }
                             try {
-                                if (update.reminderAtMs != null) io.deepseekharness.mobile.companion.CompanionReminder(context).upsertLinked(changed.id, changed.title, update.reminderAtMs)
+                                if (update.reminderAtMs != null) io.deepseekharness.mobile.companion.CompanionReminder(context).upsertLinked(changed.id, changed.title, update.reminderAtMs, changed.reminderRevision)
                                 else if (update.nextState in setOf("done", "cancelled")) io.deepseekharness.mobile.companion.CompanionReminder(context).removeLinked(changed.id)
                             } catch (e: Exception) {
-                                if (update.reminderAtMs != null) runCatching { io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(changed.id, update.reminderAtMs) } }
+                                if (update.reminderAtMs != null) runCatching { io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(changed.id, update.reminderAtMs, changed.reminderRevision) } }
                                 throw RuntimeFailure("TASK_REMINDER_UNAVAILABLE", "事项已更新，但关联提醒未能安排；已撤销本次提醒状态", e)
                             }
                             val refreshed = io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->

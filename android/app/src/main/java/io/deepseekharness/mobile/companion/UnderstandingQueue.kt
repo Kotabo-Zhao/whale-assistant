@@ -20,7 +20,9 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
                 db.execSQL("CREATE TABLE IF NOT EXISTS understanding_events (id TEXT PRIMARY KEY, source TEXT NOT NULL, input_hash TEXT NOT NULL, epoch INTEGER NOT NULL, body TEXT NOT NULL, UNIQUE(source, input_hash, epoch))")
                 db.execSQL("CREATE TABLE IF NOT EXISTS understanding_results (job_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, body TEXT NOT NULL)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS understanding_items (id TEXT PRIMARY KEY, job_id TEXT NOT NULL, event_id TEXT NOT NULL, title TEXT NOT NULL, state TEXT NOT NULL, UNIQUE(job_id, title))")
-                db.execSQL("CREATE TABLE IF NOT EXISTS understanding_item_reminders (item_id TEXT PRIMARY KEY NOT NULL, due_at INTEGER NOT NULL, enabled INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS understanding_item_reminders (item_id TEXT PRIMARY KEY NOT NULL, due_at INTEGER NOT NULL, enabled INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 1)")
+                val reminderColumns = db.rawQuery("PRAGMA table_info(understanding_item_reminders)", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(1)) } }
+                if ("revision" !in reminderColumns) db.execSQL("ALTER TABLE understanding_item_reminders ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
                 db.execSQL("CREATE TABLE IF NOT EXISTS understanding_forget (event_id TEXT PRIMARY KEY NOT NULL)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS understanding_event_threads (event_id TEXT PRIMARY KEY NOT NULL, thread_hash TEXT NOT NULL, observed_at INTEGER NOT NULL)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS understanding_thread_lookup ON understanding_event_threads(thread_hash)")
@@ -79,7 +81,7 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
         db.rawQuery("SELECT event_id FROM understanding_forget", null).use { c -> while (c.moveToNext()) forgotten.put(c.getString(0)) }
         db.rawQuery("SELECT event_id,thread_hash,observed_at FROM understanding_event_threads", null).use { c -> while (c.moveToNext()) threads.put(org.json.JSONObject().put("event", c.getString(0)).put("thread", c.getString(1)).put("at", c.getLong(2))) }
         db.rawQuery("SELECT item_id,event_id FROM understanding_item_evidence", null).use { c -> while (c.moveToNext()) evidence.put(org.json.JSONObject().put("item", c.getString(0)).put("event", c.getString(1))) }
-        db.rawQuery("SELECT item_id,due_at,enabled FROM understanding_item_reminders", null).use { c -> while (c.moveToNext()) reminders.put(org.json.JSONObject().put("item", c.getString(0)).put("at", c.getLong(1)).put("status", c.getInt(2))) }
+        db.rawQuery("SELECT item_id,due_at,enabled,revision FROM understanding_item_reminders", null).use { c -> while (c.moveToNext()) reminders.put(org.json.JSONObject().put("item", c.getString(0)).put("at", c.getLong(1)).put("status", c.getInt(2)).put("revision", c.getInt(3))) }
         CompanionKnowledgeData.utf8(org.json.JSONObject().put("version", 1).put("events", events).put("results", results).put("items", items).put("forgotten", forgotten).put("threads", threads).put("itemEvidence", evidence).put("reminders", reminders).toString())
             .also { require(it.size <= 8_000_000) { "后台备份超过单次大小上限" } }
     }
@@ -153,11 +155,11 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
         }
         val reminders = if (root.has("reminders")) root.getJSONArray("reminders") else org.json.JSONArray()
         for (i in 0 until reminders.length()) {
-            val row = reminders.getJSONObject(i); val item = row.getString("item"); val at = row.getLong("at"); val state = row.getInt("status")
-            require(validId(item) && at > 0 && state in 0..2)
+            val row = reminders.getJSONObject(i); val item = row.getString("item"); val at = row.getLong("at"); val state = row.getInt("status"); val revision = if (row.has("revision")) row.getInt("revision") else 1
+            require(validId(item) && at > 0 && state in 0..2 && revision > 0)
             if (!db.rawQuery("SELECT 1 FROM understanding_items WHERE id=?", arrayOf(item)).use { it.moveToFirst() }) continue
             // Restored reminders require explicit review; existing local state wins.
-            db.insertWithOnConflict("understanding_item_reminders", null, ContentValues().apply { put("item_id", item); put("due_at", at); put("enabled", if (state == 0) 0 else 2) }, SQLiteDatabase.CONFLICT_IGNORE)
+            db.insertWithOnConflict("understanding_item_reminders", null, ContentValues().apply { put("item_id", item); put("due_at", at); put("enabled", if (state == 0) 0 else 2); put("revision", revision) }, SQLiteDatabase.CONFLICT_IGNORE)
         }
         imported
     }
@@ -288,8 +290,8 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
             val reminder = db.rawQuery("SELECT due_at FROM understanding_item_reminders WHERE item_id=? AND enabled=1", arrayOf(old.id)).use { if (it.moveToFirst()) it.getLong(0) else null }
             if (reminder != null) {
                 val next = if (oldTime != null && newTime != null) runCatching { Math.addExact(newTime, Math.subtractExact(reminder, oldTime)) }.getOrNull() else null
-                if (next != null && CompanionReminderPolicy.isFuture(next, now)) db.execSQL("UPDATE understanding_item_reminders SET due_at=? WHERE item_id=? AND enabled=1", arrayOf(next, old.id))
-                else db.execSQL("UPDATE understanding_item_reminders SET enabled=2 WHERE item_id=? AND enabled=1", arrayOf(old.id))
+                if (next != null && CompanionReminderPolicy.isFuture(next, now)) db.execSQL("UPDATE understanding_item_reminders SET due_at=?,revision=revision+1 WHERE item_id=? AND enabled=1", arrayOf(next, old.id))
+                else db.execSQL("UPDATE understanding_item_reminders SET enabled=2,revision=revision+1 WHERE item_id=? AND enabled=1", arrayOf(old.id))
             }
         }
         return true
@@ -326,18 +328,18 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
         db.delete("understanding_events", "id IN ($placeholders)", args)
         items
     }
-    data class Item(val id: String, val title: String, val state: String, val eventId: String, val reminderStatus: Int = 0)
+    data class Item(val id: String, val title: String, val state: String, val eventId: String, val reminderStatus: Int = 0, val reminderRevision: Int = 0)
     fun item(id: String): Item? = db.rawQuery(
-        "SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.id=?", arrayOf(id)
-    ).use { c -> if (c.moveToFirst()) Item(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4)) else null }
+        "SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.id=?", arrayOf(id)
+    ).use { c -> if (c.moveToFirst()) Item(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getInt(5)) else null }
     fun sharedRecordId(eventId: String): String? = db.rawQuery(
         "SELECT record_id FROM knowledge_source_events WHERE event_id=? LIMIT 1", arrayOf(eventId)
     ).use { c -> if (c.moveToFirst()) c.getString(0) else null }
     fun listItems(limit: Int): List<Item> {
         require(limit in 1..100)
-        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id ORDER BY i.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->
+        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id ORDER BY i.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->
             val items = mutableListOf<Item>()
-            while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4)))
+            while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4), cursor.getInt(5)))
             items
         }
     }
@@ -351,18 +353,22 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
     fun setItemReminder(id: String, expected: String, dueAt: Long, now: Long): Boolean = transaction {
         require(expected in setOf("candidate", "open") && CompanionReminderPolicy.isFuture(dueAt, now))
         val updated = db.update("understanding_items", ContentValues().apply { put("state", "open") }, "id=? AND state=?", arrayOf(id, expected)) == 1
-        if (updated) db.insertWithOnConflict("understanding_item_reminders", null, ContentValues().apply { put("item_id", id); put("due_at", dueAt); put("enabled", 1) }, SQLiteDatabase.CONFLICT_REPLACE)
+        if (updated) {
+            val revision = db.rawQuery("SELECT COALESCE(revision,0)+1 FROM understanding_item_reminders WHERE item_id=?", arrayOf(id)).use { if (it.moveToFirst()) it.getInt(0) else 1 }
+            db.insertWithOnConflict("understanding_item_reminders", null, ContentValues().apply { put("item_id", id); put("due_at", dueAt); put("enabled", 1); put("revision", revision) }, SQLiteDatabase.CONFLICT_REPLACE)
+        }
         updated
     }
-    fun itemReminderCurrent(id: String, dueAt: Long): Boolean = db.rawQuery(
-        "SELECT 1 FROM understanding_item_reminders r JOIN understanding_items i ON i.id=r.item_id WHERE r.item_id=? AND r.due_at=? AND r.enabled=1 AND i.state='open'", arrayOf(id, dueAt.toString())
+    fun itemReminderCurrent(id: String, dueAt: Long, revision: Int): Boolean = db.rawQuery(
+        "SELECT 1 FROM understanding_item_reminders r JOIN understanding_items i ON i.id=r.item_id WHERE r.item_id=? AND r.due_at=? AND r.revision=? AND r.enabled=1 AND i.state='open'", arrayOf(id, dueAt.toString(), revision.toString())
     ).use { it.moveToFirst() }
-    fun disableItemReminder(id: String, dueAt: Long) = transaction {
-        db.update("understanding_item_reminders", ContentValues().apply { put("enabled", 0) }, "item_id=? AND due_at=?", arrayOf(id, dueAt.toString()))
+    fun disableItemReminder(id: String, dueAt: Long, revision: Int) = transaction {
+        db.update("understanding_item_reminders", ContentValues().apply { put("enabled", 0) }, "item_id=? AND due_at=? AND revision=?", arrayOf(id, dueAt.toString(), revision.toString()))
     }
-    fun desiredItemReminders(): List<Triple<String, String, Long>> = db.rawQuery(
-        "SELECT i.id,i.title,r.due_at FROM understanding_item_reminders r JOIN understanding_items i ON i.id=r.item_id WHERE r.enabled=1 AND i.state='open'", null
-    ).use { c -> val rows = mutableListOf<Triple<String,String,Long>>(); while (c.moveToNext()) rows.add(Triple(c.getString(0), c.getString(1), c.getLong(2))); rows }
+    data class Reminder(val itemId: String, val title: String, val dueAtMs: Long, val revision: Int)
+    fun desiredItemReminders(): List<Reminder> = db.rawQuery(
+        "SELECT i.id,i.title,r.due_at,r.revision FROM understanding_item_reminders r JOIN understanding_items i ON i.id=r.item_id WHERE r.enabled=1 AND i.state='open'", null
+    ).use { c -> val rows = mutableListOf<Reminder>(); while (c.moveToNext()) rows.add(Reminder(c.getString(0), c.getString(1), c.getLong(2), c.getInt(3))); rows }
     fun recentEvidence(limit: Int): List<CandidateEvidence> {
         require(limit in 1..100)
         return db.rawQuery("SELECT e.id, e.source, e.body, r.body FROM understanding_results r JOIN understanding_events e ON e.id=r.event_id ORDER BY r.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->
