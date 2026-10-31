@@ -92,6 +92,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [knowledgeSelectionMode, setKnowledgeSelectionMode] = useState(false)
   const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<Set<string>>(() => new Set())
   const [knowledgeProcessing, setKnowledgeProcessing] = useState<KnowledgeProcessing | null>(null)
+  const [knowledgeDetail, setKnowledgeDetail] = useState<Row | null>(null)
   const pending = useRef(false)
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
@@ -358,6 +359,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           {knowledgeProcessing.state === 'cancelled' && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingResume', knowledgeProcessing) }}>重新整理</button>}
           <button type="button" onClick={() => setKnowledgeProcessing(null)}>收起</button>
         </div></div>}</div>{!knowledgeSelectionMode && <div className="workspace-card-actions">
+        <button type="button" onClick={() => setKnowledgeDetail(row)}>查看详情</button>
         {knowledgeRevision(row) !== null && <button type="button" onClick={() => { void askKnowledge(row) }}>用此资料提问</button>}
         <button type="button" onClick={() => { void readKnowledgeProcessing(row) }}>处理状态</button>
         {row.source !== 'original' && <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>}
@@ -370,5 +372,11 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       {panel === 'memory' && items.length > 0 && <button className="button button-danger-quiet" type="button" onClick={() => { if (window.confirm('清空全部长期记忆并暂停通知和使用习惯的自动整理？此操作无法撤销。')) void run({ operation: 'memoryClear', confirmed: true }, '长期记忆已清空。') }}>清空全部长期记忆</button>}
     </>}
     </fieldset>
+    {knowledgeDetail && <div className="knowledge-detail-backdrop"><section className="knowledge-detail-page" role="dialog" aria-modal="true" aria-labelledby="knowledge-detail-title">
+      <header><div><span className="knowledge-type">{knowledgeFileTypeLabel(knowledgeDetail)}</span><h4 id="knowledge-detail-title">{typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料详情'}</h4><small>{knowledgeSourceLabel(knowledgeDetail.source)} · {knowledgeCoverageLabel(knowledgeDetail.coverage)}</small></div><button type="button" className="button button-secondary" onClick={() => setKnowledgeDetail(null)}>关闭</button></header>
+      {knowledgeDetailMeta(knowledgeDetail) && <p className="knowledge-detail-meta">{knowledgeDetailMeta(knowledgeDetail)}</p>}
+      <p className="knowledge-detail-content">{knowledgeDetail.text}</p>
+      <div className="workspace-card-actions">{knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void askKnowledge(knowledgeDetail) }}>用此资料提问</button>}<button type="button" onClick={() => setKnowledgeDetail(null)}>返回资料列表</button></div>
+    </section></div>}
   </section>
 }

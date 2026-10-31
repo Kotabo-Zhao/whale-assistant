@@ -157,6 +157,21 @@ it('资料详情只在已有解析标记时说明部分解析的具体范围', a
   fireEvent.click(detail.querySelector('summary')!)
   expect(within(detail).getByText('解析范围：仅提取前 500 页文字')).toBeInTheDocument()
 })
+it('资料可在全高详情页中阅读并带入对话草稿', async () => {
+  const revision = 'a'.repeat(64)
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'
+    ? { items: [{ id: 'k-detail', text: '这是完整的资料内容。', displayName: '旅行计划.docx', source: 'text_file', coverage: 'extracted_text', revision }] }
+    : { ok: true }))
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  fireEvent.click(await screen.findByRole('button', { name: '查看详情' }))
+  const dialog = screen.getByRole('dialog', { name: '旅行计划.docx' })
+  expect(within(dialog).getByText('这是完整的资料内容。')).toBeInTheDocument()
+  fireEvent.click(within(dialog).getByRole('button', { name: '用此资料提问' }))
+  await waitFor(() => expect(bridge.insertTaskDraft).toHaveBeenCalledWith(expect.stringContaining(`资料 ID：k-detail\n版本：${revision}`)))
+  fireEvent.click(within(dialog).getByRole('button', { name: '关闭' }))
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
 it('资料原件删除要求同一资料、原件和当前文本三项标识，并且不提供撤销', async () => {
   const originalId = 'a'.repeat(64)
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'
