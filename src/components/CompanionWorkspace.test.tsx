@@ -163,6 +163,17 @@ it('资料提问只放入带版本的对话草稿，不直接发送正文', asyn
   expect(screen.getByRole('status')).toHaveTextContent('已放入对话草稿，请补充问题并核对后发送。')
 })
 
+it('资料生成的记忆只显示受控关联，不回传资料正文', async () => {
+  bridge.companionDashboard.mockResolvedValue({ items: [{ id: 'm-source', text: '合同需要核对期限', source: 'shared_understanding', sourceRecordId: '123e4567-e89b-12d3-a456-426614174000', sourceRevision: 'a'.repeat(64) }] })
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '长期记忆' }))
+  const group = await screen.findByText('分享内容')
+  fireEvent.click(group)
+  fireEvent.click(screen.getByText('合同需要核对期限'))
+  expect(screen.getByText(/已关联资料（资料读取仍需当前对话授权）/)).toBeInTheDocument()
+  expect(screen.queryByText('合同原件正文')).not.toBeInTheDocument()
+})
+
 it('资料自动重试耗尽后如实显示失败并允许用户手动重试', async () => {
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'
     ? { items: [{ id: 'k-failed', text: '需要修复的资料' }] }

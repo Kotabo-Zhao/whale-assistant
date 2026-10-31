@@ -14,6 +14,7 @@ const rows = companionRows
 const expected = (row: Row) => typeof row._review === 'string' ? row._review : ''
 const originalId = (row: Row) => typeof row.originalId === 'string' && /^[a-f0-9]{64}$/.test(row.originalId) ? row.originalId : null
 const knowledgeRevision = (row: Row) => typeof row.revision === 'string' && /^[a-f0-9]{64}$/.test(row.revision) ? row.revision : null
+const linkedKnowledgeReference = (row: Row) => typeof row.sourceRecordId === 'string' && /^[a-f0-9-]{36}$/i.test(row.sourceRecordId) && typeof row.sourceRevision === 'string' && /^[a-f0-9]{64}$/i.test(row.sourceRevision) ? '已关联资料（资料读取仍需当前对话授权）' : null
 const formatMinute = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
 const parseMinute = (value: string) => { const [hour, minute] = value.split(':').map(Number); return hour * 60 + minute }
 const memoryCategory = (row: Row) => row.status === 'pending' ? '待确认' : row.source === 'shared_understanding' ? '分享内容' : row.source === 'auto_notification' || row.source === 'auto_notification_group' || row.source === 'user_notification' ? '通知整理' : row.source === 'auto_usage' ? '使用习惯' : row.source === 'auto_understanding' || row.source === 'user_understanding' ? '后台理解' : '手动与对话记忆'
@@ -321,7 +322,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           onTouchEnd={event => { if (memorySelectionMode) return; const start = swipeStart.current; swipeStart.current = null; if (!start || start.id !== row.id || !event.changedTouches.length) return; const dx = event.changedTouches[0].clientX - start.x; const dy = event.changedTouches[0].clientY - start.y; if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) setRevealedMemory(dx < 0 ? row.id : null) }}>
           {memorySelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedMemoryIds.has(row.id)} onChange={() => toggleMemorySelection(row.id)} aria-label={`选择记忆：${row.text}`} />选择</label>}
           <details className="memory-card-detail"><summary><span className="memory-preview">{row.text}</span><small>{row.status === 'pending' ? '待确认' : row.status === 'unverified' || (row.source === 'shared_understanding' && !row.confirmedAt) ? '待核实' : '已保存'}</small></summary>
-            <p>{row.text}</p><small>来源：{row.source ?? '未知'}</small>
+            <p>{row.text}</p><small>来源：{row.source ?? '未知'}{linkedKnowledgeReference(row) ? ` · ${linkedKnowledgeReference(row)}` : ''}</small>
             {!memorySelectionMode && <div className="workspace-card-actions">
               {row.status === 'pending' && <button type="button" onClick={() => { void startMemoryReview('approve', row) }}>确认</button>}
               <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>

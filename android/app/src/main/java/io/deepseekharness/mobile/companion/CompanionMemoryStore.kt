@@ -324,7 +324,7 @@ class CompanionMemoryStore(context: Context) {
         val rows = load()
         val beforeIds = (0 until rows.length()).map { rows.getJSONObject(it).getString("id") }.toSet()
         if (CompanionMemorySuppression.digest("event:${job.event}") !in prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty()) {
-            CompanionSharedMemory.add(rows, job.event, claims, System.currentTimeMillis(), false, ::isSuppressed)
+            CompanionSharedMemory.add(rows, job.event, claims, System.currentTimeMillis(), false, ::isSuppressed, job.id, job.hash)
         }
         val additions = (0 until rows.length()).map { rows.getJSONObject(it).getString("id") }.filterNot { it in beforeIds }.toSet()
         if (additions.isNotEmpty() && SemanticControl(app).memoryEnabled) SemanticControl(app).memoryChanged(additions)
@@ -471,6 +471,8 @@ internal object CompanionMemoryFormat {
             require(idPattern.matches(id) && ids.add(id) && text.length <= 600) { "bad memory" }
             CompanionKnowledgeData.utf8(text) // Do not silently replace malformed UTF-16 in stored values.
             if (row.has("status")) require(row.opt("status") is String && row.getString("status") in setOf("pending", "confirmed")) { "unknown memory status" }
+            if (row.has("sourceRecordId") || row.has("sourceRevision")) require(row.optString("source") == "shared_understanding" &&
+                (row.opt("sourceRecordId") as? String)?.matches(idPattern) == true && (row.opt("sourceRevision") as? String)?.matches(Regex("[a-f0-9]{64}")) == true) { "invalid shared-memory reference" }
             row.optJSONArray("history")?.let { history ->
                 require(history.length() <= 20)
                 for (item in 0 until history.length()) {
@@ -511,7 +513,7 @@ internal enum class UserMemoryResult { ADDED, EXISTING_PENDING, EXISTING_CONFIRM
 
 /** Stable optimistic-concurrency token; internal history never changes its current revision by accident. */
 internal object CompanionMemoryRevision {
-    private val fields = listOf("id", "text", "source", "status", "createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "validFrom", "validUntil")
+    private val fields = listOf("id", "text", "source", "status", "createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "sourceRecordId", "sourceRevision", "validFrom", "validUntil")
     fun of(row: JSONObject): String {
         val canonical = JSONObject()
         fields.forEach { field -> if (row.has(field)) canonical.put(field, row.opt(field)) }
@@ -521,7 +523,7 @@ internal object CompanionMemoryRevision {
         val history = row.optJSONArray("history") ?: JSONArray()
         val archived = JSONObject().put("text", row.getString("text")).put("source", row.optString("source", "unknown"))
             .put("status", row.optString("status", "confirmed")).put("validUntil", at)
-        for (field in listOf("createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "validFrom")) {
+        for (field in listOf("createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "sourceRecordId", "sourceRevision", "validFrom")) {
             if (row.has(field)) archived.put(field, row.opt(field))
         }
         val bounded = JSONArray()
@@ -560,7 +562,7 @@ internal object CompanionUserMemory {
         require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value) && now > 0) { "内容为空、过长或可能含敏感信息" }
         require((0 until rows.length()).none { it != index && rows.getJSONObject(it).getString("text") == value }) { "已有相同记忆" }
         row.put("text", value).put("source", "user_edit").put("updatedAt", now)
-        row.remove("evidenceSource"); row.remove("evidenceEventId")
+        row.remove("evidenceSource"); row.remove("evidenceEventId"); row.remove("sourceRecordId"); row.remove("sourceRevision")
         return true
     }
     fun delete(rows: JSONArray, id: String, expected: String): JSONArray? {
@@ -662,7 +664,7 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                 CompanionMemoryRevision.archiveCurrent(row, now)
                 row.put("text", text).put("source", "user_edit").put("updatedAt", now).put("confirmedAt", now).put("validFrom", now)
                 if (operationId != null) row.put("lastOperationId", operationId)
-                row.remove("evidenceEventId"); row.remove("evidenceSource")
+                row.remove("evidenceEventId"); row.remove("evidenceSource"); row.remove("sourceRecordId"); row.remove("sourceRevision")
                 write(rows)
                 JSONObject().put("id", id).put("updated", true).put("pending", false).put("revision", CompanionMemoryRevision.of(row))
                     .put("historyCount", row.optJSONArray("history")?.length() ?: 0).toString()
@@ -701,6 +703,10 @@ internal object CompanionMemorySearch {
         }
         row.optJSONArray("history")?.length()?.takeIf { it > 0 }?.let { result.put("historyCount", it) }
         row.optString("evidenceSource").takeIf { it.isNotBlank() }?.let { result.put("evidenceSource", it) }
+        val recordId = row.opt("sourceRecordId") as? String
+        val sourceRevision = row.opt("sourceRevision") as? String
+        if (recordId?.matches(Regex("[a-f0-9-]{36}")) == true && sourceRevision?.matches(Regex("[a-f0-9]{64}")) == true)
+            result.put("sourceRecordId", recordId).put("sourceRevision", sourceRevision)
         return result
     }
     private val chinese = Regex("[\\u4e00-\\u9fff]{2,}")
@@ -842,6 +848,12 @@ internal object CompanionMemoryImport {
                 val eventId = row.optString("evidenceEventId")
                 require(eventId.matches(Regex("share:[a-f0-9]{64}"))) { "分享记忆依据无效" }
                 copy.put("evidenceEventId", eventId)
+                val sourceRecordId = row.opt("sourceRecordId") as? String
+                val sourceRevision = row.opt("sourceRevision") as? String
+                if (sourceRecordId != null || sourceRevision != null) {
+                    require(sourceRecordId?.matches(Regex("[a-f0-9-]{36}")) == true && sourceRevision?.matches(Regex("[a-f0-9]{64}")) == true) { "分享资料引用无效" }
+                    copy.put("sourceRecordId", sourceRecordId).put("sourceRevision", sourceRevision)
+                }
             }
             if (source == "user_understanding" || source == "auto_understanding") {
                 val evidenceSource = row.opt("evidenceSource") as? String ?: error("记忆来源缺失")
