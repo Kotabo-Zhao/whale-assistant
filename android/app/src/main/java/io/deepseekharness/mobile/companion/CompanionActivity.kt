@@ -1296,7 +1296,8 @@ class CompanionActivity : AppCompatActivity() {
             outcome.onFailure {
                 android.widget.Toast.makeText(this, "资料已变化或无法读取处理状态，请重新查看。", android.widget.Toast.LENGTH_LONG).show()
             }.onSuccess { state ->
-                val pending = state.optString("state") == "queued"
+                val queued = state.optString("state") == "queued"
+                val failed = state.optString("state") == "failed"
                 val description = if (!state.optBoolean("memoryEnabled")) "记忆整理已关闭；重新开启后可继续处理。" else when (state.optString("state")) {
                     "queued" -> {
                         val attempts = state.optInt("attempts")
@@ -1316,13 +1317,29 @@ class CompanionActivity : AppCompatActivity() {
                         }
                         "等待或重试中；已重试 $attempts 次。下次：$time。" + if (error.isEmpty()) "" else " 上次原因：$error。"
                     }
+                    "failed" -> {
+                        val attempts = state.optInt("attempts")
+                        val error = when (state.optString("lastErrorCode")) {
+                            "credentials" -> "模型凭据不可用或被拒绝"
+                            "configuration" -> "后台模型尚未配置"
+                            "rate_limited" -> "模型服务限流"
+                            "service_unavailable" -> "模型服务暂不可用"
+                            "request_rejected" -> "模型服务拒绝请求，请检查模型兼容性"
+                            "timeout" -> "请求超时"
+                            "network" -> "网络不可用"
+                            "invalid_model_output" -> "模型返回的数据不符合要求"
+                            "processing_failed" -> "处理未完成"
+                            else -> ""
+                        }
+                        "已停止自动重试（共 $attempts 次）；可在修复问题后手动重试。" + if (error.isEmpty()) "" else " 上次原因：$error。"
+                    }
                     "completed" -> "后台整理已结束；原文件的解析范围仍可能不完整。"
                     "cancelled" -> "此版本的资料整理已由你停止；不会因后台扫描自动重新建立。"
                     else -> "没有此版本的后台整理任务；这不代表资料不存在。"
                 }
                 val builder = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("资料处理状态")
                     .setMessage(description).setNegativeButton("关闭", null)
-                if (pending && state.optBoolean("memoryEnabled")) builder.setPositiveButton("重试") { _, _ ->
+                if ((queued || failed) && state.optBoolean("memoryEnabled")) builder.setPositiveButton("重试") { _, _ ->
                     runMemoryIo("正在安排重试…", {
                         var retried = false
                         check(CompanionKnowledgeStore(this).withUnchangedRecord(id, text) {
@@ -1334,7 +1351,7 @@ class CompanionActivity : AppCompatActivity() {
                         android.widget.Toast.makeText(this, if (result.getOrNull() == true) "已安排重试，系统可能延迟。" else "任务已变化或无法安排重试。", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
-                if (pending) builder.setNeutralButton("停止整理") { _, _ ->
+                if (queued || failed) builder.setNeutralButton("停止整理") { _, _ ->
                     runMemoryIo("正在停止资料整理…", {
                         var cancelled = false
                         check(CompanionKnowledgeStore(this).withUnchangedRecord(id, text) {
