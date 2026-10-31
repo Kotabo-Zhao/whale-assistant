@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Archive, ArchiveRestore, ArrowLeft, FolderPen, Loader2, MessageCircle, Pencil, Pin, PinOff, Plus, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, ChevronDown, ChevronRight, FolderPen, Loader2, MessageCircle, Pencil, Pin, PinOff, Plus, Trash2, X } from 'lucide-react'
 import { triggerHaptic } from '../platform/haptics'
 import { t, useLanguage } from '../i18n'
 import { runtimeBridge } from '../platform/native'
@@ -116,6 +116,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   const [companionSessionIds, setCompanionSessionIds] = useState<Set<string>>(new Set())
   const [showArchived, setShowArchived] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [collapsedPeriods, setCollapsedPeriods] = useState<Set<SessionPeriod>>(new Set())
   const loadingRef = useRef(false)
 
   /**
@@ -327,8 +328,12 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
             <p>{t(sessions.length === 0 ? '点击「新建会话」开始工作。' : '换一个关键词，或新建会话开始工作。')}</p>
           </div>
         ) : sections.map(section => <div className="session-period" key={section.label}>
-          <h2>{section.label}</h2>
-          {section.sessions.map(session => (
+          <h2><button type="button" className="session-period-toggle" aria-expanded={!collapsedPeriods.has(section.label)} onClick={() => setCollapsedPeriods(current => {
+            const next = new Set(current); if (next.has(section.label)) next.delete(section.label); else next.add(section.label); return next
+          })}>
+            {collapsedPeriods.has(section.label) ? <ChevronRight size={16} /> : <ChevronDown size={16} />}{section.label}<span>（{section.sessions.length}）</span>
+          </button></h2>
+          {!collapsedPeriods.has(section.label) && section.sessions.map(session => (
           <article className="session-card" key={session.id}>
             {session.local !== true && <input type="checkbox" aria-label={`选择会话 ${session.title || '未命名会话'}`} checked={selected.has(session.id)} onChange={() => setSelected(current => {
               const next = new Set(current); if (next.has(session.id)) next.delete(session.id); else next.add(session.id); return next

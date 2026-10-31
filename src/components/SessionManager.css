@@ -9,6 +9,9 @@
 .session-period { display: grid; gap: 8px; }
 .session-period + .session-period { margin-top: 8px; }
 .session-period h2 { margin: 0 2px; color: var(--card-muted, var(--muted)); font-size: .75rem; font-weight: 650; line-height: 1.4; }
+.session-period-toggle { display: inline-flex; align-items: center; min-height: 44px; gap: 4px; padding: 4px 6px; border: 0; border-radius: 8px; color: inherit; font: inherit; background: transparent; cursor: pointer; }
+.session-period-toggle:hover { background: var(--surface-raised, rgba(255,255,255,.08)); }
+.session-period-toggle span { font-weight: 500; }
 .session-expand { margin-top: 12px; width: 100%; }
 .session-card {
   display: grid;

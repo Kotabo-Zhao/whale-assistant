@@ -118,9 +118,25 @@ describe('会话管理页', () => {
     render(<SessionManager onBack={vi.fn()} onOpenHarness={vi.fn()} />)
 
     expect(await screen.findByText('置顶会话')).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: '置顶' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /置顶/ })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '取消置顶会话 置顶会话' }))
     await waitFor(() => expect(updateSessionWorkspace).toHaveBeenCalledWith({ id: 'session-pin', pinned: false }))
+  })
+
+  it('时间分组可折叠，且不改变会话内容或打开目标', async () => {
+    listSessions.mockResolvedValue({
+      status: 'ready',
+      truncated: false,
+      sessions: [{ id: 'session-today', title: '今天的会话', updatedAt: Date.now() }],
+    })
+    render(<SessionManager onBack={vi.fn()} onOpenHarness={vi.fn()} />)
+    expect(await screen.findByText('今天的会话')).toBeInTheDocument()
+    const group = screen.getByRole('button', { name: /今天.*1/ })
+    fireEvent.click(group)
+    expect(group).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('今天的会话')).not.toBeInTheDocument()
+    fireEvent.click(group)
+    expect(await screen.findByText('今天的会话')).toBeInTheDocument()
   })
 
   it('会话较多时默认折叠，搜索仍覆盖折叠内容', async () => {
