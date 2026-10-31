@@ -9,12 +9,13 @@ import type { RuntimeSessionListResult } from '../platform/types'
  * （实测报 `ReferenceError: Cannot access 'listSessions' before initialization`），
  * 所以桩本身也要用 `vi.hoisted` 一起提前建好。
  */
-const { listSessions, getSessionWorkspace, updateSessionWorkspace } = vi.hoisted(() => ({
+const { listSessions, getSessionWorkspace, getCompanionSessionLinks, updateSessionWorkspace } = vi.hoisted(() => ({
   listSessions: vi.fn<() => Promise<RuntimeSessionListResult>>(),
   getSessionWorkspace: vi.fn().mockResolvedValue({ entries: [] }),
+  getCompanionSessionLinks: vi.fn().mockResolvedValue({ sessionIds: [], anchors: [] }),
   updateSessionWorkspace: vi.fn(),
 }))
-vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions, getSessionWorkspace, updateSessionWorkspace } }))
+vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions, getSessionWorkspace, getCompanionSessionLinks, updateSessionWorkspace } }))
 
 import { SessionManager } from './SessionManager'
 
@@ -89,6 +90,25 @@ describe('会话管理页', () => {
     fireEvent.click(screen.getByRole('button', { name: /真实会话标题/ }))
     expect(onOpenHarness).toHaveBeenCalledTimes(1)
     expect(onOpenHarness).toHaveBeenCalledWith('session-aaa')
+  })
+
+  it('桌宠会话只按需显示受限连续性摘要，打开仍进入同一 Harness 会话', async () => {
+    const onOpenHarness = vi.fn()
+    const updatedAt = Date.UTC(2026, 9, 31, 8, 0, 0)
+    listSessions.mockResolvedValue({ status: 'ready', truncated: false, sessions: [{ id: 'session-pet', title: '桌宠会话', updatedAt }] })
+    getCompanionSessionLinks.mockResolvedValue({ sessionIds: ['session-pet'], anchors: [
+      { sessionId: 'session-pet', role: 'user', atMs: updatedAt, summary: '继续上一个计划' },
+      { sessionId: 'session-pet', role: 'assistant', atMs: updatedAt + 1, summary: '已保留受限摘要' },
+    ] })
+    render(<SessionManager onBack={vi.fn()} onOpenHarness={onOpenHarness} />)
+    expect(await screen.findByText('鲸鱼娘关联会话 · 打开后继续同一 Harness 上下文')).toBeInTheDocument()
+    const summary = screen.getByText('查看桌宠连续性锚点（仅摘要）')
+    expect(screen.queryByText('继续上一个计划')).not.toBeVisible()
+    fireEvent.click(summary)
+    expect(screen.getByText('继续上一个计划')).toBeVisible()
+    expect(screen.getByText('这些是本机受限摘要，不是完整对话，也不会自动写入 Harness。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /桌宠会话/ }))
+    expect(onOpenHarness).toHaveBeenCalledWith('session-pet')
   })
 
   it('真实会话不提供删除按钮：只读通道不承诺删得掉', async () => {

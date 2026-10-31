@@ -28,6 +28,12 @@ internal class CompanionSessionAnchorStore(context: Context) {
         read().filter { it.sessionId == sessionId }
     }
 
+    /**
+     * Bounded, summary-only rows for the owner-facing session list.  This must
+     * never be used as a substitute for a Harness transcript or prompt input.
+     */
+    fun listAll(): List<Anchor> = synchronized(lock) { read().sortedByDescending { it.atMs } }
+
     fun exportArchive(): ByteArray = synchronized(lock) { encode(read()).toByteArray(Charsets.UTF_8) }
     fun mergeArchive(bytes: ByteArray): Int = synchronized(lock) {
         val imported = decode(bytes); val current = read().toMutableList(); val before = current.size

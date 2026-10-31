@@ -3,7 +3,7 @@ import { Archive, ArchiveRestore, ArrowLeft, ChevronDown, ChevronRight, FolderPe
 import { triggerHaptic } from '../platform/haptics'
 import { t, useLanguage } from '../i18n'
 import { runtimeBridge } from '../platform/native'
-import type { RuntimeSessionListReason, RuntimeSessionSummary, RuntimeSessionWorkspaceEntry } from '../platform/types'
+import type { RuntimeCompanionSessionAnchor, RuntimeSessionListReason, RuntimeSessionSummary, RuntimeSessionWorkspaceEntry } from '../platform/types'
 // 走 Vite 的资源 URL 导入（与 App.tsx 里 app-mark 的用法一致，见 src/assets.d.ts 的 *.png 声明）：
 // 打包后是一份带哈希的静态文件，不会像放 public/ 那样多一处需要手工同步的路径。
 import appMark from '../assets/app-mark.png'
@@ -96,7 +96,8 @@ function EmptyMark() {
  * 外壳会话管理页。
  *
  * 安全边界（比原先的措辞更严，因此随之更新）：外壳**只**取会话元数据——会话标识、标题与最近
- * 更新时间，全部通过原生桥接的只读端点拿；会话正文、消息片段与搜索 snippet 一律不读取、不复制，
+ * 更新时间，以及用户按需展开的受限连续性摘要，全部通过原生桥接的只读端点拿；会话正文、消息
+ * 片段与搜索 snippet 一律不读取、不复制，
  * 也**不写入任何浏览器存储**（localStorage/sessionStorage/IndexedDB 都不写）。
  *
  * 标题要单独说明：它是宿主从会话日志里折出来的文本（没有标题事件时来自首条用户消息的开头），
@@ -116,6 +117,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   const [loadMoreFailed, setLoadMoreFailed] = useState(false)
   const [workspace, setWorkspace] = useState<RuntimeSessionWorkspaceEntry[]>([])
   const [companionSessionIds, setCompanionSessionIds] = useState<Set<string>>(new Set())
+  const [companionAnchors, setCompanionAnchors] = useState<Map<string, RuntimeCompanionSessionAnchor[]>>(new Map())
   const [showArchived, setShowArchived] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsedPeriods, setCollapsedPeriods] = useState<Set<SessionPeriod>>(new Set())
@@ -169,9 +171,19 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   useEffect(() => {
     let active = true
     runtimeBridge.getCompanionSessionLinks().then(value => {
-      if (active) setCompanionSessionIds(new Set(value.sessionIds))
+      if (active) {
+        setCompanionSessionIds(new Set(value.sessionIds))
+        const bySession = new Map<string, RuntimeCompanionSessionAnchor[]>()
+        value.anchors.forEach(anchor => {
+          const rows = bySession.get(anchor.sessionId) ?? []
+          rows.push(anchor)
+          bySession.set(anchor.sessionId, rows)
+        })
+        bySession.forEach(rows => rows.sort((left, right) => right.atMs - left.atMs))
+        setCompanionAnchors(bySession)
+      }
     }).catch(() => {
-      if (active) setCompanionSessionIds(new Set())
+      if (active) { setCompanionSessionIds(new Set()); setCompanionAnchors(new Map()) }
     })
     return () => { active = false }
   }, [])
@@ -384,6 +396,17 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
                 {companionSessionIds.has(session.id) && <small>鲸鱼娘关联会话 · 打开后继续同一 Harness 上下文</small>}
               </span>
             </button>
+            {companionSessionIds.has(session.id) && (companionAnchors.get(session.id)?.length ?? 0) > 0 && (
+              <details className="session-anchors">
+                <summary>查看桌宠连续性锚点（仅摘要）</summary>
+                <p>这些是本机受限摘要，不是完整对话，也不会自动写入 Harness。</p>
+                <ol>
+                  {companionAnchors.get(session.id)!.slice(0, 6).map(anchor => <li key={`${anchor.role}-${anchor.atMs}-${anchor.summary}`}>
+                    <time dateTime={new Date(anchor.atMs).toISOString()}>{formatUpdatedAt(anchor.atMs)}</time> · {anchor.role === 'user' ? '你' : '鲸鱼娘'}：{anchor.summary}
+                  </li>)}
+                </ol>
+              </details>
+            )}
             {/* 只有本地占位条目能在这里移除：真实会话的删除不在这条只读通道里，
                 按钮一旦出现就等于承诺一件做不到的事。 */}
             <div className="session-card-actions">

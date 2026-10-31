@@ -78,11 +78,25 @@ import {
 describe('桌宠会话关联校验', () => {
   it('只接受有界、去重的 Harness 会话身份，不接受正文或其他形状', () => {
     expect(validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'] }))
-      .toEqual({ sessionIds: ['session-companion-1'] })
+      .toEqual({ sessionIds: ['session-companion-1'], anchors: [] })
     expect(() => validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1', 'session-companion-1'] }))
       .toThrow('桌宠会话标识无效')
     expect(() => validateRuntimeCompanionSessionLinks({ sessionIds: ['../session'] }))
       .toThrow('桌宠会话标识无效')
+  })
+
+  it('只接受已登记会话的短摘要锚点，并拒绝正文形态或越界内容', () => {
+    expect(validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'], anchors: [
+      { sessionId: 'session-companion-1', role: 'user', atMs: 1, summary: '继续合同问题' },
+    ] })).toEqual({ sessionIds: ['session-companion-1'], anchors: [
+      { sessionId: 'session-companion-1', role: 'user', atMs: 1, summary: '继续合同问题' },
+    ] })
+    expect(() => validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'], anchors: [
+      { sessionId: 'session-other', role: 'assistant', atMs: 1, summary: '越权会话' },
+    ] })).toThrow('桌宠会话锚点格式无效')
+    expect(() => validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'], anchors: [
+      { sessionId: 'session-companion-1', role: 'assistant', atMs: 1, summary: 'x'.repeat(161) },
+    ] })).toThrow('桌宠会话锚点格式无效')
   })
 })
 import type { RuntimeSettings } from './types'

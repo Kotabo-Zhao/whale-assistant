@@ -1733,11 +1733,22 @@ class MobileRuntimePlugin : Plugin() {
     @PluginMethod
     fun companionSessionLinks(call: PluginCall) {
         execute(call) {
-            JSObject().put("sessionIds", JSArray().apply {
-                io.deepseekharness.mobile.companion.BubbleSessionRegistry(context).sessionIds()
-                    .filter { it.startsWith("session-") }
-                    .forEach(::put)
-            })
+            val sessionIds = io.deepseekharness.mobile.companion.BubbleSessionRegistry(context).sessionIds()
+                .filter { it.startsWith("session-") }
+            val known = sessionIds.toSet()
+            JSObject().put("sessionIds", JSArray().apply { sessionIds.forEach(::put) })
+                // The companion anchor store intentionally contains only bounded summaries.  Keep
+                // this separate from the session catalogue: no Harness title or transcript passes
+                // through this method, and the WebView cannot write these rows.
+                .put("anchors", JSArray().apply {
+                    io.deepseekharness.mobile.companion.CompanionSessionAnchorStore(context).listAll()
+                        .filter { it.sessionId in known }
+                        .forEach { anchor -> put(JSObject()
+                            .put("sessionId", anchor.sessionId)
+                            .put("role", anchor.role)
+                            .put("atMs", anchor.atMs)
+                            .put("summary", anchor.summary)) }
+                })
         }
     }
 

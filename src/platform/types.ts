@@ -420,9 +420,18 @@ export interface RuntimeSessionWorkspace {
   entries: RuntimeSessionWorkspaceEntry[]
 }
 
-/** Identities of Harness sessions created by the desktop companion; no transcript metadata. */
+/** A deliberately lossy, bounded continuity marker; it is never a Harness transcript. */
+export interface RuntimeCompanionSessionAnchor {
+  sessionId: string
+  role: 'user' | 'assistant'
+  atMs: number
+  summary: string
+}
+
+/** Identities of Harness sessions created by the desktop companion, plus optional local-only summaries. */
 export interface RuntimeCompanionSessionLinks {
   sessionIds: string[]
+  anchors: RuntimeCompanionSessionAnchor[]
 }
 
 export interface RuntimeSessionWorkspaceUpdate {
@@ -2116,7 +2125,7 @@ export interface RuntimeBridge {
   listSessions: (options?: { cursor?: string }) => Promise<RuntimeSessionListResult>
   /** Reads local-only aliases, groups and archive flags for Harness sessions. */
   getSessionWorkspace: () => Promise<RuntimeSessionWorkspace>
-  /** Reads only which Harness sessions were created by the desktop companion. */
+  /** Reads desktop-companion session identities and bounded, local-only continuity summaries. */
   getCompanionSessionLinks: () => Promise<RuntimeCompanionSessionLinks>
   /** Changes only those local annotations; it never edits or deletes a Harness transcript. */
   updateSessionWorkspace: (update: RuntimeSessionWorkspaceUpdate) => Promise<RuntimeSessionWorkspace>

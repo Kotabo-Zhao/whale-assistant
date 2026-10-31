@@ -2407,7 +2407,7 @@ export function validateRuntimeSessionWorkspace(value: unknown): RuntimeSessionW
   return { entries }
 }
 
-/** Desktop companion links are identity-only, bounded, and use the same session id contract. */
+/** Desktop companion links carry identities and, on new native builds, bounded lossy continuity summaries. */
 export function validateRuntimeCompanionSessionLinks(value: unknown): RuntimeCompanionSessionLinks {
   const result = asRecord(value, '桌宠会话关联')
   if (!Array.isArray(result.sessionIds) || result.sessionIds.length > 200) throw new Error('桌宠会话关联格式无效')
@@ -2416,7 +2416,19 @@ export function validateRuntimeCompanionSessionLinks(value: unknown): RuntimeCom
     if (!isCatalogSessionId(id) || !seen.add(id)) throw new Error('桌宠会话标识无效')
     return id
   })
-  return { sessionIds }
+  const anchorsRaw = result.anchors === undefined ? [] : result.anchors
+  if (!Array.isArray(anchorsRaw) || anchorsRaw.length > 40) throw new Error('桌宠会话锚点格式无效')
+  const anchors = anchorsRaw.map(value => {
+    const anchor = asRecord(value, '桌宠会话锚点')
+    if (!isCatalogSessionId(anchor.sessionId) || !seen.has(anchor.sessionId) ||
+      (anchor.role !== 'user' && anchor.role !== 'assistant') ||
+      typeof anchor.atMs !== 'number' || !Number.isSafeInteger(anchor.atMs) || anchor.atMs <= 0 ||
+      typeof anchor.summary !== 'string' || anchor.summary.trim() === '' || anchor.summary.length > 160 || /[\x00-\x1f\x7f]/u.test(anchor.summary)) {
+      throw new Error('桌宠会话锚点格式无效')
+    }
+    return { sessionId: anchor.sessionId, role: anchor.role, atMs: anchor.atMs, summary: anchor.summary }
+  })
+  return { sessionIds, anchors }
 }
 
 /**
