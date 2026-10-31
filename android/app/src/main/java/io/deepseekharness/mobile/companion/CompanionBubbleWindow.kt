@@ -131,7 +131,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         fun citationCard(citation: CompanionBubbleChat.Citation) {
             val shouldFollow = atBottom()
-            val coverage = when (citation.parsingCoverage) { "partial" -> " · 部分解析"; "not_parsed" -> " · 尚未解析"; else -> "" }
+            val coverage = CompanionBubbleChatPolicy.citationCoverageLabel(citation)
             val segment = CompanionBubbleChatPolicy.citationSegmentLabel(citation)
             val view = TextView(context).apply {
                 text = "资料来源 · ${citation.displayName}$segment$coverage"

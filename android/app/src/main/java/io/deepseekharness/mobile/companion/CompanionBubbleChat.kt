@@ -70,6 +70,14 @@ internal object CompanionBubbleChatPolicy {
     fun citationSegmentLabel(citation: CompanionBubbleChat.Citation): String =
         if (citation.chunkCount > 1) " · 保存文本第 ${citation.chunkIndex + 1}/${citation.chunkCount} 段（非页码）" else ""
 
+    fun citationCoverageLabel(citation: CompanionBubbleChat.Citation): String = when (citation.parsingCoverage) {
+        "partial" -> " · 部分解析"
+        "not_parsed" -> " · 尚未解析"
+        "extracted_text" -> " · 已提取文字"
+        "model_description" -> " · 模型图片描述"
+        else -> ""
+    }
+
 }
 
 /** Uses the same authenticated local Harness and its selected model as the main conversation. */
