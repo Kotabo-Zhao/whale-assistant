@@ -68,6 +68,11 @@ class CompanionBubbleChatPolicyTest {
         assertTrue(guidance.contains("mobile_knowledge_read")); assertTrue(guidance.contains("id、revision 与 location"))
         assertTrue(guidance.contains("不得推断"))
     }
+    @Test fun memoryGuidanceRequiresReadingAReferencedDocumentAgain() {
+        val guidance = CompanionBubbleChatPolicy.memoryToolGuidance()
+        assertTrue(guidance.contains("mobile_memory_search")); assertTrue(guidance.contains("sourceRecordId/sourceRevision"))
+        assertTrue(guidance.contains("mobile_knowledge_read")); assertTrue(guidance.contains("不能把记忆当作原文"))
+    }
     @Test fun capabilityGuidanceExplainsRuntimeInjectedSessionIdentity() {
         val guidance = CompanionBubbleChatPolicy.capabilityGuidance()
         assertTrue(guidance.contains("mobile_companion_capabilities"))
