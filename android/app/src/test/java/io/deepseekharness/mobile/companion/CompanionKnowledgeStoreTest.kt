@@ -77,7 +77,8 @@ class CompanionKnowledgeStoreTest {
         val image = JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("text", "一只鲸鱼")
             .put("source", "image_analysis").put("createdAt", 2).put("originalId", originalId).put("coverage", "model_description")
         assertEquals(2, CompanionKnowledgeData.validateRows(JSONArray().put(original).put(image), false).length())
-        val missingOriginal = JSONObject(image.toString()).remove("originalId")
+        val missingOriginal = JSONObject(image.toString())
+        missingOriginal.remove("originalId")
         assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.validateRows(JSONArray().put(missingOriginal), false) }
         val mismatchedCoverage = JSONObject(image.toString()).put("coverage", "partial")
         assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.validateRows(JSONArray().put(mismatchedCoverage), false) }

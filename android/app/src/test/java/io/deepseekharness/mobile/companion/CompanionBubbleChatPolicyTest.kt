@@ -39,7 +39,7 @@ class CompanionBubbleChatPolicyTest {
     }
     @Test fun newSessionContextKeepsRecentMessagesAndBoundsOlderExcerpts() {
         val messages = (0 until 10).map { index ->
-            CompanionBubbleChat.Message(if (index % 2 == 0) "user" else "assistant", "第$index条" + "甲".repeat(900))
+            CompanionBubbleChat.Message(if (index % 2 == 0) "user" else "assistant", "第${index}条" + "甲".repeat(900))
         }
         val value = CompanionBubbleChatPolicy.compressedContext(messages)
         assertTrue(value.contains("第9条"))

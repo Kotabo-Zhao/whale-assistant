@@ -229,10 +229,13 @@ class SharedMemoryJobsInstrumentedTest {
         val model = UnderstandingModel { request, _ -> JSONObject().put("version", 1).put("claims", JSONArray().put(
             JSONObject().put("text", "Test whale likes jasmine tea").put("evidence_ids", JSONArray().put(request)))).toString() }
         SharedMemoryJobs.runOne(context, AtomicBoolean(false), model)
+        assertEquals("completed", SharedMemoryJobs.status(context, id, CompanionMemorySuppression.digest(source)).getString("state"))
         assertEquals(0L, SharedMemoryJobs.pendingCount(context))
         val memory = CompanionMemoryStore(context)
         memory.migrateToDatabase()
         var row = memory.listForUser().getJSONObject(0)
+        assertTrue(memory.approveForUser(row.getString("id"), row.getString("text")))
+        row = memory.listForUser().getJSONObject(0)
         val correction = JSONObject().put("op", "update").put("id", row.getString("id"))
             .put("expectedText", row.getString("text")).put("text", "Test whale now likes lemon tea")
         assertTrue(JSONObject(memory.execute(correction.toString())).getBoolean("updated"))

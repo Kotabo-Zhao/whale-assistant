@@ -260,10 +260,6 @@ internal object SharedMemoryJobs {
         if (transitioned) context.getSharedPreferences("shared_job_failures_v1", Context.MODE_PRIVATE)
             .edit().putString(failureKey(job), code).apply()
     } }
-    private fun ownsLease(context: Context, job: Job): Boolean = synchronized(lock) { database(context).use { db ->
-        val token = job.leaseToken ?: return@use false
-        db.rawQuery("SELECT 1 FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>? AND COALESCE((SELECT CAST(value AS INTEGER) FROM shared_jobs_meta WHERE key='generation'),0)=?", arrayOf(job.id, job.hash, job.event, token, System.currentTimeMillis().toString(), job.generation.toString())).use { it.moveToFirst() }
-    } }
     private fun remove(context: Context, job: Job) = synchronized(lock) { database(context).use { db ->
         val token = job.leaseToken ?: return@use false
         db.beginTransaction()
@@ -291,21 +287,21 @@ internal object SharedMemoryJobs {
         val app = context.applicationContext
         val job = claim(app) ?: return false
         val knowledge = CompanionKnowledgeStore(app)
+        val memory = CompanionMemoryStore(app)
         val row = knowledge.findById(job.id)
         val text = row?.optString("text").orEmpty()
         if (row == null || CompanionMemorySuppression.digest(text) != job.hash) { if (remove(app, job)) clearFailure(app, job); return hasDueWork(app) }
         try {
-            check(CompanionMemoryStore(app).enabled) { "memory disabled" }
+            check(memory.enabled) { "memory disabled" }
             val model = modelOverride ?: configuredUnderstandingModel(app)
             val requestId = UUID.randomUUID().toString()
             val raw = model.analyze(requestId, text)
             val boundResult = bindResultToEvent(raw, requestId, job.event)
             val result = JSONObject(boundResult)
-            if (!ownsLease(app, job)) return hasDueWork(app)
             if (stopped.get()) return true
             var persisted = false
             knowledge.withUnchangedRecord(job.id, text) {
-                if (!stopped.get()) persisted = CompanionMemoryStore(app).commitSharedJob(job, result.getJSONArray("claims"), boundResult)
+                if (!stopped.get()) persisted = memory.commitSharedJob(job, result.getJSONArray("claims"), boundResult)
             }
             if (persisted && !stopped.get()) {
                 clearFailure(app, job)

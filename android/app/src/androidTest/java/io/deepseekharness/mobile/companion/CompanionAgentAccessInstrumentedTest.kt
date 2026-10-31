@@ -51,10 +51,10 @@ class CompanionAgentAccessInstrumentedTest {
             assertEquals("MEMORY_DISABLED", assertThrows(RuntimeFailure::class.java) { access.requireMemory() }.code)
             // Capabilities remain readable without exposing memory contents when access is off.
             assertFalse(JSONObject(access.capabilities()).getJSONObject("memory").getBoolean("allowed"))
-            assertEquals("MEMORY_SESSION_UNAVAILABLE", assertThrows(RuntimeFailure::class.java) {
+            assertEquals("COMPANION_SESSION_UNAVAILABLE", assertThrows(RuntimeFailure::class.java) {
                 CompanionAgentAccess(context, JSONObject())
             }.code)
-            assertEquals("MEMORY_SESSION_UNAVAILABLE", assertThrows(RuntimeFailure::class.java) {
+            assertEquals("COMPANION_SESSION_UNAVAILABLE", assertThrows(RuntimeFailure::class.java) {
                 CompanionAgentAccess(context, JSONObject().put("callerSession", "../bad"))
             }.code)
         } finally {

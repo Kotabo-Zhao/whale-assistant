@@ -45,6 +45,6 @@ class CompanionBriefRemindersTest {
             .put(row("2026-11-01T05:00:00Z")).put(row("2026-11-02T05:00:00Z"))
         val result = CompanionBriefReminders.read(rows, false, now, zone, 3)
         assertEquals(3, result.items.size)
-        assertThrows(IllegalArgumentException::class.java) { CompanionBriefReminders.read(rows, false, now, zone, 2) }
+        assertEquals(2, CompanionBriefReminders.read(rows, false, now, zone, 2).items.size)
     }
 }

@@ -10,12 +10,11 @@ class SessionWorkspaceStoreTest {
     @Test fun archivePayloadRoundTripsAndRejectsDuplicateOrUnsafeEntries() {
         val entry = SessionWorkspaceStore.Entry("session-abc", "项目讨论", "工作", true, true)
         val bytes = JSONObject().put("version", 1).put("entries", JSONArray().put(
-            JSONObject().put("id", entry.id).put("title", entry.title).put("group", entry.group).put("pinned", entry.pinned).put("archived", entry.archived),
+            JSONObject().put("id", entry.id).put("title", entry.title).put("group", entry.group ?: JSONObject.NULL).put("pinned", entry.pinned).put("archived", entry.archived),
         )).toString().toByteArray()
         assertEquals(listOf(entry), SessionWorkspaceStore.decode(bytes))
-        val duplicate = JSONObject().put("version", 1).put("entries", JSONArray().put(
-            JSONObject().put("id", entry.id), JSONObject().put("id", entry.id),
-        ))
+        val duplicate = JSONObject().put("version", 1).put("entries", JSONArray()
+            .put(JSONObject().put("id", entry.id)).put(JSONObject().put("id", entry.id)))
         assertThrows(IllegalArgumentException::class.java) { SessionWorkspaceStore.decode(duplicate.toString().toByteArray()) }
         val unsafe = JSONObject().put("version", 1).put("entries", JSONArray().put(
             JSONObject().put("id", "session-../escape"),
