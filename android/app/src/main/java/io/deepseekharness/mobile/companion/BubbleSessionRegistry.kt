@@ -1,6 +1,7 @@
 package io.deepseekharness.mobile.companion
 
 import android.content.Context
+import org.json.JSONArray
 
 /** Persistent labels for sessions created by the desktop pet, including resumed sessions. */
 internal class BubbleSessionRegistry(context: Context) {
@@ -12,6 +13,20 @@ internal class BubbleSessionRegistry(context: Context) {
     }
     fun contains(sessionId: String): Boolean = synchronized(lock) {
         valid(sessionId) && sessionId in prefs.getStringSet("sessions", emptySet()).orEmpty()
+    }
+    /** Exported identities contain no transcript or credentials. */
+    fun exportArchive(): ByteArray = synchronized(lock) {
+        JSONArray(prefs.getStringSet("sessions", emptySet()).orEmpty().sorted()).toString().toByteArray(Charsets.UTF_8)
+    }
+    fun mergeArchive(bytes: ByteArray): Int = synchronized(lock) {
+        require(bytes.size <= 50_000)
+        val values = JSONArray(String(bytes, Charsets.UTF_8))
+        require(values.length() <= 200)
+        val sessions = prefs.getStringSet("sessions", emptySet()).orEmpty().toMutableSet()
+        val before = sessions.size
+        for (i in 0 until values.length()) sessions.add(values.getString(i).also { require(valid(it)) })
+        if (sessions.size != before) check(prefs.edit().putStringSet("sessions", sessions).commit()) { "无法恢复桌宠会话权限" }
+        sessions.size - before
     }
     companion object {
         private val lock = Any()

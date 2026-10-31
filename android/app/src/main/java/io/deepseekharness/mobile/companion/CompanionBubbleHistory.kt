@@ -23,6 +23,16 @@ internal class CompanionBubbleHistory(context: Context) {
         try { output = file.startWrite(); output.write(bytes); file.finishWrite(output) }
         catch (e: Exception) { if (output != null) file.failWrite(output); throw e }
     }
+    @Synchronized fun exportArchive(): ByteArray? = load()?.let(::encode)
+    /** Never overwrites a current local conversation during restore. */
+    @Synchronized fun restoreArchive(bytes: ByteArray): Boolean {
+        val snapshot = decode(bytes)
+        if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) { save(snapshot); return true }
+        val archive = AtomicFile(File(file.baseFile.parentFile, "companion-bubble-history-import-${java.util.UUID.randomUUID()}.json"))
+        var output: java.io.FileOutputStream? = null
+        try { output = archive.startWrite(); output.write(encode(snapshot)); archive.finishWrite(output); return false }
+        catch (e: Exception) { if (output != null) archive.failWrite(output); throw e }
+    }
     /** Preserve the local transcript before starting an explicitly requested new topic. */
     @Synchronized fun archiveAndClear() {
         check(writable) { "聊天记录无法读取，未开启新话题" }

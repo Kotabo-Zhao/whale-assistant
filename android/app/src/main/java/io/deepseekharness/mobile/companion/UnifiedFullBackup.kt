@@ -17,6 +17,8 @@ internal object UnifiedFullBackup {
     private const val MAX_OBJECT_BYTES = 64L * 1024 * 1024
     private const val MAX_OBJECTS = 200_000
     private const val SNAPSHOT = "snapshot.sqlite"
+    private const val BUBBLE_HISTORY = "conversations/bubble-history.json"
+    private const val BUBBLE_SESSIONS = "conversations/bubble-sessions.json"
     private const val FORMAT = "whale-full-backup-v1"
 
     private fun originalIds(snapshot: File): Set<String> {
@@ -52,6 +54,14 @@ internal object UnifiedFullBackup {
             ZipOutputStream(archive.outputStream().buffered()).use { zip ->
                 zip.putNextEntry(ZipEntry("format")); zip.write(FORMAT.toByteArray(Charsets.UTF_8)); zip.closeEntry()
                 zip.putNextEntry(ZipEntry(SNAPSHOT)); snapshot.inputStream().use { copyBounded(it, zip, UnifiedMemoryBackup.MAX_BYTES) }; zip.closeEntry()
+                CompanionBubbleHistory(app).exportArchive()?.let { history ->
+                    totalBytes += history.size; require(totalBytes <= MAX_BYTES)
+                    zip.putNextEntry(ZipEntry(BUBBLE_HISTORY)); zip.write(history); zip.closeEntry()
+                }
+                BubbleSessionRegistry(app).exportArchive().let { sessions ->
+                    totalBytes += sessions.size; require(totalBytes <= MAX_BYTES)
+                    zip.putNextEntry(ZipEntry(BUBBLE_SESSIONS)); zip.write(sessions); zip.closeEntry()
+                }
                 for (id in ids) {
                     val objectFile = objects.get(id) ?: error("原件不可用，备份未完成")
                     totalBytes += objectFile.length()
@@ -80,19 +90,23 @@ internal object UnifiedFullBackup {
         val app = context.applicationContext
         val snapshot = File(app.cacheDir, "full-restore-${UUID.randomUUID()}.sqlite")
         val temporary = File(app.cacheDir, "full-object-${UUID.randomUUID()}.tmp")
+        var hasBubbleHistory = false
+        var hasBubbleSessions = false
         try {
             ZipFile(archive).use { zip ->
                 val entries = mutableMapOf<String, ZipEntry>()
                 val enumeration = zip.entries()
                 while (enumeration.hasMoreElements()) {
                     val entry = enumeration.nextElement()
-                    require(!entry.isDirectory && (entry.name == "format" || entry.name == SNAPSHOT || entry.name.matches(Regex("objects/[a-f0-9]{64}")))) { "备份包含未知文件" }
-                    require(entries.put(entry.name, entry) == null && entries.size <= MAX_OBJECTS + 2) { "备份条目重复或过多" }
+                    require(!entry.isDirectory && (entry.name == "format" || entry.name == SNAPSHOT || entry.name == BUBBLE_HISTORY || entry.name == BUBBLE_SESSIONS || entry.name.matches(Regex("objects/[a-f0-9]{64}")))) { "备份包含未知文件" }
+                    require(entries.put(entry.name, entry) == null && entries.size <= MAX_OBJECTS + 4) { "备份条目重复或过多" }
                 }
                 val format = zip.getInputStream(requireNotNull(entries["format"])).use { input ->
                     val bytes = java.io.ByteArrayOutputStream(); copyBounded(input, bytes, 64); bytes.toString("UTF-8")
                 }
                 require(format == FORMAT) { "备份格式不支持" }
+                hasBubbleHistory = BUBBLE_HISTORY in entries
+                hasBubbleSessions = BUBBLE_SESSIONS in entries
                 var totalBytes = 0L
                 zip.getInputStream(requireNotNull(entries[SNAPSHOT])).use { input -> snapshot.outputStream().use { output ->
                     totalBytes += copyBounded(input, output, UnifiedMemoryBackup.MAX_BYTES); output.fd.sync()
@@ -109,6 +123,8 @@ internal object UnifiedFullBackup {
                 }
             }
             UnifiedMemoryBackup.restore(app, snapshot)
+            if (hasBubbleSessions) BubbleSessionRegistry(app).mergeArchive(zipRead(archive, BUBBLE_SESSIONS, 50_000))
+            if (hasBubbleHistory) CompanionBubbleHistory(app).restoreArchive(zipRead(archive, BUBBLE_HISTORY, 150_000))
         } finally { temporary.delete(); snapshot.delete() }
     }
 
@@ -126,6 +142,11 @@ internal object UnifiedFullBackup {
         }
         require(total > 0) { "备份内容为空" }
         return total
+    }
+    private fun zipRead(archive: File, name: String, maximum: Long): ByteArray = ZipFile(archive).use { zip ->
+        val output = java.io.ByteArrayOutputStream()
+        zip.getInputStream(requireNotNull(zip.getEntry(name))).use { copyBounded(it, output, maximum) }
+        output.toByteArray()
     }
     private fun ByteArray.hex() = joinToString("") { "%02x".format(it.toInt() and 255) }
 }
