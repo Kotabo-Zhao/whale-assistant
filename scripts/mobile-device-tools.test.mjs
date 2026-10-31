@@ -95,6 +95,16 @@ test('本地资料工具按关键词经过设备桥并拒绝无效查询', async
   assert.ok(f.prompts.some(value => JSON.stringify(value).includes('mobile_knowledge_search')))
 })
 
+test('整份资料原件删除要求同一检索结果的三项稳定标识', async t => {
+  const f = fixture(t, () => ok('{"deletedRecords":2,"objectDeleted":true}'))
+  const tool = f.tools.get('mobile_knowledge_forget_original')
+  const originalId = 'b'.repeat(64)
+  const revision = 'c'.repeat(64)
+  await tool.execute({ id: virtualSession, originalId, revision }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[0].param), { op: 'forgetOriginal', id: virtualSession, originalId, revision, callerSession: virtualSession })
+  await assert.rejects(tool.execute({ id: virtualSession, originalId: 'bad', revision }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
+})
+
 test('事项工具携带调用会话并限制检索参数', async t => {
   const f = fixture(t, () => ok('{"items":[]}'))
   const tool = f.tools.get('mobile_task_search')

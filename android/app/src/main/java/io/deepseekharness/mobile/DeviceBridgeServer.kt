@@ -276,6 +276,22 @@ class DeviceBridgeServer(
                             respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
                             return
                         }
+                        if (request.optString("op") == "forgetOriginal") {
+                            val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
+                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
+                            val originalId = (request.opt("originalId") as? String)?.takeIf { it.matches(Regex("[a-f0-9]{64}")) }
+                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "原件标识无效")
+                            val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
+                            val text = row.getString("text")
+                            if (row.optString("originalId") != originalId || request.optString("revision") != io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(text))
+                                throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料或原件关联已变化，请重新检索")
+                            val removal = knowledge.removeOriginal(originalId, id, text)
+                            if (removal.records == 0) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                            val result = JSONObject().put("originalId", originalId).put("deletedRecords", removal.records).put("objectDeleted", removal.objectDeleted)
+                                .put("undoAvailable", false).put("notice", if (removal.objectDeleted) "已删除这份原件及其所有本地资料分段，并抑制关联派生记忆；无法撤销，外部副本和已发送给模型的内容不受影响。" else "已删除这份原件的本地资料分段并抑制关联派生记忆；原件对象未删除或不可用，外部副本和已发送给模型的内容不受影响。")
+                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
+                            return
+                        }
                         if (request.optString("op") == "image") {
                             val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
                                 ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")

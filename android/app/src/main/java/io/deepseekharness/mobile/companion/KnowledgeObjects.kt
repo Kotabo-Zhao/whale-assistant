@@ -78,6 +78,16 @@ internal class KnowledgeObjects(context: Context) {
         } catch (e: Exception) { target.delete(); throw e }
     }
 
+    /** Deletes only this content-addressed object after validating its exact digest and path. */
+    fun deleteVerified(id: String): Boolean = synchronized(lock) {
+        val file = objectFile(id)
+        if (!file.exists()) return@synchronized false
+        check(file.isFile && !java.nio.file.Files.isSymbolicLink(root.toPath()) && !java.nio.file.Files.isSymbolicLink(file.parentFile.toPath()) && !java.nio.file.Files.isSymbolicLink(file.toPath()))
+        check(digest(file, 64L * 1024 * 1024) == id) { "原件校验失败" }
+        java.nio.file.Files.delete(file.toPath())
+        !file.exists()
+    }
+
     private fun digest(file: File, maxBytes: Long): String {
         require(file.length() in 1..maxBytes)
         val digest = MessageDigest.getInstance("SHA-256")

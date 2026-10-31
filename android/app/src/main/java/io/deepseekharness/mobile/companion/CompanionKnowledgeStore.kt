@@ -130,6 +130,22 @@ internal class CompanionKnowledgeStore(context: Context) {
             db.trashRecord(id, expectedText, System.currentTimeMillis())
         }
     }
+    /** Whole-original removal is irreversible locally: it tombstones all associated records before deleting the object. */
+    internal data class OriginalRemoval(val records: Int, val objectDeleted: Boolean)
+    internal fun removeOriginal(originalId: String, anchorId: String, expectedAnchorText: String): OriginalRemoval = synchronized(lock) {
+        require(originalId.matches(Regex("[a-f0-9]{64}")) && anchorId.matches(Regex("[a-f0-9-]{36}")))
+        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { db ->
+            val removed = db.deleteOriginal(originalId, anchorId, expectedAnchorText, System.currentTimeMillis())
+            if (removed.length() == 0) return@synchronized OriginalRemoval(0, false)
+            val ids = (0 until removed.length()).map { removed.getJSONObject(it).getString("id") }.toSet()
+            ids.forEach(::semanticChange)
+            for (index in 0 until removed.length()) {
+                val row = removed.getJSONObject(index)
+                CompanionMemoryStore(app).forgetSharedMaterial(row.getString("text"), row.getString("id"))
+            }
+            OriginalRemoval(removed.length(), runCatching { KnowledgeObjects(app).deleteVerified(originalId) }.getOrDefault(false))
+        }
+    }
     /** Restores the selected record only; previously suppressed derived memories stay suppressed. */
     internal fun undoRemove(id: String): Boolean = synchronized(lock) {
         require(id.matches(Regex("[a-f0-9-]{36}")))

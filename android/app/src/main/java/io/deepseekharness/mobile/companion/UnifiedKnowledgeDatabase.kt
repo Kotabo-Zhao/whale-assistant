@@ -277,6 +277,32 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         } finally { db.endTransaction() }
     }
 
+    /** A deliberate whole-original deletion has no undo window: every linked record gets a tombstone. */
+    fun deleteOriginal(originalId: String, anchorId: String, expectedAnchorText: String, now: Long): JSONArray {
+        require(originalId.matches(Regex("[a-f0-9]{64}")) && anchorId.matches(Regex("[a-f0-9-]{36}")))
+        db.beginTransaction()
+        try {
+            val anchor = findById(anchorId) ?: return JSONArray()
+            if (anchor.optString("originalId") != originalId || anchor.optString("text") != expectedAnchorText) return JSONArray()
+            val removed = JSONArray()
+            db.rawQuery("SELECT id,body FROM knowledge_records", null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val row = JSONObject(cursor.getString(1))
+                    if (row.optString("originalId") == originalId) removed.put(row)
+                }
+            }
+            if (removed.length() == 0) return removed
+            for (index in 0 until removed.length()) {
+                val row = removed.getJSONObject(index)
+                val tombstone = JSONObject().put("deletedAt", now).put("originalId", originalId).put("scope", "original")
+                db.execSQL("INSERT OR REPLACE INTO knowledge_meta(key,value) VALUES (?,?)", arrayOf("deleted:${row.getString("id")}", tombstone.toString()))
+                check(db.delete("knowledge_records", "id=?", arrayOf(row.getString("id"))) == 1)
+            }
+            db.setTransactionSuccessful()
+            return removed
+        } finally { db.endTransaction() }
+    }
+
     fun undoTrash(id: String, now: Long, windowMs: Long): Boolean {
         db.beginTransaction()
         try {
