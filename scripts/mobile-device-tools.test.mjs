@@ -101,14 +101,19 @@ test('事项工具携带调用会话并限制检索参数', async t => {
   await tool.execute({ query: '续费', limit: 2 }, memoryExec)
   assert.deepEqual(f.requests, [{ command: 'companionTasks', param: `{"query":"续费","limit":2,"callerSession":"${virtualSession}"}` }])
   await assert.rejects(tool.execute({ query: '\u0001' }, memoryExec), /TASK_INPUT_INVALID/)
+  await tool.execute({ query: '', state: 'open', sourceKind: 'shared_material', id: virtualSession }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[1].param), { query: '', state: 'open', sourceKind: 'shared_material', id: virtualSession, callerSession: virtualSession })
+  await assert.rejects(tool.execute({ query: '', sourceKind: 'unknown' }, memoryExec), /TASK_INPUT_INVALID/)
 })
 
 test('事项更新必须携带读取时状态，并限制为单项状态或提醒操作', async t => {
   const f = fixture(t, () => ok('{"id":"00000000-0000-0000-0000-000000000001"}'))
   const tool = f.tools.get('mobile_task_update')
-  await tool.execute({ id: '00000000-0000-0000-0000-000000000001', expectedState: 'candidate', state: 'open' }, memoryExec)
-  assert.deepEqual(f.requests, [{ command: 'companionTasks', param: `{"op":"update","id":"00000000-0000-0000-0000-000000000001","expectedState":"candidate","state":"open","callerSession":"${virtualSession}"}` }])
-  await assert.rejects(tool.execute({ id: '00000000-0000-0000-0000-000000000001', expectedState: 'candidate', state: 'done', reminderAtMs: 1900000000000 }, memoryExec), /TASK_INPUT_INVALID/)
+  const revision = 'a'.repeat(64)
+  await tool.execute({ id: '00000000-0000-0000-0000-000000000001', expectedRevision: revision, expectedState: 'candidate', state: 'open' }, memoryExec)
+  assert.deepEqual(f.requests, [{ command: 'companionTasks', param: `{"op":"update","id":"00000000-0000-0000-0000-000000000001","expectedRevision":"${revision}","expectedState":"candidate","state":"open","callerSession":"${virtualSession}"}` }])
+  await assert.rejects(tool.execute({ id: '00000000-0000-0000-0000-000000000001', expectedRevision: revision, expectedState: 'candidate', state: 'done', reminderAtMs: 1900000000000 }, memoryExec), /TASK_INPUT_INVALID/)
+  await assert.rejects(tool.execute({ id: '00000000-0000-0000-0000-000000000001', expectedRevision: 'bad', expectedState: 'candidate', state: 'done' }, memoryExec), /TASK_INPUT_INVALID/)
 })
 
 test('长期记忆工具通过本机桥保存、检索和删除，并验证输入', async t => {

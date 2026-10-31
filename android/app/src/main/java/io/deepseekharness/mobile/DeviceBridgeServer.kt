@@ -368,6 +368,8 @@ class DeviceBridgeServer(
                                 if (current.eventId.startsWith("share:") && !io.deepseekharness.mobile.companion.CompanionStore(context).knowledgeModelAccess)
                                     throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
                                 if (current.state != update.expectedState) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
+                                if (update.expectedRevision != null && update.expectedRevision != tasks.revision(current))
+                                    throw RuntimeFailure("TASK_CONFLICT", "事项内容或提醒已变化，请先重新读取")
                                 val saved = if (update.reminderAtMs != null) store.queue.setItemReminder(update.id, update.expectedState, update.reminderAtMs, now)
                                 else store.queue.updateItem(update.id, update.expectedState, update.nextState!!)
                                 if (!saved) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
