@@ -43,10 +43,16 @@
 .memory-card-detail p { white-space:pre-wrap; overflow-wrap:anywhere; }
 .memory-delete { border:0; border-radius:10px; padding:10px; color:#a32744; background:#ffe9ee; }
 
+.knowledge-card-detail { min-width:0; }
+.knowledge-card-detail summary { display:flex; justify-content:space-between; gap:8px; cursor:pointer; align-items:center; }
+.knowledge-card-detail summary small { flex-shrink:0; margin:0; }
+.knowledge-preview { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.knowledge-card-detail p { white-space:pre-wrap; overflow-wrap:anywhere; }
+
 .memory-groups { grid-template-columns:minmax(0,1fr); min-width:0; }
-.memory-group,.memory-group .workspace-list,.workspace-memory-card,.memory-card-detail,.memory-card-detail summary { min-width:0; max-width:100%; box-sizing:border-box; }
+.memory-group,.memory-group .workspace-list,.workspace-memory-card,.memory-card-detail,.memory-card-detail summary,.knowledge-card-detail,.knowledge-card-detail summary { min-width:0; max-width:100%; box-sizing:border-box; }
 .memory-group .workspace-list { grid-template-columns:minmax(0,1fr); }
-.memory-preview { display:block; flex:1 1 0; min-width:0; }
+.memory-preview,.knowledge-preview { display:block; flex:1 1 0; min-width:0; }
 
 /* 缩小屏幕时让正文优先占宽，按钮可换行但不挤压输入和卡片。 */
 .companion-workspace, .workspace-heading > div, .workspace-tabs, .workspace-backup, .workspace-list, .workspace-card, .workspace-review { min-width:0; max-width:100%; box-sizing:border-box; }
