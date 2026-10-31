@@ -650,13 +650,13 @@ class CompanionActivity : AppCompatActivity() {
             render()
         }
         paragraph("开启后记录通知来源、标题和正文，最多 50 条；只在读取或新增时清理超过 7 天的记录。验证码与密码使用简单规则过滤，不能保证识别所有敏感内容。")
-        val backgroundProviders = arrayOf("deepseek", "openai", "openrouter", "groq", "xai", "mistral")
+        val backgroundProviders = understandingProviderChoices(io.deepseekharness.mobile.runtime.RuntimeStore(this).settings())
         button("后台整理模型服务 · ${store.understandingProvider}") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择后台整理的模型服务")
-                .setItems(backgroundProviders) { _, index ->
-                    val provider = backgroundProviders[index]
+                .setItems(backgroundProviders.map { it.displayName }.toTypedArray()) { _, index ->
+                    val provider = backgroundProviders[index].id
                     androidx.appcompat.app.AlertDialog.Builder(this).setTitle("切换后台模型服务？")
-                        .setMessage("之后的资料和通知整理会发送给 $provider，使用模型设置中该供应商的密钥和默认模型。已经发出的请求仍由原服务处理。请确认所选服务和模型支持 JSON 格式输出，可能产生费用。")
+                        .setMessage("之后的资料和通知整理会发送给 ${backgroundProviders[index].displayName}，使用模型设置中的密钥和默认模型；自定义供应商使用其模型列表第一项。已经发出的请求仍由原服务处理。请确认所选服务支持 JSON 格式输出，可能产生费用。")
                         .setNegativeButton("取消", null).setPositiveButton("切换") { _, _ ->
                             val result = runCatching { store.understandingProvider = provider }
                             android.widget.Toast.makeText(this, if (result.isSuccess) "后台模型服务已切换。" else "无法保存设置。", android.widget.Toast.LENGTH_LONG).show()

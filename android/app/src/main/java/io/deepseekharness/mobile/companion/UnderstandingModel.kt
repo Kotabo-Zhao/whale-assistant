@@ -45,6 +45,7 @@ internal class DeepSeekUnderstandingModel(
     private val key: String,
     private val model: String,
     private val endpoint: String = "https://api.deepseek.com/chat/completions",
+    private val allowCustomEndpoint: Boolean = false,
 ) : UnderstandingModel {
     override fun analyze(eventId: String, body: String): String {
         require(key.isNotBlank() && !key.contains('\n') && !key.contains('\r'))
@@ -56,9 +57,9 @@ internal class DeepSeekUnderstandingModel(
         val payload = JSONObject().put("model", model).put("messages", messages).put("temperature", 0)
             .put("max_tokens", 1200).put("response_format", JSONObject().put("type", "json_object"))
         val target = java.net.URI(endpoint)
-        require(target.scheme == "https" && target.userInfo == null && target.host in setOf(
-            "api.deepseek.com", "api.openai.com", "openrouter.ai", "api.groq.com", "api.x.ai", "api.mistral.ai"
-        ))
+        val builtInHosts = setOf("api.deepseek.com", "api.openai.com", "openrouter.ai", "api.groq.com", "api.x.ai", "api.mistral.ai")
+        require(target.scheme == "https" && target.userInfo == null && target.host != null &&
+            (allowCustomEndpoint || target.host in builtInHosts))
         val connection = target.toURL().openConnection() as HttpURLConnection
         try {
             connection.instanceFollowRedirects = false

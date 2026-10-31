@@ -23,7 +23,7 @@ class CompanionStore(context: Context) {
     var understandingProvider: String
         get() = prefs.getString("understanding_provider", "deepseek") ?: "deepseek"
         set(value) {
-            require(value in setOf("deepseek", "openai", "openrouter", "groq", "xai", "mistral"))
+            require(value in understandingProviderChoices(io.deepseekharness.mobile.runtime.RuntimeStore(app).settings()).map { it.id })
             check(prefs.edit().putString("understanding_provider", value).commit())
         }
     var backgroundUnderstanding: Boolean

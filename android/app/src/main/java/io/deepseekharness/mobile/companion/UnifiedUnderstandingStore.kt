@@ -1,6 +1,8 @@
 package io.deepseekharness.mobile.companion
 
 import android.content.Context
+import io.deepseekharness.mobile.runtime.CustomModelProvider
+import io.deepseekharness.mobile.runtime.CustomProviderApi
 import io.deepseekharness.mobile.runtime.ModelProvider
 import io.deepseekharness.mobile.runtime.RuntimeStore
 import java.io.File
@@ -32,10 +34,32 @@ internal class UnifiedUnderstandingStore(path: File) : AutoCloseable {
     }
 }
 
+/** A provider that may receive background notification or knowledge text. */
+internal data class UnderstandingProviderChoice(val id: String, val displayName: String)
+
+/**
+ * Background understanding sends private text, so custom endpoints must be HTTPS and use the
+ * OpenAI Chat Completions contract that [DeepSeekUnderstandingModel] verifies locally.
+ */
+internal fun understandingProviderChoices(settings: io.deepseekharness.mobile.runtime.RuntimeSettings): List<UnderstandingProviderChoice> {
+    val builtIns = listOf("deepseek", "openai", "openrouter", "groq", "xai", "mistral")
+        .map { UnderstandingProviderChoice(it, it) }
+    val custom = settings.customModelProviders.mapNotNull { provider ->
+        provider.takeIf { it.api == CustomProviderApi.OPENAI_COMPLETIONS && isHttpsBaseUrl(it) }
+            ?.let { UnderstandingProviderChoice(it.id, it.name) }
+    }
+    return builtIns + custom
+}
+
+private fun isHttpsBaseUrl(provider: CustomModelProvider): Boolean =
+    runCatching { java.net.URI(provider.baseUrl).scheme == "https" }.getOrDefault(false)
+
 /** Both background pipelines resolve the same explicit provider and encrypted credential. */
 internal fun configuredUnderstandingModel(context: Context): UnderstandingModel {
     val settings = RuntimeStore(context)
     val provider = CompanionStore(context).understandingProvider
+    val runtimeSettings = settings.settings()
+    val customProvider = runtimeSettings.customModelProviders.firstOrNull { it.id == provider }
     val endpoint = when (provider) {
         "deepseek" -> "https://api.deepseek.com/chat/completions"
         "openai" -> "https://api.openai.com/v1/chat/completions"
@@ -43,11 +67,19 @@ internal fun configuredUnderstandingModel(context: Context): UnderstandingModel 
         "groq" -> "https://api.groq.com/openai/v1/chat/completions"
         "xai" -> "https://api.x.ai/v1/chat/completions"
         "mistral" -> "https://api.mistral.ai/v1/chat/completions"
-        else -> error("后台模型供应商不可用")
+        else -> customProvider?.let {
+            if (it.api != CustomProviderApi.OPENAI_COMPLETIONS || !isHttpsBaseUrl(it)) {
+                throw UnderstandingRequestException("configuration", "后台自定义供应商必须使用 HTTPS 和 OpenAI Chat Completions 协议")
+            }
+            it.baseUrl.trimEnd('/') + "/chat/completions"
+        } ?: throw UnderstandingRequestException("configuration", "已选择的后台模型供应商已删除，请在助手设置中重新选择")
     }
-    val modelProvider = ModelProvider.parse(provider)
     val key = settings.readModelCredential(provider) ?: throw UnderstandingRequestException("credentials", "后台模型凭据不可用")
-    val model = settings.settings().defaultModels[modelProvider]
-        ?: if (provider == "deepseek") "deepseek-flash" else throw UnderstandingRequestException("configuration", "请先设置后台供应商的默认模型")
-    return DeepSeekUnderstandingModel(key, model, endpoint)
+    val model = customProvider?.models?.firstOrNull()?.id
+        ?: when (provider) {
+            "deepseek" -> runtimeSettings.defaultModels[ModelProvider.DEEPSEEK] ?: "deepseek-flash"
+            else -> runtimeSettings.defaultModels[ModelProvider.parse(provider)]
+                ?: throw UnderstandingRequestException("configuration", "请先设置后台供应商的默认模型")
+        }
+    return DeepSeekUnderstandingModel(key, model, endpoint, allowCustomEndpoint = customProvider != null)
 }
