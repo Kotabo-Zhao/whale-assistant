@@ -804,10 +804,11 @@ interface ConversationScreenProps {
   /** 启动卡片上那一格按需求从「应用设置」换成「停止」：只管停 Harness 服务。 */
   onStop: () => void
   onOpenTerminal: () => void
+  onOpenTasks: () => void
   onUpdate: () => void
 }
 
-function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onStop, onOpenTerminal, onUpdate }: ConversationScreenProps) {
+function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onStop, onOpenTerminal, onOpenTasks, onUpdate }: ConversationScreenProps) {
   const installed = runtimeInstalled(runtime)
   const transitioning = runtimeTransitioning(runtime)
   const updateRequired = installed && runtime.updateAvailable && !transitioning
@@ -836,7 +837,7 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
         </div>
         <span className="home-welcome-mark" aria-hidden="true"><img src={appMark} alt="" /></span>
       </div>
-      <AssistantOverview />
+      <AssistantOverview onOpenTasks={onOpenTasks} />
       <div className="screen-heading home-section-heading">
         <div>
           <p className="eyebrow">{t("你的工作台")}</p>
@@ -5349,9 +5350,9 @@ export function App() {
   const screen = (() => {
     switch (activeView) {
       case 'harness':
-        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onUpdate={requestRuntimeUpdate} />
+        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onUpdate={requestRuntimeUpdate} />
       case 'conversation':
-        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onUpdate={requestRuntimeUpdate} />
+        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onUpdate={requestRuntimeUpdate} />
       case 'sessions':
         return <SessionManager onBack={() => backToView('conversation')} onOpenHarness={launchHarness} />
       case 'assistant-memory':

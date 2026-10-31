@@ -12,6 +12,7 @@
 .assistant-overview ul { list-style: none; padding: 0; }
 .assistant-overview li { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .assistant-overview time { color: var(--muted); font-size: .8rem; }
+.assistant-overview-link { min-height: 44px; margin: 4px 0 10px; padding: 8px 12px; border: 1px solid var(--blue-line, var(--line)); border-radius: var(--radius-inner); background: var(--blue-soft); color: var(--blue); cursor: pointer; }
 .assistant-settings-entry { margin: 16px 0; padding: 18px; border: 1px solid var(--blue-line); border-radius: 20px; background: var(--surface); }
 .assistant-settings-entry > summary { cursor: pointer; min-height: 48px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
 .assistant-settings-entry > summary small { color: var(--muted); }

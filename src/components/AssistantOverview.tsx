@@ -10,7 +10,7 @@ function parseOverview(raw: Record<string, unknown>): Overview {
   if (typeof raw.captureEnabled !== 'boolean' || !raw.categories || typeof raw.categories !== 'object' || Array.isArray(raw.categories) || !Object.values(raw.categories).every(n => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0)) throw new Error('invalid categories')
   return { ...raw, tasks: companionRows(raw.tasks), reminders: companionRows(raw.reminders), recurring: companionRows(raw.recurring) } as Overview
 }
-export function AssistantOverview() {
+export function AssistantOverview({ onOpenTasks }: { onOpenTasks?: () => void }) {
   const [data, setData] = useState<Overview | null>(null)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
@@ -30,6 +30,7 @@ export function AssistantOverview() {
       <p className="assistant-overview-note">{data.captureEnabled ? '基于本地保留的通知按关键词分类，不代表重要性判断。' : '通知采集未开启；已有数据不会因此删除。'}</p>
       <div className="assistant-category-chips">{Object.entries(data.categories).map(([name,count]) => <span key={name}>{name} · {count}</span>)}</div>
       <h3>待核对与待处理</h3>{data.tasks.length ? <ul>{data.tasks.map(row => <li key={row.id}><strong>{row.text}</strong><time>{row.state === 'candidate' ? '待核实' : '待处理'}{typeof row.reminderAtMs === 'number' ? ` · 提醒 ${new Date(row.reminderAtMs).toLocaleString()}` : ''}</time></li>)}</ul> : <p className="assistant-overview-note">当前没有待核对或待处理的事项。</p>}
+      {onOpenTasks && <button className="assistant-overview-link" type="button" onClick={onOpenTasks}>查看全部事项</button>}
       <h3>接下来</h3>{upcoming.length ? <ul>{upcoming.map(row => <li key={row.id}><strong>{row.text}</strong><time>{new Date(Number(row.nextAt ?? row.at)).toLocaleString()}</time></li>)}</ul> : <p className="assistant-overview-note">当前没有已安排的未来提醒。</p>}
       <footer>更新于 {new Date(data.generatedAt).toLocaleString()} · 在“事项”管理待办，在“记忆”管理资料和长期记忆</footer>
     </>}
