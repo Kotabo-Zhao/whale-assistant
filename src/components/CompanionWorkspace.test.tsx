@@ -174,6 +174,16 @@ it('资料生成的记忆只显示受控关联，不回传资料正文', async (
   expect(screen.queryByText('合同原件正文')).not.toBeInTheDocument()
 })
 
+it('记忆详情显示可读证据来源而不显示通知正文', async () => {
+  bridge.companionDashboard.mockResolvedValue({ items: [{ id: 'm-evidence', text: '周五有会议', source: 'user_understanding', evidenceSource: 'notification:com.example.calendar' }] })
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '长期记忆' }))
+  fireEvent.click(await screen.findByText('后台理解'))
+  fireEvent.click(screen.getByText('周五有会议'))
+  expect(screen.getByText(/来源：用户核对的后台理解 · 证据来源：com.example.calendar/)).toBeInTheDocument()
+  expect(screen.queryByText('会议通知原文')).not.toBeInTheDocument()
+})
+
 it('资料自动重试耗尽后如实显示失败并允许用户手动重试', async () => {
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'
     ? { items: [{ id: 'k-failed', text: '需要修复的资料' }] }
