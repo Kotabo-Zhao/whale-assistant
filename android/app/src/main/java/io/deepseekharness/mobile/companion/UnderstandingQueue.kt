@@ -107,7 +107,9 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
         val events = root.getJSONArray("events")
         for (i in 0 until events.length()) {
             val row = events.getJSONObject(i); val id = row.getString("id"); val source = row.getString("source"); val hash = row.getString("hash"); val body = row.getString("body")
-            require(validId(id) && source.startsWith("notification:") && CompanionSourcePolicy.validPackage(source.removePrefix("notification:")) && body.isNotBlank() && body.length <= 4000 && row.getLong("epoch") > 0)
+            val notificationSource = source.startsWith("notification:") && CompanionSourcePolicy.validPackage(source.removePrefix("notification:"))
+            val sharedMaterialSource = source == "shared_material" && id.matches(Regex("share:[a-f0-9]{64}"))
+            require(validId(id) && (notificationSource || sharedMaterialSource) && body.isNotBlank() && body.length <= (if (sharedMaterialSource) 8_000 else 4_000) && row.getLong("epoch") > 0)
             val expected = java.security.MessageDigest.getInstance("SHA-256").digest(CompanionKnowledgeData.utf8("${id.length}:$id$body")).joinToString("") { "%02x".format(it.toInt() and 255) }
             require(hash == expected)
             if (db.rawQuery("SELECT 1 FROM understanding_forget WHERE event_id=?", arrayOf(id)).use { it.moveToFirst() }) continue
@@ -296,6 +298,23 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
     fun sourceEvent(eventId: String): Pair<String, String>? = db.rawQuery(
         "SELECT source, body FROM understanding_events WHERE id=?", arrayOf(eventId)
     ).use { if (it.moveToFirst()) it.getString(0) to it.getString(1) else null }
+    /** Removing a source must retract its candidates before a stale worker can publish them again. */
+    fun forgetEvents(eventIds: Set<String>): List<String> = transaction {
+        require(eventIds.all { it.matches(Regex("share:[a-f0-9]{64}")) })
+        if (eventIds.isEmpty()) return@transaction emptyList()
+        val placeholders = eventIds.joinToString(",") { "?" }
+        val args = eventIds.toTypedArray()
+        val items = mutableListOf<String>()
+        db.rawQuery("SELECT id FROM understanding_items WHERE event_id IN ($placeholders)", args).use { c -> while (c.moveToNext()) items.add(c.getString(0)) }
+        eventIds.forEach { id -> db.insertWithOnConflict("understanding_forget", null, ContentValues().apply { put("event_id", id) }, SQLiteDatabase.CONFLICT_IGNORE) }
+        db.delete("understanding_item_evidence", "event_id IN ($placeholders) OR item_id IN (SELECT id FROM understanding_items WHERE event_id IN ($placeholders))", args + args)
+        db.delete("understanding_item_reminders", "item_id IN (SELECT id FROM understanding_items WHERE event_id IN ($placeholders))", args)
+        db.delete("understanding_items", "event_id IN ($placeholders)", args)
+        db.delete("understanding_results", "event_id IN ($placeholders)", args)
+        db.delete("understanding_event_threads", "event_id IN ($placeholders)", args)
+        db.delete("understanding_events", "id IN ($placeholders)", args)
+        items
+    }
     data class Item(val id: String, val title: String, val state: String, val eventId: String, val reminderStatus: Int = 0)
     fun listItems(limit: Int): List<Item> {
         require(limit in 1..100)

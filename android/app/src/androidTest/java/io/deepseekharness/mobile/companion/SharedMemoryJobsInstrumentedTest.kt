@@ -54,11 +54,12 @@ class SharedMemoryJobsInstrumentedTest {
         SharedMemoryJobs.enqueueWithoutSchedule(context,chunk.getString("id"),value,event)
         val job=SharedMemoryJobs.Job(chunk.getString("id"),CompanionMemorySuppression.digest(value),event)
         val facts=JSONArray();CompanionUserMemory.add(facts,"atomic fact","user_edit",1,false)
+        val result="""{"version":1,"claims":[],"items":[]}"""
         MemoryMigrationDatabase(UnifiedUnderstandingStore.path(context)).use { db ->
-            assertThrows(Exception::class.java) { db.commitSharedJob(facts,job) { error("simulated interruption") } }
+            assertThrows(Exception::class.java) { db.commitSharedJob(facts,job,result) { error("simulated interruption") } }
         }
         assertEquals(0,memory.listForUser().length());assertEquals(1L,SharedMemoryJobs.pendingCount(context))
-        MemoryMigrationDatabase(UnifiedUnderstandingStore.path(context)).use { assertTrue(it.commitSharedJob(facts,job)) }
+        MemoryMigrationDatabase(UnifiedUnderstandingStore.path(context)).use { assertTrue(it.commitSharedJob(facts,job,result)) }
         assertEquals(1,memory.listForUser().length());assertEquals(0L,SharedMemoryJobs.pendingCount(context))
         assertTrue(knowledge.annotate(chunk.getString("id"),value,"model summary"))
         assertEquals(1,memory.listForUser().length())
@@ -82,7 +83,7 @@ class SharedMemoryJobsInstrumentedTest {
         assertEquals(0,memory.listForUser().length()) // Tombstones survive restoring older snapshots.
         assertTrue(knowledge.search("").length()>100)
         SharedMemoryJobs.enqueueWithoutSchedule(context,chunk.getString("id"),value,event)
-        MemoryMigrationDatabase(UnifiedUnderstandingStore.path(context)).use { assertFalse(it.commitSharedJob(facts,job)) }
+        MemoryMigrationDatabase(UnifiedUnderstandingStore.path(context)).use { assertFalse(it.commitSharedJob(facts,job,result)) }
         assertEquals(0,memory.listForUser().length()) // A pre-restore worker cannot commit to the new generation.
         assertEquals(1L,SharedMemoryJobs.pendingCount(context))
     }

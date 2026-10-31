@@ -1,7 +1,9 @@
 package io.deepseekharness.mobile.companion
 
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 class UnderstandingModelContractTest {
     @Test fun acceptsEvidenceBoundClaimsAndEmptyResult() {
@@ -21,5 +23,12 @@ class UnderstandingModelContractTest {
     @Test fun itemMustCiteTheActualEvent() {
         UnderstandingModelContract.validate("""{"version":1,"claims":[],"items":[{"title":"领取快递","evidence_ids":["e"]}]}""", "e")
         assertThrows(Exception::class.java) { UnderstandingModelContract.validate("""{"version":1,"claims":[],"items":[{"title":"领取快递","evidence_ids":["other"]}]}""", "e") }
+    }
+    @Test fun sharedMaterialRebindsEphemeralModelEvidenceToStableSource() {
+        val raw = """{"version":1,"claims":[{"text":"会议在周三","evidence_ids":["request-1"]}],"items":[{"title":"准备会议资料","evidence_ids":["request-1"]}]}"""
+        val bound = SharedMemoryJobs.bindResultToEvent(raw, "request-1", "share:" + "a".repeat(64))
+        val root = JSONObject(bound)
+        assertTrue(root.getJSONArray("claims").getJSONObject(0).getJSONArray("evidence_ids").getString(0).startsWith("share:"))
+        assertTrue(root.getJSONArray("items").getJSONObject(0).getJSONArray("evidence_ids").getString(0).startsWith("share:"))
     }
 }

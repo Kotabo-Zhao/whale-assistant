@@ -166,6 +166,19 @@ internal object SharedMemoryJobs {
         db.rawQuery("SELECT MIN(next_at) FROM shared_jobs", null).use { c -> if (!c.moveToFirst() || c.isNull(0)) null else (c.getLong(0) - System.currentTimeMillis()).coerceAtLeast(0) }
     } }
     private fun failureKey(job: Job) = "${job.id}:${job.hash}"
+
+    /** The model receives an ephemeral request id; persisted evidence uses the stable source event id. */
+    internal fun bindResultToEvent(raw: String, requestId: String, eventId: String): String {
+        UnderstandingModelContract.validate(raw, requestId)
+        val root = JSONObject(raw)
+        for (key in listOf("claims", "items")) {
+            val rows = root.optJSONArray(key) ?: continue
+            for (i in 0 until rows.length()) rows.getJSONObject(i).put("evidence_ids", org.json.JSONArray().put(eventId))
+        }
+        val bound = root.toString()
+        UnderstandingModelContract.validate(bound, eventId)
+        return bound
+    }
     private fun clearFailure(context: Context, job: Job) {
         context.getSharedPreferences("shared_job_failures_v1", Context.MODE_PRIVATE).edit().remove(failureKey(job)).apply()
     }
@@ -211,12 +224,12 @@ internal object SharedMemoryJobs {
             val model = modelOverride ?: configuredUnderstandingModel(app)
             val requestId = UUID.randomUUID().toString()
             val raw = model.analyze(requestId, text)
-            UnderstandingModelContract.validate(raw, requestId)
-            val result = JSONObject(raw)
+            val boundResult = bindResultToEvent(raw, requestId, job.event)
+            val result = JSONObject(boundResult)
             if (!currentGeneration(app, job)) return next(app) != null
             if (stopped.get()) return true
             knowledge.withUnchangedRecord(job.id, text) {
-                if (!stopped.get()) CompanionMemoryStore(app).commitSharedJob(job, result.getJSONArray("claims"))
+                if (!stopped.get()) CompanionMemoryStore(app).commitSharedJob(job, result.getJSONArray("claims"), boundResult)
             }
         } catch (e: Exception) {
             if (!stopped.get()) defer(app, job, e)

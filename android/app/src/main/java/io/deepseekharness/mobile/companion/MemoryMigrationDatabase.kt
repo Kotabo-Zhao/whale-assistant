@@ -100,8 +100,12 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
         }
     }
 
-    /** Facts, search indexes and durable completion are committed together. */
-    fun commitSharedJob(rows: JSONArray, job: SharedMemoryJobs.Job, beforeComplete: () -> Unit = {}): Boolean {
+    /**
+     * Facts, candidate tasks and durable completion are committed together.  A shared
+     * document's model response is tied to its stable source event before it becomes
+     * visible, so deleting that source can retract every derived task as well.
+     */
+    fun commitSharedJob(rows: JSONArray, job: SharedMemoryJobs.Job, result: String, beforeComplete: () -> Unit = {}): Boolean {
         db.beginTransaction()
         try {
             val generation = db.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='generation'", null).use { if (it.moveToFirst()) it.getLong(0) else 0L }
@@ -109,7 +113,8 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
             val pending = db.rawQuery("SELECT 1 FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=?", arrayOf(job.id, job.hash, job.event)).use { it.moveToFirst() }
             val text = db.rawQuery("SELECT body FROM knowledge_records WHERE id=?", arrayOf(job.id)).use { if (it.moveToFirst()) JSONObject(it.getString(0)).getString("text") else null }
             if (!pending || text == null || CompanionMemorySuppression.digest(text) != job.hash) return false
-            applyIncremental(rows)
+            applyIncrementalInTransaction(rows)
+            persistSharedTasks(job, text, result)
             beforeComplete()
             db.execSQL("INSERT OR IGNORE INTO shared_completed(record_id,text_hash) VALUES (?,?)", arrayOf(job.id, job.hash))
             check(db.delete("shared_jobs", "record_id=? AND text_hash=? AND event_id=?", arrayOf(job.id, job.hash, job.event)) == 1)
@@ -120,39 +125,74 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
 
     /** Preserve stable positions and update only changed rows when existing order is unchanged. */
     fun applyIncremental(rows: JSONArray) {
-        CompanionMemoryFormat.validateRows(rows, legacyLimit = false)
         db.beginTransaction()
         try {
-            check(isImported()) { "legacy data not imported" }
-            val existing = linkedMapOf<String, Pair<Long, String>>()
-            db.rawQuery("SELECT id,position,body FROM memories ORDER BY position", null).use { cursor ->
-                while (cursor.moveToNext()) existing[cursor.getString(0)] = cursor.getLong(1) to cursor.getString(2)
-            }
-            val incoming = (0 until rows.length()).map { rows.getJSONObject(it) }
-            val incomingIds = incoming.map { it.getString("id") }.toSet()
-            val oldRetained = existing.keys.filter { it in incomingIds }
-            val newRetained = incoming.map { it.getString("id") }.filter(existing::containsKey)
-            val firstNew = incoming.indexOfFirst { !existing.containsKey(it.getString("id")) }
-            val appendOnly = firstNew < 0 || incoming.drop(firstNew).none { existing.containsKey(it.getString("id")) }
-            check(oldRetained == newRetained && appendOnly) { "snapshot reordering requires full replacement" }
-            var changed = false
-            for (id in existing.keys) if (id !in incomingIds) { db.delete("memories", "id=?", arrayOf(id)); db.delete("memory_text_index", "id=?", arrayOf(id)); MemorySearchIndex.delete(db, id); changed = true }
-            var position = (existing.values.maxOfOrNull { it.first } ?: -1L) + 1
-            for (row in incoming) {
-                val id = row.getString("id"); val body = row.toString(); val previous = existing[id]
-                if (previous == null) {
-                    db.insertOrThrow("memories", null, ContentValues().apply { put("id", id); put("position", position++); put("body", body) })
-                    putIndex(id, row)
-                    changed = true
-                } else if (previous.second != body) {
-                    check(db.update("memories", ContentValues().apply { put("body", body) }, "id=?", arrayOf(id)) == 1)
-                    putIndex(id, row)
-                    changed = true
-                }
-            }
-            if (changed) db.execSQL("UPDATE metadata SET value = CAST(value AS INTEGER) + 1 WHERE key = 'revision'")
+            applyIncrementalInTransaction(rows)
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
+    }
+
+    private fun applyIncrementalInTransaction(rows: JSONArray) {
+        CompanionMemoryFormat.validateRows(rows, legacyLimit = false)
+        check(isImported()) { "legacy data not imported" }
+        val existing = linkedMapOf<String, Pair<Long, String>>()
+        db.rawQuery("SELECT id,position,body FROM memories ORDER BY position", null).use { cursor ->
+            while (cursor.moveToNext()) existing[cursor.getString(0)] = cursor.getLong(1) to cursor.getString(2)
+        }
+        val incoming = (0 until rows.length()).map { rows.getJSONObject(it) }
+        val incomingIds = incoming.map { it.getString("id") }.toSet()
+        val oldRetained = existing.keys.filter { it in incomingIds }
+        val newRetained = incoming.map { it.getString("id") }.filter(existing::containsKey)
+        val firstNew = incoming.indexOfFirst { !existing.containsKey(it.getString("id")) }
+        val appendOnly = firstNew < 0 || incoming.drop(firstNew).none { existing.containsKey(it.getString("id")) }
+        check(oldRetained == newRetained && appendOnly) { "snapshot reordering requires full replacement" }
+        var changed = false
+        for (id in existing.keys) if (id !in incomingIds) { db.delete("memories", "id=?", arrayOf(id)); db.delete("memory_text_index", "id=?", arrayOf(id)); MemorySearchIndex.delete(db, id); changed = true }
+        var position = (existing.values.maxOfOrNull { it.first } ?: -1L) + 1
+        for (row in incoming) {
+            val id = row.getString("id"); val body = row.toString(); val previous = existing[id]
+            if (previous == null) {
+                db.insertOrThrow("memories", null, ContentValues().apply { put("id", id); put("position", position++); put("body", body) })
+                putIndex(id, row)
+                changed = true
+            } else if (previous.second != body) {
+                check(db.update("memories", ContentValues().apply { put("body", body) }, "id=?", arrayOf(id)) == 1)
+                putIndex(id, row)
+                changed = true
+            }
+        }
+        if (changed) db.execSQL("UPDATE metadata SET value = CAST(value AS INTEGER) + 1 WHERE key = 'revision'")
+    }
+
+    private fun persistSharedTasks(job: SharedMemoryJobs.Job, text: String, result: String) {
+        val source = "shared_material"
+        val eventBody = text.substringAfter("\n\n文档提取内容：\n", text)
+        val inputHash = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(CompanionKnowledgeData.utf8("${job.event.length}:${job.event}$eventBody"))
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
+        val forgotten = db.rawQuery("SELECT 1 FROM understanding_forget WHERE event_id=?", arrayOf(job.event)).use { it.moveToFirst() }
+        if (forgotten) return
+        val event = ContentValues().apply { put("id", job.event); put("source", source); put("input_hash", inputHash); put("epoch", 1); put("body", eventBody) }
+        if (db.insertWithOnConflict("understanding_events", null, event, SQLiteDatabase.CONFLICT_IGNORE) == -1L) {
+            check(db.rawQuery("SELECT source,input_hash,epoch,body FROM understanding_events WHERE id=?", arrayOf(job.event)).use { c ->
+                c.moveToFirst() && c.getString(0) == source && c.getString(1) == inputHash && c.getLong(2) == 1L && c.getString(3) == eventBody
+            }) { "shared event conflict" }
+        }
+        val jobId = "shared:${job.id}:${job.hash}"
+        val row = ContentValues().apply { put("job_id", jobId); put("event_id", job.event); put("body", result) }
+        if (db.insertWithOnConflict("understanding_results", null, row, SQLiteDatabase.CONFLICT_IGNORE) == -1L) {
+            check(db.rawQuery("SELECT event_id,body FROM understanding_results WHERE job_id=?", arrayOf(jobId)).use { c ->
+                c.moveToFirst() && c.getString(0) == job.event && c.getString(1) == result
+            }) { "shared result conflict" }
+        }
+        val items = JSONObject(result).optJSONArray("items") ?: JSONArray()
+        for (i in 0 until items.length()) {
+            val title = items.getJSONObject(i).getString("title").trim()
+            val id = java.util.UUID.nameUUIDFromBytes("$jobId:$title".toByteArray(Charsets.UTF_8)).toString()
+            val item = ContentValues().apply { put("id", id); put("job_id", jobId); put("event_id", job.event); put("title", title); put("state", "candidate") }
+            if (db.insertWithOnConflict("understanding_items", null, item, SQLiteDatabase.CONFLICT_IGNORE) != -1L)
+                db.insertOrThrow("understanding_item_evidence", null, ContentValues().apply { put("item_id", id); put("event_id", job.event) })
+        }
     }
 
     private fun putDigest(id: String, text: String) {

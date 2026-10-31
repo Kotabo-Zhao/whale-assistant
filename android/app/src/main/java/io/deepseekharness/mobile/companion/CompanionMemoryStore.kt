@@ -280,7 +280,7 @@ class CompanionMemoryStore(context: Context) {
         added
     }
 
-    internal fun commitSharedJob(job: SharedMemoryJobs.Job, claims: JSONArray): Boolean = synchronized(lock) {
+    internal fun commitSharedJob(job: SharedMemoryJobs.Job, claims: JSONArray, result: String): Boolean = synchronized(lock) {
         check(enabled) { "memory disabled" }
         if (!usesDatabase()) migrateToDatabase()
         val rows = load()
@@ -290,7 +290,7 @@ class CompanionMemoryStore(context: Context) {
         }
         val additions = (0 until rows.length()).map { rows.getJSONObject(it).getString("id") }.filterNot { it in beforeIds }.toSet()
         if (additions.isNotEmpty() && SemanticControl(app).memoryEnabled) SemanticControl(app).memoryChanged(additions)
-        MemoryMigrationDatabase(UnifiedUnderstandingStore.path(app)).use { it.commitSharedJob(rows, job) }.also {
+        MemoryMigrationDatabase(UnifiedUnderstandingStore.path(app)).use { it.commitSharedJob(rows, job, result) }.also {
             if (additions.isNotEmpty() && SemanticControl(app).memoryEnabled) runCatching { SemanticIndexJobs.schedule(app, 5_000L) }
         }
     }
@@ -314,6 +314,8 @@ class CompanionMemoryStore(context: Context) {
             if (row.optString("evidenceEventId") in events) rememberDeleted(row) else kept.put(row)
         }
         if (kept.length() != rows.length()) write(kept)
+        val removedItems = UnifiedUnderstandingStore.open(app).use { it.queue.forgetEvents(events) }
+        removedItems.forEach { runCatching { CompanionReminder(app).removeLinked(it) } }
     }
 
     internal fun usesDatabase(): Boolean = synchronized(lock) { prefs.getBoolean("memory_sqlite_active", false) }
