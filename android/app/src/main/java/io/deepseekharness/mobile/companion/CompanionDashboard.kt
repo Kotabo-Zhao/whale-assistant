@@ -160,6 +160,17 @@ internal class CompanionDashboard(private val context: Context) {
                     SharedMemoryJobs.resumeRecord(context, id, value).also { if (it) SharedMemoryJobs.schedule(context, 0) }
                 }
             }
+            "knowledgeImagePreview" -> {
+                val id = text("id")
+                val expectedText = text("expectedText")
+                val originalId = text("originalId")
+                var preview: JSONObject? = null
+                check(knowledge.withUnchangedRecord(id, expectedText) {
+                    check(knowledge.findById(id)?.optString("originalId") == originalId) { "资料已变化，请刷新后重试" }
+                    preview = JSONObject(KnowledgeImageModel.preview(context, originalId))
+                }) { "资料已变化，请刷新后重试" }
+                checkNotNull(preview)
+            }
             "knowledgeRemoveOriginal" -> {
                 val removal = knowledge.removeOriginal(text("originalId"), text("id"), text("expectedText"))
                 require(removal.records > 0) { "资料已变化，请刷新后重试" }

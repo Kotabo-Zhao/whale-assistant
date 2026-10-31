@@ -10,10 +10,12 @@ type Preview = { token: string; items: Row[]; skipped: number }
 type KnowledgeSource = 'shared_text' | 'text_file' | 'original' | 'image_analysis'
 type KnowledgeCoverage = 'not_parsed' | 'partial' | 'extracted_text' | 'model_description'
 type KnowledgeProcessing = { id: string; expectedText: string; state: 'queued' | 'running' | 'failed' | 'completed' | 'cancelled' | 'not_queued'; attempts: number; nextAttemptAtMs: number | null; lastErrorCode: string | null; memoryEnabled: boolean }
+type KnowledgeImagePreview = { id: string; source: string }
 const rows = companionRows
 const expected = (row: Row) => typeof row._review === 'string' ? row._review : ''
 const originalId = (row: Row) => typeof row.originalId === 'string' && /^[a-f0-9]{64}$/.test(row.originalId) ? row.originalId : null
 const knowledgeRevision = (row: Row) => typeof row.revision === 'string' && /^[a-f0-9]{64}$/.test(row.revision) ? row.revision : null
+const canPreviewKnowledgeImage = (row: Row) => originalId(row) !== null && (row.source === 'image_analysis' || (row.source === 'original' && typeof row.mime === 'string' && row.mime.startsWith('image/')))
 const linkedKnowledgeReference = (row: Row) => typeof row.sourceRecordId === 'string' && /^[a-f0-9-]{36}$/i.test(row.sourceRecordId) && typeof row.sourceRevision === 'string' && /^[a-f0-9]{64}$/i.test(row.sourceRevision) ? '已关联资料（资料读取仍需当前对话授权）' : null
 const formatMinute = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
 const parseMinute = (value: string) => { const [hour, minute] = value.split(':').map(Number); return hour * 60 + minute }
@@ -93,6 +95,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<Set<string>>(() => new Set())
   const [knowledgeProcessing, setKnowledgeProcessing] = useState<KnowledgeProcessing | null>(null)
   const [knowledgeDetail, setKnowledgeDetail] = useState<Row | null>(null)
+  const [knowledgeImagePreview, setKnowledgeImagePreview] = useState<KnowledgeImagePreview | null>(null)
   const pending = useRef(false)
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
@@ -189,6 +192,18 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       if (state !== 'queued' && state !== 'running' && state !== 'failed' && state !== 'completed' && state !== 'cancelled' && state !== 'not_queued') throw new Error('invalid status')
       setKnowledgeProcessing({ id: row.id, expectedText: row.text, state, attempts: Number.isSafeInteger(result.attempts) && (result.attempts as number) >= 0 ? result.attempts as number : 0, nextAttemptAtMs: Number.isSafeInteger(result.nextAttemptAtMs) && (result.nextAttemptAtMs as number) >= 0 ? result.nextAttemptAtMs as number : null, lastErrorCode: typeof result.lastErrorCode === 'string' ? result.lastErrorCode : null, memoryEnabled: result.memoryEnabled === true })
     } catch { setMessage('资料已变化或无法读取处理状态，请重新查看。') } finally { setBusy(false) }
+  }
+  const showKnowledgeImagePreview = async (row: Row) => {
+    const id = originalId(row)
+    if (id === null) { setMessage('这条资料没有可预览的图片原件。'); return }
+    if (knowledgeImagePreview?.id === row.id) { setKnowledgeImagePreview(null); return }
+    setBusy(true); setMessage('')
+    try {
+      const result = await runtimeBridge.companionDashboard({ operation: 'knowledgeImagePreview', id: row.id, originalId: id, expectedText: row.text })
+      if (typeof result.imageBase64 !== 'string' || result.imageBase64 === '') throw new Error('invalid image preview')
+      setKnowledgeImagePreview({ id: row.id, source: `data:image/png;base64,${result.imageBase64}` })
+    } catch { setMessage('图片预览不可用；资料没有发送。') }
+    finally { setBusy(false) }
   }
   const changeKnowledgeProcessing = async (operation: 'knowledgeProcessingRetry' | 'knowledgeProcessingCancel' | 'knowledgeProcessingResume', value: KnowledgeProcessing) => {
     const result = await run({ operation, id: value.id, expectedText: value.expectedText }, operation === 'knowledgeProcessingRetry' ? '已安排重试，系统可能延迟。' : operation === 'knowledgeProcessingCancel' ? '已停止该版本的资料整理。' : '已重新安排资料整理，系统可能延迟。')
@@ -359,7 +374,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           {knowledgeProcessing.state === 'cancelled' && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingResume', knowledgeProcessing) }}>重新整理</button>}
           <button type="button" onClick={() => setKnowledgeProcessing(null)}>收起</button>
         </div></div>}</div>{!knowledgeSelectionMode && <div className="workspace-card-actions">
-        <button type="button" onClick={() => setKnowledgeDetail(row)}>查看详情</button>
+        <button type="button" onClick={() => { setKnowledgeDetail(row); setKnowledgeImagePreview(null) }}>查看详情</button>
         {knowledgeRevision(row) !== null && <button type="button" onClick={() => { void askKnowledge(row) }}>用此资料提问</button>}
         <button type="button" onClick={() => { void readKnowledgeProcessing(row) }}>处理状态</button>
         {row.source !== 'original' && <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>}
@@ -373,10 +388,11 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     </>}
     </fieldset>
     {knowledgeDetail && <div className="knowledge-detail-backdrop"><section className="knowledge-detail-page" role="dialog" aria-modal="true" aria-labelledby="knowledge-detail-title">
-      <header><div><span className="knowledge-type">{knowledgeFileTypeLabel(knowledgeDetail)}</span><h4 id="knowledge-detail-title">{typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料详情'}</h4><small>{knowledgeSourceLabel(knowledgeDetail.source)} · {knowledgeCoverageLabel(knowledgeDetail.coverage)}</small></div><button type="button" className="button button-secondary" onClick={() => setKnowledgeDetail(null)}>关闭</button></header>
+      <header><div><span className="knowledge-type">{knowledgeFileTypeLabel(knowledgeDetail)}</span><h4 id="knowledge-detail-title">{typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料详情'}</h4><small>{knowledgeSourceLabel(knowledgeDetail.source)} · {knowledgeCoverageLabel(knowledgeDetail.coverage)}</small></div><button type="button" className="button button-secondary" onClick={() => { setKnowledgeDetail(null); setKnowledgeImagePreview(null) }}>关闭</button></header>
       {knowledgeDetailMeta(knowledgeDetail) && <p className="knowledge-detail-meta">{knowledgeDetailMeta(knowledgeDetail)}</p>}
+      {knowledgeImagePreview?.id === knowledgeDetail.id && <img className="knowledge-image-preview" src={knowledgeImagePreview.source} alt={`图片预览：${typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料图片'}`} />}
       <p className="knowledge-detail-content">{knowledgeDetail.text}</p>
-      <div className="workspace-card-actions">{knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void askKnowledge(knowledgeDetail) }}>用此资料提问</button>}<button type="button" onClick={() => setKnowledgeDetail(null)}>返回资料列表</button></div>
+      <div className="workspace-card-actions">{canPreviewKnowledgeImage(knowledgeDetail) && <button type="button" disabled={busy} onClick={() => { void showKnowledgeImagePreview(knowledgeDetail) }}>{knowledgeImagePreview?.id === knowledgeDetail.id ? '隐藏图片预览' : '显示图片预览'}</button>}{knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void askKnowledge(knowledgeDetail) }}>用此资料提问</button>}<button type="button" onClick={() => { setKnowledgeDetail(null); setKnowledgeImagePreview(null) }}>返回资料列表</button></div>
     </section></div>}
   </section>
 }
