@@ -181,6 +181,7 @@ it('图片资料打开详情页时加载本机缩略预览', async () => {
   })
   render(<CompanionWorkspace />)
   fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  expect((await screen.findByRole('img', { name: '图片缩略图：资料图片' })).getAttribute('src')).toBe('data:image/png;base64,aGVsbG8=')
   fireEvent.click(await screen.findByRole('button', { name: '查看详情' }))
   const dialog = screen.getByRole('dialog')
   expect((await within(dialog).findByRole('img', { name: '图片预览：资料图片' })).getAttribute('src')).toBe('data:image/png;base64,aGVsbG8=')

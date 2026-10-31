@@ -16,6 +16,7 @@ const expected = (row: Row) => typeof row._review === 'string' ? row._review : '
 const originalId = (row: Row) => typeof row.originalId === 'string' && /^[a-f0-9]{64}$/.test(row.originalId) ? row.originalId : null
 const knowledgeRevision = (row: Row) => typeof row.revision === 'string' && /^[a-f0-9]{64}$/.test(row.revision) ? row.revision : null
 const canPreviewKnowledgeImage = (row: Row) => originalId(row) !== null && (row.source === 'image_analysis' || (row.source === 'original' && typeof row.mime === 'string' && row.mime.startsWith('image/')))
+const knowledgeImageKey = (row: Row) => `${row.id}:${originalId(row) ?? ''}:${row.text}`
 const linkedKnowledge = (row: Row) => typeof row.sourceRecordId === 'string' && /^[a-f0-9-]{36}$/i.test(row.sourceRecordId) && typeof row.sourceRevision === 'string' && /^[a-f0-9]{64}$/i.test(row.sourceRevision) ? { id: row.sourceRecordId, revision: row.sourceRevision } : null
 const linkedKnowledgeReference = (row: Row) => linkedKnowledge(row) !== null ? '已关联资料（资料读取仍需当前对话授权）' : null
 const formatMinute = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
@@ -97,6 +98,8 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [knowledgeProcessing, setKnowledgeProcessing] = useState<KnowledgeProcessing | null>(null)
   const [knowledgeDetail, setKnowledgeDetail] = useState<Row | null>(null)
   const [knowledgeImagePreview, setKnowledgeImagePreview] = useState<KnowledgeImagePreview | null>(null)
+  const [knowledgeImageThumbnails, setKnowledgeImageThumbnails] = useState<Map<string, string>>(() => new Map())
+  const thumbnailRequests = useRef(new Set<string>())
   const pending = useRef(false)
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
@@ -110,6 +113,20 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     }).catch(() => { if (active) setMessage('图片预览不可用；资料没有发送。') })
     return () => { active = false }
   }, [knowledgeDetail])
+  useEffect(() => {
+    if (panel !== 'knowledge') return
+    let active = true
+    items.filter(canPreviewKnowledgeImage).forEach(row => {
+      const original = originalId(row)
+      const key = knowledgeImageKey(row)
+      if (original === null || thumbnailRequests.current.has(key)) return
+      thumbnailRequests.current.add(key)
+      void runtimeBridge.companionDashboard({ operation: 'knowledgeImagePreview', id: row.id, originalId: original, expectedText: row.text }).then(result => {
+        if (active && typeof result.imageBase64 === 'string' && result.imageBase64 !== '') setKnowledgeImageThumbnails(current => new Map(current).set(key, `data:image/png;base64,${result.imageBase64}`))
+      }).catch(() => undefined)
+    })
+    return () => { active = false }
+  }, [panel, items])
   useEffect(() => {
     let live = true
     if (previousPanel.current !== panel) {
@@ -382,7 +399,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           </details>
           {!memorySelectionMode && revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
-      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}>{knowledgeSelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedKnowledgeIds.has(row.id)} onChange={() => toggleKnowledgeSelection(row.id)} aria-label={`选择资料：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}`} />选择</label>}<div><details className="knowledge-card-detail"><summary><span className="knowledge-type" aria-label={`资料类型：${knowledgeFileTypeLabel(row)}`}>{knowledgeFileTypeLabel(row)}</span><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>
+      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}>{knowledgeSelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedKnowledgeIds.has(row.id)} onChange={() => toggleKnowledgeSelection(row.id)} aria-label={`选择资料：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}`} />选择</label>}<div className="knowledge-card-copy">{knowledgeImageThumbnails.get(knowledgeImageKey(row)) && <img className="knowledge-list-thumbnail" src={knowledgeImageThumbnails.get(knowledgeImageKey(row))} alt={`图片缩略图：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : '资料图片'}`} />}<details className="knowledge-card-detail"><summary><span className="knowledge-type" aria-label={`资料类型：${knowledgeFileTypeLabel(row)}`}>{knowledgeFileTypeLabel(row)}</span><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>
         {knowledgeProcessing?.id === row.id && <div className="workspace-review"><strong>资料处理状态</strong><p>{processingDescription(knowledgeProcessing)}</p><div className="workspace-card-actions">
           {(knowledgeProcessing.state === 'queued' || knowledgeProcessing.state === 'failed') && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingRetry', knowledgeProcessing) }}>重试</button>}
           {(knowledgeProcessing.state === 'queued' || knowledgeProcessing.state === 'running' || knowledgeProcessing.state === 'failed') && <button type="button" className="button-danger-quiet" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingCancel', knowledgeProcessing) }}>停止整理</button>}
