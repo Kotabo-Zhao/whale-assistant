@@ -75,6 +75,16 @@ it('刷新不清空正在编辑的资料，读取失败保留原记录', async (
   expect(screen.getByText('已有资料')).toBeInTheDocument()
   expect(screen.getByLabelText('资料内容')).toHaveValue('未保存的草稿')
 })
+it('记忆缩略卡片同时显示来源、保存日期和确认状态', async () => {
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'memoryList'
+    ? { items: [{ id: 'm1', text: '每周六去游泳', source: 'assistant_tool', status: 'confirmed', createdAt: new Date('2030-01-02').getTime() }] }
+    : { items: [], recurring: [] }))
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '长期记忆' }))
+  await screen.findByText('每周六去游泳')
+  expect(screen.getByText(/助手记忆 · 保存于/)).toBeInTheDocument()
+  expect(screen.getByText('已保存')).toBeInTheDocument()
+})
 it('资料来源和解析范围筛选交由本地分页查询，加载更多保持相同筛选', async () => {
   bridge.companionDashboard.mockImplementation((request: { operation: string; offset?: number }) => {
     if (request.operation !== 'knowledgeList') return Promise.resolve({ items: [], recurring: [] })
