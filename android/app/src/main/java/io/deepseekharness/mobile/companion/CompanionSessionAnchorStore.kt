@@ -28,6 +28,13 @@ internal class CompanionSessionAnchorStore(context: Context) {
         read().filter { it.sessionId == sessionId }
     }
 
+    fun exportArchive(): ByteArray = synchronized(lock) { encode(read()).toByteArray(Charsets.UTF_8) }
+    fun mergeArchive(bytes: ByteArray): Int = synchronized(lock) {
+        val imported = decode(bytes); val current = read().toMutableList(); val before = current.size
+        current.addAll(imported.filter { candidate -> current.none { it.sessionId == candidate.sessionId && it.role == candidate.role && it.atMs == candidate.atMs && it.summary == candidate.summary } })
+        save(current.sortedBy { it.atMs }.takeLast(MAX_ANCHORS)); current.size - before
+    }
+
     private fun read(): List<Anchor> = runCatching {
         val raw = prefs.getString(KEY, null) ?: return emptyList()
         val root = JSONArray(raw); require(root.length() <= MAX_ANCHORS)
@@ -39,7 +46,7 @@ internal class CompanionSessionAnchorStore(context: Context) {
     }.getOrElse { emptyList() }
 
     private fun save(rows: List<Anchor>) {
-        val value = JSONArray().apply { rows.forEach { anchor -> put(JSONObject().put("sessionId", anchor.sessionId).put("role", anchor.role).put("atMs", anchor.atMs).put("summary", anchor.summary)) } }.toString()
+        val value = encode(rows)
         check(prefs.edit().putString(KEY, value).commit()) { "无法保存会话锚点" }
     }
 
@@ -51,5 +58,7 @@ internal class CompanionSessionAnchorStore(context: Context) {
         private val CONTROLS = Regex("[\\u0000-\\u001F\\u007F]")
         private val locks = java.util.WeakHashMap<Context, Any>()
         private fun lockFor(context: Context): Any = synchronized(locks) { locks.getOrPut(context) { Any() } }
+        private fun encode(rows: List<Anchor>) = JSONArray().apply { rows.forEach { anchor -> put(JSONObject().put("sessionId", anchor.sessionId).put("role", anchor.role).put("atMs", anchor.atMs).put("summary", anchor.summary)) } }.toString()
+        private fun decode(bytes: ByteArray): List<Anchor> { require(bytes.size <= 20_000); val root = JSONArray(String(bytes, Charsets.UTF_8)); require(root.length() <= MAX_ANCHORS); return (0 until root.length()).map { index -> root.getJSONObject(index).let { Anchor(it.getString("sessionId"), it.getString("role"), it.getLong("atMs"), it.getString("summary")) } }.also { rows -> rows.forEach { require(BubbleSessionRegistry.valid(it.sessionId) && it.role in setOf("user", "assistant") && it.atMs > 0 && it.summary.isNotBlank() && it.summary.length <= MAX_SUMMARY && !CONTROLS.containsMatchIn(it.summary)) } } }
     }
 }
