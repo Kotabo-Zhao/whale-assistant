@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { beforeEachAppTest, bridge, keepAlive, settings } from './__tests__/appTestHarness'
 
@@ -187,7 +187,8 @@ describe('任务完成回到对话界面（5.6-F）', () => {
 
   /** 切到设置页：这里只是「用户不在对话界面」的一个真实落点。 */
   const openSettingsView = async (): Promise<void> => {
-    fireEvent.click(await screen.findByRole('button', { name: '设置' }))
+    const nav = await screen.findByRole('navigation', { name: '底部导航' })
+    fireEvent.click(within(nav).getByRole('button', { name: '我的' }))
     await screen.findByRole('heading', { name: '设置' })
   }
 

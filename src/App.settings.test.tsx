@@ -651,7 +651,7 @@ describe('设置草稿与未保存的输入', () => {
     // 拿到对话页：它不属于设置区，草稿要活到进程结束，不能再在这里丢掉。
     const nav = document.querySelector('.bottom-navigation')
     if (!(nav instanceof HTMLElement)) throw new Error('底栏没有渲染出来')
-    fireEvent.click(within(nav).getByRole('button', { name: '首页' }))
+    fireEvent.click(within(nav).getByRole('button', { name: '对话' }))
     await waitFor(() => expect(screen.queryByRole('heading', { name: '设置', level: 1 })).not.toBeInTheDocument())
 
     await openSettingsPage('主题', '字号与配色')

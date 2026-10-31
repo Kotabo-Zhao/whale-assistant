@@ -3,7 +3,7 @@ import { Archive, ArchiveRestore, ArrowLeft, ChevronDown, ChevronRight, FolderPe
 import { triggerHaptic } from '../platform/haptics'
 import { t, useLanguage } from '../i18n'
 import { runtimeBridge } from '../platform/native'
-import type { RuntimeCompanionSessionAnchor, RuntimeCompanionSourceCard, RuntimeSessionListReason, RuntimeSessionSummary, RuntimeSessionWorkspaceEntry } from '../platform/types'
+import type { RuntimeCompanionSessionAnchor, RuntimeCompanionSessionLinks, RuntimeCompanionSourceCard, RuntimeSessionListReason, RuntimeSessionSummary, RuntimeSessionWorkspaceEntry } from '../platform/types'
 // 走 Vite 的资源 URL 导入（与 App.tsx 里 app-mark 的用法一致，见 src/assets.d.ts 的 *.png 声明）：
 // 打包后是一份带哈希的静态文件，不会像放 public/ 那样多一处需要手工同步的路径。
 import appMark from '../assets/app-mark.png'
@@ -172,8 +172,10 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   // Organisation data is optional enhancement data. A read failure must not hide the real session catalogue.
   useEffect(() => {
     let active = true
-    runtimeBridge.getSessionWorkspace().then(value => {
-      if (active) setWorkspace(value.entries)
+    const readWorkspace = (runtimeBridge as { getSessionWorkspace?: () => Promise<{ entries: RuntimeSessionWorkspaceEntry[] }> }).getSessionWorkspace
+    if (!readWorkspace) return () => { active = false }
+    Promise.resolve(readWorkspace()).then(value => {
+      if (active) setWorkspace(value?.entries ?? [])
     }).catch(() => {
       if (active) setWorkspace([])
     })
@@ -184,7 +186,10 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   // conversation created from the pet without copying either conversation's message bodies.
   useEffect(() => {
     let active = true
-    runtimeBridge.getCompanionSessionLinks().then(value => {
+    const readLinks = (runtimeBridge as { getCompanionSessionLinks?: () => Promise<RuntimeCompanionSessionLinks> }).getCompanionSessionLinks
+    if (!readLinks) return () => { active = false }
+    Promise.resolve(readLinks()).then(value => {
+      if (!value) return
       if (active) {
         setCompanionSessionIds(new Set(value.sessionIds))
         const bySession = new Map<string, RuntimeCompanionSessionAnchor[]>()

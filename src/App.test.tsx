@@ -64,7 +64,7 @@ describe('App conversation gate', () => {
       await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
       expect(nav.getByRole('button', { name: '对话' })).toHaveAttribute('aria-current', 'page')
       await act(async () => { window.dispatchEvent(new CustomEvent('dsh-native-tab', { detail: 'conversation' })); await Promise.resolve() })
-      expect(nav.getByRole('button', { name: '首页' })).toHaveAttribute('aria-current', 'page')
+      expect(nav.getByRole('button', { name: '对话' })).toHaveAttribute('aria-current', 'page')
       fireEvent.click(nav.getByRole('button', { name: '对话' }))
       await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(2))
       expect(bridge.startHarness).toHaveBeenCalledTimes(1)
@@ -81,10 +81,10 @@ describe('App conversation gate', () => {
       const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
       fireEvent.click(nav.getByRole('button', { name: '对话' }))
       await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
-      fireEvent.click(nav.getByRole('button', { name: '首页' }))
+      fireEvent.click(nav.getByRole('button', { name: '我的' }))
       await act(async () => { finishStart(runningState); await Promise.resolve() })
       expect(bridge.openHarness).not.toHaveBeenCalled()
-      expect(nav.getByRole('button', { name: '首页' })).toHaveAttribute('aria-current', 'page')
+      expect(nav.getByRole('button', { name: '我的' })).toHaveAttribute('aria-current', 'page')
     } finally { native.mockRestore() }
   })
 

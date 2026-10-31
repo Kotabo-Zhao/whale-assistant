@@ -9,13 +9,13 @@ const provider = {
 
 describe('custom providers', () => {
   it('normalizes a complete provider declaration', () => {
-    expect(validateCustomModelProviders([provider])).toEqual([{ ...provider, baseUrl: 'https://api.example.com/v1' }])
+    expect(validateCustomModelProviders([provider])).toEqual([{ ...provider, baseUrl: 'https://api.example.com/v1', models: [{ ...provider.models[0], inputModalities: ['text'] }] }])
   })
   it.each(['openai', '__proto__', 'UPPER', 'gateway\n'])('rejects reserved or malformed route %s', id => {
     expect(() => validateCustomModelProviders([{ ...provider, id }])).toThrow()
   })
   it('accepts a public HTTP URL and normalizes it', () => {
-    expect(validateCustomModelProviders([{ ...provider, baseUrl: 'http://api.example.com/v1/' }])).toEqual([{ ...provider, baseUrl: 'http://api.example.com/v1' }])
+    expect(validateCustomModelProviders([{ ...provider, baseUrl: 'http://api.example.com/v1/' }])).toEqual([{ ...provider, baseUrl: 'http://api.example.com/v1', models: [{ ...provider.models[0], inputModalities: ['text'] }] }])
   })
   it.each(['https://api.example.com:0', 'https://user:secret@example.com', 'https://example.com/?token=value', 'https://example.com/#secret'])('rejects credential-bearing or insecure URL %s', baseUrl => {
     expect(() => validateCustomModelProviders([{ ...provider, baseUrl }])).toThrow()

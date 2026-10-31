@@ -176,6 +176,9 @@ export const bridge = {
   getMarketProposal: vi.fn(),
   dismissMarketProposal: vi.fn(),
   companionDashboard: vi.fn(),
+  getCompanionSessionLinks: vi.fn(),
+  openCompanionKnowledge: vi.fn(),
+  resumeCompanionSession: vi.fn(),
   exportCompanionBackup: vi.fn(),
   openCompanionSettings: vi.fn(),
   getCompanionQuickSettings: vi.fn(),
@@ -636,6 +639,9 @@ export function beforeEachAppTest(): void {
   bridge.getMarketProposal.mockResolvedValue(null)
   bridge.dismissMarketProposal.mockResolvedValue(false)
   bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] })
+  bridge.getCompanionSessionLinks.mockResolvedValue({ sessionIds: [], anchors: [] })
+  bridge.openCompanionKnowledge.mockResolvedValue(undefined)
+  bridge.resumeCompanionSession.mockResolvedValue(undefined)
   bridge.exportCompanionBackup.mockResolvedValue(undefined)
   bridge.openCompanionSettings.mockResolvedValue(undefined)
   bridge.getCompanionQuickSettings.mockResolvedValue({ memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, reminders: false, quietHoursEnabled: false })
@@ -747,14 +753,14 @@ async function bottomNav(): Promise<HTMLElement> {
   return nav
 }
 
-/** 底栏「设置」入口：标签同样随语言变化，两种写法都认。 */
+/** 底栏「我的」入口通向设置页；兼容旧标签与英文。 */
 async function settingsTab(): Promise<HTMLElement> {
   const nav = await bottomNav()
-  for (const label of ['设置', 'Settings']) {
+  for (const label of ['我的', '设置', 'Mine', 'Settings']) {
     const found = within(nav).queryByRole('button', { name: label })
     if (found !== null) return found
   }
-  throw new Error('底栏里没有「设置」入口')
+  throw new Error('底栏里没有「我的」入口')
 }
 
 /** 设置首页标题：中英文都要能认出来。 */

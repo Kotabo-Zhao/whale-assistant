@@ -5,6 +5,7 @@ import android.util.AtomicFile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.UUID
 
 /** Local user-selected text; never exposed to the model by this store. */
 internal class CompanionKnowledgeStore(context: Context) {

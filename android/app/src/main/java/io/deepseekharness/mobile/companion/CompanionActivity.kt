@@ -119,6 +119,7 @@ class CompanionActivity : AppCompatActivity() {
                     .setPositiveButton("确认恢复") { _, _ -> restoreEncryptedKnowledgePackage(archive) }.show()
             }.onFailure { android.widget.Toast.makeText(this, "无法解锁或校验知识包；当前数据未替换。", android.widget.Toast.LENGTH_LONG).show() }
         }
+        }
     }
 
     private fun restoreEncryptedKnowledgePackage(archive: java.io.File) {

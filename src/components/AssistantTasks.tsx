@@ -35,7 +35,9 @@ export function AssistantTasks() {
   useEffect(() => {
     let active = true
     setLoading(true); setMessage('')
-    runtimeBridge.companionDashboard({ operation: 'taskList', query: '' }).then(result => {
+    const readDashboard = (runtimeBridge as { companionDashboard?: (request: { operation: 'taskList'; query: string }) => Promise<Record<string, unknown>> }).companionDashboard
+    if (!readDashboard) { setMessage('无法读取事项；不会把读取失败显示成没有事项。'); setLoading(false); return () => { active = false } }
+    Promise.resolve(readDashboard({ operation: 'taskList', query: '' })).then(result => {
       if (active) setItems(companionRows(result.items))
     }).catch(() => {
       if (active) setMessage('无法读取事项；不会把读取失败显示成没有事项。')

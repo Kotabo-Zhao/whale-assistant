@@ -745,6 +745,7 @@ class OverlayBallService : Service() {
     }
 
     private fun configureCompanionMotion(avatar: android.widget.ImageView) {
+        val density = resources.displayMetrics.density
         hintHandler.removeCallbacks(blinkTick)
         hintHandler.removeCallbacks(blinkOpen)
         companionAnimator?.cancel()
@@ -777,7 +778,7 @@ class OverlayBallService : Service() {
                 petDrawable?.rightArm = arms.right
                 avatar.pivotY = avatar.height * 0.78f
                 avatar.rotation = pose.rotation
-                avatar.translationY = -metrics.density * pose.lift
+                avatar.translationY = -density * pose.lift
                 avatar.scaleX = pose.scaleX * tap
                 avatar.scaleY = pose.scaleY * tap
             }

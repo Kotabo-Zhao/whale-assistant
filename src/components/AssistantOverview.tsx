@@ -18,7 +18,9 @@ export function AssistantOverview({ onOpenTasks }: { onOpenTasks?: () => void })
   useEffect(() => {
     let live = true
     setLoading(true); setFailed(false)
-    void Promise.resolve().then(() => runtimeBridge.companionDashboard({ operation: 'overview' })).then(parseOverview).then(value => { if (live) setData(value) }).catch(() => { if (live) setFailed(true) }).finally(() => { if (live) setLoading(false) })
+    const readDashboard = (runtimeBridge as { companionDashboard?: (request: { operation: 'overview' }) => Promise<Record<string, unknown>> }).companionDashboard
+    if (!readDashboard) { setFailed(true); setLoading(false); return () => { live = false } }
+    void Promise.resolve(readDashboard({ operation: 'overview' })).then(parseOverview).then(value => { if (live) setData(value) }).catch(() => { if (live) setFailed(true) }).finally(() => { if (live) setLoading(false) })
     return () => { live = false }
   }, [revision])
   const upcoming = data ? [...data.reminders, ...data.recurring].filter(row => row.state === 'scheduled' && Number(row.nextAt ?? row.at) > Date.now()).sort((a,b) => Number(a.nextAt ?? a.at) - Number(b.nextAt ?? b.at)).slice(0, 3) : []

@@ -246,7 +246,10 @@ internal object SharedMemoryJobs {
     private fun defer(context: Context, job: Job, error: Exception) = synchronized(lock) { database(context).use { db ->
         val token = job.leaseToken ?: return@use
         val code = UnderstandingFailure.code(error)
-        val attempts = db.rawQuery("SELECT attempts FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>?", arrayOf(job.id, job.hash, job.event, token, System.currentTimeMillis().toString())).use { if (it.moveToFirst()) it.getInt(0) else return@use }
+        val attempts = db.rawQuery("SELECT attempts FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>?", arrayOf(job.id, job.hash, job.event, token, System.currentTimeMillis().toString())).use { cursor ->
+            if (!cursor.moveToFirst()) return@use 0
+            cursor.getInt(0)
+        }
         val exhausted = attempts + 1 >= MAX_AUTOMATIC_ATTEMPTS
         val delay = UnderstandingFailure.retryDelayMs(code)
         val transitioned = db.compileStatement("UPDATE shared_jobs SET attempts=attempts+1,state=?,next_at=?,lease_token=NULL,lease_until=0 WHERE record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>? AND COALESCE((SELECT CAST(value AS INTEGER) FROM shared_jobs_meta WHERE key='generation'),0)=?").use { update ->

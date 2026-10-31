@@ -46,7 +46,7 @@ describe('停止后重新打开 Harness', () => {
 
       await act(async () => { await vi.advanceTimersByTimeAsync(45_000) })
       expect(await screen.findByRole('alert')).toHaveTextContent('设备没有在预期时间内响应')
-      fireEvent.click(screen.getByRole('button', { name: '设置' }))
+      fireEvent.click(within(screen.getByRole('navigation', { name: '底部导航' })).getByRole('button', { name: '我的' }))
       const retry = screen.getByRole('button', { name: /^打开(?: Harness|对话)$/ })
       expect(retry).toBeEnabled()
 
@@ -82,7 +82,7 @@ describe('停止后重新打开 Harness', () => {
     await waitFor(() => expect(finishRefresh).toBeDefined())
 
     if (action === 'retry') {
-      fireEvent.click(screen.getByRole('button', { name: '设置' }))
+      fireEvent.click(within(screen.getByRole('navigation', { name: '底部导航' })).getByRole('button', { name: '我的' }))
       fireEvent.click(screen.getByRole('button', { name: /^打开(?: Harness|对话)$/ }))
       await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(2))
     } else if (action === 'stop') {
@@ -91,7 +91,7 @@ describe('停止后重新打开 Harness', () => {
       await screen.findByText('运行环境已停止')
     } else {
       act(() => { emitProgress({ phase: 'ready', downloadedBytes: readyState.totalBytes, totalBytes: readyState.totalBytes }) })
-      fireEvent.click(screen.getByRole('button', { name: '设置' }))
+      fireEvent.click(within(screen.getByRole('navigation', { name: '底部导航' })).getByRole('button', { name: '我的' }))
     }
 
     await act(async () => { finishRefresh(action === 'retry' ? readyState : runningState); await Promise.resolve() })
@@ -140,7 +140,7 @@ describe('停止后重新打开 Harness', () => {
       expect(await screen.findByRole('alert')).toHaveTextContent('设备没有在预期时间内响应')
       await act(async () => { finishStart(runningState); await Promise.resolve() })
       expect(bridge.openHarness).not.toHaveBeenCalled()
-      fireEvent.click(screen.getByRole('button', { name: '设置' }))
+      fireEvent.click(within(screen.getByRole('navigation', { name: '底部导航' })).getByRole('button', { name: '我的' }))
       expect(screen.getByRole('button', { name: /^打开(?: Harness|对话)$/ })).toBeEnabled()
     } finally {
       vi.useRealTimers()
@@ -159,7 +159,7 @@ describe('停止后重新打开 Harness', () => {
     }
 
     // 停止键统一在首页启动卡片：先切回首页。
-    fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '首页' }))
+    fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '对话' }))
     fireEvent.click(await screen.findByRole('button', { name: '停止' }))
     await waitFor(() => expect(bridge.stopRuntime).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('运行环境已停止')).toBeVisible()
@@ -180,14 +180,14 @@ describe('停止后重新打开 Harness', () => {
     bridge.stopRuntime.mockRejectedValue(Object.assign(new Error('停止超时'), { code: 'SHIZUKU_UNBIND_TIMEOUT' }))
 
     // 停止键统一在首页启动卡片：先切回首页。
-    fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '首页' }))
+    fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '对话' }))
     fireEvent.click(screen.getByRole('button', { name: '停止' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('请在 Shizuku 中重启服务后重试')
     expect(screen.queryByText('运行环境已停止')).not.toBeInTheDocument()
     // 停止失败时视图留在首页；「打开 Harness」按钮在设置首页头部。
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(within(screen.getByRole('navigation', { name: '底部导航' })).getByRole('button', { name: '我的' }))
     await waitFor(() => expect(screen.getByRole('button', { name: /^打开(?: Harness|对话)$/ })).toBeEnabled())
   })
 
@@ -209,7 +209,7 @@ describe('停止后重新打开 Harness', () => {
   await arriveAtSettingsHome()
       bridge.stopRuntime.mockImplementation(() => new Promise(() => {}))
 
-      fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '首页' }))
+      fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '对话' }))
       fireEvent.click(screen.getByRole('button', { name: '停止' }))
       await waitFor(() => expect(bridge.stopRuntime).toHaveBeenCalledTimes(1))
 
@@ -236,7 +236,7 @@ describe('停止后重新打开 Harness', () => {
       bridge.stopRuntime.mockImplementationOnce(() => new Promise<RuntimeState>(resolve => { finish = resolve }))
       render(<App />)
       await arriveAtSettingsHome()
-      fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '首页' }))
+      fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '对话' }))
       fireEvent.click(await screen.findByRole('button', { name: '停止' }))
       await waitFor(() => expect(bridge.stopRuntime).toHaveBeenCalledTimes(1))
       await act(async () => { await vi.advanceTimersByTimeAsync(45_000) })
@@ -261,7 +261,7 @@ describe('停止后重新打开 Harness', () => {
       bridge.stopRuntime.mockImplementationOnce(() => new Promise<RuntimeState>(resolve => { finishNew = resolve }))
       render(<App />)
       await arriveAtSettingsHome()
-      fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '首页' }))
+      fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '对话' }))
       fireEvent.click(await screen.findByRole('button', { name: '停止' }))
       await waitFor(() => expect(bridge.stopRuntime).toHaveBeenCalledTimes(1))
       await act(async () => { await vi.advanceTimersByTimeAsync(45_000) })
@@ -289,7 +289,7 @@ describe('停止后重新打开 Harness', () => {
       bridge.stopRuntime.mockImplementationOnce(() => new Promise<RuntimeState>((_, reject) => { rejectOld = reject }))
       render(<App />)
       await arriveAtSettingsHome()
-      fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '首页' }))
+      fireEvent.click(await within(screen.getByRole('navigation', { name: '底部导航' })).findByRole('button', { name: '对话' }))
       fireEvent.click(await screen.findByRole('button', { name: '停止' }))
       await waitFor(() => expect(bridge.stopRuntime).toHaveBeenCalledTimes(1))
       await act(async () => { await vi.advanceTimersByTimeAsync(45_000) })

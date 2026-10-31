@@ -2585,7 +2585,7 @@ describe('validateModelConnectivityResult', () => {
 describe('上游模型列表校验', () => {
   const base = { ok: true, status: 200, latencyMs: 120, message: '已获取 2 个模型 (120ms)' }
 
-  it('只保留 id 与显示名，重复 id 丢弃，缺显示名时用 id 兜底', () => {
+  it('只保留 id、显示名与输入能力，重复 id 丢弃，缺显示名时用 id 兜底', () => {
     expect(validateModelCatalogResult({
       ...base,
       models: [
@@ -2595,7 +2595,7 @@ describe('上游模型列表校验', () => {
       ],
     })).toEqual({
       ...base,
-      models: [{ id: 'gpt-4o', name: 'GPT-4o' }, { id: 'plain', name: 'plain' }],
+      models: [{ id: 'gpt-4o', name: 'GPT-4o', inputModalities: ['text'] }, { id: 'plain', name: 'plain', inputModalities: ['text'] }],
     })
   })
 

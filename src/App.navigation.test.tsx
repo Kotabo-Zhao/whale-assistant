@@ -383,7 +383,7 @@ describe('返回键与视图历史', () => {
   it('屏幕左边缘向右滑动触发边缘手势返回上一级', async () => {
     await renderAtMainView()
     const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
-    fireEvent.click(nav.getByRole('button', { name: '设置' }))
+    fireEvent.click(nav.getByRole('button', { name: '我的' }))
     await waitFor(() => expect(window.location.hash).toBe('#settings'))
 
     // 模拟从屏幕最左边缘 (clientX = 10) 起手向右滑动到 clientX = 120 (deltaX = 110 > 75)

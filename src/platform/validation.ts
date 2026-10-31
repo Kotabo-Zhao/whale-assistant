@@ -2420,7 +2420,8 @@ export function validateRuntimeCompanionSessionLinks(value: unknown): RuntimeCom
   if (!Array.isArray(result.sessionIds) || result.sessionIds.length > 200) throw new Error('桌宠会话关联格式无效')
   const seen = new Set<string>()
   const sessionIds = result.sessionIds.map(id => {
-    if (!isCatalogSessionId(id) || !seen.add(id)) throw new Error('桌宠会话标识无效')
+    if (!isCatalogSessionId(id) || seen.has(id)) throw new Error('桌宠会话标识无效')
+    seen.add(id)
     return id
   })
   const anchorsRaw = result.anchors === undefined ? [] : result.anchors
@@ -2445,7 +2446,7 @@ export function validateRuntimeCompanionSessionLinks(value: unknown): RuntimeCom
         typeof citation.parsingCoverage !== 'string' || citation.parsingCoverage.length > 64 || /[\x00-\x1f\x7f]/u.test(citation.parsingCoverage)) throw new Error('桌宠会话来源卡片格式无效')
       return { id: citation.id, revision: citation.revision, displayName: citation.displayName, chunkIndex: citation.chunkIndex, chunkCount: citation.chunkCount, parsingCoverage: citation.parsingCoverage }
     })
-    return { sessionId: anchor.sessionId, role: anchor.role, atMs: anchor.atMs, summary: anchor.summary, citations }
+    return { sessionId: anchor.sessionId, role: anchor.role as 'user' | 'assistant', atMs: anchor.atMs, summary: anchor.summary, citations }
   })
   return { sessionIds, anchors }
 }

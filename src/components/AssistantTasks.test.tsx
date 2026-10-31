@@ -32,7 +32,7 @@ it('事项关联资料只把 ID 与版本交给对话草稿', async () => {
 it('事项读取失败不伪装成空清单', async () => {
   bridge.companionDashboard.mockRejectedValue(new Error('unavailable'))
   render(<AssistantTasks />)
-  expect(await screen.findByRole('status')).toHaveTextContent('不会把读取失败显示成没有事项')
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('不会把读取失败显示成没有事项'))
   expect(screen.queryByText('当前筛选下没有事项。')).not.toBeInTheDocument()
 })
 

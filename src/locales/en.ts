@@ -1,5 +1,6 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "未能加载更多会话；已显示的会话不受影响，可稍后重试。": "Could not load more sessions. Displayed sessions are unchanged; try again later.",
   "按包名停用插件": "Disable a plugin by package name",
   "列表无法读取时，可输入已安装的插件包名并停用；插件文件和数据会保留。请先停止运行环境。": "If the list cannot be read, enter an installed package name to disable it. Plugin files and data are kept. Stop the runtime first.",
   "要停用的插件包名": "Plugin package name to disable",
