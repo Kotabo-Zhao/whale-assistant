@@ -19,9 +19,7 @@ internal class BubbleSessionRegistry(context: Context) {
         JSONArray(prefs.getStringSet("sessions", emptySet()).orEmpty().sorted()).toString().toByteArray(Charsets.UTF_8)
     }
     fun mergeArchive(bytes: ByteArray): Int = synchronized(lock) {
-        require(bytes.size <= 50_000)
-        val values = JSONArray(String(bytes, Charsets.UTF_8))
-        require(values.length() <= 200)
+        val values = validateArchive(bytes)
         val sessions = prefs.getStringSet("sessions", emptySet()).orEmpty().toMutableSet()
         val before = sessions.size
         for (i in 0 until values.length()) sessions.add(values.getString(i).also { require(valid(it)) })
@@ -31,5 +29,12 @@ internal class BubbleSessionRegistry(context: Context) {
     companion object {
         private val lock = Any()
         fun valid(id: String): Boolean = id.matches(Regex("[A-Za-z0-9._-]{1,200}"))
+        fun validateArchive(bytes: ByteArray): JSONArray {
+            require(bytes.size <= 50_000)
+            val values = JSONArray(String(bytes, Charsets.UTF_8))
+            require(values.length() <= 200)
+            for (i in 0 until values.length()) require(valid(values.getString(i)))
+            return values
+        }
     }
 }

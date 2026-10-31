@@ -92,6 +92,8 @@ internal object UnifiedFullBackup {
         val temporary = File(app.cacheDir, "full-object-${UUID.randomUUID()}.tmp")
         var hasBubbleHistory = false
         var hasBubbleSessions = false
+        var bubbleHistory: ByteArray? = null
+        var bubbleSessions: ByteArray? = null
         try {
             ZipFile(archive).use { zip ->
                 val entries = mutableMapOf<String, ZipEntry>()
@@ -107,6 +109,14 @@ internal object UnifiedFullBackup {
                 require(format == FORMAT) { "备份格式不支持" }
                 hasBubbleHistory = BUBBLE_HISTORY in entries
                 hasBubbleSessions = BUBBLE_SESSIONS in entries
+                if (hasBubbleHistory) bubbleHistory = zip.getInputStream(requireNotNull(entries[BUBBLE_HISTORY])).use { input ->
+                    java.io.ByteArrayOutputStream().also { copyBounded(input, it, 150_000) }.toByteArray()
+                }
+                if (hasBubbleSessions) bubbleSessions = zip.getInputStream(requireNotNull(entries[BUBBLE_SESSIONS])).use { input ->
+                    java.io.ByteArrayOutputStream().also { copyBounded(input, it, 50_000) }.toByteArray()
+                }
+                bubbleHistory?.let { CompanionBubbleHistory.decode(it) }
+                bubbleSessions?.let { BubbleSessionRegistry.validateArchive(it) }
                 var totalBytes = 0L
                 zip.getInputStream(requireNotNull(entries[SNAPSHOT])).use { input -> snapshot.outputStream().use { output ->
                     totalBytes += copyBounded(input, output, UnifiedMemoryBackup.MAX_BYTES); output.fd.sync()
@@ -123,8 +133,8 @@ internal object UnifiedFullBackup {
                 }
             }
             UnifiedMemoryBackup.restore(app, snapshot)
-            if (hasBubbleSessions) BubbleSessionRegistry(app).mergeArchive(zipRead(archive, BUBBLE_SESSIONS, 50_000))
-            if (hasBubbleHistory) CompanionBubbleHistory(app).restoreArchive(zipRead(archive, BUBBLE_HISTORY, 150_000))
+            if (hasBubbleSessions) BubbleSessionRegistry(app).mergeArchive(requireNotNull(bubbleSessions))
+            if (hasBubbleHistory) CompanionBubbleHistory(app).restoreArchive(requireNotNull(bubbleHistory))
         } finally { temporary.delete(); snapshot.delete() }
     }
 
@@ -142,11 +152,6 @@ internal object UnifiedFullBackup {
         }
         require(total > 0) { "备份内容为空" }
         return total
-    }
-    private fun zipRead(archive: File, name: String, maximum: Long): ByteArray = ZipFile(archive).use { zip ->
-        val output = java.io.ByteArrayOutputStream()
-        zip.getInputStream(requireNotNull(zip.getEntry(name))).use { copyBounded(it, output, maximum) }
-        output.toByteArray()
     }
     private fun ByteArray.hex() = joinToString("") { "%02x".format(it.toInt() and 255) }
 }
