@@ -311,6 +311,18 @@ class CompanionMemoryEngineTest {
         }
     }
 
+    @Test fun searchCanRestrictConfirmedMemoriesToAnExplicitCreatedTimeRange() {
+        val rows = JSONArray()
+            .put(JSONObject().put("id", "00000000-0000-0000-0000-000000000001").put("text", "旧咖啡偏好").put("status", "confirmed").put("createdAt", 100L))
+            .put(JSONObject().put("id", "00000000-0000-0000-0000-000000000002").put("text", "本周咖啡偏好").put("status", "confirmed").put("createdAt", 200L))
+            .put(JSONObject().put("id", "00000000-0000-0000-0000-000000000003").put("text", "待确认咖啡偏好").put("status", "pending").put("createdAt", 200L))
+        val engine = CompanionMemoryEngine({ rows }, {})
+        val result = JSONObject(engine.execute("""{"op":"search","query":"咖啡","fromMs":200,"toMs":300}"""))
+        assertEquals(1, result.getInt("total"))
+        assertEquals("本周咖啡偏好", result.getJSONArray("items").getJSONObject(0).getString("text"))
+        assertEquals(200L, result.getLong("fromMs")); assertEquals(300L, result.getLong("toMs"))
+    }
+
     @Test fun rejectsSensitiveAndOversizedMemories() {
         val engine = CompanionMemoryEngine({ JSONArray() }, { })
         for (value in listOf("", "密码 abc", "api key: sk-abcdefghijklmnop", "a".repeat(601))) {
