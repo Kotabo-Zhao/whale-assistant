@@ -62,6 +62,23 @@ function formatUpdatedAt(millis: number): string {
   return new Date(millis).toLocaleString()
 }
 
+type SessionPeriod = '新建中' | '今天' | '最近七天' | '更早'
+
+function sessionPeriod(session: SessionEntry, now = new Date()): SessionPeriod {
+  if (session.local === true || session.updatedAt === undefined) return '新建中'
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  if (session.updatedAt >= midnight) return '今天'
+  if (session.updatedAt >= midnight - 6 * 24 * 60 * 60 * 1000) return '最近七天'
+  return '更早'
+}
+
+function groupSessionsByPeriod(sessions: SessionEntry[]): Array<{ label: SessionPeriod; sessions: SessionEntry[] }> {
+  const order: SessionPeriod[] = ['新建中', '今天', '最近七天', '更早']
+  const buckets = new Map<SessionPeriod, SessionEntry[]>(order.map(period => [period, []]))
+  sessions.forEach(session => buckets.get(sessionPeriod(session))?.push(session))
+  return order.map(label => ({ label, sessions: buckets.get(label) ?? [] })).filter(section => section.sessions.length > 0)
+}
+
 /**
  * 空态 / 加载态 / 读不到态共用的装饰徽标。
  *
@@ -177,6 +194,9 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
     if (normalized === '') return inScope
     return inScope.filter(session => `${session.title} ${session.group ?? ''}`.toLocaleLowerCase().includes(normalized))
   }, [query, sessions, showArchived])
+
+  const displayed = expanded || query.trim() !== '' ? filtered : filtered.slice(0, 5)
+  const sections = useMemo(() => groupSessionsByPeriod(displayed), [displayed])
 
   const writeWorkspace = (update: { id: string; title?: string | null; group?: string | null; archived?: boolean }): void => {
     if (disabled) return
@@ -303,7 +323,9 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
             <strong>{t(sessions.length === 0 ? '暂无会话' : '没有匹配的会话')}</strong>
             <p>{t(sessions.length === 0 ? '点击「新建会话」开始工作。' : '换一个关键词，或新建会话开始工作。')}</p>
           </div>
-        ) : (expanded || query.trim() !== '' ? filtered : filtered.slice(0, 5)).map(session => (
+        ) : sections.map(section => <div className="session-period" key={section.label}>
+          <h2>{section.label}</h2>
+          {section.sessions.map(session => (
           <article className="session-card" key={session.id}>
             {session.local !== true && <input type="checkbox" aria-label={`选择会话 ${session.title || '未命名会话'}`} checked={selected.has(session.id)} onChange={() => setSelected(current => {
               const next = new Set(current); if (next.has(session.id)) next.delete(session.id); else next.add(session.id); return next
@@ -335,7 +357,8 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
               </button>
             </>}
           </article>
-        ))}
+          ))}
+        </div>)}
       </section>
 
       {catalog.status === 'ready' && query.trim() === '' && filtered.length > 5 && (
