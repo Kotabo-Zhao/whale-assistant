@@ -104,7 +104,7 @@ class CompanionActivity : AppCompatActivity() {
             } catch(e: Exception) { snapshot.delete(); throw e }
         }) { result -> result.onSuccess { snapshot ->
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("恢复统一备份？")
-                .setMessage("替换当前资料、记忆和后台事项；保留现有删除保护和授权，不恢复旧的在途任务，事项提醒需重新核对。新版备份包含关联原件；旧版备份仅含结构化数据。会话、密钥和运行环境不包含在备份中。恢复前会保留一份本机结构化快照。")
+                .setMessage("替换当前资料、记忆和后台事项；保留现有删除保护和授权，不恢复旧的在途任务，事项提醒需重新核对。新版备份包含关联原件、桌宠最近本地消息快照、桌宠会话映射和会话分组/归档标记；不会包含 Harness 会话正文、密钥或运行环境。旧版备份仅含结构化数据。恢复前会保留一份本机结构化快照。")
                 .setNegativeButton("取消") { _, _ -> snapshot.delete() }
                 .setOnCancelListener { snapshot.delete() }
                 .setPositiveButton("核对并恢复") { _, _ -> restoreUnified(snapshot, true) }.show()
@@ -431,8 +431,8 @@ class CompanionActivity : AppCompatActivity() {
                 .setView(input).setNegativeButton("取消", null)
                 .setPositiveButton("搜索") { _, _ -> showMemories(input.text.toString().trim()) }.show()
         }
-        button("导出统一备份（资料、原件、记忆、事项）") { if(!memoryBusy) unifiedExport.launch("whale-memory.whalememory") }
-        paragraph("备份包含关联原件和个人资料，未加密；请选择可信的保存位置。会话、密钥和运行环境不包含在备份中。")
+        button("导出统一备份（资料、原件、记忆、事项、桌宠会话映射）") { if(!memoryBusy) unifiedExport.launch("whale-memory.whalememory") }
+        paragraph("备份包含关联原件、个人资料、桌宠最近本地消息快照及会话组织标记，未加密；请选择可信的保存位置。Harness 会话正文、密钥和运行环境不包含在备份中。")
         button("恢复统一备份") { if(!memoryBusy) unifiedImport.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*")) }
         val rollback = java.io.File(noBackupFilesDir, "last-unified-rollback.sqlite")
         if(rollback.isFile) button("回退到上次恢复前") {
