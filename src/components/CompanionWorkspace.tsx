@@ -31,6 +31,15 @@ const knowledgeFileTypeLabel = (row: Row) => {
   if (/\.(docx?|pptx?|odt|rtf)$/.test(name)) return '文档'
   return '文本'
 }
+const knowledgeCoverageDetail = (row: Row) => {
+  if (row.coverage === 'partial' && typeof row.text === 'string') {
+    const pageLimit = row.text.match(/\[仅提取前\s*(\d+)\s*页\]/)
+    if (pageLimit) return `解析范围：仅提取前 ${pageLimit[1]} 页文字`
+    if (row.text.includes('[内容过长，已截取]')) return '解析范围：提取文字达到上限后已截取'
+    return '解析范围：仅保存了部分提取文字'
+  }
+  return null
+}
 const knowledgeStoredLocation = (row: Row) => {
   const index = row.chunkIndex
   const count = row.chunkCount
@@ -38,7 +47,7 @@ const knowledgeStoredLocation = (row: Row) => {
     ? `文档第 ${index + 1} / ${count} 段（保存的文本分段，不是页码）`
     : null
 }
-const knowledgeDetailMeta = (row: Row) => [knowledgeStoredLocation(row), originalId(row) !== null ? '已关联本机原件' : null, typeof row.createdAt === 'number' && Number.isFinite(row.createdAt) && row.createdAt > 0 ? `保存于 ${new Date(row.createdAt).toLocaleString()}` : null].filter((value): value is string => value !== null).join(' · ')
+const knowledgeDetailMeta = (row: Row) => [knowledgeCoverageDetail(row), knowledgeStoredLocation(row), originalId(row) !== null ? '已关联本机原件' : null, typeof row.createdAt === 'number' && Number.isFinite(row.createdAt) && row.createdAt > 0 ? `保存于 ${new Date(row.createdAt).toLocaleString()}` : null].filter((value): value is string => value !== null).join(' · ')
 const processingErrorLabel = (code: string | null) => code === 'credentials' ? '模型凭据不可用或被拒绝' : code === 'configuration' ? '后台模型尚未配置' : code === 'rate_limited' ? '模型服务限流' : code === 'service_unavailable' ? '模型服务暂不可用' : code === 'request_rejected' ? '模型服务拒绝请求，请检查模型兼容性' : code === 'timeout' ? '请求超时' : code === 'network' ? '网络不可用' : code === 'invalid_model_output' ? '模型返回的数据不符合要求' : code === 'processing_failed' ? '处理未完成' : null
 const processingDescription = (value: KnowledgeProcessing) => !value.memoryEnabled ? '记忆整理已关闭；重新开启后才能继续处理。' : value.state === 'queued' ? `等待或重试中；已重试 ${value.attempts} 次。下次：${value.nextAttemptAtMs !== null && value.nextAttemptAtMs > Date.now() ? new Date(value.nextAttemptAtMs).toLocaleString() : '等待系统调度'}。${processingErrorLabel(value.lastErrorCode) ? ` 上次原因：${processingErrorLabel(value.lastErrorCode)}。` : ''}` : value.state === 'running' ? '正在处理此版本；当前租约结束前不能重试。若不再需要，可停止整理，已在途的结果不会写入。' : value.state === 'failed' ? `已停止自动重试（共 ${value.attempts} 次）；可在修复问题后手动重试。${processingErrorLabel(value.lastErrorCode) ? ` 上次原因：${processingErrorLabel(value.lastErrorCode)}。` : ''}` : value.state === 'completed' ? '后台整理已结束；原文件的解析范围仍可能不完整。' : value.state === 'cancelled' ? '此版本的资料整理已停止；后台扫描不会自动重新建立。' : '没有此版本的后台整理任务；这不代表资料不存在。'
 const days = ['每天', '每周一', '每周二', '每周三', '每周四', '每周五', '每周六', '每周日']

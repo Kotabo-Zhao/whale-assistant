@@ -147,6 +147,16 @@ it('资料详情展示保存的分段和原件关联，不把分段伪装成页�
   expect(within(detail).getByText(/文档第 3 \/ 4 段（保存的文本分段，不是页码）/)).toBeInTheDocument()
   expect(within(detail).getByText(/已关联本机原件/)).toBeInTheDocument()
 })
+it('资料详情只在已有解析标记时说明部分解析的具体范围', async () => {
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'
+    ? { items: [{ id: 'k-partial', text: '正文\n[仅提取前500页]', displayName: '长报告.pdf', source: 'text_file', coverage: 'partial' }] }
+    : { ok: true }))
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  const detail = (await screen.findByText('长报告.pdf')).closest('details')!
+  fireEvent.click(detail.querySelector('summary')!)
+  expect(within(detail).getByText('解析范围：仅提取前 500 页文字')).toBeInTheDocument()
+})
 it('资料原件删除要求同一资料、原件和当前文本三项标识，并且不提供撤销', async () => {
   const originalId = 'a'.repeat(64)
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'
