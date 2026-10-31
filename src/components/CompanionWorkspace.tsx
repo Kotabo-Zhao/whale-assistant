@@ -60,12 +60,15 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [memoryRevision, setMemoryRevision] = useState<number | null>(null)
   const [loadingMoreMemory, setLoadingMoreMemory] = useState(false)
   const [undoKnowledge, setUndoKnowledge] = useState<Row | null>(null)
+  const [undoKnowledgeBatch, setUndoKnowledgeBatch] = useState<Row[]>([])
   const [memorySource, setMemorySource] = useState('all')
   const [memoryOrder, setMemoryOrder] = useState<'recent' | 'oldest' | 'source' | 'type'>('recent')
   const [memorySelectionMode, setMemorySelectionMode] = useState(false)
   const [selectedMemoryIds, setSelectedMemoryIds] = useState<Set<string>>(() => new Set())
   const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource | 'all'>('all')
   const [knowledgeCoverage, setKnowledgeCoverage] = useState<KnowledgeCoverage | 'all'>('all')
+  const [knowledgeSelectionMode, setKnowledgeSelectionMode] = useState(false)
+  const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<Set<string>>(() => new Set())
   const [knowledgeProcessing, setKnowledgeProcessing] = useState<KnowledgeProcessing | null>(null)
   const pending = useRef(false)
   const previousPanel = useRef(panel)
@@ -73,7 +76,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   useEffect(() => {
     let live = true
     if (previousPanel.current !== panel) {
-      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setMemorySelectionMode(false); setSelectedMemoryIds(new Set()); setKnowledgeSource('all'); setKnowledgeCoverage('all'); setKnowledgeProcessing(null)
+      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setMemorySelectionMode(false); setSelectedMemoryIds(new Set()); setKnowledgeSource('all'); setKnowledgeCoverage('all'); setKnowledgeSelectionMode(false); setSelectedKnowledgeIds(new Set()); setKnowledgeProcessing(null)
       previousPanel.current = panel
     }
     setLoading(true); setLoadFailed(false)
@@ -87,6 +90,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       if (live) {
         setItems(nextItems); setRecurring(nextRecurring); setSuggestions(nextSuggestions)
         if (panel === 'memory') setSelectedMemoryIds(new Set())
+        if (panel === 'knowledge') setSelectedKnowledgeIds(new Set())
         setKnowledgeNextOffset(panel === 'knowledge' && Number.isSafeInteger(result.nextOffset) && (result.nextOffset as number) >= 0 ? result.nextOffset as number : null)
         setMemoryNextBefore(panel === 'memory' && Number.isSafeInteger(result.nextBefore) && (result.nextBefore as number) >= 0 ? result.nextBefore as number : null)
         setMemoryRevision(panel === 'memory' && Number.isSafeInteger(result.revision) && (result.revision as number) >= 0 ? result.revision as number : null)
@@ -107,7 +111,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const deleteKnowledge = async (row: Row) => {
     if (!window.confirm('删除这条资料？十分钟内可撤销；关联原件和已抑制的派生记忆不会因此恢复。')) return
     const result = await run({ operation: 'knowledgeDelete', id: row.id, expected: expected(row), expectedText: row.text }, '资料已删除，可在十分钟内撤销。')
-    if (result) setUndoKnowledge(row)
+    if (result) { setUndoKnowledge(row); setUndoKnowledgeBatch([]) }
   }
   const deleteKnowledgeOriginal = async (row: Row) => {
     const verifiedOriginalId = originalId(row)
@@ -125,6 +129,24 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     if (undoKnowledge === null) return
     const result = await run({ operation: 'knowledgeUndoDelete', id: undoKnowledge.id }, '资料已恢复；此前已抑制的派生记忆不会自动恢复。')
     if (result) setUndoKnowledge(null)
+  }
+  const toggleKnowledgeSelection = (id: string) => {
+    if (!selectedKnowledgeIds.has(id) && selectedKnowledgeIds.size >= 20) { setMessage('一次最多选择 20 条资料。'); return }
+    setSelectedKnowledgeIds(current => {
+      const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next
+    })
+  }
+  const deleteSelectedKnowledge = async () => {
+    const selected = list.filter(row => selectedKnowledgeIds.has(row.id)).map(row => ({ id: row.id, expectedText: row.text }))
+    if (selected.length === 0) { setMessage('请先选择至少一条当前显示的资料。'); return }
+    if (!window.confirm(`删除所选 ${selected.length} 条资料？任何一条已变化都会取消整批删除；十分钟内可整批撤销。关联原件不会删除。`)) return
+    const result = await run({ operation: 'knowledgeBatchDelete', entries: selected }, `已删除 ${selected.length} 条资料；十分钟内可整批撤销。`)
+    if (result) { setUndoKnowledge(null); setUndoKnowledgeBatch(list.filter(row => selectedKnowledgeIds.has(row.id))); setSelectedKnowledgeIds(new Set()); setKnowledgeSelectionMode(false) }
+  }
+  const undoKnowledgeBatchDelete = async () => {
+    if (undoKnowledgeBatch.length === 0) return
+    const result = await run({ operation: 'knowledgeBatchUndoDelete', ids: undoKnowledgeBatch.map(row => row.id) }, `已恢复 ${undoKnowledgeBatch.length} 条资料；此前已抑制的派生记忆不会自动恢复。`)
+    if (result) setUndoKnowledgeBatch([])
   }
   const readKnowledgeProcessing = async (row: Row) => {
     setBusy(true); setMessage('')
@@ -273,6 +295,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
         <label>来源筛选<select value={memorySource} onChange={event => setMemorySource(event.target.value)}><option value="all">全部来源</option>{memorySources.map(source => <option key={source} value={source}>{source}</option>)}</select></label>
         <label>排序<select value={memoryOrder} onChange={event => setMemoryOrder(event.target.value as typeof memoryOrder)}><option value="recent">最近</option><option value="oldest">最早</option><option value="source">来源</option><option value="type">类型</option></select></label>
       </div>}
+      {panel === 'knowledge' && list.length > 0 && <div className="workspace-card-actions"><button type="button" disabled={busy} onClick={() => { setKnowledgeSelectionMode(value => !value); setSelectedKnowledgeIds(new Set()) }}>{knowledgeSelectionMode ? '结束批量管理' : '批量管理'}</button>{knowledgeSelectionMode && <button type="button" className="button-danger-quiet" disabled={busy || selectedKnowledgeIds.size === 0} onClick={() => { void deleteSelectedKnowledge() }}>删除所选（{selectedKnowledgeIds.size}）</button>}</div>}
       <label>{panel === 'memory' ? '记忆内容' : '资料内容'}<textarea value={text} maxLength={panel === 'memory' ? 600 : 8000} rows={3} onChange={e => setText(e.target.value)} placeholder={panel === 'memory' ? '写下希望助手记住的事实或偏好' : '输入或导入需要保存的资料'} /></label>
       <div className="workspace-card-actions"><button className="button button-primary" type="button" disabled={busy || !text.trim()} onClick={() => {
         if (panel === 'memory') { void startMemoryReview(editing ? 'edit' : 'add', editing ?? undefined); return }
@@ -296,19 +319,20 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           </details>
           {!memorySelectionMode && revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
-      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><details className="knowledge-card-detail"><summary><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>
+      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}>{knowledgeSelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedKnowledgeIds.has(row.id)} onChange={() => toggleKnowledgeSelection(row.id)} aria-label={`选择资料：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}`} />选择</label>}<div><details className="knowledge-card-detail"><summary><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>
         {knowledgeProcessing?.id === row.id && <div className="workspace-review"><strong>资料处理状态</strong><p>{processingDescription(knowledgeProcessing)}</p><div className="workspace-card-actions">
           {knowledgeProcessing.state === 'queued' && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingRetry', knowledgeProcessing) }}>重试</button>}
           {knowledgeProcessing.state === 'queued' && <button type="button" className="button-danger-quiet" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingCancel', knowledgeProcessing) }}>停止整理</button>}
           {knowledgeProcessing.state === 'cancelled' && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingResume', knowledgeProcessing) }}>重新整理</button>}
           <button type="button" onClick={() => setKnowledgeProcessing(null)}>收起</button>
-        </div></div>}</div><div className="workspace-card-actions">
+        </div></div>}</div>{!knowledgeSelectionMode && <div className="workspace-card-actions">
         <button type="button" onClick={() => { void readKnowledgeProcessing(row) }}>处理状态</button>
         {row.source !== 'original' && <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>}
         <button type="button" onClick={() => { void deleteKnowledge(row) }}>删除</button>
         {originalId(row) !== null && <button type="button" className="button-danger-quiet" onClick={() => { void deleteKnowledgeOriginal(row) }}>永久删除整份原件</button>}
-      </div></article>)}</div>{knowledgeNextOffset !== null && <button className="button button-secondary" type="button" disabled={busy || loadingMoreKnowledge} onClick={() => { void loadMoreKnowledge() }}>{loadingMoreKnowledge ? '正在加载资料…' : '加载更多资料'}</button>}</>}
+      </div>}</article>)}</div>{knowledgeNextOffset !== null && <button className="button button-secondary" type="button" disabled={busy || loadingMoreKnowledge} onClick={() => { void loadMoreKnowledge() }}>{loadingMoreKnowledge ? '正在加载资料…' : '加载更多资料'}</button>}</>}
       {panel === 'knowledge' && undoKnowledge !== null && <p className="workspace-hint" role="status">资料已删除，可在十分钟内撤销。 <button className="button button-quiet" type="button" disabled={busy} onClick={() => { void undoKnowledgeDelete() }}>撤销删除</button></p>}
+      {panel === 'knowledge' && undoKnowledgeBatch.length > 0 && <p className="workspace-hint" role="status">已批量删除 {undoKnowledgeBatch.length} 条资料，可在十分钟内一起撤销。 <button className="button button-quiet" type="button" disabled={busy} onClick={() => { void undoKnowledgeBatchDelete() }}>撤销本批资料</button></p>}
       {panel === 'memory' && <div className="workspace-hint"><p>删除自动通知或使用习惯记忆后，对应来源会暂停自动整理，避免下次采集立即重新生成。恢复只影响已开启的自动整理功能。</p><button type="button" className="button button-secondary" onClick={() => { if (window.confirm('恢复已删除来源的自动整理？新通知和使用统计可能再次形成记忆。')) void run({ operation: 'memoryResumeAutomatic' }, '自动整理来源已恢复。') }}>恢复已删除来源的自动整理</button></div>}
       {panel === 'memory' && items.length > 0 && <button className="button button-danger-quiet" type="button" onClick={() => { if (window.confirm('清空全部长期记忆并暂停通知和使用习惯的自动整理？此操作无法撤销。')) void run({ operation: 'memoryClear', confirmed: true }, '长期记忆已清空。') }}>清空全部长期记忆</button>}
     </>}

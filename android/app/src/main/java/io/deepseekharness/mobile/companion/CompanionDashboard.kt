@@ -116,7 +116,17 @@ internal class CompanionDashboard(private val context: Context) {
             "knowledgeAdd" -> JSONObject().put("ok", knowledge.add(text("text"), "text_file"))
             "knowledgeEdit" -> success(knowledge.edit(text("id"), text("expectedText"), text("text")))
             "knowledgeDelete" -> success(knowledge.remove(text("id"), text("expectedText")))
+            "knowledgeBatchDelete" -> {
+                val entries = request.optJSONArray("entries") ?: throw IllegalArgumentException("批量删除参数无效")
+                val removed = knowledge.removeMany(entries) ?: throw IllegalStateException("资料已变化，请刷新后重试")
+                JSONObject().put("ok", true).put("deleted", removed.length())
+            }
             "knowledgeUndoDelete" -> success(knowledge.undoRemove(text("id")))
+            "knowledgeBatchUndoDelete" -> {
+                val ids = request.optJSONArray("ids") ?: throw IllegalArgumentException("批量撤销参数无效")
+                val values = (0 until ids.length()).map { ids.optString(it) }
+                success(knowledge.undoMany(values))
+            }
             "knowledgeProcessingStatus" -> {
                 val id = text("id")
                 val expectedText = text("expectedText")

@@ -136,6 +136,21 @@ it('资料原件删除要求同一资料、原件和当前文本三项标识，�
   expect(screen.queryByRole('button', { name: '撤销删除' })).not.toBeInTheDocument()
   confirm.mockRestore()
 })
+it('资料批量管理传递所有当前文本，并保留整批撤销入口', async () => {
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'
+    ? { items: [{ id: 'k1', text: '资料一' }, { id: 'k2', text: '资料二' }] } : { ok: true, deleted: 2 }))
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  await screen.findByText('资料一')
+  fireEvent.click(screen.getByRole('button', { name: '批量管理' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: '选择资料：资料一' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: '选择资料：资料二' }))
+  fireEvent.click(screen.getByRole('button', { name: '删除所选（2）' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeBatchDelete', entries: [{ id: 'k1', expectedText: '资料一' }, { id: 'k2', expectedText: '资料二' }] }))
+  expect(await screen.findByRole('button', { name: '撤销本批资料' })).toBeInTheDocument()
+  confirm.mockRestore()
+})
 it('损坏的列表响应显示读取失败而不是空列表', async () => {
   bridge.companionDashboard.mockResolvedValue({ items: 'broken' })
   render(<CompanionWorkspace />)

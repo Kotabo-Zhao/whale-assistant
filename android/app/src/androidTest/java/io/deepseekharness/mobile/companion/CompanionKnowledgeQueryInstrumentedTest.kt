@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import org.json.JSONArray
 import java.util.UUID
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -68,6 +69,22 @@ class CompanionKnowledgeQueryInstrumentedTest {
                     .put("id", pending.getString("id")).put("expectedText", "已变更"))
             }.exceptionOrNull()
             assertTrue(staleStatusFailure is IllegalStateException)
+            assertTrue(store.add("批量资料一", "text_file"))
+            assertTrue(store.add("批量资料二", "text_file"))
+            val firstBatch = store.searchPage("批量资料一", 0, 1).first.getJSONObject(0)
+            val secondBatch = store.searchPage("批量资料二", 0, 1).first.getJSONObject(0)
+            val staleBatch = runCatching { dashboard.execute(JSONObject().put("operation", "knowledgeBatchDelete").put("entries", JSONArray()
+                .put(JSONObject().put("id", firstBatch.getString("id")).put("expectedText", firstBatch.getString("text")))
+                .put(JSONObject().put("id", secondBatch.getString("id")).put("expectedText", "已变更")))) }.exceptionOrNull()
+            assertTrue(staleBatch is IllegalStateException)
+            assertEquals(1, store.searchPage("批量资料一", 0, 1).first.length())
+            val deleted = dashboard.execute(JSONObject().put("operation", "knowledgeBatchDelete").put("entries", JSONArray()
+                .put(JSONObject().put("id", firstBatch.getString("id")).put("expectedText", firstBatch.getString("text")))
+                .put(JSONObject().put("id", secondBatch.getString("id")).put("expectedText", secondBatch.getString("text")))))
+            assertEquals(2, deleted.getInt("deleted"))
+            assertEquals(0, store.searchPage("批量资料", 0, 2).first.length())
+            assertTrue(dashboard.execute(JSONObject().put("operation", "knowledgeBatchUndoDelete").put("ids", JSONArray().put(firstBatch.getString("id")).put(secondBatch.getString("id")))).getBoolean("ok"))
+            assertEquals(2, store.searchPage("批量资料", 0, 2).first.length())
             val invalidFilterFailure = runCatching {
                 dashboard.execute(JSONObject().put("operation", "knowledgeList").put("source", "unknown"))
             }.exceptionOrNull()

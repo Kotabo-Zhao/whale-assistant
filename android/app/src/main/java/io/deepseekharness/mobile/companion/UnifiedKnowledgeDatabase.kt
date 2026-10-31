@@ -279,6 +279,29 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         } finally { db.endTransaction() }
     }
 
+    /** Every selected row is checked before this transaction writes any deletion marker. */
+    fun trashRecords(entries: List<Pair<String, String>>, now: Long): JSONArray? {
+        require(entries.size in 1..20 && entries.map { it.first }.toSet().size == entries.size)
+        db.beginTransaction()
+        try {
+            val rows = mutableListOf<JSONObject>()
+            for ((id, expectedText) in entries) {
+                val row = findById(id) ?: return null
+                if (row.getString("text") != expectedText) return null
+                rows.add(row)
+            }
+            rows.forEach { row ->
+                val id = row.getString("id")
+                val trash = JSONObject().put("row", row).put("deletedAt", now)
+                row.optString("originalId").takeIf { it.matches(Regex("[a-f0-9]{64}")) }?.let { trash.put("originalId", it) }
+                db.execSQL("INSERT OR REPLACE INTO knowledge_meta(key,value) VALUES (?,?)", arrayOf("deleted:$id", trash.toString()))
+                check(db.delete("knowledge_records", "id=?", arrayOf(id)) == 1)
+            }
+            db.setTransactionSuccessful()
+            return JSONArray().apply { rows.forEach { put(JSONObject(it.toString())) } }
+        } finally { db.endTransaction() }
+    }
+
     /** A deliberate whole-original deletion has no undo window: every linked record gets a tombstone. */
     fun deleteOriginal(originalId: String, anchorId: String, expectedAnchorText: String, now: Long): JSONArray {
         require(originalId.matches(Regex("[a-f0-9]{64}")) && anchorId.matches(Regex("[a-f0-9-]{36}")))
@@ -323,6 +346,34 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
             trash.remove("row")
             trash.put("restored", true)
             db.execSQL("UPDATE knowledge_meta SET value=? WHERE key=?", arrayOf(trash.toString(), key))
+            db.setTransactionSuccessful()
+            return true
+        } finally { db.endTransaction() }
+    }
+
+    /** Restores the complete reviewed batch or none of it; a missing/expired row rejects the batch. */
+    fun undoTrashes(ids: List<String>, now: Long, windowMs: Long): Boolean {
+        require(ids.size in 1..20 && ids.toSet().size == ids.size)
+        db.beginTransaction()
+        try {
+            val restores = mutableListOf<Triple<String, JSONObject, JSONObject>>()
+            for (id in ids) {
+                val key = "deleted:$id"
+                val value = db.rawQuery("SELECT value FROM knowledge_meta WHERE key=?", arrayOf(key)).use { if (it.moveToFirst()) it.getString(0) else null } ?: return false
+                val trash = JSONObject(value)
+                val deletedAt = trash.getLong("deletedAt")
+                if (now < deletedAt || now - deletedAt > windowMs || findById(id) != null) return false
+                val row = trash.optJSONObject("row") ?: return false
+                if (row.getString("id") != id) return false
+                CompanionKnowledgeData.validateRows(JSONArray().put(row), false)
+                restores.add(Triple(key, trash, row))
+            }
+            var position = nextPosition()
+            restores.forEach { (key, trash, row) ->
+                db.insertOrThrow("knowledge_records", null, ContentValues().apply { put("id", row.getString("id")); put("position", position++); put("body", row.toString()) })
+                trash.remove("row"); trash.put("restored", true)
+                db.execSQL("UPDATE knowledge_meta SET value=? WHERE key=?", arrayOf(trash.toString(), key))
+            }
             db.setTransactionSuccessful()
             return true
         } finally { db.endTransaction() }

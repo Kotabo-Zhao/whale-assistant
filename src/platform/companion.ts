@@ -11,10 +11,12 @@ export type CompanionRequest =
   | { operation: 'memoryEdit' | 'memoryApprove' | 'memoryApproveEdit'; id: string; text: string; snapshot: string; expected: string; expectedText: string }
   | { operation: 'memoryDelete' | 'knowledgeDelete'; id: string; expected: string; expectedText: string }
   | { operation: 'memoryBatchDelete'; entries: Array<{ id: string; expected: string }> }
+  | { operation: 'knowledgeBatchDelete'; entries: Array<{ id: string; expectedText: string }> }
   | { operation: 'memoryClear'; confirmed: true }
   | { operation: 'knowledgeAdd'; text: string }
   | { operation: 'knowledgeEdit'; id: string; expectedText: string; text: string }
   | { operation: 'knowledgeUndoDelete'; id: string }
+  | { operation: 'knowledgeBatchUndoDelete'; ids: string[] }
   | { operation: 'knowledgeProcessingStatus' | 'knowledgeProcessingRetry' | 'knowledgeProcessingCancel' | 'knowledgeProcessingResume'; id: string; expectedText: string }
   /** Irreversibly removes every local record linked to this verified original. */
   | { operation: 'knowledgeRemoveOriginal'; id: string; originalId: string; expectedText: string }

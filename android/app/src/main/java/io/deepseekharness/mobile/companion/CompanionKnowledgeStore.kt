@@ -130,6 +130,24 @@ internal class CompanionKnowledgeStore(context: Context) {
             db.trashRecord(id, expectedText, System.currentTimeMillis())
         }
     }
+    /** Ordinary record removal only: original-object deletion remains a separate irreversible action. */
+    fun removeMany(entries: org.json.JSONArray): org.json.JSONArray? = synchronized(lock) {
+        require(entries.length() in 1..20) { "请选择 1 至 20 条资料" }
+        val reviewed = (0 until entries.length()).map { index ->
+            val row = entries.optJSONObject(index) ?: throw IllegalArgumentException("批量删除参数无效")
+            val id = row.opt("id") as? String ?: throw IllegalArgumentException("批量删除参数无效")
+            val text = row.opt("expectedText") as? String ?: throw IllegalArgumentException("批量删除参数无效")
+            require(id.matches(Regex("[a-f0-9-]{36}")) && text.length <= CompanionKnowledgeData.MAX_TEXT) { "批量删除参数无效" }
+            id to text
+        }
+        val removed = UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.trashRecords(reviewed, System.currentTimeMillis()) } ?: return@synchronized null
+        for (index in 0 until removed.length()) {
+            val row = removed.getJSONObject(index)
+            semanticChange(row.getString("id"))
+            CompanionMemoryStore(app).forgetSharedMaterial(row.getString("text"), row.getString("id"))
+        }
+        removed
+    }
     /** Whole-original removal is irreversible locally: it tombstones all associated records before deleting the object. */
     internal data class OriginalRemoval(val records: Int, val objectDeleted: Boolean)
     internal fun removeOriginal(originalId: String, anchorId: String, expectedAnchorText: String): OriginalRemoval = synchronized(lock) {
@@ -151,6 +169,11 @@ internal class CompanionKnowledgeStore(context: Context) {
         require(id.matches(Regex("[a-f0-9-]{36}")))
         semanticChange()
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.undoTrash(id, System.currentTimeMillis(), 10 * 60_000L) }.also { if (it) scheduleSemantic() }
+    }
+    internal fun undoMany(ids: List<String>): Boolean = synchronized(lock) {
+        require(ids.size in 1..20 && ids.all { it.matches(Regex("[a-f0-9-]{36}")) })
+        semanticChange()
+        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.undoTrashes(ids, System.currentTimeMillis(), 10 * 60_000L) }.also { if (it) scheduleSemantic() }
     }
     internal fun recentTrash(): JSONArray = synchronized(lock) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.recentTrash(System.currentTimeMillis(), 10 * 60_000L) }
