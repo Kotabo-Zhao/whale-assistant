@@ -40,6 +40,18 @@ class ModelCatalogProbeTest {
     }
 
     @Test
+    fun preservesOnlyExplicitImageInputCapability() {
+        val models = ModelCatalogProbe.parseModels("""{"data":[
+          {"id":"vision-chat","input_modalities":["text","image"]},
+          {"id":"unknown-chat"},
+          {"id":"bad-capability","input_modalities":["audio"]}
+        ]}""")
+        assertEquals(setOf("text", "image"), models.first { it.id == "vision-chat" }.inputModalities)
+        assertEquals(setOf("text"), models.first { it.id == "unknown-chat" }.inputModalities)
+        assertEquals(setOf("text"), models.first { it.id == "bad-capability" }.inputModalities)
+    }
+
+    @Test
     fun parsesGeminiModelNamesAndStripsTheResourcePrefix() {
         val models = ModelCatalogProbe.parseModels(
             """{"models":[

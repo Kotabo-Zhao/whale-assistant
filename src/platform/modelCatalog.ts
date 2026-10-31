@@ -60,6 +60,7 @@ export function mergeCatalogModels(
       name: entry.name.trim() === '' ? entry.id : entry.name,
       contextWindow: CATALOG_DEFAULT_CONTEXT_WINDOW,
       maxTokens: CATALOG_DEFAULT_MAX_TOKENS,
+      inputModalities: entry.inputModalities ?? ['text'],
     }
   }
   const merged: CustomProviderModel[] = [toModel(first)]

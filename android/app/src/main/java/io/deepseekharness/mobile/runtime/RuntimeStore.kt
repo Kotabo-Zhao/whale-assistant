@@ -776,7 +776,8 @@ class RuntimeStore(context: Context) {
                                     .put("id", model.id)
                                     .put("name", model.name)
                                     .put("contextWindow", model.contextWindow)
-                                    .put("maxTokens", model.maxTokens),
+                                    .put("maxTokens", model.maxTokens)
+                                    .put("inputModalities", JSONArray(model.inputModalities.sorted())),
                             )
                         }
                     }),
@@ -926,7 +927,8 @@ class RuntimeStore(context: Context) {
                     .put("models", JSONArray().also { models ->
                         provider.models.forEach { model ->
                             models.put(JSONObject().put("id", model.id).put("name", model.name)
-                                .put("contextWindow", model.contextWindow).put("maxTokens", model.maxTokens))
+                                .put("contextWindow", model.contextWindow).put("maxTokens", model.maxTokens)
+                                .put("inputModalities", JSONArray(model.inputModalities.sorted())))
                         }
                     }),
             )

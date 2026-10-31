@@ -37,6 +37,13 @@ function tokenCount(value: unknown, label: string): number {
   }
   return value as number
 }
+function inputModalities(value: unknown): Array<'text' | 'image'> {
+  if (value === undefined) return ['text']
+  if (!Array.isArray(value) || value.length < 1 || value.length > 2 || value.some(item => item !== 'text' && item !== 'image')) throw new Error('模型输入能力格式无效')
+  const result = [...new Set(value)] as Array<'text' | 'image'>
+  if (!result.includes('text')) throw new Error('模型至少需要支持文本输入')
+  return result
+}
 
 function validateCustomProviderUrl(value: unknown): string {
   // Security boundary: credentials belong in encrypted key storage, never URL components.
@@ -81,7 +88,7 @@ export function validateCustomModelProviders(value: unknown): CustomModelProvide
         const contextWindow = tokenCount(model.contextWindow, '模型上下文长度')
         const maxTokens = tokenCount(model.maxTokens, '模型最大输出长度')
         if (maxTokens > contextWindow) throw new Error('模型最大输出长度不能超过上下文长度')
-        return { id: model.id, name: name(model.name, 100, '模型名称'), contextWindow, maxTokens }
+        return { id: model.id, name: name(model.name, 100, '模型名称'), contextWindow, maxTokens, inputModalities: inputModalities(model.inputModalities) }
       }),
     }
   })

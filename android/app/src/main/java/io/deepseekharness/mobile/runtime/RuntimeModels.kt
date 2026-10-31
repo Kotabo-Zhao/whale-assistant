@@ -58,6 +58,8 @@ data class CustomProviderModel(
     val name: String,
     val contextWindow: Int,
     val maxTokens: Int,
+    /** Absent/unknown capability stays text-only; never infer image support from an ID. */
+    val inputModalities: Set<String> = setOf("text"),
 )
 
 data class CustomModelProvider(
@@ -489,7 +491,13 @@ object RuntimeValidation {
                 val contextWindow = requireTokenCount(model.opt("contextWindow"), "模型上下文长度")
                 val maxTokens = requireTokenCount(model.opt("maxTokens"), "模型最大输出长度")
                 if (maxTokens > contextWindow) throw RuntimeFailure("SETTINGS_INVALID", "模型最大输出长度不能超过上下文长度")
-                CustomProviderModel(modelId, requireDisplayName(model.opt("name"), 100, "模型名称"), contextWindow, maxTokens)
+                val modalities = model.optJSONArray("inputModalities")?.let { values ->
+                    (0 until values.length()).map { values.optString(it) }.toSet()
+                } ?: setOf("text")
+                if (modalities.isEmpty() || !modalities.all { it == "text" || it == "image" } || "text" !in modalities) {
+                    throw RuntimeFailure("SETTINGS_INVALID", "模型输入能力格式无效")
+                }
+                CustomProviderModel(modelId, requireDisplayName(model.opt("name"), 100, "模型名称"), contextWindow, maxTokens, modalities)
             }
             CustomModelProvider(
                 id,

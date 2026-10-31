@@ -3017,8 +3017,14 @@ export function validateModelCatalogResult(value: unknown): ModelCatalogResult {
     if (seen.has(id)) continue
     const rawName = typeof entry.name === 'string' ? entry.name.trim() : ''
     const name = rawName === '' || rawName.length > 100 || containsControlCharacter(rawName) ? id : rawName
+    const rawModalities = entry.inputModalities
+    const inputModalities = rawModalities === undefined
+      ? ['text'] as Array<'text' | 'image'>
+      : Array.isArray(rawModalities) && rawModalities.length >= 1 && rawModalities.length <= 2 && rawModalities.every(value => value === 'text' || value === 'image') && rawModalities.includes('text')
+        ? [...new Set(rawModalities)] as Array<'text' | 'image'>
+        : ['text'] as Array<'text' | 'image'>
     seen.add(id)
-    models.push({ id, name })
+    models.push({ id, name, inputModalities })
   }
   return { ...connectivity, models }
 }

@@ -59,6 +59,8 @@ export interface CustomProviderModel {
   name: string
   contextWindow: number
   maxTokens: number
+  /** Unknown catalog entries fail closed as text-only; image is never inferred from the model name. */
+  inputModalities?: Array<'text' | 'image'>
 }
 
 export interface CustomModelProvider {
@@ -2243,6 +2245,7 @@ export interface ModelCatalogEntry {
   id: string
   /** 上游给的显示名；没有时与 id 相同。 */
   name: string
+  inputModalities?: Array<'text' | 'image'>
 }
 
 export interface ModelCatalogResult {

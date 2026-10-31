@@ -1422,6 +1422,7 @@ class MobileRuntimePlugin : Plugin() {
                         JSObject().apply {
                             put("id", model.id)
                             put("name", model.name)
+                            put("inputModalities", JSONArray(model.inputModalities.sorted()))
                         },
                     )
                 }

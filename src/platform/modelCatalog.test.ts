@@ -32,10 +32,19 @@ describe('model catalog helpers', () => {
 
   it('adds every upstream entry to an empty model list with the shared defaults', () => {
     expect(mergeCatalogModels([], [{ id: 'alpha', name: 'Alpha' }, { id: 'beta', name: '' }])).toEqual([
-      { id: 'alpha', name: 'Alpha', contextWindow: CATALOG_DEFAULT_CONTEXT_WINDOW, maxTokens: CATALOG_DEFAULT_MAX_TOKENS },
+      { id: 'alpha', name: 'Alpha', contextWindow: CATALOG_DEFAULT_CONTEXT_WINDOW, maxTokens: CATALOG_DEFAULT_MAX_TOKENS, inputModalities: ['text'] },
       // 上游没给显示名时用 id 兜底，不留一个空白的名称输入框。
-      { id: 'beta', name: 'beta', contextWindow: CATALOG_DEFAULT_CONTEXT_WINDOW, maxTokens: CATALOG_DEFAULT_MAX_TOKENS },
+      { id: 'beta', name: 'beta', contextWindow: CATALOG_DEFAULT_CONTEXT_WINDOW, maxTokens: CATALOG_DEFAULT_MAX_TOKENS, inputModalities: ['text'] },
     ])
+  })
+
+  it('persists only a catalog-declared image modality and defaults unknown entries to text', () => {
+    const models = mergeCatalogModels([], [
+      { id: 'vision', name: 'Vision', inputModalities: ['text', 'image'] },
+      { id: 'unknown', name: 'Unknown' },
+    ])
+    expect(models[0].inputModalities).toEqual(['text', 'image'])
+    expect(models[1].inputModalities).toEqual(['text'])
   })
 
   it('moves the first upstream entry to the front and keeps user-edited fields intact', () => {

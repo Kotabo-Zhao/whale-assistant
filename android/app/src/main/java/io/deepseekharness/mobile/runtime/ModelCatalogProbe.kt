@@ -18,6 +18,7 @@ import javax.net.ssl.SSLException
 data class ModelCatalogEntry(
     val id: String,
     val name: String,
+    val inputModalities: Set<String> = setOf("text"),
 )
 
 data class ModelCatalogProbeResult(
@@ -198,7 +199,13 @@ object ModelCatalogProbe {
                 ?: item.optString("name").takeIf { it.isNotBlank() && it != rawId && !it.startsWith("models/") }
                 ?: rawId
             val name = rawName.trim().take(MAX_NAME_CHARS).ifEmpty { rawId }
-            val entry = ModelCatalogEntry(rawId, name)
+            // Only consume the upstream's explicit declaration. Missing or malformed fields stay text-only.
+            val declared = item.optJSONArray("input_modalities") ?: item.optJSONArray("inputModalities") ?: item.optJSONArray("modalities")
+            val modalities = declared?.let { values ->
+                (0 until values.length()).map { values.optString(it) }.toSet()
+                    .takeIf { it.isNotEmpty() && "text" in it && it.all { modality -> modality == "text" || modality == "image" } }
+            } ?: setOf("text")
+            val entry = ModelCatalogEntry(rawId, name, modalities)
             if (isNonChat(rawId)) other.add(entry) else chat.add(entry)
             if (chat.size >= MAX_ENTRIES) break
         }
