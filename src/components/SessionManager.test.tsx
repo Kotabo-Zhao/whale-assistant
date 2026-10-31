@@ -9,14 +9,15 @@ import type { RuntimeSessionListResult } from '../platform/types'
  * （实测报 `ReferenceError: Cannot access 'listSessions' before initialization`），
  * 所以桩本身也要用 `vi.hoisted` 一起提前建好。
  */
-const { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace } = vi.hoisted(() => ({
+const { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace, insertTaskDraft } = vi.hoisted(() => ({
   listSessions: vi.fn<() => Promise<RuntimeSessionListResult>>(),
   getSessionWorkspace: vi.fn().mockResolvedValue({ entries: [] }),
   getCompanionSessionLinks: vi.fn().mockResolvedValue({ sessionIds: [], anchors: [] }),
   resumeCompanionSession: vi.fn().mockResolvedValue(undefined),
   updateSessionWorkspace: vi.fn(),
+  insertTaskDraft: vi.fn().mockResolvedValue(undefined),
 }))
-vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace } }))
+vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace, insertTaskDraft } }))
 
 import { SessionManager } from './SessionManager'
 
@@ -99,7 +100,7 @@ describe('会话管理页', () => {
     listSessions.mockResolvedValue({ status: 'ready', truncated: false, sessions: [{ id: 'session-pet', title: '桌宠会话', updatedAt }] })
     getCompanionSessionLinks.mockResolvedValue({ sessionIds: ['session-pet'], anchors: [
       { sessionId: 'session-pet', role: 'user', atMs: updatedAt, summary: '继续上一个计划' },
-      { sessionId: 'session-pet', role: 'assistant', atMs: updatedAt + 1, summary: '已保留受限摘要' },
+      { sessionId: 'session-pet', role: 'assistant', atMs: updatedAt + 1, summary: '已保留受限摘要', citations: [{ id: '123e4567-e89b-12d3-a456-426614174000', revision: 'a'.repeat(64), displayName: '合同.pdf', chunkIndex: 0, chunkCount: 2, parsingCoverage: 'partial' }] },
     ] })
     render(<SessionManager onBack={vi.fn()} onOpenHarness={onOpenHarness} />)
     expect(await screen.findByText('鲸鱼娘关联会话 · 打开后继续同一 Harness 上下文')).toBeInTheDocument()
@@ -107,6 +108,11 @@ describe('会话管理页', () => {
     expect(screen.queryByText('继续上一个计划')).not.toBeVisible()
     fireEvent.click(summary)
     expect(screen.getByText('继续上一个计划')).toBeVisible()
+    const source = screen.getByRole('button', { name: /资料来源 · 合同.pdf/ })
+    expect(source).toHaveTextContent('保存文本第 1/2 段（非页码）')
+    expect(source).toHaveTextContent('部分解析')
+    fireEvent.click(source)
+    await waitFor(() => expect(runtimeBridge.insertTaskDraft).toHaveBeenCalledWith(expect.stringContaining('资料 ID：123e4567-e89b-12d3-a456-426614174000')))
     expect(screen.getByText('这些是本机受限摘要，不是完整对话，也不会自动写入 Harness。')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /桌宠会话/ }))
     expect(onOpenHarness).toHaveBeenCalledWith('session-pet')

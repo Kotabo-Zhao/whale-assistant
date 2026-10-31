@@ -422,12 +422,23 @@ export interface RuntimeSessionWorkspace {
   entries: RuntimeSessionWorkspaceEntry[]
 }
 
+/** A source pointer captured from a companion turn; it never includes a retrieved excerpt. */
+export interface RuntimeCompanionSourceCard {
+  id: string
+  revision: string
+  displayName: string
+  chunkIndex: number
+  chunkCount: number
+  parsingCoverage: string
+}
+
 /** A deliberately lossy, bounded continuity marker; it is never a Harness transcript. */
 export interface RuntimeCompanionSessionAnchor {
   sessionId: string
   role: 'user' | 'assistant'
   atMs: number
   summary: string
+  citations: RuntimeCompanionSourceCard[]
 }
 
 /** Identities of Harness sessions created by the desktop companion, plus optional local-only summaries. */

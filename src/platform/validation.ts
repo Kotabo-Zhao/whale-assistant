@@ -2433,7 +2433,19 @@ export function validateRuntimeCompanionSessionLinks(value: unknown): RuntimeCom
       typeof anchor.summary !== 'string' || anchor.summary.trim() === '' || anchor.summary.length > 160 || /[\x00-\x1f\x7f]/u.test(anchor.summary)) {
       throw new Error('桌宠会话锚点格式无效')
     }
-    return { sessionId: anchor.sessionId, role: anchor.role, atMs: anchor.atMs, summary: anchor.summary }
+    const citationsRaw = anchor.citations === undefined ? [] : anchor.citations
+    if (!Array.isArray(citationsRaw) || citationsRaw.length > 6) throw new Error('桌宠会话来源卡片格式无效')
+    const citations = citationsRaw.map(value => {
+      const citation = asRecord(value, '桌宠会话来源卡片')
+      if (typeof citation.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(citation.id) ||
+        typeof citation.revision !== 'string' || !/^[a-f0-9]{64}$/i.test(citation.revision) ||
+        typeof citation.displayName !== 'string' || citation.displayName.trim() === '' || citation.displayName.length > 160 || /[\x00-\x1f\x7f]/u.test(citation.displayName) ||
+        typeof citation.chunkIndex !== 'number' || !Number.isInteger(citation.chunkIndex) || citation.chunkIndex < 0 ||
+        typeof citation.chunkCount !== 'number' || !Number.isInteger(citation.chunkCount) || citation.chunkCount < 1 || citation.chunkCount > 10_000 || citation.chunkIndex >= citation.chunkCount ||
+        typeof citation.parsingCoverage !== 'string' || citation.parsingCoverage.length > 64 || /[\x00-\x1f\x7f]/u.test(citation.parsingCoverage)) throw new Error('桌宠会话来源卡片格式无效')
+      return { id: citation.id, revision: citation.revision, displayName: citation.displayName, chunkIndex: citation.chunkIndex, chunkCount: citation.chunkCount, parsingCoverage: citation.parsingCoverage }
+    })
+    return { sessionId: anchor.sessionId, role: anchor.role, atMs: anchor.atMs, summary: anchor.summary, citations }
   })
   return { sessionIds, anchors }
 }

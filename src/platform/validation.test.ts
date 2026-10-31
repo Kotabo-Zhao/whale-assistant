@@ -96,14 +96,20 @@ describe('桌宠会话关联校验', () => {
     expect(validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'], anchors: [
       { sessionId: 'session-companion-1', role: 'user', atMs: 1, summary: '继续合同问题' },
     ] })).toEqual({ sessionIds: ['session-companion-1'], anchors: [
-      { sessionId: 'session-companion-1', role: 'user', atMs: 1, summary: '继续合同问题' },
+      { sessionId: 'session-companion-1', role: 'user', atMs: 1, summary: '继续合同问题', citations: [] },
     ] })
+    expect(validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'], anchors: [
+      { sessionId: 'session-companion-1', role: 'assistant', atMs: 2, summary: '已核对资料', citations: [{ id: '123e4567-e89b-12d3-a456-426614174000', revision: 'a'.repeat(64), displayName: '合同.pdf', chunkIndex: 0, chunkCount: 2, parsingCoverage: 'partial' }] },
+    ] }).anchors[0].citations).toHaveLength(1)
     expect(() => validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'], anchors: [
       { sessionId: 'session-other', role: 'assistant', atMs: 1, summary: '越权会话' },
     ] })).toThrow('桌宠会话锚点格式无效')
     expect(() => validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'], anchors: [
       { sessionId: 'session-companion-1', role: 'assistant', atMs: 1, summary: 'x'.repeat(161) },
     ] })).toThrow('桌宠会话锚点格式无效')
+    expect(() => validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'], anchors: [
+      { sessionId: 'session-companion-1', role: 'assistant', atMs: 1, summary: '错误来源', citations: [{ id: 'wrong', revision: 'a'.repeat(64), displayName: '合同.pdf', chunkIndex: 0, chunkCount: 1, parsingCoverage: 'partial' }] },
+    ] })).toThrow('桌宠会话来源卡片格式无效')
   })
 })
 import type { RuntimeSettings } from './types'

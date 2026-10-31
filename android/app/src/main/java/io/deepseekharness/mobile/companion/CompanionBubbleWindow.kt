@@ -266,7 +266,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                                 // The anchor is intentionally lossy and is never sent back into Harness automatically.
                                 fun summary(value: String) = value.replace(Regex("\\s+"), " ").trim().take(160)
                                 anchorStore.append(snapshot.sessionId, "user", System.currentTimeMillis(), summary(message))
-                                anchorStore.append(snapshot.sessionId, "assistant", System.currentTimeMillis(), summary(answer.text))
+                                anchorStore.append(snapshot.sessionId, "assistant", System.currentTimeMillis(), summary(answer.text), answer.citations.map {
+                                    CompanionSessionAnchorStore.Citation(it.id, it.revision, it.displayName, it.chunkIndex, it.chunkCount, it.parsingCoverage)
+                                })
                             }
                         } }
                         draft = ""

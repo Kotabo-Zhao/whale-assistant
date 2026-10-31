@@ -1748,7 +1748,10 @@ class MobileRuntimePlugin : Plugin() {
                             .put("sessionId", anchor.sessionId)
                             .put("role", anchor.role)
                             .put("atMs", anchor.atMs)
-                            .put("summary", anchor.summary)) }
+                            .put("summary", anchor.summary)
+                            .put("citations", JSArray().apply { anchor.citations.forEach { citation -> put(JSObject()
+                                .put("id", citation.id).put("revision", citation.revision).put("displayName", citation.displayName)
+                                .put("chunkIndex", citation.chunkIndex).put("chunkCount", citation.chunkCount).put("parsingCoverage", citation.parsingCoverage)) } })) }
                 })
         }
     }
