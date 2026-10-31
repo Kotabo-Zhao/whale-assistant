@@ -22,6 +22,14 @@ const memorySourceLabel = (source: unknown) => source === 'assistant_tool' ? '�
 const memoryEvidenceLabel = (row: Row) => typeof row.evidenceSource === 'string' && row.evidenceSource.startsWith('notification:') && row.evidenceSource.length > 'notification:'.length ? `证据来源：${row.evidenceSource.slice('notification:'.length)}` : null
 const knowledgeSourceLabel = (source: unknown) => source === 'shared_text' ? '分享文本' : source === 'text_file' ? '文档/文本' : source === 'original' ? '已保存原件' : source === 'image_analysis' ? '图片描述' : '来源未知'
 const knowledgeCoverageLabel = (coverage: unknown) => coverage === 'not_parsed' ? '尚未解析' : coverage === 'partial' ? '部分解析' : coverage === 'extracted_text' ? '已提取文字' : coverage === 'model_description' ? '模型图片描述' : '覆盖范围未知'
+const knowledgeFileTypeLabel = (row: Row) => {
+  const name = typeof row.displayName === 'string' ? row.displayName.toLowerCase() : ''
+  if (row.source === 'image_analysis' || /\.(png|jpe?g|webp|gif|heic)$/.test(name)) return '图片'
+  if (/\.pdf$/.test(name)) return 'PDF'
+  if (/\.(xlsx?|csv|tsv)$/.test(name)) return '表格'
+  if (/\.(docx?|pptx?|odt|rtf)$/.test(name)) return '文档'
+  return '文本'
+}
 const knowledgeStoredLocation = (row: Row) => {
   const index = row.chunkIndex
   const count = row.chunkCount
@@ -333,7 +341,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           </details>
           {!memorySelectionMode && revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
-      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}>{knowledgeSelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedKnowledgeIds.has(row.id)} onChange={() => toggleKnowledgeSelection(row.id)} aria-label={`选择资料：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}`} />选择</label>}<div><details className="knowledge-card-detail"><summary><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>
+      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}>{knowledgeSelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedKnowledgeIds.has(row.id)} onChange={() => toggleKnowledgeSelection(row.id)} aria-label={`选择资料：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}`} />选择</label>}<div><details className="knowledge-card-detail"><summary><span className="knowledge-type" aria-label={`资料类型：${knowledgeFileTypeLabel(row)}`}>{knowledgeFileTypeLabel(row)}</span><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>
         {knowledgeProcessing?.id === row.id && <div className="workspace-review"><strong>资料处理状态</strong><p>{processingDescription(knowledgeProcessing)}</p><div className="workspace-card-actions">
           {(knowledgeProcessing.state === 'queued' || knowledgeProcessing.state === 'failed') && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingRetry', knowledgeProcessing) }}>重试</button>}
           {(knowledgeProcessing.state === 'queued' || knowledgeProcessing.state === 'running' || knowledgeProcessing.state === 'failed') && <button type="button" className="button-danger-quiet" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingCancel', knowledgeProcessing) }}>停止整理</button>}

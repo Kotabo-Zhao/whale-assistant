@@ -88,6 +88,7 @@ it('资料来源和解析范围筛选交由本地分页查询，加载更多保�
   fireEvent.change(screen.getByLabelText('解析覆盖'), { target: { value: 'extracted_text' } })
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeList', query: '', offset: 0, source: 'text_file', coverage: 'extracted_text' }))
   expect(await screen.findByText('报告.pdf')).toBeInTheDocument()
+  expect(screen.getByLabelText('资料类型：PDF')).toHaveTextContent('PDF')
   expect(screen.getByText('文档/文本 · 已提取文字')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '加载更多资料' }))
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeList', query: '', offset: 20, source: 'text_file', coverage: 'extracted_text' }))
