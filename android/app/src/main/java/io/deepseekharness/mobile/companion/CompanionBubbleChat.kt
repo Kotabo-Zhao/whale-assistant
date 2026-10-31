@@ -22,6 +22,16 @@ internal object CompanionBubbleChatPolicy {
         return null
     }
     fun validateMessage(text: String): String = text.trim().also { require(it.isNotEmpty() && it.length <= 2000) }
+    data class InlineImages(val text: String, val images: List<String>)
+    fun parseInlineImages(text: String): InlineImages {
+        val pattern = Regex("!\\[[^\\]\\r\\n]{0,200}\\]\\(<?/root/\\.dsh/attachments/v1/objects/([a-f0-9]{2})/([a-f0-9]{64})>?\\)")
+        val ids = mutableListOf<String>()
+        val cleaned = pattern.replace(text) { match ->
+            val prefix = match.groupValues[1]; val hash = match.groupValues[2]
+            if (hash.startsWith(prefix) && ids.size < 6) { ids.add("sha256:$hash"); "" } else match.value
+        }.trim()
+        return InlineImages(cleaned.ifBlank { if (ids.isNotEmpty()) "[图片]" else text }, ids.distinct())
+    }
 
 }
 
@@ -184,8 +194,9 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             sendPrompt()
             check(done.await(600, java.util.concurrent.TimeUnit.SECONDS)) { "回复超时，请检查主对话中的模型状态" }
             failure.get()?.let { error(it) }
-            val text = answer.get() ?: if (images.get().isNotEmpty()) "[图片]" else error("模型没有返回文字，请检查主对话")
-            return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(text), images.get())
+            val raw = answer.get() ?: if (images.get().isNotEmpty()) "[图片]" else error("模型没有返回文字，请检查主对话")
+            val parsed = CompanionBubbleChatPolicy.parseInlineImages(raw)
+            return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(parsed.text), (images.get() + parsed.images).distinct().take(6))
         } finally {
             socket.cancel()
             http.dispatcher.executorService.shutdown()

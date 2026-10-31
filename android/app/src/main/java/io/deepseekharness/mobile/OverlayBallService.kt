@@ -716,6 +716,9 @@ class OverlayBallService : Service() {
                     val tap = io.deepseekharness.mobile.overlay.CompanionPetMotion.tapScale(now - petTapAt)
                     petDrawable?.blinkAmount = io.deepseekharness.mobile.overlay.CompanionPetMotion.blink(now - petBlinkAt)
                     petDrawable?.bend = kotlin.math.sin(now * 2.0 * Math.PI / (if (petChatState == "thinking") 2300.0 else 3800.0)).toFloat()
+                    val arms = io.deepseekharness.mobile.overlay.CompanionPetMotion.arms(now, thinkingBlend, reply)
+                    petDrawable?.leftArm = arms.left
+                    petDrawable?.rightArm = arms.right
                     avatar.pivotY = avatar.height * 0.78f
                     avatar.rotation = pose.rotation
                     avatar.translationY = -metrics.density * pose.lift
@@ -746,21 +749,23 @@ class OverlayBallService : Service() {
                 if (closed == null || open.width != closed.width || open.height != closed.height) {
                     open.recycle(); closed?.recycle(); error("blink frame unavailable")
                 }
-                open to closed
+                val body = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_body_v3, options)
+                if (body == null || body.width != open.width || body.height != open.height) { open.recycle(); closed.recycle(); body?.recycle(); error("body frame unavailable") }
+                Triple(open, closed, body)
             }.getOrNull() ?: return@execute
-            if (avatarDestroyed) { pair.first.recycle(); pair.second.recycle(); return@execute }
+            if (avatarDestroyed) { pair.first.recycle(); pair.second.recycle(); pair.third.recycle(); return@execute }
             val posted = hintHandler.post {
                 if (!avatarDestroyed && avatarGeneration == generation && ballView === view && ballAttached) {
-                    val next = io.deepseekharness.mobile.overlay.CompanionPetDrawable(pair.first, pair.second)
+                    val next = io.deepseekharness.mobile.overlay.CompanionPetDrawable(pair.first, pair.second, pair.third)
                     val old = petDrawable
                     hintHandler.removeCallbacks(blinkTick); hintHandler.removeCallbacks(blinkOpen)
                     petDrawable = next
                     view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
                     old?.close()
                     if (android.animation.ValueAnimator.areAnimatorsEnabled()) hintHandler.postDelayed(blinkTick, 2400)
-                } else { pair.first.recycle(); pair.second.recycle() }
+                } else { pair.first.recycle(); pair.second.recycle(); pair.third.recycle() }
             }
-            if (!posted) { pair.first.recycle(); pair.second.recycle() }
+            if (!posted) { pair.first.recycle(); pair.second.recycle(); pair.third.recycle() }
         }
     }
 

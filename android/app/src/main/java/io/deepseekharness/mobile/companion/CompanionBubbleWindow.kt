@@ -66,9 +66,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         fun imageBubble(id: String) {
             if (!id.matches(Regex("sha256:[a-f0-9]{64}"))) return
             val hash = id.removePrefix("sha256:")
-            val root = java.io.File(context.noBackupFilesDir, "dsh-runtime/current/root/.dsh/attachments/v1/objects").canonicalFile
-            val file = java.io.File(root, "${hash.take(2)}/$hash").canonicalFile
-            if (!file.path.startsWith(root.path + java.io.File.separator) || !file.isFile || file.length() !in 1..8_000_000L) { bubble("图片暂不可用", false); return }
+            val imageRoot = java.io.File(context.noBackupFilesDir, "dsh-runtime/current/root/.dsh/attachments/v1/objects").canonicalFile
+            val file = java.io.File(imageRoot, "${hash.take(2)}/$hash").canonicalFile
+            if (!file.path.startsWith(imageRoot.path + java.io.File.separator) || !file.isFile || file.length() !in 1..8_000_000L) { bubble("图片暂不可用", false); return }
             val imageWidth = width - dp(45)
             val image = android.widget.ImageView(context).apply { adjustViewBounds = true; maxWidth = imageWidth; maxHeight = dp(300); contentDescription = "对话图片" }
             content.addView(image, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(6) })
@@ -91,7 +91,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
         }
         if (history.isEmpty()) bubble(opening ?: "嗨，想聊什么？", false)
-        else history.takeLast(8).forEach { bubble(it.text, it.role == "user"); it.images.forEach(::imageBubble) }
+        else history.takeLast(8).forEach {
+            val parsed = if (it.role == "assistant") CompanionBubbleChatPolicy.parseInlineImages(it.text) else CompanionBubbleChatPolicy.InlineImages(it.text, emptyList())
+            bubble(parsed.text, it.role == "user"); (it.images + parsed.images).distinct().take(6).forEach(::imageBubble)
+        }
         val input = EditText(context).apply {
             hint = "说点什么…"; textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
             setText(draft); setSelection(text.length)
