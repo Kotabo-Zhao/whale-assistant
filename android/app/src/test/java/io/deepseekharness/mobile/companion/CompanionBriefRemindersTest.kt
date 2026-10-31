@@ -37,4 +37,14 @@ class CompanionBriefRemindersTest {
         assertEquals(1, result.items.size)
         assertEquals("等待恢复安排", result.items.single().state)
     }
+    @Test fun includesOnlyTheSelectedNumberOfLocalCalendarDays() {
+        val zone = ZoneId.of("Asia/Shanghai")
+        val now = Instant.parse("2026-10-30T04:00:00Z").toEpochMilli()
+        fun row(at: String) = JSONObject().put("at", Instant.parse(at).toEpochMilli()).put("text", "提醒").put("state", "scheduled")
+        val rows = JSONArray().put(row("2026-10-30T05:00:00Z")).put(row("2026-10-31T05:00:00Z"))
+            .put(row("2026-11-01T05:00:00Z")).put(row("2026-11-02T05:00:00Z"))
+        val result = CompanionBriefReminders.read(rows, false, now, zone, 3)
+        assertEquals(3, result.items.size)
+        assertThrows(IllegalArgumentException::class.java) { CompanionBriefReminders.read(rows, false, now, zone, 2) }
+    }
 }

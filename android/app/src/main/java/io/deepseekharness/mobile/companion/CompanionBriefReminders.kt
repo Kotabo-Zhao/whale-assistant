@@ -9,10 +9,11 @@ internal object CompanionBriefReminders {
     const val MAX_ITEMS = 10
     data class Item(val at: Long, val text: String, val state: String)
     data class Snapshot(val items: List<Item>, val truncated: Boolean)
-    fun read(rows: JSONArray, recurring: Boolean, now: Long, zone: ZoneId): Snapshot {
+    fun read(rows: JSONArray, recurring: Boolean, now: Long, zone: ZoneId, days: Int = 1): Snapshot {
+        require(days in 1..7)
         val day = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
-        val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = day.plusDays(days.toLong()).atStartOfDay(zone).toInstant().toEpochMilli()
         val items = mutableListOf<Item>()
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i)

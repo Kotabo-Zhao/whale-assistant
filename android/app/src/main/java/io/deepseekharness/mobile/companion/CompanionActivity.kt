@@ -851,8 +851,17 @@ class CompanionActivity : AppCompatActivity() {
         button("设置简报提示时间：${"%02d:%02d".format(briefHour, briefMinute)}") {
             android.app.TimePickerDialog(this, { _, hour, minute -> store.dailyBriefMinute = hour * 60 + minute; render() }, briefHour, briefMinute, true).show()
         }
+        button("设置简报范围：未来 ${store.dailyBriefDays} 天（含今天）") {
+            val choices = intArrayOf(1, 3, 7)
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择简报范围")
+                .setSingleChoiceItems(arrayOf("今天", "未来 3 天（含今天）", "未来 7 天（含今天）"), choices.indexOf(store.dailyBriefDays)) { dialog, index ->
+                    store.dailyBriefDays = choices[index]
+                    dialog.dismiss()
+                    render()
+                }.setNegativeButton("取消", null).show()
+        }
         paragraph("默认关闭。悬浮助手运行、手机解锁且不在免打扰时，约每 5 分钟检查；在所选时间后 2 小时内最多显示一次通用气泡。点击后才打开本地简报；系统限制可能导致错过，不会补发。")
-        paragraph("日历只在打开简报时临时读取当天可见日历，不保存，也不会自动发送给模型；是否显示取决于系统授权。")
+        paragraph("日历和提醒只在打开简报时临时读取所选未来范围内的记录，不保存，也不会自动发送给模型；通知统计则展示截至当前的同等天数历史范围。是否显示取决于系统授权。")
         toggle("允许助手对话访问今日日历", store.calendarModelAccess) { enabled ->
             if (!enabled) { store.calendarModelAccess = false; render() }
             else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许助手读取日历？")
@@ -1719,6 +1728,7 @@ class CompanionActivity : AppCompatActivity() {
         briefBusy = true
         android.widget.Toast.makeText(this, "正在读取本地简报…", android.widget.Toast.LENGTH_SHORT).show()
         val app = applicationContext
+        val briefDays = store.dailyBriefDays
         briefExecutor.execute {
             val checkedAt = System.currentTimeMillis()
             val zone = java.util.TimeZone.getDefault()
@@ -1726,23 +1736,33 @@ class CompanionActivity : AppCompatActivity() {
             // block on storage or PackageManager; keep them off the UI thread.
             val notifications = runCatching {
                 val records = CompanionStore(app).read()
-                if (records.length() == 0) "没有可用的本地通知记录；请检查采集开关和通知读取权限。"
+                val (briefStart, _) = CompanionCalendar.dayRange(checkedAt, zone, briefDays)
+                val notificationStart = Calendar.getInstance(zone).apply {
+                    timeInMillis = briefStart
+                    add(Calendar.DAY_OF_MONTH, -(briefDays - 1))
+                }.timeInMillis
+                val scoped = org.json.JSONArray()
+                for (index in 0 until records.length()) {
+                    val row = records.getJSONObject(index)
+                    if (row.optLong("time", 0) in notificationStart..checkedAt) scoped.put(row)
+                }
+                if (scoped.length() == 0) "所选 ${briefDays} 天范围内没有可用的本地通知记录；请检查采集开关和通知读取权限。"
                 else {
-                    val lines = CompanionBrief.counts(records).entries.joinToString("\n") { "${it.key}：${it.value} 条" }
+                    val lines = CompanionBrief.counts(scoped).entries.joinToString("\n") { "${it.key}：${it.value} 条" }
                     val formatter = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }
-                    val recent = (maxOf(0, records.length() - 3) until records.length()).reversed().map { index ->
-                        val row = records.getJSONObject(index)
+                    val recent = (maxOf(0, scoped.length() - 3) until scoped.length()).reversed().map { index ->
+                        val row = scoped.getJSONObject(index)
                         val pkg = row.optString("package")
                         val source = runCatching { app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
                         val time = formatter.format(Date(row.optLong("time")))
                         "$source · $time\n${row.optString("title")} ${row.optString("text")}"
                     }.joinToString("\n\n")
-                    "最近保留的 ${records.length()} 条通知：\n$lines\n\n最近记录：\n$recent"
+                    "所选 ${briefDays} 天内的 ${scoped.length()} 条通知：\n$lines\n\n最近记录：\n$recent"
                 }
             }.getOrElse { "通知记录读取失败，原数据已保留；请检查本地数据。" }
-            val calendar = CompanionCalendar.read(app, checkedAt, zone)
-            val once = runCatching { CompanionBriefReminders.read(CompanionReminder(app).list(), false, checkedAt, zone.toZoneId()) }
-            val repeating = runCatching { CompanionBriefReminders.read(CompanionRecurringReminder(app).list(), true, checkedAt, zone.toZoneId()) }
+            val calendar = CompanionCalendar.read(app, checkedAt, zone, briefDays)
+            val once = runCatching { CompanionBriefReminders.read(CompanionReminder(app).list(), false, checkedAt, zone.toZoneId(), briefDays) }
+            val repeating = runCatching { CompanionBriefReminders.read(CompanionRecurringReminder(app).list(), true, checkedAt, zone.toZoneId(), briefDays) }
             val usage = CompanionUsage.brief(CompanionUsage.loadSummary(app, checkedAt)) { pkg ->
                 app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString()
             }
@@ -1752,7 +1772,7 @@ class CompanionActivity : AppCompatActivity() {
                 val calendarText = when (calendar.state) {
                     CompanionCalendar.State.NO_PERMISSION -> "日历未授权；可在助手设置中授权。"
                     CompanionCalendar.State.UNAVAILABLE -> "日历读取失败或系统日历不可用。"
-                    CompanionCalendar.State.OK -> if (calendar.events.isEmpty()) "当天可见日历没有日程。" else {
+                    CompanionCalendar.State.OK -> if (calendar.events.isEmpty()) "所选范围内没有可见日历日程。" else {
                         val dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }
                         calendar.events.joinToString("\n") { event ->
                             val time = if (event.allDay) "全天" else dateFormat.format(Date(event.start))
@@ -1763,7 +1783,7 @@ class CompanionActivity : AppCompatActivity() {
                 val onceText = briefReminderText(once, zone)
                 val repeatingText = briefReminderText(repeating, zone)
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地简报")
-                    .setMessage("今天的可见日历（${zone.id}，读取开始于 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }.format(Date(checkedAt))}）：\n$calendarText\n\n今天的一次性提醒：\n$onceText\n\n今天的重复提醒（仅显示下一次）：\n$repeatingText\n\n最近约 7 天使用情况：\n$usage\n\n$notifications\n\n已交给系统不保证送达；通知分类可能遗漏重要事项。天气尚未接入。")
+                    .setMessage("未来 ${briefDays} 天（含今天）的可见日历（${zone.id}，读取开始于 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).apply { timeZone = zone }.format(Date(checkedAt))}）：\n$calendarText\n\n未来 ${briefDays} 天的一次性提醒：\n$onceText\n\n未来 ${briefDays} 天的重复提醒（仅显示下一次）：\n$repeatingText\n\n最近约 7 天使用情况：\n$usage\n\n$notifications\n\n已交给系统不保证送达；通知分类可能遗漏重要事项。天气尚未接入。")
                     .setNeutralButton("提醒操作") { _, _ ->
                         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择操作")
                             .setItems(arrayOf("管理一次性提醒", "管理重复提醒", "从日程创建提醒")) { _, choice ->

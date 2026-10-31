@@ -110,6 +110,10 @@ class CompanionStore(context: Context) {
     var dailyBriefMinute: Int
         get() = prefs.getInt("daily_brief_minute", 8 * 60).takeIf { it in 0 until 1440 } ?: 8 * 60
         set(value) { require(value in 0 until 1440); prefs.edit().putInt("daily_brief_minute", value).apply() }
+    /** The local brief's forward-looking calendar/reminder horizon. */
+    var dailyBriefDays: Int
+        get() = prefs.getInt("daily_brief_days", 1).takeIf { it in setOf(1, 3, 7) } ?: 1
+        set(value) { require(value in setOf(1, 3, 7)); prefs.edit().putInt("daily_brief_days", value).apply() }
     var dailyBriefLastDay: String?
         get() = prefs.getString("daily_brief_last_day", null)
         set(value) { prefs.edit().putString("daily_brief_last_day", value).apply() }

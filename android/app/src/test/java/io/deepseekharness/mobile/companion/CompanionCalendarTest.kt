@@ -18,6 +18,14 @@ class CompanionCalendarTest {
         val china = CompanionCalendar.dayRange(noon(Calendar.JUNE, 1), TimeZone.getTimeZone("Asia/Shanghai"))
         assertEquals(24L * 60 * 60 * 1000, china.second - china.first)
     }
+    @Test fun multiDayBoundsKeepLocalCalendarDaysAcrossDaylightSaving() {
+        val zone = TimeZone.getTimeZone("America/New_York")
+        val noon = Calendar.getInstance(zone).apply { clear(); set(2026, Calendar.MARCH, 8, 12, 0, 0) }.timeInMillis
+        val range = CompanionCalendar.dayRange(noon, zone, 3)
+        assertEquals(71L * 60 * 60 * 1000, range.second - range.first)
+        assertThrows(IllegalArgumentException::class.java) { CompanionCalendar.dayRange(noon, zone, 0) }
+        assertThrows(IllegalArgumentException::class.java) { CompanionCalendar.dayRange(noon, zone, 8) }
+    }
     @Test fun distinguishesPermissionUnavailableEmptyAndTruncated() {
         var called = false
         val denied = CompanionCalendar.snapshot(false) { called = true; emptyList() }

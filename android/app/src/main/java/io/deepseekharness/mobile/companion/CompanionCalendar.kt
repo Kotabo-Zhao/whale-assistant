@@ -17,13 +17,14 @@ internal object CompanionCalendar {
     enum class State { OK, NO_PERMISSION, UNAVAILABLE }
 
     /** Calendar arithmetic handles 23/25-hour days at daylight-saving transitions. */
-    fun dayRange(now: Long, zone: TimeZone): Pair<Long, Long> {
+    fun dayRange(now: Long, zone: TimeZone, days: Int = 1): Pair<Long, Long> {
+        require(days in 1..7)
         val calendar = Calendar.getInstance(zone).apply {
             timeInMillis = now
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }
         val start = calendar.timeInMillis
-        calendar.add(Calendar.DAY_OF_MONTH, 1)
+        calendar.add(Calendar.DAY_OF_MONTH, days)
         return start to calendar.timeInMillis
     }
 
@@ -61,8 +62,8 @@ internal object CompanionCalendar {
         } catch (_: Exception) { null }
     }
 
-    fun read(context: Context, now: Long = System.currentTimeMillis(), zone: TimeZone = TimeZone.getDefault()): Snapshot =
-        readDay(context, now, zone, false)
+    fun read(context: Context, now: Long = System.currentTimeMillis(), zone: TimeZone = TimeZone.getDefault(), days: Int = 1): Snapshot =
+        readDay(context, now, zone, false, days)
 
     /** Query future timed instances before applying the display limit, so past events cannot crowd them out. */
     fun readReminderCandidates(context: Context, now: Long, zone: TimeZone): Snapshot =
@@ -73,10 +74,10 @@ internal object CompanionCalendar {
         return if (futureOnly) "$visible AND ${CalendarContract.Instances.ALL_DAY}=0 AND ${CalendarContract.Instances.BEGIN}>? AND ${CalendarContract.Instances.BEGIN}<?" else visible
     }
 
-    private fun readDay(context: Context, now: Long, zone: TimeZone, futureOnly: Boolean): Snapshot = snapshot(
+    private fun readDay(context: Context, now: Long, zone: TimeZone, futureOnly: Boolean, days: Int = 1): Snapshot = snapshot(
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     ) {
-            val (start, end) = dayRange(now, zone)
+            val (start, end) = dayRange(now, zone, days)
             val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().apply {
                 ContentUris.appendId(this, start); ContentUris.appendId(this, end)
             }.build()
