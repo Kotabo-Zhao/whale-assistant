@@ -62,6 +62,8 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [undoKnowledge, setUndoKnowledge] = useState<Row | null>(null)
   const [memorySource, setMemorySource] = useState('all')
   const [memoryOrder, setMemoryOrder] = useState<'recent' | 'oldest' | 'source' | 'type'>('recent')
+  const [memorySelectionMode, setMemorySelectionMode] = useState(false)
+  const [selectedMemoryIds, setSelectedMemoryIds] = useState<Set<string>>(() => new Set())
   const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource | 'all'>('all')
   const [knowledgeCoverage, setKnowledgeCoverage] = useState<KnowledgeCoverage | 'all'>('all')
   const [knowledgeProcessing, setKnowledgeProcessing] = useState<KnowledgeProcessing | null>(null)
@@ -71,7 +73,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   useEffect(() => {
     let live = true
     if (previousPanel.current !== panel) {
-      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setKnowledgeSource('all'); setKnowledgeCoverage('all'); setKnowledgeProcessing(null)
+      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setMemorySelectionMode(false); setSelectedMemoryIds(new Set()); setKnowledgeSource('all'); setKnowledgeCoverage('all'); setKnowledgeProcessing(null)
       previousPanel.current = panel
     }
     setLoading(true); setLoadFailed(false)
@@ -84,6 +86,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       const nextItems = rows(result.items); const nextRecurring = rows(result.recurring ?? []); const nextSuggestions = rows(result.suggestions ?? [])
       if (live) {
         setItems(nextItems); setRecurring(nextRecurring); setSuggestions(nextSuggestions)
+        if (panel === 'memory') setSelectedMemoryIds(new Set())
         setKnowledgeNextOffset(panel === 'knowledge' && Number.isSafeInteger(result.nextOffset) && (result.nextOffset as number) >= 0 ? result.nextOffset as number : null)
         setMemoryNextBefore(panel === 'memory' && Number.isSafeInteger(result.nextBefore) && (result.nextBefore as number) >= 0 ? result.nextBefore as number : null)
         setMemoryRevision(panel === 'memory' && Number.isSafeInteger(result.revision) && (result.revision as number) >= 0 ? result.revision as number : null)
@@ -207,6 +210,19 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       return direction * (Number(left.createdAt ?? 0) - Number(right.createdAt ?? 0))
     })
   const groups = [...new Set(memoryList.map(memoryCategory))].map(name => ({ name, rows: memoryList.filter(row => memoryCategory(row) === name) }))
+  const toggleMemorySelection = (id: string) => {
+    if (!selectedMemoryIds.has(id) && selectedMemoryIds.size >= 20) { setMessage('一次最多选择 20 条记忆。'); return }
+    setSelectedMemoryIds(current => {
+    const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next
+    })
+  }
+  const deleteSelectedMemories = async () => {
+    const selected = memoryList.filter(row => selectedMemoryIds.has(row.id)).map(row => ({ id: row.id, expected: expected(row) }))
+    if (selected.length === 0) { setMessage('请先选择至少一条当前显示的记忆。'); return }
+    if (!window.confirm(`删除所选 ${selected.length} 条记忆？任何一条已变化都会取消整批删除；删除后不能撤销。`)) return
+    const result = await run({ operation: 'memoryBatchDelete', entries: selected }, `已删除 ${selected.length} 条记忆，并保留删除抑制记录。`)
+    if (result) { setSelectedMemoryIds(new Set()); setMemorySelectionMode(false) }
+  }
   return <section className="companion-workspace" aria-labelledby="companion-workspace-title">
     <div className="workspace-heading"><div><span className="workspace-kicker">YOUR ASSISTANT</span><h3 id="companion-workspace-title">助手工作台</h3><p>提醒、资料与长期记忆集中管理，数据保存在手机本地。</p></div>
       <button className="icon-button" type="button" aria-label="刷新助手数据" disabled={busy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></div>
@@ -263,21 +279,22 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
         void run(editing ? { operation: 'knowledgeEdit', id: editing.id, expectedText: editing.text, text: text.trim() } : { operation: 'knowledgeAdd', text: text.trim() }, '资料已处理。')
       }}>{editing ? '保存修改' : '添加'}</button>{editing && <button type="button" onClick={() => { setEditing(null); setText('') }}>取消编辑</button>}</div>
       {review && <div className="workspace-review"><strong>核对相关记忆</strong><p>相关内容仅供参考，请确认是否重复、冲突或包含敏感信息。</p>{review.candidates.map((row, i) => <p key={i}>{row.status}：{row.text}</p>)}<div className="workspace-card-actions"><button type="button" onClick={() => setReview(null)}>取消</button><button type="button" disabled={busy} onClick={() => { void saveMemory() }}>确认保存</button></div></div>}
-      {panel === 'memory' && memoryList.length > 0 && <p className="workspace-hint">展开分类查看缩略卡片，点击卡片查看详情；左滑可删除。</p>}
+      {panel === 'memory' && memoryList.length > 0 && <div className="workspace-card-actions"><p className="workspace-hint">展开分类查看缩略卡片，点击卡片查看详情；左滑可删除。</p><button type="button" disabled={busy} onClick={() => { setMemorySelectionMode(value => !value); setSelectedMemoryIds(new Set()) }}>{memorySelectionMode ? '结束批量管理' : '批量管理'}</button>{memorySelectionMode && <button type="button" className="button-danger-quiet" disabled={busy || selectedMemoryIds.size === 0} onClick={() => { void deleteSelectedMemories() }}>删除所选（{selectedMemoryIds.size}）</button>}</div>}
       {panel === 'memory' ? <><div className="memory-groups">{groups.map(group => <details className="memory-group" key={group.name} open={query.trim() ? true : undefined}>
         <summary><span>{group.name}</span><small>{group.rows.length} 条</small></summary>
         <div className="workspace-list">{group.rows.map(row => <article className="workspace-card workspace-memory-card" key={row.id}
-          onTouchStart={event => { if (event.touches.length === 1) swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY, id: row.id } }}
-          onTouchEnd={event => { const start = swipeStart.current; swipeStart.current = null; if (!start || start.id !== row.id || !event.changedTouches.length) return; const dx = event.changedTouches[0].clientX - start.x; const dy = event.changedTouches[0].clientY - start.y; if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) setRevealedMemory(dx < 0 ? row.id : null) }}>
+          onTouchStart={event => { if (!memorySelectionMode && event.touches.length === 1) swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY, id: row.id } }}
+          onTouchEnd={event => { if (memorySelectionMode) return; const start = swipeStart.current; swipeStart.current = null; if (!start || start.id !== row.id || !event.changedTouches.length) return; const dx = event.changedTouches[0].clientX - start.x; const dy = event.changedTouches[0].clientY - start.y; if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) setRevealedMemory(dx < 0 ? row.id : null) }}>
+          {memorySelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedMemoryIds.has(row.id)} onChange={() => toggleMemorySelection(row.id)} aria-label={`选择记忆：${row.text}`} />选择</label>}
           <details className="memory-card-detail"><summary><span className="memory-preview">{row.text}</span><small>{row.status === 'pending' ? '待确认' : row.status === 'unverified' || (row.source === 'shared_understanding' && !row.confirmedAt) ? '待核实' : '已保存'}</small></summary>
             <p>{row.text}</p><small>来源：{row.source ?? '未知'}</small>
-            <div className="workspace-card-actions">
+            {!memorySelectionMode && <div className="workspace-card-actions">
               {row.status === 'pending' && <button type="button" onClick={() => { void startMemoryReview('approve', row) }}>确认</button>}
               <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>
               <button type="button" onClick={() => setRevealedMemory(revealedMemory === row.id ? null : row.id)}>操作</button>
-            </div>
+            </div>}
           </details>
-          {revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
+          {!memorySelectionMode && revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
       </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><details className="knowledge-card-detail"><summary><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>
         {knowledgeProcessing?.id === row.id && <div className="workspace-review"><strong>资料处理状态</strong><p>{processingDescription(knowledgeProcessing)}</p><div className="workspace-card-actions">

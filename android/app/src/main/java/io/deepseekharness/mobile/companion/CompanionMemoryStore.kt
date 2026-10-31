@@ -178,6 +178,41 @@ class CompanionMemoryStore(context: Context) {
         write(kept)
         true
     }
+    /** Delete a reviewed selection as one snapshot; a stale row leaves every selected row intact. */
+    fun deleteManyForUser(entries: JSONArray): Int? = synchronized(lock) {
+        require(entries.length() in 1..20) { "请选择 1 至 20 条记忆" }
+        val expected = (0 until entries.length()).map { index ->
+            val row = entries.optJSONObject(index) ?: throw IllegalArgumentException("批量删除参数无效")
+            val id = row.opt("id") as? String ?: throw IllegalArgumentException("批量删除参数无效")
+            val snapshot = row.opt("expected") as? String ?: throw IllegalArgumentException("批量删除参数无效")
+            require(id.matches(Regex("[a-f0-9-]{36}")) && snapshot.length <= 20_000) { "批量删除参数无效" }
+            id to snapshot
+        }
+        require(expected.map { it.first }.toSet().size == expected.size) { "批量删除事项重复" }
+        val rows = load()
+        val selected = mutableListOf<JSONObject>()
+        for ((id, snapshot) in expected) {
+            val found = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id && it.toString() == snapshot }
+                ?: return@synchronized null
+            selected.add(found)
+        }
+        val ids = expected.map { it.first }.toSet()
+        val blocked = prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty().toMutableSet()
+        val blockedEvents = prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty().toMutableSet()
+        val signatures = prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty().toMutableSet()
+        val suppressedSources = prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().toMutableSet()
+        selected.forEach { row ->
+            blocked.add(CompanionMemorySuppression.digest(row.getString("text")))
+            CompanionMemorySuppression.encodeSignature(row.getString("text"))?.let(signatures::add)
+            row.optString("evidenceEventId").takeIf(String::isNotBlank)?.let { blockedEvents.add(CompanionMemorySuppression.digest("event:$it")) }
+            CompanionAutomaticMemoryDeletion.sourceKey(row)?.let(suppressedSources::add)
+        }
+        check(prefs.edit().putStringSet("memory_deleted_hashes", blocked).putStringSet("memory_deleted_events", blockedEvents)
+            .putStringSet("memory_deleted_signatures", signatures).putStringSet("automatic_memory_suppressed_sources", suppressedSources).commit()) { "无法保存删除记录" }
+        val kept = JSONArray().apply { (0 until rows.length()).map { rows.getJSONObject(it) }.filterNot { it.optString("id") in ids }.forEach { put(it) } }
+        write(kept)
+        selected.size
+    }
     fun clearForUser() = synchronized(lock) {
         val rows = load()
         val blocked = prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty().toMutableSet()

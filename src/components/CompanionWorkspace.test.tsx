@@ -160,6 +160,21 @@ it('左滑记忆卡片后确认删除，使用当前记录快照', async () => {
   confirm.mockRestore()
 })
 
+it('批量管理先选择当前记忆，再将全部快照交给原子删除操作', async () => {
+  bridge.companionDashboard.mockImplementation((req: { operation: string }) => Promise.resolve(req.operation === 'memoryList'
+    ? { items: [{ id: 'm1', text: '喜欢咖啡', _review: 'snapshot-1' }, { id: 'm2', text: '喜欢茶', _review: 'snapshot-2' }] } : { ok: true }))
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '长期记忆' }))
+  fireEvent.click(await screen.findByText('手动与对话记忆'))
+  fireEvent.click(screen.getByRole('button', { name: '批量管理' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: '选择记忆：喜欢咖啡' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: '选择记忆：喜欢茶' }))
+  fireEvent.click(screen.getByRole('button', { name: '删除所选（2）' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'memoryBatchDelete', entries: [{ id: 'm1', expected: 'snapshot-1' }, { id: 'm2', expected: 'snapshot-2' }] }))
+  confirm.mockRestore()
+})
+
 it('按来源折叠记忆，展开卡片后才显示全文', async () => {
   const longText = '分享资料：' + '鲸鱼喜欢游泳。'.repeat(15)
   bridge.companionDashboard.mockImplementation((req: { operation: string }) => Promise.resolve(req.operation === 'memoryList' ? { items: [{ id: 'm2', text: longText, source: 'shared_understanding' }] } : { items: [] }))

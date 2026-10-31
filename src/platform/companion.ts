@@ -10,6 +10,7 @@ export type CompanionRequest =
   | { operation: 'memoryAdd'; text: string; snapshot: string }
   | { operation: 'memoryEdit' | 'memoryApprove' | 'memoryApproveEdit'; id: string; text: string; snapshot: string; expected: string; expectedText: string }
   | { operation: 'memoryDelete' | 'knowledgeDelete'; id: string; expected: string; expectedText: string }
+  | { operation: 'memoryBatchDelete'; entries: Array<{ id: string; expected: string }> }
   | { operation: 'memoryClear'; confirmed: true }
   | { operation: 'knowledgeAdd'; text: string }
   | { operation: 'knowledgeEdit'; id: string; expectedText: string; text: string }

@@ -42,6 +42,8 @@
 .memory-card-detail summary small { flex-shrink:0; margin:0; }
 .memory-card-detail p { white-space:pre-wrap; overflow-wrap:anywhere; }
 .memory-delete { border:0; border-radius:10px; padding:10px; color:#a32744; background:#ffe9ee; }
+.memory-selection { display:flex; align-items:center; gap:8px; min-height:44px; margin-bottom:6px; color:var(--muted); }
+.memory-selection input { width:20px; height:20px; }
 
 .knowledge-card-detail { min-width:0; }
 .knowledge-card-detail summary { display:flex; justify-content:space-between; gap:8px; cursor:pointer; align-items:center; }

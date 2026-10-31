@@ -79,6 +79,11 @@ internal class CompanionDashboard(private val context: Context) {
             "memoryApproveEdit" -> success(memory.approveEditedForUser(text("id"), text("expectedText"), text("text"), text("snapshot")))
             "memoryEdit" -> success(memory.updateForUser(text("id"), text("expected"), text("text"), text("snapshot")))
             "memoryDelete" -> success(memory.deleteForUser(text("id"), text("expected")))
+            "memoryBatchDelete" -> {
+                val entries = request.optJSONArray("entries") ?: throw IllegalArgumentException("批量删除参数无效")
+                val deleted = memory.deleteManyForUser(entries) ?: throw IllegalStateException("记忆已变化，请刷新后重试")
+                JSONObject().put("ok", true).put("deleted", deleted)
+            }
             "memoryResumeAutomatic" -> { memory.resumeAutomaticSources(); JSONObject().put("ok", true) }
             "memoryClear" -> { require(request.optBoolean("confirmed")); memory.clearForUser(); JSONObject().put("ok", true) }
             "knowledgeList" -> {
