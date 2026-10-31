@@ -1,6 +1,7 @@
 package io.deepseekharness.mobile.companion
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
@@ -137,6 +138,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 contentDescription = "回答资料来源：${citation.displayName}$segment$coverage"
                 setPadding(dp(12), dp(7), dp(12), dp(7))
                 background = GradientDrawable().apply { setColor(Color.rgb(238, 247, 255)); cornerRadius = dp(12).toFloat(); setStroke(dp(1), Color.rgb(177, 213, 240)) }
+                isClickable = true
+                setOnClickListener {
+                    runCatching {
+                        context.startActivity(Intent(context, CompanionActivity::class.java)
+                            .putExtra(CompanionActivity.OPEN_KNOWLEDGE_ID, citation.id)
+                            .putExtra(CompanionActivity.OPEN_KNOWLEDGE_REVISION, citation.revision)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                    }.onFailure { android.widget.Toast.makeText(context, "无法打开资料来源，请稍后重试。", android.widget.Toast.LENGTH_LONG).show() }
+                }
             }
             content.addView(view, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.START; bottomMargin = dp(6) })
             if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
