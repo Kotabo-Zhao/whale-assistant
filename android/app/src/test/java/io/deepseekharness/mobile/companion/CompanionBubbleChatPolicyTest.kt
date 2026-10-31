@@ -46,4 +46,17 @@ class CompanionBubbleChatPolicyTest {
         assertTrue(value.contains("早前摘录"))
         assertTrue(value.length <= 8_000)
     }
+    @Test fun extractsOnlyStableKnowledgeCitationsFromToolResults() {
+        val id = "00000000-1111-2222-3333-444444444444"
+        val revision = "a".repeat(64)
+        val value = JSONObject().put("items", JSONArray().put(JSONObject().put("id", id).put("revision", revision)
+            .put("documentId", "b".repeat(64)).put("displayName", "合同.pdf").put("chunkIndex", 1).put("chunkCount", 3).put("parsingCoverage", "partial")
+            .put("excerpt", "不应进入来源卡的正文")))
+        val citations = CompanionBubbleChatPolicy.citationsFromToolResult(value.toString())
+        assertEquals(1, citations.size)
+        assertEquals("合同.pdf", citations.single().displayName)
+        assertEquals(1, citations.single().chunkIndex)
+        assertTrue(CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("id", id).toString()).isEmpty())
+        assertTrue(CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("id", id).put("revision", revision).put("text", "记忆正文").toString()).isEmpty())
+    }
 }

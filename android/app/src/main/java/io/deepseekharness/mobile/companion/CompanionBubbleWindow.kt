@@ -127,10 +127,24 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
         }
+        fun citationCard(citation: CompanionBubbleChat.Citation) {
+            val shouldFollow = atBottom()
+            val coverage = when (citation.parsingCoverage) { "partial" -> " · 部分解析"; "not_parsed" -> " · 尚未解析"; else -> "" }
+            val segment = if (citation.chunkCount > 1) " · 第 ${citation.chunkIndex + 1}/${citation.chunkCount} 段" else ""
+            val view = TextView(context).apply {
+                text = "资料来源 · ${citation.displayName}$segment$coverage"
+                textSize = 12f; setTextColor(Color.rgb(48, 91, 125)); maxWidth = width - dp(45)
+                contentDescription = "回答资料来源：${citation.displayName}$segment$coverage"
+                setPadding(dp(12), dp(7), dp(12), dp(7))
+                background = GradientDrawable().apply { setColor(Color.rgb(238, 247, 255)); cornerRadius = dp(12).toFloat(); setStroke(dp(1), Color.rgb(177, 213, 240)) }
+            }
+            content.addView(view, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.START; bottomMargin = dp(6) })
+            if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
+        }
         if (history.isEmpty()) bubble(opening ?: "嗨，想聊什么？", false)
         else history.takeLast(8).forEach {
             val parsed = if (it.role == "assistant") CompanionBubbleChatPolicy.parseInlineImages(it.text) else CompanionBubbleChatPolicy.InlineImages(it.text, emptyList())
-            bubble(parsed.text, it.role == "user"); (it.images + parsed.images).distinct().take(6).forEach(::imageBubble)
+            bubble(parsed.text, it.role == "user"); (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (it.role == "assistant") it.citations.forEach(::citationCard)
         }
         val input = EditText(context).apply {
             hint = "说点什么…"; textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
@@ -208,11 +222,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     busy = false; send.isEnabled = true; input.isEnabled = true
                     result.onSuccess { answer ->
                         onState("reply")
-                        history.add(CompanionBubbleChat.Message("user", message)); history.add(CompanionBubbleChat.Message("assistant", answer.text, answer.images))
+                        history.add(CompanionBubbleChat.Message("user", message)); history.add(CompanionBubbleChat.Message("assistant", answer.text, answer.images, answer.citations))
                         while (history.size > 18) { history.removeAt(0); history.removeAt(0) }
                         chat.snapshot(history)?.let { snapshot -> executor.execute { runCatching { historyStore.save(snapshot) } } }
                         draft = ""
-                        if (samePanel) { bubble(answer.text, false); answer.images.forEach(::imageBubble); input.text.clear() }
+                        if (samePanel) { bubble(answer.text, false); answer.images.forEach(::imageBubble); answer.citations.forEach(::citationCard); input.text.clear() }
                         status.text = ""; status.visibility = android.view.View.GONE
                     }.onFailure { error ->
                         onState("idle")

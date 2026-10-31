@@ -45,18 +45,33 @@ internal class CompanionBubbleHistory(context: Context) {
             snapshot.messages.forEachIndexed { index, message ->
                 require(message.role == if (index % 2 == 0) "user" else "assistant")
                 require(message.images.size <= 6 && message.images.all { it.matches(Regex("sha256:[a-f0-9]{64}")) })
-                rows.put(JSONObject().put("role", message.role).put("text", CompanionBubbleChatPolicy.validateMessage(message.text)).put("images", JSONArray(message.images)))
+                val citations = JSONArray()
+                message.citations.take(6).forEach { citation ->
+                    require(citation.id.matches(Regex("[a-f0-9-]{36}")) && citation.revision.matches(Regex("[a-f0-9]{64}")))
+                    require(citation.displayName.isNotBlank() && citation.displayName.length <= 160 && citation.chunkIndex >= 0 && citation.chunkCount in 1..10_000 && citation.chunkIndex < citation.chunkCount)
+                    citation.documentId?.let { require(it.matches(Regex("[a-f0-9]{64}"))) }
+                    citation.originalId?.let { require(it.matches(Regex("[a-f0-9]{64}"))) }
+                    citations.put(JSONObject().put("id", citation.id).put("revision", citation.revision).put("displayName", citation.displayName)
+                        .put("chunkIndex", citation.chunkIndex).put("chunkCount", citation.chunkCount).put("parsingCoverage", citation.parsingCoverage)
+                        .apply { citation.documentId?.let { put("documentId", it) }; citation.originalId?.let { put("originalId", it) } })
+                }
+                rows.put(JSONObject().put("role", message.role).put("text", CompanionBubbleChatPolicy.validateMessage(message.text)).put("images", JSONArray(message.images)).put("citations", citations))
             }
-            return JSONObject().put("version", 1).put("sessionId", snapshot.sessionId).put("scope", snapshot.scope).put("messages", rows)
+            return JSONObject().put("version", 2).put("sessionId", snapshot.sessionId).put("scope", snapshot.scope).put("messages", rows)
                 .toString().toByteArray(Charsets.UTF_8).also { require(it.size <= 150_000) }
         }
         fun decode(bytes: ByteArray): Snapshot {
             require(bytes.size <= 150_000)
             val root = JSONObject(Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes)).toString())
-            require(root.getInt("version") == 1)
+            require(root.getInt("version") in 1..2)
             val rows = root.getJSONArray("messages")
             val snapshot = Snapshot(root.getString("sessionId"), root.getString("scope"), (0 until rows.length()).map {
-                rows.getJSONObject(it).let { row -> CompanionBubbleChat.Message(row.getString("role"), row.getString("text"), row.optJSONArray("images")?.let { images -> (0 until images.length()).map { images.getString(it) } } ?: emptyList()) }
+                rows.getJSONObject(it).let { row ->
+                    val citations = row.optJSONArray("citations")?.let { values -> (0 until values.length()).map { values.getJSONObject(it) }.map { citation ->
+                        CompanionBubbleChat.Citation(citation.getString("id"), citation.getString("revision"), citation.getString("displayName"), citation.optString("documentId").takeIf(String::isNotBlank), citation.optString("originalId").takeIf(String::isNotBlank), citation.getInt("chunkIndex"), citation.getInt("chunkCount"), citation.optString("parsingCoverage", "unknown"))
+                    } } ?: emptyList()
+                    CompanionBubbleChat.Message(row.getString("role"), row.getString("text"), row.optJSONArray("images")?.let { images -> (0 until images.length()).map { images.getString(it) } } ?: emptyList(), citations)
+                }
             })
             encode(snapshot)
             return snapshot

@@ -46,13 +46,33 @@ internal object CompanionBubbleChatPolicy {
         }.trim()
         return InlineImages(cleaned.ifBlank { if (ids.isNotEmpty()) "[图片]" else text }, ids.distinct())
     }
+    /** Extract stable, bounded knowledge references from a tool result without retaining its excerpt. */
+    fun citationsFromToolResult(text: String): List<CompanionBubbleChat.Citation> {
+        val root = runCatching { JSONObject(text) }.getOrNull() ?: return emptyList()
+        val rows = root.optJSONArray("items") ?: JSONArray().put(root)
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val id = row.optString("id")
+            val revision = row.optString("revision")
+            if (!id.matches(Regex("[a-f0-9-]{36}")) || !revision.matches(Regex("[a-f0-9]{64}"))) return@mapNotNull null
+            val documentId = row.optString("documentId").takeIf { it.matches(Regex("[a-f0-9]{64}")) }
+            val originalId = row.optString("originalId").takeIf { it.matches(Regex("[a-f0-9]{64}")) }
+            // Memory and status results also have id/revision; only knowledge responses carry a display-name field or file linkage.
+            if (!row.has("displayName") && documentId == null && originalId == null) return@mapNotNull null
+            val display = row.optString("displayName").replace(Regex("[\\p{Cc}\\s]+"), " ").trim().take(160).ifBlank { "本地资料" }
+            val chunkIndex = row.optInt("chunkIndex", 0).takeIf { it >= 0 } ?: return@mapNotNull null
+            val chunkCount = row.optInt("chunkCount", 1).takeIf { it in 1..10_000 && chunkIndex < it } ?: return@mapNotNull null
+            CompanionBubbleChat.Citation(id, revision, display, documentId, originalId, chunkIndex, chunkCount, row.optString("parsingCoverage", "unknown").take(64))
+        }.distinctBy { "${it.id}:${it.revision}" }.take(6)
+    }
 
 }
 
 /** Uses the same authenticated local Harness and its selected model as the main conversation. */
 internal class CompanionBubbleChat(private val context: Context, restored: CompanionBubbleHistory.Snapshot? = null) {
-    data class Message(val role: String, val text: String, val images: List<String> = emptyList())
-    data class Reply(val text: String, val images: List<String>)
+    data class Citation(val id: String, val revision: String, val displayName: String, val documentId: String?, val originalId: String?, val chunkIndex: Int, val chunkCount: Int, val parsingCoverage: String)
+    data class Message(val role: String, val text: String, val images: List<String> = emptyList(), val citations: List<Citation> = emptyList())
+    data class Reply(val text: String, val images: List<String>, val citations: List<Citation>)
     private var sessionId: String? = restored?.sessionId
     private var sessionAccess: HarnessAccess? = null
     private var sessionScope: String? = restored?.scope
@@ -152,6 +172,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
         val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val answer = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val images = java.util.concurrent.atomic.AtomicReference<List<String>>(emptyList())
+        val citations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
         val streamId = java.util.UUID.randomUUID().toString()
         val http = okhttp3.OkHttpClient.Builder().readTimeout(610, java.util.concurrent.TimeUnit.SECONDS).build()
         val basic = java.util.Base64.getEncoder().encodeToString("${access.username}:${access.password}".toByteArray(Charsets.UTF_8))
@@ -182,6 +203,10 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                                 content.optJSONObject(j)?.takeIf { it.optString("type") == "text" }?.optString("text")
                             }.filter { it.isNotBlank() }
                             if (event.optString("type") == "assistant/message" && parts.isNotEmpty()) answer.set(parts.joinToString("\n"))
+                            if (event.optString("type") == "tool/result") {
+                                val found = parts.flatMap(CompanionBubbleChatPolicy::citationsFromToolResult)
+                                if (found.isNotEmpty()) citations.set((citations.get() + found).distinctBy { "${it.id}:${it.revision}" }.take(6))
+                            }
                             val refs = (0 until content.length()).mapNotNull { j ->
                                 val item = content.optJSONObject(j) ?: return@mapNotNull null
                                 if (item.optString("type") != "image") return@mapNotNull null
@@ -212,7 +237,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             failure.get()?.let { error(it) }
             val raw = answer.get() ?: if (images.get().isNotEmpty()) "[图片]" else error("模型没有返回文字，请检查主对话")
             val parsed = CompanionBubbleChatPolicy.parseInlineImages(raw)
-            return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(parsed.text), (images.get() + parsed.images).distinct().take(6))
+            return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(parsed.text), (images.get() + parsed.images).distinct().take(6), citations.get())
         } finally {
             socket.cancel()
             http.dispatcher.executorService.shutdown()
