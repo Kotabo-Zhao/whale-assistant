@@ -16,6 +16,27 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(AndroidJUnit4::class)
 class SharedMemoryJobsInstrumentedTest {
+    @Test fun userCancellationPreventsCommitUntilExplicitResume() {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        val tag = UUID.randomUUID().toString()
+        val dir = File(base.cacheDir, "shared-cancel-$tag").apply { check(mkdirs()) }
+        val context = object : ContextWrapper(base) {
+            override fun getApplicationContext(): Context = this
+            override fun getNoBackupFilesDir(): File = dir
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences = base.getSharedPreferences("$tag-$name", mode)
+        }
+        val knowledge = CompanionKnowledgeStore(context)
+        assertTrue(knowledge.add("cancelled source"))
+        val row = knowledge.search("").getJSONObject(0); val id = row.getString("id"); val text = row.getString("text")
+        SharedMemoryJobs.enqueueWithoutSchedule(context, id, text, "share:" + CompanionMemorySuppression.digest(text))
+        val hash = CompanionMemorySuppression.digest(text)
+        assertTrue(SharedMemoryJobs.cancelRecord(context, id, hash))
+        assertEquals("cancelled", SharedMemoryJobs.status(context, id, hash).getString("state"))
+        assertEquals(0L, SharedMemoryJobs.pendingCount(context))
+        assertTrue(SharedMemoryJobs.resumeRecord(context, id, text))
+        assertEquals("queued", SharedMemoryJobs.status(context, id, hash).getString("state"))
+    }
+
     @Test fun chunksAtomicCompletionAndUnifiedRestore() {
         val base=InstrumentationRegistry.getInstrumentation().targetContext
         val tag=UUID.randomUUID().toString()

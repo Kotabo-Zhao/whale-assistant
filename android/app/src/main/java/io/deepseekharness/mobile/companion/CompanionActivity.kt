@@ -1198,6 +1198,7 @@ class CompanionActivity : AppCompatActivity() {
                         "等待或重试中；已重试 $attempts 次。下次：$time。" + if (error.isEmpty()) "" else " 上次原因：$error。"
                     }
                     "completed" -> "后台整理已结束；原文件的解析范围仍可能不完整。"
+                    "cancelled" -> "此版本的资料整理已由你停止；不会因后台扫描自动重新建立。"
                     else -> "没有此版本的后台整理任务；这不代表资料不存在。"
                 }
                 val builder = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("资料处理状态")
@@ -1212,6 +1213,29 @@ class CompanionActivity : AppCompatActivity() {
                         retried
                     }) { result ->
                         android.widget.Toast.makeText(this, if (result.getOrNull() == true) "已安排重试，系统可能延迟。" else "任务已变化或无法安排重试。", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+                if (pending) builder.setNeutralButton("停止整理") { _, _ ->
+                    runMemoryIo("正在停止资料整理…", {
+                        var cancelled = false
+                        check(CompanionKnowledgeStore(this).withUnchangedRecord(id, text) {
+                            cancelled = SharedMemoryJobs.cancelRecord(this, id, hash)
+                        })
+                        cancelled
+                    }) { result ->
+                        android.widget.Toast.makeText(this, if (result.isSuccess) "已停止该版本的资料整理；需要时可再次打开资料并重试。" else "任务已变化或无法停止。", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+                if (state.optString("state") == "cancelled" && state.optBoolean("memoryEnabled")) builder.setPositiveButton("重新整理") { _, _ ->
+                    runMemoryIo("正在重新安排资料整理…", {
+                        var resumed = false
+                        check(CompanionKnowledgeStore(this).withUnchangedRecord(id, text) {
+                            resumed = SharedMemoryJobs.resumeRecord(this, id, text)
+                            if (resumed) SharedMemoryJobs.schedule(this, 0)
+                        })
+                        resumed
+                    }) { result ->
+                        android.widget.Toast.makeText(this, if (result.getOrNull() == true) "已重新安排资料整理，系统可能延迟。" else "任务已变化或无法重新安排。", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
                 builder.show()

@@ -26,6 +26,8 @@ internal object SharedMemoryJobs {
         if ("attempts" !in columns) db.execSQL("ALTER TABLE shared_jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
         if ("next_at" !in columns) db.execSQL("ALTER TABLE shared_jobs ADD COLUMN next_at INTEGER NOT NULL DEFAULT 0")
         db.execSQL("CREATE TABLE IF NOT EXISTS shared_completed (record_id TEXT NOT NULL, text_hash TEXT NOT NULL, PRIMARY KEY(record_id,text_hash))")
+        // User cancellation is durable: bootstrap must not silently recreate a job the user stopped.
+        db.execSQL("CREATE TABLE IF NOT EXISTS shared_cancelled (record_id TEXT NOT NULL, text_hash TEXT NOT NULL, PRIMARY KEY(record_id,text_hash))")
         db.execSQL("CREATE TABLE IF NOT EXISTS shared_jobs_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         val migrated = db.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='legacy_imported'", null).use { it.moveToFirst() }
         if (!migrated) {
@@ -56,7 +58,8 @@ internal object SharedMemoryJobs {
     private fun enqueueRow(db: SQLiteDatabase, id: String, text: String, event: String) {
         require(id.matches(Regex("[a-f0-9-]{36}")) && event.matches(Regex("share:[a-f0-9]{64}")))
         db.execSQL("INSERT OR IGNORE INTO knowledge_source_events(record_id,event_id) VALUES (?,?)", arrayOf(id,event))
-        db.execSQL("INSERT OR IGNORE INTO shared_jobs(record_id,text_hash,event_id) VALUES (?,?,?)", arrayOf(id, CompanionMemorySuppression.digest(text), event))
+        val hash = CompanionMemorySuppression.digest(text)
+        db.execSQL("INSERT OR IGNORE INTO shared_jobs(record_id,text_hash,event_id) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM shared_cancelled WHERE record_id=? AND text_hash=?)", arrayOf(id, hash, event, id, hash))
     }
     /** Also catches an interrupted share between saving the record and enqueueing it. */
     fun bootstrap(context: Context) {
@@ -82,8 +85,9 @@ internal object SharedMemoryJobs {
                                 if (text.isBlank()) continue
                                 val hash = CompanionMemorySuppression.digest(text)
                                 val done = db.rawQuery("SELECT 1 FROM shared_completed WHERE record_id=? AND text_hash=?", arrayOf(id, hash)).use { it.moveToFirst() }
+                                val cancelled = db.rawQuery("SELECT 1 FROM shared_cancelled WHERE record_id=? AND text_hash=?", arrayOf(id, hash)).use { it.moveToFirst() }
                                 val pending = db.rawQuery("SELECT 1 FROM shared_jobs WHERE record_id=? AND text_hash=?", arrayOf(id, hash)).use { it.moveToFirst() }
-                                if (!done && !pending) enqueueRow(db, id, text, stableEvent(text))
+                                if (!done && !cancelled && !pending) enqueueRow(db, id, text, stableEvent(text))
                             }
                             db.setTransactionSuccessful()
                         } finally { db.endTransaction() }
@@ -146,7 +150,8 @@ internal object SharedMemoryJobs {
                 }
             }
             val completed = db.rawQuery("SELECT 1 FROM shared_completed WHERE record_id=? AND text_hash=?", arrayOf(id, textHash)).use { it.moveToFirst() }
-            JSONObject().put("state", if (completed) "completed" else "not_queued")
+            val cancelled = db.rawQuery("SELECT 1 FROM shared_cancelled WHERE record_id=? AND text_hash=?", arrayOf(id, textHash)).use { it.moveToFirst() }
+            JSONObject().put("state", when { completed -> "completed"; cancelled -> "cancelled"; else -> "not_queued" })
                 .put("retryable", false)
         }
     }
@@ -156,6 +161,31 @@ internal object SharedMemoryJobs {
                 update.bindString(1, id); update.bindString(2, textHash)
                 update.executeUpdateDelete() > 0
             }
+        }
+    }
+    /** Cancels this exact record version. A concurrent model reply cannot commit because commitSharedJob rechecks the row. */
+    internal fun cancelRecord(context: Context, id: String, textHash: String): Boolean = synchronized(lock) {
+        database(context.applicationContext).use { db ->
+            db.beginTransaction()
+            try {
+                val queued = db.delete("shared_jobs", "record_id=? AND text_hash=?", arrayOf(id, textHash))
+                db.execSQL("INSERT OR IGNORE INTO shared_cancelled(record_id,text_hash) VALUES (?,?)", arrayOf(id, textHash))
+                db.setTransactionSuccessful()
+                queued > 0
+            } finally { db.endTransaction() }
+        }
+    }
+    /** An explicit user retry revokes a previous cancellation and recreates only this unchanged record version. */
+    internal fun resumeRecord(context: Context, id: String, text: String): Boolean = synchronized(lock) {
+        val hash = CompanionMemorySuppression.digest(text)
+        database(context.applicationContext).use { db ->
+            db.beginTransaction()
+            try {
+                val cancelled = db.delete("shared_cancelled", "record_id=? AND text_hash=?", arrayOf(id, hash)) > 0
+                if (cancelled) enqueueRow(db, id, text, stableEvent(text))
+                db.setTransactionSuccessful()
+                cancelled
+            } finally { db.endTransaction() }
         }
     }
     internal data class Job(val id: String, val hash: String, val event: String, val generation: Long = 0)
