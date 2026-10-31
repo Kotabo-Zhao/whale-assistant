@@ -157,15 +157,33 @@ internal class CompanionDashboard(private val context: Context) {
                 val id = text("id")
                 val expectedState = text("expectedState")
                 val expectedRevision = text("expectedRevision")
-                val next = text("state")
-                require(expectedState in setOf("candidate", "open", "done", "cancelled") && next in setOf("open", "done", "cancelled")) { "事项状态无效" }
-                val updated = UnifiedUnderstandingStore.open(context).use { data ->
-                    val current = data.queue.item(id) ?: return@use false
-                    require(current.state == expectedState && CompanionTaskModel.revision(current) == expectedRevision) { "事项已变化，请刷新后重试" }
-                    data.queue.updateItem(id, expectedState, next)
+                val next = request.optString("state").takeIf { it.isNotBlank() }
+                val hasReminder = request.has("reminderAtMs") && !request.isNull("reminderAtMs")
+                val reminderAtMs = when (val value = request.opt("reminderAtMs")) {
+                    is Int -> value.toLong()
+                    is Long -> value
+                    is Double -> value.toLong().takeIf { it.toDouble() == value }
+                    else -> null
                 }
-                if (updated && next in setOf("done", "cancelled")) runCatching { CompanionReminder(context).removeLinked(id) }
-                success(updated)
+                require(expectedState in setOf("candidate", "open", "done", "cancelled")) { "事项状态无效" }
+                require((next != null) xor hasReminder) { "请只选择一种事项操作" }
+                require(next == null || next in setOf("open", "done", "cancelled")) { "事项状态无效" }
+                require(!hasReminder || reminderAtMs != null) { "提醒时间无效" }
+                val changed = UnifiedUnderstandingStore.open(context).use { data ->
+                    val current = data.queue.item(id) ?: return@use null
+                    require(current.state == expectedState && CompanionTaskModel.revision(current) == expectedRevision) { "事项已变化，请刷新后重试" }
+                    val updated = if (reminderAtMs != null) data.queue.setItemReminder(id, expectedState, reminderAtMs, System.currentTimeMillis())
+                    else data.queue.updateItem(id, expectedState, checkNotNull(next))
+                    if (updated) data.queue.item(id) else null
+                } ?: throw IllegalStateException("事项已变化，请刷新后重试")
+                try {
+                    if (reminderAtMs != null) CompanionReminder(context).upsertLinked(changed.id, changed.title, reminderAtMs, changed.reminderRevision)
+                    else if (next in setOf("done", "cancelled")) CompanionReminder(context).removeLinked(id)
+                } catch (e: Exception) {
+                    if (reminderAtMs != null) runCatching { UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(changed.id, reminderAtMs, changed.reminderRevision) } }
+                    throw IllegalStateException("事项已更新，但关联提醒未能安排；已撤销本次提醒状态", e)
+                }
+                success(true)
             }
             "quietHoursSet" -> {
                 val start = request.getInt("start"); val end = request.getInt("end")

@@ -2,6 +2,7 @@
 export type CompanionRequest =
   | { operation: 'memoryList' | 'reminderList' | 'taskList'; query?: string }
   | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; state: 'open' | 'done' | 'cancelled' }
+  | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; reminderAtMs: number }
   | { operation: 'memoryPage'; before: number; revision: number }
   | { operation: 'knowledgeList'; query?: string; offset?: number; source?: 'shared_text' | 'text_file' | 'original' | 'image_analysis'; coverage?: 'not_parsed' | 'partial' | 'extracted_text' | 'model_description' }
   | { operation: 'overview' | 'memorySuggestionsReset' | 'memoryResumeAutomatic' }

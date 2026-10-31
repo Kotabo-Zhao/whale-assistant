@@ -10,4 +10,7 @@
 .assistant-task-card > div:first-child { display: grid; min-width: 0; gap: 5px; }
 .assistant-task-card strong, .assistant-task-card small { overflow-wrap: anywhere; }
 .assistant-task-card small { color: var(--card-muted, var(--muted)); }
+.assistant-task-reminder { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; width: 100%; }
+.assistant-task-reminder label { display: grid; gap: 4px; font-size: .82rem; color: var(--card-muted, var(--muted)); }
+.assistant-task-reminder input, .assistant-task-reminder button { min-height: 40px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface); color: var(--card-ink, var(--ink)); padding: 7px 10px; }
 @media (max-width: 520px) { .assistant-task-card { align-items: stretch; flex-direction: column; } .assistant-task-actions button { min-height: 44px; } }
