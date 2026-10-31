@@ -93,6 +93,20 @@ it('资料来源和解析范围筛选交由本地分页查询，加载更多保�
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeList', query: '', offset: 20, source: 'text_file', coverage: 'extracted_text' }))
   expect(await screen.findByText('第二页内容')).toBeInTheDocument()
 })
+it('资料处理状态与重试始终携带当前资料文本', async () => {
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => {
+    if (request.operation === 'knowledgeList') return Promise.resolve({ items: [{ id: 'k1', text: '等待处理的资料' }] })
+    if (request.operation === 'knowledgeProcessingStatus') return Promise.resolve({ state: 'queued', attempts: 2, nextAttemptAtMs: null, lastErrorCode: 'network', memoryEnabled: true })
+    return Promise.resolve({ ok: true })
+  })
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  fireEvent.click(await screen.findByRole('button', { name: '处理状态' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeProcessingStatus', id: 'k1', expectedText: '等待处理的资料' }))
+  expect(await screen.findByText('等待或重试中；已重试 2 次。下次：等待系统调度。 上次原因：网络不可用。')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '重试' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeProcessingRetry', id: 'k1', expectedText: '等待处理的资料' }))
+})
 it('资料原件删除要求同一资料、原件和当前文本三项标识，并且不提供撤销', async () => {
   const originalId = 'a'.repeat(64)
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'

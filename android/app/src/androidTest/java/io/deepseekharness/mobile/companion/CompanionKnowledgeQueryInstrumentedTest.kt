@@ -58,6 +58,16 @@ class CompanionKnowledgeQueryInstrumentedTest {
                 .put("query", "").put("source", "original").put("coverage", "not_parsed"))
             assertEquals(20, originals.getJSONArray("items").length())
             assertEquals("未解析.pdf", originals.getJSONArray("items").getJSONObject(0).getString("displayName"))
+            assertTrue(store.add("等待处理的资料", "text_file"))
+            val pending = store.searchPage("等待处理的资料", 0, 1).first.getJSONObject(0)
+            val processing = dashboard.execute(JSONObject().put("operation", "knowledgeProcessingStatus")
+                .put("id", pending.getString("id")).put("expectedText", pending.getString("text")))
+            assertEquals("not_queued", processing.getString("state"))
+            val staleStatusFailure = runCatching {
+                dashboard.execute(JSONObject().put("operation", "knowledgeProcessingStatus")
+                    .put("id", pending.getString("id")).put("expectedText", "已变更"))
+            }.exceptionOrNull()
+            assertTrue(staleStatusFailure is IllegalStateException)
             val invalidFilterFailure = runCatching {
                 dashboard.execute(JSONObject().put("operation", "knowledgeList").put("source", "unknown"))
             }.exceptionOrNull()

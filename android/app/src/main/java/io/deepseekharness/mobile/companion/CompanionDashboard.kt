@@ -23,6 +23,14 @@ internal class CompanionDashboard(private val context: Context) {
         val op = request.getString("operation")
         fun text(key: String) = request.getString(key)
         fun success(ok: Boolean): JSONObject { require(ok) { "内容已变化，请刷新后重试" }; return JSONObject().put("ok", true) }
+        fun withCurrentKnowledge(action: (String, String, String) -> Boolean): JSONObject {
+            val id = text("id")
+            val expectedText = text("expectedText")
+            val hash = CompanionMemorySuppression.digest(expectedText)
+            var completed = false
+            check(knowledge.withUnchangedRecord(id, expectedText) { completed = action(id, expectedText, hash) }) { "资料已变化，请刷新后重试" }
+            return success(completed)
+        }
         return when (op) {
             "overview" -> {
                 val store = CompanionStore(context)
@@ -100,6 +108,30 @@ internal class CompanionDashboard(private val context: Context) {
             "knowledgeEdit" -> success(knowledge.edit(text("id"), text("expectedText"), text("text")))
             "knowledgeDelete" -> success(knowledge.remove(text("id"), text("expectedText")))
             "knowledgeUndoDelete" -> success(knowledge.undoRemove(text("id")))
+            "knowledgeProcessingStatus" -> {
+                val id = text("id")
+                val expectedText = text("expectedText")
+                var status: JSONObject? = null
+                check(knowledge.withUnchangedRecord(id, expectedText) {
+                    status = SharedMemoryJobs.status(context, id, CompanionMemorySuppression.digest(expectedText))
+                }) { "资料已变化，请刷新后重试" }
+                checkNotNull(status).put("memoryEnabled", memory.enabled)
+            }
+            "knowledgeProcessingRetry" -> {
+                require(memory.enabled) { "长期记忆整理已关闭" }
+                withCurrentKnowledge { id, _, hash ->
+                    SharedMemoryJobs.retryRecord(context, id, hash).also { if (it) SharedMemoryJobs.schedule(context, 0) }
+                }
+            }
+            "knowledgeProcessingCancel" -> withCurrentKnowledge { id, _, hash ->
+                SharedMemoryJobs.cancelRecord(context, id, hash)
+            }
+            "knowledgeProcessingResume" -> {
+                require(memory.enabled) { "长期记忆整理已关闭" }
+                withCurrentKnowledge { id, value, _ ->
+                    SharedMemoryJobs.resumeRecord(context, id, value).also { if (it) SharedMemoryJobs.schedule(context, 0) }
+                }
+            }
             "knowledgeRemoveOriginal" -> {
                 val removal = knowledge.removeOriginal(text("originalId"), text("id"), text("expectedText"))
                 require(removal.records > 0) { "资料已变化，请刷新后重试" }

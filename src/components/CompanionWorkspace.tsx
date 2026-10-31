@@ -9,6 +9,7 @@ type Row = CompanionRow
 type Preview = { token: string; items: Row[]; skipped: number }
 type KnowledgeSource = 'shared_text' | 'text_file' | 'original' | 'image_analysis'
 type KnowledgeCoverage = 'not_parsed' | 'partial' | 'extracted_text' | 'model_description'
+type KnowledgeProcessing = { id: string; expectedText: string; state: 'queued' | 'completed' | 'cancelled' | 'not_queued'; attempts: number; nextAttemptAtMs: number | null; lastErrorCode: string | null; memoryEnabled: boolean }
 const rows = companionRows
 const expected = (row: Row) => typeof row._review === 'string' ? row._review : ''
 const originalId = (row: Row) => typeof row.originalId === 'string' && /^[a-f0-9]{64}$/.test(row.originalId) ? row.originalId : null
@@ -17,6 +18,8 @@ const parseMinute = (value: string) => { const [hour, minute] = value.split(':')
 const memoryCategory = (row: Row) => row.status === 'pending' ? '待确认' : row.source === 'shared_understanding' ? '分享内容' : row.source === 'auto_notification' || row.source === 'auto_notification_group' || row.source === 'user_notification' ? '通知整理' : row.source === 'auto_usage' ? '使用习惯' : row.source === 'auto_understanding' || row.source === 'user_understanding' ? '后台理解' : '手动与对话记忆'
 const knowledgeSourceLabel = (source: unknown) => source === 'shared_text' ? '分享文本' : source === 'text_file' ? '文档/文本' : source === 'original' ? '已保存原件' : source === 'image_analysis' ? '图片描述' : '来源未知'
 const knowledgeCoverageLabel = (coverage: unknown) => coverage === 'not_parsed' ? '尚未解析' : coverage === 'partial' ? '部分解析' : coverage === 'extracted_text' ? '已提取文字' : coverage === 'model_description' ? '模型图片描述' : '覆盖范围未知'
+const processingErrorLabel = (code: string | null) => code === 'credentials' ? '模型凭据不可用或被拒绝' : code === 'configuration' ? '后台模型尚未配置' : code === 'rate_limited' ? '模型服务限流' : code === 'service_unavailable' ? '模型服务暂不可用' : code === 'request_rejected' ? '模型服务拒绝请求，请检查模型兼容性' : code === 'timeout' ? '请求超时' : code === 'network' ? '网络不可用' : code === 'invalid_model_output' ? '模型返回的数据不符合要求' : code === 'processing_failed' ? '处理未完成' : null
+const processingDescription = (value: KnowledgeProcessing) => !value.memoryEnabled ? '记忆整理已关闭；重新开启后才能继续处理。' : value.state === 'queued' ? `等待或重试中；已重试 ${value.attempts} 次。下次：${value.nextAttemptAtMs !== null && value.nextAttemptAtMs > Date.now() ? new Date(value.nextAttemptAtMs).toLocaleString() : '等待系统调度'}。${processingErrorLabel(value.lastErrorCode) ? ` 上次原因：${processingErrorLabel(value.lastErrorCode)}。` : ''}` : value.state === 'completed' ? '后台整理已结束；原文件的解析范围仍可能不完整。' : value.state === 'cancelled' ? '此版本的资料整理已停止；后台扫描不会自动重新建立。' : '没有此版本的后台整理任务；这不代表资料不存在。'
 const days = ['每天', '每周一', '每周二', '每周三', '每周四', '每周五', '每周六', '每周日']
 
 export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPanel?: Panel }) {
@@ -53,13 +56,14 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [memoryOrder, setMemoryOrder] = useState<'recent' | 'oldest' | 'source' | 'type'>('recent')
   const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource | 'all'>('all')
   const [knowledgeCoverage, setKnowledgeCoverage] = useState<KnowledgeCoverage | 'all'>('all')
+  const [knowledgeProcessing, setKnowledgeProcessing] = useState<KnowledgeProcessing | null>(null)
   const pending = useRef(false)
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
   useEffect(() => {
     let live = true
     if (previousPanel.current !== panel) {
-      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setKnowledgeSource('all'); setKnowledgeCoverage('all')
+      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setKnowledgeSource('all'); setKnowledgeCoverage('all'); setKnowledgeProcessing(null)
       previousPanel.current = panel
     }
     setLoading(true); setLoadFailed(false)
@@ -110,6 +114,19 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     if (undoKnowledge === null) return
     const result = await run({ operation: 'knowledgeUndoDelete', id: undoKnowledge.id }, '资料已恢复；此前已抑制的派生记忆不会自动恢复。')
     if (result) setUndoKnowledge(null)
+  }
+  const readKnowledgeProcessing = async (row: Row) => {
+    setBusy(true); setMessage('')
+    try {
+      const result = await runtimeBridge.companionDashboard({ operation: 'knowledgeProcessingStatus', id: row.id, expectedText: row.text })
+      const state = result.state
+      if (state !== 'queued' && state !== 'completed' && state !== 'cancelled' && state !== 'not_queued') throw new Error('invalid status')
+      setKnowledgeProcessing({ id: row.id, expectedText: row.text, state, attempts: Number.isSafeInteger(result.attempts) && (result.attempts as number) >= 0 ? result.attempts as number : 0, nextAttemptAtMs: Number.isSafeInteger(result.nextAttemptAtMs) && (result.nextAttemptAtMs as number) >= 0 ? result.nextAttemptAtMs as number : null, lastErrorCode: typeof result.lastErrorCode === 'string' ? result.lastErrorCode : null, memoryEnabled: result.memoryEnabled === true })
+    } catch { setMessage('资料已变化或无法读取处理状态，请重新查看。') } finally { setBusy(false) }
+  }
+  const changeKnowledgeProcessing = async (operation: 'knowledgeProcessingRetry' | 'knowledgeProcessingCancel' | 'knowledgeProcessingResume', value: KnowledgeProcessing) => {
+    const result = await run({ operation, id: value.id, expectedText: value.expectedText }, operation === 'knowledgeProcessingRetry' ? '已安排重试，系统可能延迟。' : operation === 'knowledgeProcessingCancel' ? '已停止该版本的资料整理。' : '已重新安排资料整理，系统可能延迟。')
+    if (result) setKnowledgeProcessing(null)
   }
   const startMemoryReview = async (action: 'add' | 'edit' | 'approve', row?: Row) => {
     const value = action === 'approve' ? row?.text ?? '' : text.trim()
@@ -254,8 +271,15 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           </details>
           {revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
-      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</strong><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}{typeof row.displayName === 'string' && row.displayName !== '' ? ` · ${row.text.slice(0, 120)}` : ''}</small></div><div className="workspace-card-actions">
-        <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>
+      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</strong><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}{typeof row.displayName === 'string' && row.displayName !== '' ? ` · ${row.text.slice(0, 120)}` : ''}</small>
+        {knowledgeProcessing?.id === row.id && <div className="workspace-review"><strong>资料处理状态</strong><p>{processingDescription(knowledgeProcessing)}</p><div className="workspace-card-actions">
+          {knowledgeProcessing.state === 'queued' && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingRetry', knowledgeProcessing) }}>重试</button>}
+          {knowledgeProcessing.state === 'queued' && <button type="button" className="button-danger-quiet" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingCancel', knowledgeProcessing) }}>停止整理</button>}
+          {knowledgeProcessing.state === 'cancelled' && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingResume', knowledgeProcessing) }}>重新整理</button>}
+          <button type="button" onClick={() => setKnowledgeProcessing(null)}>收起</button>
+        </div></div>}</div><div className="workspace-card-actions">
+        <button type="button" onClick={() => { void readKnowledgeProcessing(row) }}>处理状态</button>
+        {row.source !== 'original' && <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>}
         <button type="button" onClick={() => { void deleteKnowledge(row) }}>删除</button>
         {originalId(row) !== null && <button type="button" className="button-danger-quiet" onClick={() => { void deleteKnowledgeOriginal(row) }}>永久删除整份原件</button>}
       </div></article>)}</div>{knowledgeNextOffset !== null && <button className="button button-secondary" type="button" disabled={busy || loadingMoreKnowledge} onClick={() => { void loadMoreKnowledge() }}>{loadingMoreKnowledge ? '正在加载资料…' : '加载更多资料'}</button>}</>}
