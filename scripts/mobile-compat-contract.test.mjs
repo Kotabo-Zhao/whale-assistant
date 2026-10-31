@@ -448,6 +448,7 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
       'mobile_knowledge_retry',
       'mobile_notification_search',
       'mobile_calendar_today',
+      'mobile_companion_search',
       'mobile_companion_capabilities',
       'mobile_memory_search',
       'mobile_memory_hybrid_search',

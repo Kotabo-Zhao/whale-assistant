@@ -118,6 +118,13 @@ test('事项工具携带调用会话并限制检索参数', async t => {
   await assert.rejects(tool.execute({ query: '', sourceKind: 'unknown' }, memoryExec), /TASK_INPUT_INVALID/)
 })
 
+test('统一检索只透传受控类别与时间边界', async t => {
+  const f = fixture(t, () => ok('{"memory":{"items":[]}}'))
+  await f.tools.get('mobile_companion_search').execute({ query: '咖啡', kinds: ['memory', 'knowledge'], fromMs: 100, toMs: 200 }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[0].param), { query: '咖啡', kinds: ['memory', 'knowledge'], fromMs: 100, toMs: 200, callerSession: virtualSession })
+  await assert.rejects(f.tools.get('mobile_companion_search').execute({ query: '咖啡', kinds: ['memory', 'memory'] }, memoryExec), /COMPANION_SEARCH_INPUT_INVALID/)
+})
+
 test('事项更新必须携带读取时状态，并限制为单项状态或提醒操作', async t => {
   const f = fixture(t, () => ok('{"id":"00000000-0000-0000-0000-000000000001"}'))
   const tool = f.tools.get('mobile_task_update')
