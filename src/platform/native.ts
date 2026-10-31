@@ -41,6 +41,7 @@ import {
 } from './types'
 import {
   assertBase64Input,
+  assertHarnessSessionId,
   assertDiagnosticRetentionDays,
   assertMailboxSubdirectory,
   assertRuntimeVersionTarget,
@@ -147,6 +148,7 @@ interface NativeRuntimePlugin {
   sessionList(options?: { cursor?: string }): Promise<unknown>
   sessionWorkspace(): Promise<unknown>
   companionSessionLinks(): Promise<unknown>
+  resumeCompanionSession(options: { sessionId: string }): Promise<unknown>
   updateSessionWorkspace(options: { id: string; title?: string | null; group?: string | null; pinned?: boolean; archived?: boolean }): Promise<unknown>
   getRuntimeSessionSnapshotState(): Promise<unknown>
   createRuntimeSessionSnapshot(): Promise<unknown>
@@ -680,6 +682,10 @@ function createNativeBridge(): RuntimeBridge {
     },
     getSessionWorkspace: () => NativeRuntime.sessionWorkspace().then(validateRuntimeSessionWorkspace),
     getCompanionSessionLinks: () => NativeRuntime.companionSessionLinks().then(validateRuntimeCompanionSessionLinks),
+    resumeCompanionSession: sessionId => {
+      assertHarnessSessionId(sessionId)
+      return NativeRuntime.resumeCompanionSession({ sessionId }).then(() => undefined)
+    },
     updateSessionWorkspace: update => NativeRuntime.updateSessionWorkspace(update).then(validateRuntimeSessionWorkspace),
     // 快照标识的形态由原生侧把关（`RUNTIME_SNAPSHOT_ID_INVALID`）：前端原样传过去，
     // 不在这里另造一套错误文案，避免两边对「什么算合法 id」说法不一。

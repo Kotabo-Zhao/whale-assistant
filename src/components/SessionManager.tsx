@@ -118,6 +118,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   const [workspace, setWorkspace] = useState<RuntimeSessionWorkspaceEntry[]>([])
   const [companionSessionIds, setCompanionSessionIds] = useState<Set<string>>(new Set())
   const [companionAnchors, setCompanionAnchors] = useState<Map<string, RuntimeCompanionSessionAnchor[]>>(new Map())
+  const [companionHandoff, setCompanionHandoff] = useState<{ sessionId: string; status: 'sending' | 'accepted' | 'failed' } | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsedPeriods, setCollapsedPeriods] = useState<Set<SessionPeriod>>(new Set())
@@ -290,6 +291,17 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
     setLocalSessions(current => current.filter(session => session.id !== id))
   }
 
+  /** A user chooses this explicitly; only the opaque session id crosses the WebView bridge. */
+  const resumeInCompanion = (session: SessionEntry): void => {
+    if (disabled || session.local === true) return
+    setCompanionHandoff({ sessionId: session.id, status: 'sending' })
+    runtimeBridge.resumeCompanionSession(session.id).then(() => {
+      setCompanionHandoff({ sessionId: session.id, status: 'accepted' })
+    }).catch(() => {
+      setCompanionHandoff({ sessionId: session.id, status: 'failed' })
+    })
+  }
+
   return (
     <div className={embedded ? 'session-manager-embedded' : 'screen session-screen'}>
       {!embedded && <div className="screen-heading management-heading session-heading">
@@ -416,6 +428,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
                 </button>
               )}
               {session.local !== true && <>
+                <button className="icon-button session-workspace-action" type="button" aria-label={`在鲸鱼娘继续会话 ${session.title || '未命名会话'}`} title="在鲸鱼娘继续" disabled={disabled || companionHandoff?.sessionId === session.id && companionHandoff.status === 'sending'} onClick={() => resumeInCompanion(session)}><MessageCircle size={17} /></button>
                 <button className="icon-button session-workspace-action" type="button" aria-label={`重命名会话 ${session.title || '未命名会话'}`} title="重命名" onClick={() => renameSession(session)}><Pencil size={17} /></button>
                 <button className="icon-button session-workspace-action" type="button" aria-label={`分组会话 ${session.title || '未命名会话'}`} title="分组" onClick={() => groupSession(session)}><FolderPen size={17} /></button>
                 <button className="icon-button session-workspace-action" type="button" aria-label={`${session.pinned ? '取消置顶' : '置顶'}会话 ${session.title || '未命名会话'}`} title={session.pinned ? '取消置顶' : '置顶'} onClick={() => writeWorkspace({ id: session.id, pinned: !session.pinned })}>
@@ -426,6 +439,11 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
                 </button>
               </>}
             </div>
+            {session.local !== true && companionHandoff?.sessionId === session.id && <p className="session-handoff-note" role="status">{companionHandoff.status === 'sending'
+              ? '正在交给鲸鱼娘继续…'
+              : companionHandoff.status === 'accepted'
+                ? '已在鲸鱼娘继续同一会话；主对话正文不会复制到桌宠。'
+                : '鲸鱼娘当前不可用或正在回复；主对话未被改动。'}</p>}
           </article>
           ))}
         </div>)}

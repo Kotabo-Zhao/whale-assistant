@@ -9,13 +9,14 @@ import type { RuntimeSessionListResult } from '../platform/types'
  * （实测报 `ReferenceError: Cannot access 'listSessions' before initialization`），
  * 所以桩本身也要用 `vi.hoisted` 一起提前建好。
  */
-const { listSessions, getSessionWorkspace, getCompanionSessionLinks, updateSessionWorkspace } = vi.hoisted(() => ({
+const { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace } = vi.hoisted(() => ({
   listSessions: vi.fn<() => Promise<RuntimeSessionListResult>>(),
   getSessionWorkspace: vi.fn().mockResolvedValue({ entries: [] }),
   getCompanionSessionLinks: vi.fn().mockResolvedValue({ sessionIds: [], anchors: [] }),
+  resumeCompanionSession: vi.fn().mockResolvedValue(undefined),
   updateSessionWorkspace: vi.fn(),
 }))
-vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions, getSessionWorkspace, getCompanionSessionLinks, updateSessionWorkspace } }))
+vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace } }))
 
 import { SessionManager } from './SessionManager'
 
@@ -109,6 +110,17 @@ describe('会话管理页', () => {
     expect(screen.getByText('这些是本机受限摘要，不是完整对话，也不会自动写入 Harness。')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /桌宠会话/ }))
     expect(onOpenHarness).toHaveBeenCalledWith('session-pet')
+  })
+
+  it('用户可把主会话显式交给鲸鱼娘，桥接只接收会话标识', async () => {
+    listSessions.mockResolvedValue({ status: 'ready', truncated: false, sessions: [{ id: 'session-main', title: '主会话', updatedAt: Date.UTC(2026, 9, 31, 8, 0, 0) }] })
+    render(<SessionManager onBack={vi.fn()} onOpenHarness={vi.fn()} />)
+    await screen.findByText('主会话')
+    fireEvent.click(screen.getByRole('button', { name: '在鲸鱼娘继续会话 主会话' }))
+    await waitFor(() => expect(resumeCompanionSession).toHaveBeenCalledWith('session-main'))
+    expect(screen.getByText('已在鲸鱼娘继续同一会话；主对话正文不会复制到桌宠。')).toBeInTheDocument()
+    expect(resumeCompanionSession.mock.calls[0]).toHaveLength(1)
+    expect(resumeCompanionSession.mock.calls[0]).not.toContain(BODY_SENTINEL)
   })
 
   it('真实会话不提供删除按钮：只读通道不承诺删得掉', async () => {

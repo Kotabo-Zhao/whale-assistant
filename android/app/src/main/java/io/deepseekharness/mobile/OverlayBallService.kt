@@ -964,6 +964,12 @@ class OverlayBallService : Service() {
         runCatching { pending.send() }
     }
 
+    /** Explicit main-workspace handoff.  It closes the competing overlay page, not Harness. */
+    private fun resumeCompanionSession(sessionId: String): Boolean {
+        if (conversationView != null || conversationOpening) detachConversation()
+        return bubbleChat.resumeSession(sessionId)
+    }
+
     private fun toggleConversation() {
         bubbleChat.hide()
         if (conversationView != null || conversationOpening) {
@@ -2043,6 +2049,27 @@ class OverlayBallService : Service() {
 
     companion object {
         @Volatile private var activeService: OverlayBallService? = null
+        /**
+         * The WebView supplies only a user-selected session identity.  Do not add a message,
+         * title, anchor, or transcript parameter to this bridge: that would defeat the handoff
+         * privacy boundary.
+         */
+        internal fun resumeCompanionSession(sessionId: String): Boolean {
+            if (!sessionId.startsWith("session-") || !io.deepseekharness.mobile.companion.BubbleSessionRegistry.valid(sessionId)) return false
+            val service = activeService ?: return false
+            val accepted = java.util.concurrent.atomic.AtomicReference(false)
+            val completed = java.util.concurrent.CountDownLatch(1)
+            Handler(Looper.getMainLooper()).post {
+                accepted.set(activeService === service && service.resumeCompanionSession(sessionId))
+                completed.countDown()
+            }
+            return try {
+                completed.await(2, java.util.concurrent.TimeUnit.SECONDS) && accepted.get()
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                false
+            }
+        }
         /** Reminder bubble opens chat only after a user tap; it never inserts or sends a message. */
         internal fun companionRecurringConversationHint(text: String) {
             Handler(Looper.getMainLooper()).post {

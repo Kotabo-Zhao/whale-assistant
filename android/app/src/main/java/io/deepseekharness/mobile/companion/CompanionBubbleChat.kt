@@ -91,6 +91,16 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
     private var sessionAccess: HarnessAccess? = null
     private var sessionScope: String? = restored?.scope
     fun startNewTopic() { sessionId = null; sessionAccess = null; sessionScope = null }
+    /**
+     * User-selected handoff from the main workspace.  The caller must have selected an
+     * existing Harness session; this object receives only its identity, never a transcript.
+     */
+    fun resumeSession(sessionId: String) {
+        require(sessionId.startsWith("session-") && BubbleSessionRegistry.valid(sessionId))
+        this.sessionId = sessionId
+        sessionAccess = null
+        sessionScope = null
+    }
     fun snapshot(messages: List<Message>): CompanionBubbleHistory.Snapshot? =
         sessionId?.let { id -> sessionScope?.let { CompanionBubbleHistory.Snapshot(id, it, messages.toList()) } }
 
@@ -99,12 +109,16 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         val access = runCatching { RuntimeHost.controllerOrNull()?.openHarnessAccess() }.getOrNull()
             ?: error("本机对话服务未运行，请先在应用中启动对话")
         val client = HarnessBubbleClient(access)
-        val existing = sessionId?.takeIf { (sessionAccess == null || sessionAccess == access) && sessionScope == scope }
+        // An explicitly handed-off session has no pet-local scope yet.  Reuse it once, then
+        // bind it to the current capability scope; a later capability change creates a new
+        // session just like a normal pet conversation.
+        val existing = sessionId?.takeIf { (sessionAccess == null || sessionAccess == access) && (sessionScope == null || sessionScope == scope) }
         val currentSession = existing ?: client.call("session/create", JSONObject()).getString("sessionId").also {
             sessionId = it
             sessionAccess = access
-            sessionScope = scope
         }
+        sessionAccess = access
+        sessionScope = scope
         // Register before any model prompt can invoke the memory bridge.
         BubbleSessionRegistry(context).record(currentSession)
         val prompt = buildString {

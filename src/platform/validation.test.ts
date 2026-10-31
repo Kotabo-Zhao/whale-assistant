@@ -7,6 +7,7 @@ import {
   assertBase64Input,
   assertBooleanFlag,
   assertDiagnosticRetentionDays,
+  assertHarnessSessionId,
   assertMailboxSubdirectory,
   assertRuntimeVersionPinTarget,
   assertRuntimeVersionTarget,
@@ -76,6 +77,12 @@ import {
 } from './types'
 
 describe('桌宠会话关联校验', () => {
+  it('主会话交接只接受 Harness 会话身份，不复用终端会话校验', () => {
+    expect(assertHarnessSessionId('session-whale_2026.10')).toBe('session-whale_2026.10')
+    expect(() => assertHarnessSessionId('f6b8d03c-7c5a-4523-8f11-3a6e9de3b239')).toThrow('Harness 会话')
+    expect(() => assertHarnessSessionId('session-../../outside')).toThrow('Harness 会话')
+  })
+
   it('只接受有界、去重的 Harness 会话身份，不接受正文或其他形状', () => {
     expect(validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'] }))
       .toEqual({ sessionIds: ['session-companion-1'], anchors: [] })

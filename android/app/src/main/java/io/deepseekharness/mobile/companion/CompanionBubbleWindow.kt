@@ -34,6 +34,31 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     val visible: Boolean get() = root != null
 
     fun toggle() { if (visible) hide() else show() }
+    /**
+     * Start the pet UI on a main-workspace session selected by the user.  Its local bubble
+     * history is archived before switching; the main Harness transcript is never read here.
+     */
+    fun resumeSession(sessionId: String): Boolean {
+        if (closed || busy || !BubbleSessionRegistry.valid(sessionId)) return false
+        busy = true
+        val generation = ++request
+        hide()
+        executor.execute {
+            val result = runCatching { historyStore.archiveAndClear(); chat.resumeSession(sessionId) }
+            handler.post {
+                if (closed || request != generation) return@post
+                busy = false
+                result.onSuccess {
+                    history.clear(); draft = ""; lastError = null
+                    show("已接续主对话会话；主对话正文不会复制到桌宠。现在可以继续发送消息。")
+                }.onFailure {
+                    lastError = "无法切换到主对话会话，原桌宠记录已保留。"
+                    show(lastError)
+                }
+            }
+        }
+        return true
+    }
     fun show(opening: String? = null) {
         if (closed || visible) return
         val density = context.resources.displayMetrics.density

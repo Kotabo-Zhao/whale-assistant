@@ -1752,6 +1752,25 @@ class MobileRuntimePlugin : Plugin() {
         }
     }
 
+    /**
+     * User-selected main-workspace -> desktop-pet handoff.  The bridge accepts exactly one
+     * session identity and never reads, returns, stores, or relays Harness message bodies.
+     */
+    @PluginMethod
+    fun resumeCompanionSession(call: PluginCall) {
+        val sessionId = call.getString("sessionId")
+            ?: run { call.reject("缺少会话标识", "COMPANION_SESSION_INVALID"); return }
+        if (!sessionId.startsWith("session-") || !io.deepseekharness.mobile.companion.BubbleSessionRegistry.valid(sessionId)) {
+            call.reject("会话标识无效", "COMPANION_SESSION_INVALID"); return
+        }
+        execute(call) {
+            if (!OverlayBallService.resumeCompanionSession(sessionId)) {
+                throw RuntimeFailure("COMPANION_UNAVAILABLE", "鲸鱼娘悬浮服务当前不可用")
+            }
+            JSObject().put("accepted", true)
+        }
+    }
+
     /** Updates only local organisational metadata; it never edits or deletes a Harness session. */
     @PluginMethod
     fun updateSessionWorkspace(call: PluginCall) {

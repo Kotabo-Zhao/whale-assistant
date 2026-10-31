@@ -2127,6 +2127,8 @@ export interface RuntimeBridge {
   getSessionWorkspace: () => Promise<RuntimeSessionWorkspace>
   /** Reads desktop-companion session identities and bounded, local-only continuity summaries. */
   getCompanionSessionLinks: () => Promise<RuntimeCompanionSessionLinks>
+  /** Explicitly hands one user-selected Harness session to the running desktop pet without copying its transcript. */
+  resumeCompanionSession: (sessionId: string) => Promise<void>
   /** Changes only those local annotations; it never edits or deletes a Harness transcript. */
   updateSessionWorkspace: (update: RuntimeSessionWorkspaceUpdate) => Promise<RuntimeSessionWorkspace>
   /**
