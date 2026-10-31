@@ -18,6 +18,15 @@ internal class CompanionDashboard(private val context: Context) {
             put(JSONObject(original).put("_review", original))
         }
     }
+    /** The conversation draft carries a value that mobile_knowledge_read verifies before reading. */
+    private fun reviewedKnowledgeRows(rows: JSONArray): JSONArray = JSONArray().apply {
+        for (i in 0 until rows.length()) {
+            val row = rows.getJSONObject(i)
+            val original = row.toString()
+            put(JSONObject(original).put("_review", original)
+                .put("revision", CompanionMemorySuppression.digest(row.getString("text"))))
+        }
+    }
 
     fun execute(request: JSONObject): JSONObject {
         val op = request.getString("operation")
@@ -110,7 +119,7 @@ internal class CompanionDashboard(private val context: Context) {
                 val source = filter("source", setOf("shared_text", "text_file", "original", "image_analysis"))
                 val coverage = filter("coverage", setOf("not_parsed", "partial", "extracted_text", "model_description"))
                 val (items, nextOffset) = knowledge.searchPage(query, offset, 20, source, coverage)
-                JSONObject().put("items", items).put("nextOffset", nextOffset ?: JSONObject.NULL)
+                JSONObject().put("items", reviewedKnowledgeRows(items)).put("nextOffset", nextOffset ?: JSONObject.NULL)
                     .put("source", source ?: JSONObject.NULL).put("coverage", coverage ?: JSONObject.NULL)
             }
             "knowledgeAdd" -> JSONObject().put("ok", knowledge.add(text("text"), "text_file"))
