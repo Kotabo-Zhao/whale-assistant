@@ -62,6 +62,8 @@ import type {
   RuntimeSessionListReason,
   RuntimeSessionListResult,
   RuntimeSessionSummary,
+  RuntimeSessionWorkspace,
+  RuntimeSessionWorkspaceEntry,
   RuntimeSessionSnapshot,
   RuntimeSessionSnapshotRestoreResult,
   RuntimeSessionSnapshotState,
@@ -2366,6 +2368,32 @@ export function validateRuntimeSessionListResult(value: unknown): RuntimeSession
   })
 
   return { status: 'ready', sessions, truncated: requiredBoolean(result.truncated, '会话列表截断标记') }
+}
+
+/** Local organisation data has its own strict shape, so a malformed preference cannot poison the session list. */
+export function validateRuntimeSessionWorkspace(value: unknown): RuntimeSessionWorkspace {
+  const result = asRecord(value, '会话组织信息')
+  if (!Array.isArray(result.entries) || result.entries.length > 500) throw new Error('会话组织信息格式无效')
+  const seen = new Set<string>()
+  const entries: RuntimeSessionWorkspaceEntry[] = result.entries.map(item => {
+    const entry = asRecord(item, '会话组织条目')
+    const id = entry.id
+    if (!isCatalogSessionId(id) || !seen.add(id)) throw new Error('会话组织标识无效')
+    const text = (field: 'title' | 'group', limit: number): string | undefined => {
+      const value = entry[field]
+      if (value === undefined) return undefined
+      if (typeof value !== 'string' || value.trim() === '' || value.length > limit || containsControlCharacter(value)) {
+        throw new Error('会话组织文字无效')
+      }
+      return value
+    }
+    const title = text('title', 200)
+    const group = text('group', 80)
+    const archived = entry.archived
+    if (typeof archived !== 'boolean') throw new Error('会话归档状态无效')
+    return { id, ...(title === undefined ? {} : { title }), ...(group === undefined ? {} : { group }), archived }
+  })
+  return { entries }
 }
 
 /**

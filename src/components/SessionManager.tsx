@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Loader2, MessageCircle, Plus, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, FolderPen, Loader2, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { triggerHaptic } from '../platform/haptics'
 import { t, useLanguage } from '../i18n'
 import { runtimeBridge } from '../platform/native'
-import type { RuntimeSessionListReason, RuntimeSessionSummary } from '../platform/types'
+import type { RuntimeSessionListReason, RuntimeSessionSummary, RuntimeSessionWorkspaceEntry } from '../platform/types'
 // 走 Vite 的资源 URL 导入（与 App.tsx 里 app-mark 的用法一致，见 src/assets.d.ts 的 *.png 声明）：
 // 打包后是一份带哈希的静态文件，不会像放 public/ 那样多一处需要手工同步的路径。
 import appMark from '../assets/app-mark.png'
@@ -18,6 +18,8 @@ interface SessionEntry {
    */
   updatedAt?: number
   local?: true
+  group?: string
+  archived?: boolean
 }
 
 interface SessionManagerProps {
@@ -91,6 +93,9 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   const [expanded, setExpanded] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
   const [retrying, setRetrying] = useState(false)
+  const [workspace, setWorkspace] = useState<RuntimeSessionWorkspaceEntry[]>([])
+  const [showArchived, setShowArchived] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const loadingRef = useRef(false)
 
   /**
@@ -123,6 +128,17 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
     return () => { active = false }
   }, [reloadToken])
 
+  // Organisation data is optional enhancement data. A read failure must not hide the real session catalogue.
+  useEffect(() => {
+    let active = true
+    runtimeBridge.getSessionWorkspace().then(value => {
+      if (active) setWorkspace(value.entries)
+    }).catch(() => {
+      if (active) setWorkspace([])
+    })
+    return () => { active = false }
+  }, [])
+
   const retrySessions = (): void => {
     // Ref 立即锁住请求，避免连续点击在下一次渲染前排队多个桥调用。
     if (disabled || loadingRef.current) return
@@ -131,16 +147,51 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
     setReloadToken(current => current + 1)
   }
 
-  const sessions = useMemo<SessionEntry[]>(() => [
-    ...localSessions,
-    ...(catalog.status === 'ready' ? catalog.sessions : []),
-  ], [catalog, localSessions])
+  const sessions = useMemo<SessionEntry[]>(() => {
+    const annotations = new Map(workspace.map(entry => [entry.id, entry]))
+    return [
+      ...localSessions,
+      ...(catalog.status === 'ready' ? catalog.sessions.map(session => {
+        const local = annotations.get(session.id)
+        return { ...session, title: local?.title ?? session.title, group: local?.group, archived: local?.archived === true }
+      }) : []),
+    ]
+  }, [catalog, localSessions, workspace])
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
-    if (normalized === '') return sessions
-    return sessions.filter(session => session.title.toLocaleLowerCase().includes(normalized))
-  }, [query, sessions])
+    const inScope = sessions.filter(session => showArchived || !session.archived)
+    if (normalized === '') return inScope
+    return inScope.filter(session => `${session.title} ${session.group ?? ''}`.toLocaleLowerCase().includes(normalized))
+  }, [query, sessions, showArchived])
+
+  const writeWorkspace = (update: { id: string; title?: string | null; group?: string | null; archived?: boolean }): void => {
+    if (disabled) return
+    runtimeBridge.updateSessionWorkspace(update).then(value => {
+      setWorkspace(value.entries)
+      setSelected(current => { const next = new Set(current); if (update.archived !== undefined) next.delete(update.id); return next })
+    }).catch(() => undefined)
+  }
+
+  const renameSession = (session: SessionEntry): void => {
+    const value = window.prompt('自定义会话名称（留空可恢复 Harness 原名称）', session.title)
+    if (value === null) return
+    const title = value.trim()
+    if (title.length > 200) return
+    writeWorkspace({ id: session.id, title: title === '' ? null : title })
+  }
+
+  const groupSession = (session: SessionEntry): void => {
+    const value = window.prompt('会话分组（留空可移出分组）', session.group ?? '')
+    if (value === null) return
+    const group = value.trim()
+    if (group.length > 80) return
+    writeWorkspace({ id: session.id, group: group === '' ? null : group })
+  }
+
+  const archiveSelected = (archived: boolean): void => {
+    sessions.filter(session => selected.has(session.id) && session.local !== true).forEach(session => writeWorkspace({ id: session.id, archived }))
+  }
 
   const createSession = (): void => {
     triggerHaptic('medium')
@@ -207,7 +258,14 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
             </button>
           )}
         </div>
-        <span className="session-count">{t('{0} 个会话', sessions.length)}</span>
+        <span className="session-count">{t('{0} 个会话', sessions.filter(session => !session.archived).length)}</span>
+        <button className="button button-secondary compact-button" type="button" onClick={() => setShowArchived(value => !value)}>
+          {showArchived ? '隐藏已归档' : '查看已归档'}
+        </button>
+        {selected.size > 0 && <>
+          <button className="button button-secondary compact-button" type="button" onClick={() => archiveSelected(true)}>归档选中项</button>
+          {showArchived && <button className="button button-secondary compact-button" type="button" onClick={() => archiveSelected(false)}>恢复选中项</button>}
+        </>}
       </div>
 
       <section className="session-list" aria-label={t('会话列表')}>
@@ -234,6 +292,9 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
           </div>
         ) : (expanded || query.trim() !== '' ? filtered : filtered.slice(0, 5)).map(session => (
           <article className="session-card" key={session.id}>
+            {session.local !== true && <input type="checkbox" aria-label={`选择会话 ${session.title || '未命名会话'}`} checked={selected.has(session.id)} onChange={() => setSelected(current => {
+              const next = new Set(current); if (next.has(session.id)) next.delete(session.id); else next.add(session.id); return next
+            })} />}
             <button className="session-open" type="button" onClick={() => onOpenHarness(session.local ? undefined : session.id)} disabled={disabled}>
               <span className="session-icon"><MessageCircle size={18} /></span>
               <span className="session-copy">
@@ -242,6 +303,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
                 <small>{session.local === true
                   ? t('由 Harness 管理会话内容')
                   : t('最近更新 {0}', formatUpdatedAt(session.updatedAt ?? 0))}</small>
+                {session.group && <small>分组：{session.group}</small>}
               </span>
             </button>
             {/* 只有本地占位条目能在这里移除：真实会话的删除不在这条只读通道里，
@@ -251,6 +313,13 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
                 <Trash2 size={17} />
               </button>
             )}
+            {session.local !== true && <>
+              <button className="icon-button session-delete" type="button" aria-label={`重命名会话 ${session.title || '未命名会话'}`} title="重命名" onClick={() => renameSession(session)}><Pencil size={17} /></button>
+              <button className="icon-button session-delete" type="button" aria-label={`分组会话 ${session.title || '未命名会话'}`} title="分组" onClick={() => groupSession(session)}><FolderPen size={17} /></button>
+              <button className="icon-button session-delete" type="button" aria-label={`${session.archived ? '恢复' : '归档'}会话 ${session.title || '未命名会话'}`} title={session.archived ? '恢复' : '归档'} onClick={() => writeWorkspace({ id: session.id, archived: !session.archived })}>
+                {session.archived ? <ArchiveRestore size={17} /> : <Archive size={17} />}
+              </button>
+            </>}
           </article>
         ))}
       </section>

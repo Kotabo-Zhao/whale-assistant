@@ -353,6 +353,8 @@ class MobileRuntimePlugin : Plugin() {
      * 懒建：没打开过会话工作区就不付 profile 解析与脚本投放的代价。
      */
     private val sessionCatalog: SessionCatalog by lazy { SessionCatalog(context, controller.store) }
+    /** Local aliases/groups are separate from the read-only Harness catalogue and never contain transcript text. */
+    private val sessionWorkspace: SessionWorkspaceStore by lazy { SessionWorkspaceStore(context) }
 
     companion object {
         private const val DEVICE_COMMAND_TIMEOUT_MS = 60_000L
@@ -1715,6 +1717,33 @@ class MobileRuntimePlugin : Plugin() {
         // 否则启动同时读列表会读到正在替换的 currentRoot 配置。
         execute(call) { controller.withLifecycleLock { sessionCatalog.list() } }
     }
+
+    /** User-owned title overrides, groups and archive flags for entries returned by [sessionList]. */
+    @PluginMethod
+    fun sessionWorkspace(call: PluginCall) {
+        execute(call) { sessionWorkspacePayload(sessionWorkspace.entries()) }
+    }
+
+    /** Updates only local organisational metadata; it never edits or deletes a Harness session. */
+    @PluginMethod
+    fun updateSessionWorkspace(call: PluginCall) {
+        execute(call) {
+            val id = call.getString("id") ?: throw RuntimeFailure("SESSION_WORKSPACE_INVALID", "缺少会话标识")
+            val hasTitle = call.data.has("title")
+            val hasGroup = call.data.has("group")
+            val hasArchived = call.data.has("archived")
+            val title = if (hasTitle) call.data.opt("title").takeUnless { it == org.json.JSONObject.NULL }?.let { it as? String ?: throw RuntimeFailure("SESSION_WORKSPACE_INVALID", "会话名称无效") } else null
+            val group = if (hasGroup) call.data.opt("group").takeUnless { it == org.json.JSONObject.NULL }?.let { it as? String ?: throw RuntimeFailure("SESSION_WORKSPACE_INVALID", "会话分组无效") } else null
+            val archived = if (hasArchived) call.data.opt("archived") as? Boolean ?: throw RuntimeFailure("SESSION_WORKSPACE_INVALID", "归档状态无效") else null
+            sessionWorkspacePayload(sessionWorkspace.update(id, title, hasTitle, group, hasGroup, archived, hasArchived))
+        }
+    }
+
+    private fun sessionWorkspacePayload(entries: List<SessionWorkspaceStore.Entry>): JSObject = JSObject().put("entries", JSArray().apply {
+        entries.forEach { entry -> put(JSObject().put("id", entry.id).apply {
+            entry.title?.let { put("title", it) }; entry.group?.let { put("group", it) }; put("archived", entry.archived)
+        }) }
+    })
 
     /**
      * 会话快照总览。

@@ -2,6 +2,7 @@ package io.deepseekharness.mobile.companion
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import io.deepseekharness.mobile.SessionWorkspaceStore
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
@@ -19,6 +20,7 @@ internal object UnifiedFullBackup {
     private const val SNAPSHOT = "snapshot.sqlite"
     private const val BUBBLE_HISTORY = "conversations/bubble-history.json"
     private const val BUBBLE_SESSIONS = "conversations/bubble-sessions.json"
+    private const val SESSION_WORKSPACE = "conversations/session-workspace.json"
     private const val FORMAT = "whale-full-backup-v1"
 
     private fun originalIds(snapshot: File): Set<String> {
@@ -62,6 +64,10 @@ internal object UnifiedFullBackup {
                     totalBytes += sessions.size; require(totalBytes <= MAX_BYTES)
                     zip.putNextEntry(ZipEntry(BUBBLE_SESSIONS)); zip.write(sessions); zip.closeEntry()
                 }
+                SessionWorkspaceStore(app).exportArchive().let { workspace ->
+                    totalBytes += workspace.size; require(totalBytes <= MAX_BYTES)
+                    zip.putNextEntry(ZipEntry(SESSION_WORKSPACE)); zip.write(workspace); zip.closeEntry()
+                }
                 for (id in ids) {
                     val objectFile = objects.get(id) ?: error("原件不可用，备份未完成")
                     totalBytes += objectFile.length()
@@ -94,14 +100,15 @@ internal object UnifiedFullBackup {
         var hasBubbleSessions = false
         var bubbleHistory: ByteArray? = null
         var bubbleSessions: ByteArray? = null
+        var sessionWorkspace: ByteArray? = null
         try {
             ZipFile(archive).use { zip ->
                 val entries = mutableMapOf<String, ZipEntry>()
                 val enumeration = zip.entries()
                 while (enumeration.hasMoreElements()) {
                     val entry = enumeration.nextElement()
-                    require(!entry.isDirectory && (entry.name == "format" || entry.name == SNAPSHOT || entry.name == BUBBLE_HISTORY || entry.name == BUBBLE_SESSIONS || entry.name.matches(Regex("objects/[a-f0-9]{64}")))) { "备份包含未知文件" }
-                    require(entries.put(entry.name, entry) == null && entries.size <= MAX_OBJECTS + 4) { "备份条目重复或过多" }
+                    require(!entry.isDirectory && (entry.name == "format" || entry.name == SNAPSHOT || entry.name == BUBBLE_HISTORY || entry.name == BUBBLE_SESSIONS || entry.name == SESSION_WORKSPACE || entry.name.matches(Regex("objects/[a-f0-9]{64}")))) { "备份包含未知文件" }
+                    require(entries.put(entry.name, entry) == null && entries.size <= MAX_OBJECTS + 5) { "备份条目重复或过多" }
                 }
                 val format = zip.getInputStream(requireNotNull(entries["format"])).use { input ->
                     val bytes = java.io.ByteArrayOutputStream(); copyBounded(input, bytes, 64); bytes.toString("UTF-8")
@@ -115,8 +122,12 @@ internal object UnifiedFullBackup {
                 if (hasBubbleSessions) bubbleSessions = zip.getInputStream(requireNotNull(entries[BUBBLE_SESSIONS])).use { input ->
                     java.io.ByteArrayOutputStream().also { copyBounded(input, it, 50_000) }.toByteArray()
                 }
+                if (SESSION_WORKSPACE in entries) sessionWorkspace = zip.getInputStream(requireNotNull(entries[SESSION_WORKSPACE])).use { input ->
+                    java.io.ByteArrayOutputStream().also { copyBounded(input, it, 150_000) }.toByteArray()
+                }
                 bubbleHistory?.let { CompanionBubbleHistory.decode(it) }
                 bubbleSessions?.let { BubbleSessionRegistry.validateArchive(it) }
+                sessionWorkspace?.let { SessionWorkspaceStore.decode(it) }
                 var totalBytes = 0L
                 zip.getInputStream(requireNotNull(entries[SNAPSHOT])).use { input -> snapshot.outputStream().use { output ->
                     totalBytes += copyBounded(input, output, UnifiedMemoryBackup.MAX_BYTES); output.fd.sync()
@@ -135,6 +146,7 @@ internal object UnifiedFullBackup {
             UnifiedMemoryBackup.restore(app, snapshot)
             if (hasBubbleSessions) BubbleSessionRegistry(app).mergeArchive(requireNotNull(bubbleSessions))
             if (hasBubbleHistory) CompanionBubbleHistory(app).restoreArchive(requireNotNull(bubbleHistory))
+            sessionWorkspace?.let { SessionWorkspaceStore(app).mergeArchive(it) }
         } finally { temporary.delete(); snapshot.delete() }
     }
 

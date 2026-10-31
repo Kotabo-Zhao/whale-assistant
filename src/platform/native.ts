@@ -98,6 +98,7 @@ import {
   validateRuntimeResidue,
   validateRuntimeResidueCleanup,
   validateRuntimeSessionListResult,
+  validateRuntimeSessionWorkspace,
   validateRuntimeSessionSnapshotRestoreResult,
   validateRuntimeSessionSnapshotState,
   validateRuntimeWorkspaceFileList,
@@ -143,6 +144,8 @@ interface NativeRuntimePlugin {
   install(source?: RuntimeSource): Promise<unknown>
   /** 会话工作区的会话元数据；返回值在 TS 侧走校验（`unknown` → validate）。 */
   sessionList(): Promise<unknown>
+  sessionWorkspace(): Promise<unknown>
+  updateSessionWorkspace(options: { id: string; title?: string | null; group?: string | null; archived?: boolean }): Promise<unknown>
   getRuntimeSessionSnapshotState(): Promise<unknown>
   createRuntimeSessionSnapshot(): Promise<unknown>
   restoreRuntimeSessionSnapshot(options: { id: string }): Promise<unknown>
@@ -668,6 +671,8 @@ function createNativeBridge(): RuntimeBridge {
     // 会话工作区：只取元数据（标识/标题/更新时间），读不到时原生侧回受控错误字段而不是空列表，
     // 这里也不把「读不到」改写成空列表——校验器只认这两种形状。
     listSessions: () => NativeRuntime.sessionList().then(validateRuntimeSessionListResult),
+    getSessionWorkspace: () => NativeRuntime.sessionWorkspace().then(validateRuntimeSessionWorkspace),
+    updateSessionWorkspace: update => NativeRuntime.updateSessionWorkspace(update).then(validateRuntimeSessionWorkspace),
     // 快照标识的形态由原生侧把关（`RUNTIME_SNAPSHOT_ID_INVALID`）：前端原样传过去，
     // 不在这里另造一套错误文案，避免两边对「什么算合法 id」说法不一。
     getRuntimeSessionSnapshotState: () => NativeRuntime

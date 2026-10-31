@@ -735,6 +735,8 @@ export function createBrowserBridge(): RuntimeBridge {
     // 等于把「读不到」编造成「确认没有」。
     listSessions: (): Promise<RuntimeSessionListResult> =>
       Promise.reject(new Error('浏览器模式下没有运行时会话列表')),
+    getSessionWorkspace: () => Promise.reject(new Error('浏览器模式下没有会话组织信息')),
+    updateSessionWorkspace: () => Promise.reject(new Error('浏览器模式下不能修改会话组织信息')),
     // 预览里没有原生侧的会话快照能力：四条一律如实拒绝。
     // **不要**返回空状态对象——那会让界面显示成「还没有快照」，等于编造一次成功。
     getRuntimeSessionSnapshotState: (): Promise<RuntimeSessionSnapshotState> =>

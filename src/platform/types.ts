@@ -407,6 +407,27 @@ export type RuntimeSessionListResult =
   | { status: 'ready'; sessions: RuntimeSessionSummary[]; truncated: boolean }
   | { status: 'unavailable'; reason: RuntimeSessionListReason }
 
+/** A local-only user annotation. It never contains a transcript or copied Harness title. */
+export interface RuntimeSessionWorkspaceEntry {
+  id: string
+  title?: string
+  group?: string
+  archived: boolean
+}
+
+export interface RuntimeSessionWorkspace {
+  entries: RuntimeSessionWorkspaceEntry[]
+}
+
+export interface RuntimeSessionWorkspaceUpdate {
+  id: string
+  /** `null` removes the local override. */
+  title?: string | null
+  /** `null` removes the local group. */
+  group?: string | null
+  archived?: boolean
+}
+
 /**
  * 安装/更新前自动快照的结论；不阻断安装，只如实报告。
  *
@@ -2086,6 +2107,10 @@ export interface RuntimeBridge {
    * 注意与下面的「会话快照」区分：那是**整目录备份/恢复**，这里只是列表元数据。
    */
   listSessions: () => Promise<RuntimeSessionListResult>
+  /** Reads local-only aliases, groups and archive flags for Harness sessions. */
+  getSessionWorkspace: () => Promise<RuntimeSessionWorkspace>
+  /** Changes only those local annotations; it never edits or deletes a Harness transcript. */
+  updateSessionWorkspace: (update: RuntimeSessionWorkspaceUpdate) => Promise<RuntimeSessionWorkspace>
   /**
    * 会话快照总览（无参数，只读）。
    *
