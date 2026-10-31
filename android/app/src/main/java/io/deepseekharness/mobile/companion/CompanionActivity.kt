@@ -92,6 +92,51 @@ class CompanionActivity : AppCompatActivity() {
             finally { snapshot.delete() }
         }) { result -> android.widget.Toast.makeText(this, if(result.isSuccess) "统一备份已保存" else "备份失败，原数据未改变", android.widget.Toast.LENGTH_LONG).show() }
     }
+    private val knowledgePackageExport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) askKnowledgePackagePassphrase("加密个人知识包", confirm = true) { passphrase ->
+            runMemoryIo("正在加密个人知识包…", {
+                val packageFile = PersonalKnowledgePackage.export(this, passphrase)
+                try { (contentResolver.openOutputStream(uri, "wt") ?: error("无法打开文件")).use { output -> packageFile.inputStream().use { it.copyTo(output) } } }
+                finally { packageFile.delete() }
+            }) { result -> android.widget.Toast.makeText(this, if (result.isSuccess) "加密个人知识包已保存" else "知识包导出失败，原数据未改变", android.widget.Toast.LENGTH_LONG).show() }
+        }
+    }
+    private val knowledgePackageImport = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) askKnowledgePackagePassphrase("解锁个人知识包", confirm = false) { passphrase ->
+            runMemoryIo("正在解锁并恢复个人知识包…", {
+                val encrypted = java.io.File(cacheDir, "knowledge-package-${java.util.UUID.randomUUID()}.wpk")
+                try {
+                    (contentResolver.openInputStream(uri) ?: error("无法读取知识包")).use { input -> encrypted.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024); var total = 0L
+                        while (true) { val count = input.read(buffer); if (count < 0) break; if (count == 0) continue; total += count; require(total <= UnifiedFullBackup.MAX_BYTES + 64 * 1024L) { "知识包文件过大" }; output.write(buffer, 0, count) }
+                    } }
+                    val archive = PersonalKnowledgePackage.decrypt(this, encrypted, passphrase)
+                    try {
+                        val previous = UnifiedMemoryBackup.export(this)
+                        val rollback = java.io.File(noBackupFilesDir, "last-unified-rollback.sqlite")
+                        java.nio.file.Files.move(previous.toPath(), rollback.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                        UnifiedFullBackup.restore(this, archive)
+                    } finally { archive.delete() }
+                } finally { encrypted.delete() }
+            }) { result -> android.widget.Toast.makeText(this, if (result.isSuccess) "个人知识包已合并恢复；请重新核对提醒。" else "无法解锁或恢复知识包；当前数据未替换。", android.widget.Toast.LENGTH_LONG).show(); render() }
+        }
+    }
+
+    private fun askKnowledgePackagePassphrase(title: String, confirm: Boolean, ready: (CharArray) -> Unit) {
+        val input = android.widget.EditText(this).apply { inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD; hint = "至少 12 个字符" }
+        val repeat = if (confirm) android.widget.EditText(this).apply { inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD; hint = "再次输入口令" } else null
+        val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, dp(12), 0); addView(input); repeat?.let(::addView) }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle(title)
+            .setMessage(if (confirm) "口令不会保存或同步；忘记后无法恢复此知识包。" else "输入创建此知识包时使用的口令。")
+            .setView(container).setNegativeButton("取消", null).setPositiveButton(if (confirm) "加密导出" else "解锁恢复", null).create()
+        dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val value = input.text.toString()
+            if (value.length !in 12..256) { input.error = "口令长度应为 12 到 256 个字符。"; return@setOnClickListener }
+            if (repeat != null && value != repeat.text.toString()) { repeat.error = "两次口令不一致。"; return@setOnClickListener }
+            dialog.dismiss(); ready(value.toCharArray())
+        } }
+        dialog.show()
+    }
     private val unifiedImport = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) runMemoryIo("正在读取统一备份…", {
             val snapshot = java.io.File(cacheDir, "restore-${java.util.UUID.randomUUID()}.sqlite")
@@ -433,6 +478,9 @@ class CompanionActivity : AppCompatActivity() {
         }
         button("导出统一备份（资料、原件、记忆、事项、桌宠会话映射）") { if(!memoryBusy) unifiedExport.launch("whale-memory.whalememory") }
         paragraph("备份包含关联原件、个人资料、桌宠最近本地消息快照及会话组织标记，未加密；请选择可信的保存位置。Harness 会话正文、密钥和运行环境不包含在备份中。")
+        button("导出加密个人知识包") { if (!memoryBusy) knowledgePackageExport.launch("whale-personal.wpk") }
+        button("导入加密个人知识包") { if (!memoryBusy) knowledgePackageImport.launch(arrayOf("application/octet-stream", "application/x-whale-knowledge-package", "*/*")) }
+        paragraph("加密知识包使用你输入的口令和 AES-GCM；口令、模型密钥与 Harness 会话正文都不会写入包。导入会合并结构化资料和本地会话标记，提醒需重新核对。")
         button("恢复统一备份") { if(!memoryBusy) unifiedImport.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*")) }
         val rollback = java.io.File(noBackupFilesDir, "last-unified-rollback.sqlite")
         if(rollback.isFile) button("回退到上次恢复前") {
