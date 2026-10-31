@@ -87,10 +87,10 @@ test('日历工具通过只读本机桥查询，使用空参数', async t => {
 test('本地资料工具按关键词经过设备桥并拒绝无效查询', async t => {
   const f = fixture(t, () => ok('{"items":[],"truncated":false}'))
   const tool = f.tools.get('mobile_knowledge_search')
-  await tool.execute({ query: '  会议 ', limit: 2 }, {})
-  assert.deepEqual(f.requests, [{ command: 'companionKnowledge', param: '{"query":"会议","limit":2}' }])
-  await assert.rejects(tool.execute({ query: '\u0001' }, {}), /KNOWLEDGE_INPUT_INVALID/)
-  await assert.rejects(tool.execute({ query: '会议', limit: 4 }, {}), /KNOWLEDGE_INPUT_INVALID/)
+  await tool.execute({ query: '  会议 ', limit: 2 }, memoryExec)
+  assert.deepEqual(f.requests, [{ command: 'companionKnowledge', param: `{"query":"会议","limit":2,"callerSession":"${virtualSession}"}` }])
+  await assert.rejects(tool.execute({ query: '\u0001' }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
+  await assert.rejects(tool.execute({ query: '会议', limit: 4 }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
   assert.equal(f.requests.length, 1)
   assert.ok(f.prompts.some(value => JSON.stringify(value).includes('mobile_knowledge_search')))
 })
@@ -660,26 +660,27 @@ test('回退组合信号仍然跟着会话取消中止请求', async t => {
 
 test('最近资料和分段读取携带来源与版本', async t => {
   const f = fixture(t, () => ok('{"items":[]}'))
-  await f.tools.get('mobile_knowledge_search').execute({ query: '', offset: 3 }, {})
-  await f.tools.get('mobile_knowledge_read').execute({ id: virtualSession, revision: 'a'.repeat(64), offset: 4000 }, {})
-  assert.deepEqual(JSON.parse(f.requests[0].param), { query: '', offset: 3 })
+  await f.tools.get('mobile_knowledge_search').execute({ query: '', offset: 3 }, memoryExec)
+  await f.tools.get('mobile_knowledge_read').execute({ id: virtualSession, revision: 'a'.repeat(64), offset: 4000 }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[0].param), { query: '', offset: 3, callerSession: virtualSession })
   assert.equal(JSON.parse(f.requests[1].param).revision, 'a'.repeat(64))
-  await assert.rejects(f.tools.get('mobile_knowledge_read').execute({ id: virtualSession, revision: 'invalid' }, {}), /KNOWLEDGE_INPUT_INVALID/)
+  await assert.rejects(f.tools.get('mobile_knowledge_read').execute({ id: virtualSession, revision: 'invalid' }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
 })
 
 test('纠正记忆通过设备桥携带旧值，拒绝缺失目标', async t => {
   const f = fixture(t, () => ok('{"updated":true}'))
   const tool = f.tools.get('mobile_memory_update')
-  await tool.execute({ id: virtualSession, expectedText: '旧住址', text: '新住址' }, memoryExec)
-  assert.deepEqual(JSON.parse(f.requests[0].param), { op: 'update', callerSession: virtualSession, id: virtualSession, expectedText: '旧住址', text: '新住址' })
-  await assert.rejects(tool.execute({ id: 'bad', expectedText: '旧住址', text: '新住址' }, memoryExec), /MEMORY_INPUT_INVALID/)
+  const revision = 'a'.repeat(64)
+  await tool.execute({ id: virtualSession, expectedRevision: revision, text: '新住址' }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[0].param), { op: 'update', callerSession: virtualSession, id: virtualSession, expectedRevision: revision, text: '新住址' })
+  await assert.rejects(tool.execute({ id: 'bad', expectedRevision: revision, text: '新住址' }, memoryExec), /MEMORY_INPUT_INVALID/)
 })
 
 test('文档分段检索携带文档标识与游标', async t => {
   const f = fixture(t, () => ok('{"items":[]}'))
-  await f.tools.get('mobile_knowledge_search').execute({ query: '', documentId: 'a'.repeat(64), offset: 3 }, {})
-  assert.deepEqual(JSON.parse(f.requests[0].param), { query: '', documentId: 'a'.repeat(64), offset: 3 })
-  await assert.rejects(f.tools.get('mobile_knowledge_search').execute({ query: '', documentId: '../bad' }, {}), /KNOWLEDGE_INPUT_INVALID/)
+  await f.tools.get('mobile_knowledge_search').execute({ query: '', documentId: 'a'.repeat(64), offset: 3 }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[0].param), { query: '', documentId: 'a'.repeat(64), offset: 3, callerSession: virtualSession })
+  await assert.rejects(f.tools.get('mobile_knowledge_search').execute({ query: '', documentId: '../bad' }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
 })
 
 
@@ -689,14 +690,14 @@ test('记忆会话由运行时提供，缺失或非法身份拒绝且模型不�
     ['mobile_memory_search', { query: '' }],
     ['mobile_memory_hybrid_search', { query: '偏好' }],
     ['mobile_memory_save', { text: '喜欢蓝色' }],
-    ['mobile_memory_update', { id: virtualSession, expectedText: '旧值', text: '新值' }],
+    ['mobile_memory_update', { id: virtualSession, expectedRevision: 'a'.repeat(64), text: '新值' }],
     ['mobile_memory_delete', { id: virtualSession }],
     ['mobile_companion_capabilities', {}],
   ]
   for (const [name, args] of calls) {
     const tool = f.tools.get(name)
-    await assert.rejects(tool.execute({ ...args, callerSession: virtualSession }, {}), /MEMORY_SESSION_UNAVAILABLE/)
-    await assert.rejects(tool.execute(args, { agent: { session: { id: '../bad' } } }), /MEMORY_SESSION_UNAVAILABLE/)
+    await assert.rejects(tool.execute({ ...args, callerSession: virtualSession }, {}), /COMPANION_SESSION_UNAVAILABLE/)
+    await assert.rejects(tool.execute(args, { agent: { session: { id: '../bad' } } }), /COMPANION_SESSION_UNAVAILABLE/)
     await tool.execute({ ...args, callerSession: 'forged-session' }, memoryExec)
   }
   assert.equal(f.requests.length, calls.length)

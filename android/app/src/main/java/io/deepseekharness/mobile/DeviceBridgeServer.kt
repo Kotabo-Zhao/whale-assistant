@@ -248,14 +248,15 @@ class DeviceBridgeServer(
                         val store = io.deepseekharness.mobile.companion.CompanionStore(context)
                         val knowledge = io.deepseekharness.mobile.companion.CompanionKnowledgeStore(context)
                         val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料查询参数无效") }
+                        val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
+                        access.requireKnowledge()
                         if (request.optString("op") == "hybrid") {
-                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
                             val result = io.deepseekharness.mobile.companion.SemanticKnowledgeSearch.execute(context, param)
+                            access.requireKnowledge()
                             respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                             return
                         }
                         if (request.optString("op") == "forget" || request.optString("op") == "undo") {
-                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
                             val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
                                 ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
                             val result = if (request.optString("op") == "undo") {
@@ -276,7 +277,6 @@ class DeviceBridgeServer(
                             return
                         }
                         if (request.optString("op") == "image") {
-                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
                             val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
                                 ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
                             val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
@@ -288,12 +288,11 @@ class DeviceBridgeServer(
                             if (!knowledge.withUnchangedRecord(id, row.getString("text")) {
                                 image = io.deepseekharness.mobile.companion.KnowledgeImageModel.preview(context, originalId)
                             }) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
-                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "对话访问已关闭")
+                            access.requireKnowledge()
                             respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, checkNotNull(image), false, null))
                             return
                         }
                         if (request.optString("op") in setOf("status", "retry")) {
-                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
                             val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
                                 ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
                             val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
@@ -319,6 +318,7 @@ class DeviceBridgeServer(
                         val result = io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, param, knowledge::findById, knowledge::recent) {
                             knowledge.search(it)
                         }
+                        access.requireKnowledge()
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return
                     }

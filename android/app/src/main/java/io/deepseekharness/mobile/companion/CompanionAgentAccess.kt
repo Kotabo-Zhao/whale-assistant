@@ -8,7 +8,7 @@ import org.json.JSONObject
 internal class CompanionAgentAccess(context: Context, request: JSONObject) {
     private val app = context.applicationContext
     private val sessionId = (request.opt("callerSession") as? String)?.takeIf { BubbleSessionRegistry.valid(it) }
-        ?: throw RuntimeFailure("MEMORY_SESSION_UNAVAILABLE", "无法确认调用会话，请更新运行环境后重试")
+        ?: throw RuntimeFailure("COMPANION_SESSION_UNAVAILABLE", "无法确认调用会话，请更新运行环境后重试")
     private val store = CompanionStore(app)
     private val memory = CompanionMemoryStore(app)
     private val bubble: Boolean get() = BubbleSessionRegistry(app).contains(sessionId)
@@ -19,13 +19,17 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
             throw RuntimeFailure("MEMORY_BUBBLE_DISABLED", "用户已关闭此桌宠会话的记忆访问")
     }
 
+    fun requireKnowledge() {
+        if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
+    }
+
     /** No stored content is returned, including when permission is disabled. */
     fun capabilities(): String {
         val bubbleSession = bubble
         val canReadMemory = memory.enabled && (!bubbleSession || store.bubbleMemoryAccess)
         val canReadKnowledge = store.knowledgeModelAccess
         val semantic = SemanticControl(app)
-        return JSONObject().put("schemaVersion", 1).put("sessionId", sessionId)
+        return JSONObject().put("schemaVersion", 1)
             .put("scope", if (bubbleSession) "bubble" else "conversation")
             .put("memory", JSONObject().put("allowed", canReadMemory)
                 .put("errorCode", when {

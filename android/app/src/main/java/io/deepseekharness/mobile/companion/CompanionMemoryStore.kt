@@ -431,12 +431,41 @@ internal object CompanionMemoryFormat {
             require(idPattern.matches(id) && ids.add(id) && text.length <= 600) { "bad memory" }
             CompanionKnowledgeData.utf8(text) // Do not silently replace malformed UTF-16 in stored values.
             if (row.has("status")) require(row.opt("status") is String && row.getString("status") in setOf("pending", "confirmed")) { "unknown memory status" }
+            row.optJSONArray("history")?.let { history ->
+                require(history.length() <= 20)
+                for (item in 0 until history.length()) {
+                    val previous = history.optJSONObject(item) ?: error("bad memory history")
+                    require(previous.opt("text") is String && previous.getString("text").length <= 600 && previous.optLong("validUntil") > 0) { "bad memory history" }
+                }
+            }
         }
         return rows
     }
 }
 
 internal enum class UserMemoryResult { ADDED, EXISTING_PENDING, EXISTING_CONFIRMED, STALE }
+
+/** Stable optimistic-concurrency token; internal history never changes its current revision by accident. */
+internal object CompanionMemoryRevision {
+    private val fields = listOf("id", "text", "source", "status", "createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "validFrom", "validUntil")
+    fun of(row: JSONObject): String {
+        val canonical = JSONObject()
+        fields.forEach { field -> if (row.has(field)) canonical.put(field, row.opt(field)) }
+        return CompanionMemorySuppression.digest(canonical.toString())
+    }
+    fun archiveCurrent(row: JSONObject, at: Long) {
+        val history = row.optJSONArray("history") ?: JSONArray()
+        val archived = JSONObject().put("text", row.getString("text")).put("source", row.optString("source", "unknown"))
+            .put("status", row.optString("status", "confirmed")).put("validUntil", at)
+        for (field in listOf("createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "validFrom")) {
+            if (row.has(field)) archived.put(field, row.opt(field))
+        }
+        val bounded = JSONArray()
+        for (index in maxOf(0, history.length() - 19) until history.length()) bounded.put(history.get(index))
+        bounded.put(archived)
+        row.put("history", bounded)
+    }
+}
 
 internal data class MemorySimilarityReview(val snapshot: String, val candidates: List<Pair<String, String>>, val truncated: Boolean)
 
@@ -503,12 +532,13 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                 val rows = load()
                 val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("text") == text }
                 if (existing != null) return JSONObject().put("id", existing.getString("id")).put("alreadyExists", true)
-                    .put("pending", existing.optString("status") == "pending").toString()
+                    .put("pending", existing.optString("status") == "pending").put("revision", CompanionMemoryRevision.of(existing)).toString()
                 if (legacyLimit && rows.length() >= 100) throw RuntimeFailure("MEMORY_FULL", "记忆已满，请先删除不需要的条目")
                 val row = JSONObject().put("id", UUID.randomUUID().toString()).put("text", text)
                     .put("createdAt", System.currentTimeMillis()).put("source", "assistant_tool").put("status", if (automaticAssistantMemory) "confirmed" else "pending")
                 rows.put(row); write(rows)
-                JSONObject().put("id", row.getString("id")).put("alreadyExists", false).put("pending", !automaticAssistantMemory).toString()
+                JSONObject().put("id", row.getString("id")).put("alreadyExists", false).put("pending", !automaticAssistantMemory)
+                    .put("revision", CompanionMemoryRevision.of(row)).toString()
             }
             "search" -> {
                 val query = (request.opt("query") as? String)?.trim() ?: throw invalid()
@@ -530,21 +560,32 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
             }
             "update" -> {
                 val id = request.opt("id") as? String ?: throw invalid()
-                val expected = request.opt("expectedText") as? String ?: throw invalid()
+                val expected = request.opt("expectedText") as? String
+                val expectedRevision = request.opt("expectedRevision") as? String
+                val operationId = request.opt("operationId") as? String
                 val text = (request.opt("text") as? String)?.trim() ?: throw invalid()
-                if (!id.matches(Regex("[a-f0-9-]{36}")) || text.isBlank() || text.length > 600 || CompanionStore.sensitive(text)) throw invalid()
+                if (!id.matches(Regex("[a-f0-9-]{36}")) || (expected == null && expectedRevision == null) ||
+                    (expectedRevision != null && !expectedRevision.matches(Regex("[a-f0-9]{64}"))) ||
+                    (operationId != null && !operationId.matches(Regex("[a-f0-9-]{36}"))) || text.isBlank() || text.length > 600 || CompanionStore.sensitive(text)) throw invalid()
                 val rows = load()
                 val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("id") == id }
                     ?: throw RuntimeFailure("MEMORY_NOT_FOUND", "记忆已删除，请重新检索")
-                if (row.getString("text") != expected || row.optString("status") == "pending") throw RuntimeFailure("MEMORY_CHANGED", "记忆已变化或尚未确认，请重新检索")
-                if (row.getString("text") == text) return JSONObject().put("id", id).put("updated", false).toString()
+                if (operationId != null && row.optString("lastOperationId") == operationId)
+                    return JSONObject().put("id", id).put("updated", false).put("idempotent", true).put("revision", CompanionMemoryRevision.of(row)).toString()
+                if ((expected != null && row.getString("text") != expected) || (expectedRevision != null && CompanionMemoryRevision.of(row) != expectedRevision) || row.optString("status") == "pending")
+                    throw RuntimeFailure("MEMORY_CHANGED", "记忆已变化或尚未确认，请重新检索")
+                if (row.getString("text") == text) return JSONObject().put("id", id).put("updated", false).put("revision", CompanionMemoryRevision.of(row)).toString()
                 if (suppressed(text)) throw RuntimeFailure("MEMORY_SUPPRESSED", "内容已被删除，请在记忆管理中明确恢复")
                 if ((0 until rows.length()).any { rows.getJSONObject(it).getString("id") != id && rows.getJSONObject(it).getString("text") == text }) throw invalid()
                 onDelete(JSONObject(row.toString()))
-                row.put("text", text).put("source", "user_edit").put("updatedAt", System.currentTimeMillis()).put("confirmedAt", System.currentTimeMillis())
+                val now = System.currentTimeMillis()
+                CompanionMemoryRevision.archiveCurrent(row, now)
+                row.put("text", text).put("source", "user_edit").put("updatedAt", now).put("confirmedAt", now).put("validFrom", now)
+                if (operationId != null) row.put("lastOperationId", operationId)
                 row.remove("evidenceEventId"); row.remove("evidenceSource")
                 write(rows)
-                JSONObject().put("id", id).put("updated", true).put("pending", false).toString()
+                JSONObject().put("id", id).put("updated", true).put("pending", false).put("revision", CompanionMemoryRevision.of(row))
+                    .put("historyCount", row.optJSONArray("history")?.length() ?: 0).toString()
             }
             "delete" -> {
                 val id = request.opt("id") as? String ?: throw invalid()
@@ -572,11 +613,14 @@ internal object CompanionMemorySearch {
         val knownSources = setOf("assistant_tool", "user_edit", "user_notification", "user_understanding", "auto_understanding", "shared_understanding", "auto_notification", "auto_usage", "auto_notification_group")
         val source = (row.opt("source") as? String)?.takeIf { it in knownSources } ?: "unknown"
         val result = JSONObject().put("id", row.getString("id")).put("text", row.getString("text"))
-            .put("source", source).put("status", if (source == "auto_understanding" || (source == "shared_understanding" && row.optLong("confirmedAt") <= 0)) "unverified" else "confirmed")
+            .put("revision", CompanionMemoryRevision.of(row)).put("source", source)
+            .put("status", if (source == "auto_understanding" || (source == "shared_understanding" && row.optLong("confirmedAt") <= 0)) "unverified" else "confirmed")
         for (key in listOf("createdAt", "updatedAt", "confirmedAt")) {
             val value = row.opt(key)
             if (value is Number && value.toLong() > 0) result.put(key, value.toLong())
         }
+        row.optJSONArray("history")?.length()?.takeIf { it > 0 }?.let { result.put("historyCount", it) }
+        row.optString("evidenceSource").takeIf { it.isNotBlank() }?.let { result.put("evidenceSource", it) }
         return result
     }
     private val chinese = Regex("[\\u4e00-\\u9fff]{2,}")

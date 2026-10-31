@@ -22,6 +22,20 @@ internal object CompanionBubbleChatPolicy {
         return null
     }
     fun validateMessage(text: String): String = text.trim().also { require(it.isNotEmpty() && it.length <= 2000) }
+    /** Only permissions and advertised retrieval capabilities determine session reuse. */
+    fun toolScope(memoryAllowed: Boolean, knowledgeAllowed: Boolean, memorySemantic: Boolean, knowledgeSemantic: Boolean): String =
+        memoryDigest("tools-v5|memory=$memoryAllowed|knowledge=$knowledgeAllowed|memorySemantic=$memorySemantic|knowledgeSemantic=$knowledgeSemantic")
+    /** Bounded local continuity context for a deliberately new Harness session. */
+    fun compressedContext(messages: List<CompanionBubbleChat.Message>): String {
+        require(messages.size <= 20)
+        val older = messages.dropLast(6).takeLast(12).joinToString("\n") { message ->
+            "${if (message.role == "user") "用户" else "鲸鱼娘"}（早前摘录）：${validateMessage(message.text).take(160)}"
+        }
+        val recent = messages.takeLast(6).joinToString("\n") { message ->
+            "${if (message.role == "user") "用户" else "鲸鱼娘"}：${validateMessage(message.text).take(600)}"
+        }
+        return listOf(older, recent).filter { it.isNotBlank() }.joinToString("\n").take(8_000)
+    }
     data class InlineImages(val text: String, val images: List<String>)
     fun parseInlineImages(text: String): InlineImages {
         val pattern = Regex("!\\[[^\\]\\r\\n]{0,200}\\]\\(<?/root/\\.dsh/attachments/v1/objects/([a-f0-9]{2})/([a-f0-9]{64})>?\\)")
@@ -67,7 +81,8 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
             if (knowledgeAllowed) append("需要查看用户保存的图片理解或文档资料时，可按需使用 mobile_knowledge_search；不知道关键词时可查询最近资料。需要完整内容时用 mobile_knowledge_read 分段读取；需要确认后台进度时用 mobile_knowledge_status。处理完成不等于原文件已被完整解析。\n")
             else append("本地资料对话访问已关闭，不要查询本地资料。\n")
             if (knowledgeAllowed && SemanticControl(context).enabled) append("用户已启用资料语义检索；关键词未命中或表达不同时可使用 mobile_knowledge_hybrid_search，再读取原文核对；索引可能尚未完成。\n")
-            (if (existing == null) history else history.takeLast(1)).forEach { append(if (it.role == "user") "用户：" else "鲸鱼娘：").append(CompanionBubbleChatPolicy.validateMessage(it.text)).append('\n') }
+            if (existing == null) append(CompanionBubbleChatPolicy.compressedContext(history)).append('\n')
+            else append("用户：").append(CompanionBubbleChatPolicy.validateMessage(history.last().text)).append('\n')
             append("请回复最后一条用户消息。")
         }
         return client.followReplyWithImages(currentSession) {

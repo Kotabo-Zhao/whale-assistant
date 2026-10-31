@@ -27,4 +27,23 @@ class CompanionBubbleChatPolicyTest {
         assertThrows(IllegalArgumentException::class.java) { CompanionBubbleChatPolicy.validateMessage(" ") }
         assertThrows(IllegalArgumentException::class.java) { CompanionBubbleChatPolicy.validateMessage("甲".repeat(2001)) }
     }
+    @Test fun toolScopeChangesOnlyWithPermissionOrCapabilityChanges() {
+        assertEquals(
+            CompanionBubbleChatPolicy.toolScope(true, true, true, false),
+            CompanionBubbleChatPolicy.toolScope(true, true, true, false),
+        )
+        assertNotEquals(
+            CompanionBubbleChatPolicy.toolScope(true, true, true, false),
+            CompanionBubbleChatPolicy.toolScope(false, true, false, false),
+        )
+    }
+    @Test fun newSessionContextKeepsRecentMessagesAndBoundsOlderExcerpts() {
+        val messages = (0 until 10).map { index ->
+            CompanionBubbleChat.Message(if (index % 2 == 0) "user" else "assistant", "第$index条" + "甲".repeat(900))
+        }
+        val value = CompanionBubbleChatPolicy.compressedContext(messages)
+        assertTrue(value.contains("第9条"))
+        assertTrue(value.contains("早前摘录"))
+        assertTrue(value.length <= 8_000)
+    }
 }

@@ -31,6 +31,11 @@ class CompanionAgentAccessInstrumentedTest {
             val request = JSONObject().put("callerSession", session)
             val access = CompanionAgentAccess(context, request)
             access.requireMemory() // An ordinary main conversation is not a pet conversation.
+            assertEquals("KNOWLEDGE_MODEL_DISABLED", assertThrows(RuntimeFailure::class.java) { access.requireKnowledge() }.code)
+            store.knowledgeModelAccess = true
+            access.requireKnowledge()
+            store.knowledgeModelAccess = false
+            assertEquals("KNOWLEDGE_MODEL_DISABLED", assertThrows(RuntimeFailure::class.java) { access.requireKnowledge() }.code)
             BubbleSessionRegistry(context).record(session)
             assertEquals("MEMORY_BUBBLE_DISABLED", assertThrows(RuntimeFailure::class.java) { access.requireMemory() }.code)
             assertTrue(BubbleSessionRegistry(context).contains(session))

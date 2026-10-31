@@ -192,11 +192,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 val result = runCatching {
                     val settings = CompanionStore(context)
                     val memoryStore = CompanionMemoryStore(context)
-                    val memoryRows = if (settings.bubbleMemoryAccess && memoryStore.enabled) memoryStore.listForUser() else null
-                    val knowledgeScope = if (settings.knowledgeModelAccess) CompanionKnowledgeStore(context).fingerprint() else null
-                    // Never reuse a session containing excerpts after access is revoked or data changes.
-                    val scope = CompanionBubbleChatPolicy.memoryDigest("tools-v4\n${memoryRows?.toString() ?: "disabled"}\n${knowledgeScope ?: "disabled"}")
-                    chat.reply(prior, scope, memoryRows != null, knowledgeScope != null)
+                    val memoryAllowed = settings.bubbleMemoryAccess && memoryStore.enabled
+                    val knowledgeAllowed = settings.knowledgeModelAccess
+                    // Content changes do not reset a live conversation; authorization/capability changes do.
+                    val scope = CompanionBubbleChatPolicy.toolScope(
+                        memoryAllowed, knowledgeAllowed,
+                        memoryAllowed && SemanticControl(context).memoryEnabled,
+                        knowledgeAllowed && SemanticControl(context).enabled,
+                    )
+                    chat.reply(prior, scope, memoryAllowed, knowledgeAllowed)
                 }
                 handler.post {
                     if (closed || request != generation) return@post

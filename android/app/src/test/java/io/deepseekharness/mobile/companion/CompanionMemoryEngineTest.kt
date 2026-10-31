@@ -22,6 +22,20 @@ class CompanionMemoryEngineTest {
         assertThrows(RuntimeFailure::class.java) { engine.execute(update("我住北京")) }
     }
 
+    @Test fun revisionedCorrectionRetainsBoundedHistoryAndIsIdempotent() {
+        var rows = JSONArray()
+        val engine = CompanionMemoryEngine({ JSONArray(rows.toString()) }, { rows = it }, true)
+        val saved = JSONObject(engine.execute("""{"op":"save","text":"我住北京"}"""))
+        val id = saved.getString("id")
+        val revision = JSONObject(engine.execute("""{"op":"search","query":"北京"}""")).getJSONArray("items").getJSONObject(0).getString("revision")
+        val op = "00000000-0000-0000-0000-000000000001"
+        val updated = JSONObject(engine.execute(JSONObject().put("op", "update").put("id", id).put("expectedRevision", revision).put("text", "我住上海").put("operationId", op).toString()))
+        assertTrue(updated.getBoolean("updated")); assertEquals(1, updated.getInt("historyCount")); assertNotEquals(revision, updated.getString("revision"))
+        assertEquals("我住北京", rows.getJSONObject(0).getJSONArray("history").getJSONObject(0).getString("text"))
+        val replay = JSONObject(engine.execute(JSONObject().put("op", "update").put("id", id).put("expectedRevision", revision).put("text", "我住上海").put("operationId", op).toString()))
+        assertTrue(replay.getBoolean("idempotent")); assertEquals(1, rows.getJSONObject(0).getJSONArray("history").length())
+    }
+
     @org.junit.Test fun databaseModeAcceptsMoreThanOneHundredAndPaginatesPastOldBoundary() {
         val rows = org.json.JSONArray()
         repeat(105) { CompanionUserMemory.add(rows, "记忆第${it}条", "user_edit", 1L, legacyLimit = false) }
