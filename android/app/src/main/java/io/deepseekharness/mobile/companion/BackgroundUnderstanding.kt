@@ -100,6 +100,24 @@ internal object BackgroundUnderstanding {
         UnifiedUnderstandingStore.open(context).use { it.queue.pendingCount() > 0 }
     }.getOrDefault(false)
 
+    data class PendingStatus(val count: Long, val attempts: Int, val nextAtMs: Long?, val message: String, val errorCode: String?)
+    fun pendingStatus(context: Context): PendingStatus {
+        val app = context.applicationContext
+        val queue = UnifiedUnderstandingStore.open(app).use { it.queue.pendingStatus() }
+        val prefs = app.getSharedPreferences("understanding_runtime_v1", Context.MODE_PRIVATE)
+        return PendingStatus(queue.count, queue.attempts, queue.nextAtMs, prefs.getString("status", "等待新通知").orEmpty(), prefs.getString("lastErrorCode", null))
+    }
+
+    /** User-requested retry never overrides an active worker lease or bypasses consent. */
+    fun retryPending(context: Context): Int {
+        val app = context.applicationContext
+        check(CompanionStore(app).backgroundUnderstanding && CompanionStore(app).notificationCapture) { "后台理解未启用" }
+        val retried = UnifiedUnderstandingStore.open(app).use { it.queue.retryPending(System.currentTimeMillis()) }
+        if (retried > 0) status(app, "已按用户要求提前重试")
+        schedule(app, 0)
+        return retried
+    }
+
     fun runOne(context: Context, stopped: AtomicBoolean): Boolean {
         val app = context.applicationContext
         UnifiedUnderstandingStore.open(app).use { store ->

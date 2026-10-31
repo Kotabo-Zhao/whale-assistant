@@ -166,6 +166,17 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
         it.moveToFirst(); it.getLong(0)
     }
 
+    data class PendingStatus(val count: Long, val attempts: Int, val nextAtMs: Long?)
+    fun pendingStatus(): PendingStatus = db.rawQuery(
+        "SELECT COUNT(*),COALESCE(MAX(attempts),0),MIN(CASE WHEN state='pending' THEN next_at END) FROM jobs WHERE state IN ('pending','running')", null
+    ).use { c -> c.moveToFirst(); PendingStatus(c.getLong(0), c.getInt(1), if (c.isNull(2)) null else c.getLong(2)) }
+
+    /** Manual retry only releases waiting work; an in-flight model request keeps its lease. */
+    fun retryPending(now: Long): Int = transaction {
+        require(now >= 0)
+        db.update("jobs", ContentValues().apply { put("next_at", now) }, "state='pending' AND next_at>?", arrayOf(now.toString()))
+    }
+
     fun enqueue(source: String, inputHash: String): Boolean = transaction {
         validateSource(source)
         require(inputHash.matches(Regex("[a-f0-9]{64}"))) { "invalid input hash" }

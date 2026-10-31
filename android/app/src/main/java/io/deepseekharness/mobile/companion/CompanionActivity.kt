@@ -588,6 +588,22 @@ class CompanionActivity : AppCompatActivity() {
         }
         val understandingState = getSharedPreferences("understanding_runtime_v1", Context.MODE_PRIVATE)
         paragraph("后台理解：${if (store.backgroundUnderstanding) understandingState.getString("status", "已开启，等待新通知") else "已关闭"}。需要通知采集、系统授权、所选模型服务的凭据和非计费网络；系统可能延迟处理。")
+        button("查看后台理解状态") {
+            runMemoryIo("正在读取后台理解状态…", { BackgroundUnderstanding.pendingStatus(applicationContext) }) { result ->
+                result.onSuccess { status ->
+                    val next = status.nextAtMs?.takeIf { it > System.currentTimeMillis() }?.let { DateFormat.getDateTimeInstance().format(Date(it)) } ?: "可由系统随时调度"
+                    val error = status.errorCode?.let { "\n上次原因：${UnderstandingFailure.summary(it)}（$it）" }.orEmpty()
+                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle("后台理解状态")
+                        .setMessage("${status.message}\n等待或运行任务：${status.count} 条；最大尝试次数：${status.attempts}。\n下次：$next。$error\n手动重试不会中断正在运行的模型请求。")
+                        .setPositiveButton("关闭", null).show()
+                }.onFailure { paragraph("无法读取后台理解状态，原任务未更改。") }
+            }
+        }
+        button("立即重试等待中的后台理解") {
+            runMemoryIo("正在请求后台重试…", { BackgroundUnderstanding.retryPending(applicationContext) }) { result ->
+                android.widget.Toast.makeText(this, result.fold({ "已提前安排 $it 条等待任务；运行中的请求不会被中断。" }, { "无法安排重试：${it.message ?: "请检查后台开关和系统状态"}" }), android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
         button("查看后台理解候选") {
             val results = runCatching { UnifiedUnderstandingStore.open(this).use { it.queue.recentEvidence(30) } }.getOrNull()
             if (results == null) paragraph("无法读取后台理解结果。")
