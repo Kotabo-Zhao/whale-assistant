@@ -328,18 +328,18 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
         db.delete("understanding_events", "id IN ($placeholders)", args)
         items
     }
-    data class Item(val id: String, val title: String, val state: String, val eventId: String, val reminderStatus: Int = 0, val reminderRevision: Int = 0)
+    data class Item(val id: String, val title: String, val state: String, val eventId: String, val reminderStatus: Int = 0, val reminderRevision: Int = 0, val reminderAtMs: Long? = null)
     fun item(id: String): Item? = db.rawQuery(
-        "SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.id=?", arrayOf(id)
-    ).use { c -> if (c.moveToFirst()) Item(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getInt(5)) else null }
+        "SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.id=?", arrayOf(id)
+    ).use { c -> if (c.moveToFirst()) Item(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getInt(5), if (c.isNull(6)) null else c.getLong(6)) else null }
     fun sharedRecordId(eventId: String): String? = db.rawQuery(
         "SELECT record_id FROM knowledge_source_events WHERE event_id=? LIMIT 1", arrayOf(eventId)
     ).use { c -> if (c.moveToFirst()) c.getString(0) else null }
     fun listItems(limit: Int): List<Item> {
         require(limit in 1..100)
-        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id ORDER BY i.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->
+        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id ORDER BY i.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->
             val items = mutableListOf<Item>()
-            while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4), cursor.getInt(5)))
+            while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4), cursor.getInt(5), if (cursor.isNull(6)) null else cursor.getLong(6)))
             items
         }
     }

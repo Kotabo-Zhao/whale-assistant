@@ -24,11 +24,12 @@ class CompanionTaskModelTest {
 
     @Test fun searchSupportsStableIdStateAndSourceFiltersAndReturnsRevision() {
         val notification = UnderstandingQueue.Item("00000000-0000-0000-0000-000000000001", "续费", "open", "notification:one")
-        val shared = UnderstandingQueue.Item("00000000-0000-0000-0000-000000000002", "合同", "open", "share:${"a".repeat(64)}", 1, 2)
-        val result = JSONObject(CompanionTaskModel.execute(true, """{"query":"","state":"open","sourceKind":"shared_material"}""", { listOf(notification, shared) }))
+        val shared = UnderstandingQueue.Item("00000000-0000-0000-0000-000000000002", "合同", "open", "share:${"a".repeat(64)}", 1, 2, 250L)
+        val result = JSONObject(CompanionTaskModel.execute(true, """{"query":"","state":"open","sourceKind":"shared_material","reminderFromMs":200,"reminderToMs":300}""", { listOf(notification, shared) }))
         val item = result.getJSONArray("items").getJSONObject(0)
         assertEquals(shared.id, item.getString("id"))
         assertEquals("shared_material", item.getString("sourceKind"))
+        assertEquals(250L, item.getLong("reminderAtMs"))
         assertEquals(64, item.getString("revision").length)
         val update = CompanionTaskModel.parseUpdate(JSONObject().put("op", "update").put("id", shared.id)
             .put("expectedState", "open").put("expectedRevision", item.getString("revision")).put("state", "done").toString())

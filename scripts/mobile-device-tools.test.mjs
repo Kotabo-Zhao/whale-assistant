@@ -113,8 +113,8 @@ test('事项工具携带调用会话并限制检索参数', async t => {
   await tool.execute({ query: '续费', limit: 2 }, memoryExec)
   assert.deepEqual(f.requests, [{ command: 'companionTasks', param: `{"query":"续费","limit":2,"callerSession":"${virtualSession}"}` }])
   await assert.rejects(tool.execute({ query: '\u0001' }, memoryExec), /TASK_INPUT_INVALID/)
-  await tool.execute({ query: '', state: 'open', sourceKind: 'shared_material', id: virtualSession }, memoryExec)
-  assert.deepEqual(JSON.parse(f.requests[1].param), { query: '', state: 'open', sourceKind: 'shared_material', id: virtualSession, callerSession: virtualSession })
+  await tool.execute({ query: '', state: 'open', sourceKind: 'shared_material', id: virtualSession, reminderFromMs: 100, reminderToMs: 200 }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[1].param), { query: '', state: 'open', sourceKind: 'shared_material', id: virtualSession, reminderFromMs: 100, reminderToMs: 200, callerSession: virtualSession })
   await assert.rejects(tool.execute({ query: '', sourceKind: 'unknown' }, memoryExec), /TASK_INPUT_INVALID/)
 })
 
