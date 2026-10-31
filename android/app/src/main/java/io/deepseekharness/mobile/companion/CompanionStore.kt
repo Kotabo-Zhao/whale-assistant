@@ -15,6 +15,10 @@ class CompanionStore(context: Context) {
     var proactiveMemoryChat: Boolean
         get() = prefs.getBoolean("proactive_memory_chat", false)
         set(value) { prefs.edit().putBoolean("proactive_memory_chat", value).apply() }
+    /** User-level accessibility preference for the floating companion only. */
+    var reduceMotion: Boolean
+        get() = prefs.getBoolean("reduce_motion", false)
+        set(value) { prefs.edit().putBoolean("reduce_motion", value).apply() }
     /** Explicit provider selection; changing this changes where background content is sent. */
     var understandingProvider: String
         get() = prefs.getString("understanding_provider", "deepseek") ?: "deepseek"

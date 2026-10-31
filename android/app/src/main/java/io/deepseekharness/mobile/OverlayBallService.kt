@@ -90,7 +90,7 @@ class OverlayBallService : Service() {
     private val blinkOpen = Runnable { petDrawable?.blinkAmount = 0f }
     private val blinkTick = object : Runnable {
         override fun run() {
-            if (!ballAttached || avatarDestroyed || !android.animation.ValueAnimator.areAnimatorsEnabled()) return
+            if (!ballAttached || avatarDestroyed || !companionMotionEnabled()) return
             petBlinkAt = SystemClock.uptimeMillis()
             hintHandler.postDelayed(blinkOpen, 300)
             hintHandler.postDelayed(this, if (petChatState == "thinking") 3300 else 4800)
@@ -717,38 +717,70 @@ class OverlayBallService : Service() {
         ballView = view
         layoutParams = params
         val avatar = view.findViewById<android.widget.ImageView>(R.id.companion_avatar)
-        if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
-            var thinkingBlend = 0f
-            companionAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 3600; repeatCount = android.animation.ValueAnimator.INFINITE
-                interpolator = android.view.animation.LinearInterpolator()
-                addUpdateListener {
-                    val now = SystemClock.uptimeMillis()
-                    if (petChatState == "reply" && now - petReplyAt > 1800) petChatState = "idle"
-                    val target = if (petChatState == "thinking") 1f else 0f
-                    thinkingBlend += (target - thinkingBlend) * 0.08f
-                    val reply = if (petChatState == "reply") now - petReplyAt else -1L
-                    val pose = io.deepseekharness.mobile.overlay.CompanionPetMotion.pose(now, thinkingBlend, reply)
-                    val tap = io.deepseekharness.mobile.overlay.CompanionPetMotion.tapScale(now - petTapAt)
-                    petDrawable?.blinkAmount = io.deepseekharness.mobile.overlay.CompanionPetMotion.blink(now - petBlinkAt)
-                    petDrawable?.bend = kotlin.math.sin(now * 2.0 * Math.PI / (if (petChatState == "thinking") 2300.0 else 3800.0)).toFloat()
-                    val arms = io.deepseekharness.mobile.overlay.CompanionPetMotion.arms(now, thinkingBlend, reply)
-                    petDrawable?.leftArm = arms.left
-                    petDrawable?.rightArm = arms.right
-                    avatar.pivotY = avatar.height * 0.78f
-                    avatar.rotation = pose.rotation
-                    avatar.translationY = -metrics.density * pose.lift
-                    avatar.scaleX = pose.scaleX * tap
-                    avatar.scaleY = pose.scaleY * tap
-                }
-                start()
-            }
-        }
+        configureCompanionMotion(avatar)
         // 乐观置位：addView 返回时窗口已登记，首次遍历（附着回调）还没跑完，
         // 这一小段空窗期不能把刚挂上的球误判成陈旧视图。
         ballAttached = true
         loadCompanionAvatar(view, size)
         return true
+    }
+
+    /**
+     * The system animation scale and the in-app accessibility preference are both authoritative.
+     * Keep a static, visible pose when motion is reduced rather than hiding feedback or changing
+     * the conversation state machine.
+     */
+    private fun companionMotionEnabled(): Boolean =
+        android.animation.ValueAnimator.areAnimatorsEnabled() && !io.deepseekharness.mobile.companion.CompanionStore(this).reduceMotion
+
+    /** Reconfigure the current avatar after the user changes the accessibility preference. */
+    private fun applyCompanionMotionPreference(): Boolean {
+        val avatar = ballView?.findViewById<android.widget.ImageView>(R.id.companion_avatar) ?: return false
+        if (!ballAttached || avatarDestroyed) return false
+        configureCompanionMotion(avatar)
+        return true
+    }
+
+    private fun configureCompanionMotion(avatar: android.widget.ImageView) {
+        hintHandler.removeCallbacks(blinkTick)
+        hintHandler.removeCallbacks(blinkOpen)
+        companionAnimator?.cancel()
+        companionAnimator = null
+        petDrawable?.blinkAmount = 0f
+        petDrawable?.bend = 0f
+        petDrawable?.leftArm = 0f
+        petDrawable?.rightArm = 0f
+        avatar.rotation = 0f
+        avatar.translationY = 0f
+        avatar.scaleX = 1f
+        avatar.scaleY = 1f
+        if (!companionMotionEnabled()) return
+        var thinkingBlend = 0f
+        companionAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 3600; repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.LinearInterpolator()
+            addUpdateListener {
+                val now = SystemClock.uptimeMillis()
+                if (petChatState == "reply" && now - petReplyAt > 1800) petChatState = "idle"
+                val target = if (petChatState == "thinking") 1f else 0f
+                thinkingBlend += (target - thinkingBlend) * 0.08f
+                val reply = if (petChatState == "reply") now - petReplyAt else -1L
+                val pose = io.deepseekharness.mobile.overlay.CompanionPetMotion.pose(now, thinkingBlend, reply)
+                val tap = io.deepseekharness.mobile.overlay.CompanionPetMotion.tapScale(now - petTapAt)
+                petDrawable?.blinkAmount = io.deepseekharness.mobile.overlay.CompanionPetMotion.blink(now - petBlinkAt)
+                petDrawable?.bend = kotlin.math.sin(now * 2.0 * Math.PI / (if (petChatState == "thinking") 2300.0 else 3800.0)).toFloat()
+                val arms = io.deepseekharness.mobile.overlay.CompanionPetMotion.arms(now, thinkingBlend, reply)
+                petDrawable?.leftArm = arms.left
+                petDrawable?.rightArm = arms.right
+                avatar.pivotY = avatar.height * 0.78f
+                avatar.rotation = pose.rotation
+                avatar.translationY = -metrics.density * pose.lift
+                avatar.scaleX = pose.scaleX * tap
+                avatar.scaleY = pose.scaleY * tap
+            }
+            start()
+        }
+        if (petDrawable != null) hintHandler.postDelayed(blinkTick, 2400)
     }
 
     /** Decode both aligned expression frames at overlay resolution, off the UI thread. */
@@ -778,7 +810,7 @@ class OverlayBallService : Service() {
                     petDrawable = next
                     view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
                     old?.close()
-                    if (android.animation.ValueAnimator.areAnimatorsEnabled()) hintHandler.postDelayed(blinkTick, 2400)
+                    if (companionMotionEnabled()) hintHandler.postDelayed(blinkTick, 2400)
                 } else { pair.first.recycle(); pair.second.recycle(); pair.third.recycle() }
             }
             if (!posted) { pair.first.recycle(); pair.second.recycle(); pair.third.recycle() }
@@ -2042,6 +2074,9 @@ class OverlayBallService : Service() {
         }
         /** Opens only the local notification list on an explicit bubble tap. */
         internal fun applyCompanionSizePreference(): Boolean = activeService?.applyCompanionSize() == true
+
+        /** Apply the app-level reduced-motion setting immediately when the floating companion exists. */
+        internal fun applyCompanionMotionPreference(): Boolean = activeService?.applyCompanionMotionPreference() == true
 
         internal fun companionNotificationHint() {
             Handler(Looper.getMainLooper()).post {

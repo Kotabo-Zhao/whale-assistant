@@ -446,6 +446,12 @@ class CompanionActivity : AppCompatActivity() {
         val avatarSize = io.deepseekharness.mobile.overlay.OverlayBallPreferences.from(this).readSizeDp()
         button("鲸鱼娘大小 · ${when (avatarSize) { 64 -> "小"; 112 -> "大"; else -> "中" }}") { chooseAvatarSize() }
         paragraph("可选择悬浮形象大小；悬浮窗权限和系统后台限制仍会影响显示。")
+        toggle("减少鲸鱼娘动态效果", store.reduceMotion) { enabled ->
+            store.reduceMotion = enabled
+            val applied = io.deepseekharness.mobile.OverlayBallService.applyCompanionMotionPreference()
+            android.widget.Toast.makeText(this, if (applied) "动态效果已更新。" else "已保存，下次显示悬浮形象时生效。", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        paragraph("开启后，悬浮鲸鱼娘保持静止可见状态，不播放眨眼、摆动或点击缩放；系统“移除动画”设置同样会停止这些动态效果。")
         heading("语音对话", "voice")
         paragraph("通知和使用数据默认在本机处理；单独开启对话访问后，相关内容可能发送给当前模型服务。系统和应用可能限制读取。")
         button("语音输入任务") { startVoiceInput() }
