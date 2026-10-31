@@ -103,23 +103,33 @@ class CompanionActivity : AppCompatActivity() {
     }
     private val knowledgePackageImport = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) askKnowledgePackagePassphrase("解锁个人知识包", confirm = false) { passphrase ->
-            runMemoryIo("正在解锁并恢复个人知识包…", {
+            runMemoryIo("正在解锁并校验个人知识包…", {
                 val encrypted = java.io.File(cacheDir, "knowledge-package-${java.util.UUID.randomUUID()}.wpk")
                 try {
                     (contentResolver.openInputStream(uri) ?: error("无法读取知识包")).use { input -> encrypted.outputStream().use { output ->
                         val buffer = ByteArray(64 * 1024); var total = 0L
                         while (true) { val count = input.read(buffer); if (count < 0) break; if (count == 0) continue; total += count; require(total <= UnifiedFullBackup.MAX_BYTES + 64 * 1024L) { "知识包文件过大" }; output.write(buffer, 0, count) }
                     } }
-                    val archive = PersonalKnowledgePackage.decrypt(this, encrypted, passphrase)
-                    try {
-                        val previous = UnifiedMemoryBackup.export(this)
-                        val rollback = java.io.File(noBackupFilesDir, "last-unified-rollback.sqlite")
-                        java.nio.file.Files.move(previous.toPath(), rollback.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-                        UnifiedFullBackup.restore(this, archive)
-                    } finally { archive.delete() }
+                    PersonalKnowledgePackage.decrypt(this, encrypted, passphrase)
                 } finally { encrypted.delete() }
-            }) { result -> android.widget.Toast.makeText(this, if (result.isSuccess) "个人知识包已合并恢复；请重新核对提醒。" else "无法解锁或恢复知识包；当前数据未替换。", android.widget.Toast.LENGTH_LONG).show(); render() }
+            }) { result -> result.onSuccess { archive ->
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("恢复加密个人知识包？")
+                    .setMessage("已成功解锁并校验知识包。确认后将恢复资料、记忆、事项、关联原件和本地会话标记；不会恢复模型密钥或 Harness 会话正文。恢复前会保留一份本机结构化回退快照。")
+                    .setNegativeButton("取消") { _, _ -> archive.delete() }.setOnCancelListener { archive.delete() }
+                    .setPositiveButton("确认恢复") { _, _ -> restoreEncryptedKnowledgePackage(archive) }.show()
+            }.onFailure { android.widget.Toast.makeText(this, "无法解锁或校验知识包；当前数据未替换。", android.widget.Toast.LENGTH_LONG).show() }
         }
+    }
+
+    private fun restoreEncryptedKnowledgePackage(archive: java.io.File) {
+        runMemoryIo("正在恢复个人知识包…", {
+            try {
+                val previous = UnifiedMemoryBackup.export(this)
+                val rollback = java.io.File(noBackupFilesDir, "last-unified-rollback.sqlite")
+                java.nio.file.Files.move(previous.toPath(), rollback.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                UnifiedFullBackup.restore(this, archive)
+            } finally { archive.delete() }
+        }) { result -> android.widget.Toast.makeText(this, if (result.isSuccess) "个人知识包已合并恢复；请重新核对提醒。" else "恢复知识包失败；当前数据可能只保留已验证的回退快照。", android.widget.Toast.LENGTH_LONG).show(); render() }
     }
 
     private fun askKnowledgePackagePassphrase(title: String, confirm: Boolean, ready: (CharArray) -> Unit) {
