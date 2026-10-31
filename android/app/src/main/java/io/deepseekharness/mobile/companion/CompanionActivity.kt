@@ -389,6 +389,9 @@ class CompanionActivity : AppCompatActivity() {
         } else if (intent?.getBooleanExtra("open_pending_memories", false) == true) {
             intent?.removeExtra("open_pending_memories")
             showMemories()
+        } else if (intent?.getBooleanExtra("open_task_list", false) == true) {
+            intent?.removeExtra("open_task_list")
+            showTaskList()
         } else if (intent?.getBooleanExtra("open_calendar_brief", false) == true) {
             intent?.removeExtra("open_calendar_brief")
             showBrief()
@@ -445,6 +448,19 @@ class CompanionActivity : AppCompatActivity() {
                         }.show()
                 }
         }
+    }
+
+    private fun showTaskList() {
+        val items = runCatching { UnifiedUnderstandingStore.open(this).use { it.queue.listItems(100) } }.getOrNull()
+        if (items == null) { paragraph("无法读取事项。"); return }
+        if (items.isEmpty()) { paragraph("暂无识别事项。"); return }
+        val labels = items.map { "[${when (it.state) { "candidate" -> "待核实"; "open" -> "待处理"; "done" -> "已完成"; else -> "已取消" }}] ${it.title}" }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("事项").setItems(labels) { _, index ->
+            val item = items[index]
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle(item.title)
+                .setMessage("模型识别可能有误；可在助手设置中查看、更新或安排提醒。")
+                .setNegativeButton("关闭", null).show()
+        }.setNegativeButton("关闭", null).show()
     }
 
     private fun render() {

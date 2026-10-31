@@ -7,6 +7,7 @@ import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import io.deepseekharness.mobile.OverlayBallService
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
@@ -303,7 +304,10 @@ internal object SharedMemoryJobs {
             knowledge.withUnchangedRecord(job.id, text) {
                 if (!stopped.get()) persisted = CompanionMemoryStore(app).commitSharedJob(job, result.getJSONArray("claims"), boundResult)
             }
-            if (persisted && !stopped.get()) clearFailure(app, job)
+            if (persisted && !stopped.get()) {
+                clearFailure(app, job)
+                if ((result.optJSONArray("items")?.length() ?: 0) > 0) OverlayBallService.companionTaskHint()
+            }
         } catch (e: Exception) {
             if (!stopped.get()) defer(app, job, e)
             throw e

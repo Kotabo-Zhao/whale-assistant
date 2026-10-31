@@ -2128,6 +2128,17 @@ class OverlayBallService : Service() {
                 }
             }
         }
+        internal fun companionTaskHint() {
+            Handler(Looper.getMainLooper()).post {
+                activeService?.let { service ->
+                    if (!CompanionStore(service).notificationBubbles) return@let
+                    service.showCompanionHint("有新事项待核对，点击查看。", notificationStyle = true) {
+                        runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
+                            .putExtra("open_task_list", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
+                }
+            }
+        }
         internal fun companionHint(message: String) {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
