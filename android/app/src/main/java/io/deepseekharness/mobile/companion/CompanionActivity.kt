@@ -1885,8 +1885,23 @@ class CompanionActivity : AppCompatActivity() {
                     val event = runCatching { UnifiedUnderstandingStore.open(this).use { it.queue.sourceEvent(selected.optString("evidenceEventId")) } }.getOrNull()
                     if (event != null && event.first == selected.optString("evidenceSource")) "\n\n依据：${event.second}" else "\n\n原始依据不可用（可能已清除）。"
                 } else ""
+                val details = android.widget.LinearLayout(this).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    setPadding(dp(8), dp(4), dp(8), dp(4))
+                    addView(android.widget.TextView(this@CompanionActivity).apply {
+                        text = labels[index] + evidenceText
+                        textSize = 15f
+                        setTextColor(ink)
+                    })
+                }
+                val historyCount = selected.optJSONArray("history")?.length() ?: 0
+                if (historyCount > 0) details.addView(android.widget.Button(this).apply {
+                    text = "查看 $historyCount 条历史版本"
+                    contentDescription = "查看这条记忆的 $historyCount 条历史版本"
+                    setOnClickListener { showMemoryHistory(selected) }
+                })
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("管理记忆")
-                    .setMessage(labels[index] + evidenceText).setNegativeButton("关闭", null)
+                    .setView(details).setNegativeButton("关闭", null)
                     .setNeutralButton(if (selected.optString("status") == "pending" || selected.optString("source") == "auto_understanding" || (selected.optString("source") == "shared_understanding" && selected.optLong("confirmedAt") <= 0)) "确认记住" else "编辑") { _, _ ->
                         if (selected.optString("source") == "auto_understanding" || (selected.optString("source") == "shared_understanding" && selected.optLong("confirmedAt") <= 0)) {
                             runMemoryIo("正在确认记忆…", { memory.confirmAutomaticUnderstanding(id, selected.toString()) }) { outcome ->
@@ -1957,6 +1972,27 @@ class CompanionActivity : AppCompatActivity() {
             list.addView(card, android.widget.LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         }
         dialog.show()
+    }
+
+    /** Local-only audit view. Historical text is intentionally never returned by Agent search. */
+    private fun showMemoryHistory(row: org.json.JSONObject) {
+        val history = row.optJSONArray("history") ?: return
+        val lines = (history.length() - 1 downTo 0).mapNotNull { index ->
+            val version = history.optJSONObject(index) ?: return@mapNotNull null
+            val until = version.optLong("validUntil")
+            val from = version.optLong("validFrom")
+            val range = buildString {
+                if (from > 0) append(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(from))) else append("记录起始时间未知")
+                append(" 至 ")
+                if (until > 0) append(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(until))) else append("失效时间未知")
+            }
+            val status = if (version.optString("status") == "pending") "待确认" else "已确认"
+            "[$status] $range\n来源：${version.optString("source", "unknown")}\n${version.optString("text")}"
+        }
+        val text = if (lines.isEmpty()) "没有可读取的历史版本。" else lines.joinToString("\n\n────────\n\n")
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("记忆历史版本")
+            .setMessage(text + "\n\n历史仅保存在本机管理界面，不会由 Agent 检索或发送给模型。")
+            .setPositiveButton("关闭", null).show()
     }
 
     private fun editConfirmedMemory(memory: CompanionMemoryStore, row: org.json.JSONObject) {
