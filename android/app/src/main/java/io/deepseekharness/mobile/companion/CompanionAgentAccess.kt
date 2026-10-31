@@ -49,7 +49,8 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
                 .put("semanticAllowed", canReadKnowledge && semantic.enabled))
             .put("tasks", JSONObject().put("allowed", store.notificationModelAccess)
                 .put("errorCode", if (store.notificationModelAccess) JSONObject.NULL else "TASK_MODEL_DISABLED")
-                .put("searchTool", "mobile_task_search").put("updateTool", "mobile_task_update"))
+                .put("searchTool", "mobile_task_search").put("updateTool", "mobile_task_update")
+                .put("sharedMaterialIncluded", store.notificationModelAccess && canReadKnowledge))
             .put("notice", "按需检索，不自动读取全部内容；未知资料关键词时查询最近资料，再用 id/revision 读取原文。权限状态可能变化，以每次工具回执为准。")
             .toString()
     }

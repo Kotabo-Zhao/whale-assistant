@@ -365,6 +365,8 @@ class DeviceBridgeServer(
                             val now = System.currentTimeMillis()
                             val changed = io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
                                 val current = store.queue.item(update.id) ?: throw RuntimeFailure("TASK_NOT_FOUND", "事项不存在或已删除")
+                                if (current.eventId.startsWith("share:") && !io.deepseekharness.mobile.companion.CompanionStore(context).knowledgeModelAccess)
+                                    throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
                                 if (current.state != update.expectedState) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
                                 val saved = if (update.reminderAtMs != null) store.queue.setItemReminder(update.id, update.expectedState, update.reminderAtMs, now)
                                 else store.queue.updateItem(update.id, update.expectedState, update.nextState!!)
@@ -387,7 +389,12 @@ class DeviceBridgeServer(
                             io.deepseekharness.mobile.companion.CompanionTaskModel.execute(
                                 io.deepseekharness.mobile.companion.CompanionStore(context).notificationModelAccess,
                                 param,
-                                { limit -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.listItems(limit) } },
+                                { limit ->
+                                    val allowShared = io.deepseekharness.mobile.companion.CompanionStore(context).knowledgeModelAccess
+                                    io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
+                                        store.queue.listItems(limit).filter { allowShared || !it.eventId.startsWith("share:") }
+                                    }
+                                },
                                 { eventId -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.sharedRecordId(eventId) } },
                             )
                         }
