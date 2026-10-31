@@ -49,6 +49,7 @@ class CompanionKnowledgeQueryInstrumentedTest {
                 val row = first.getJSONArray("items").getJSONObject(index)
                 assertEquals("image_analysis", row.getString("source"))
                 assertEquals("model_description", row.getString("coverage"))
+                assertTrue(row.getString("revision").matches(Regex("[a-f0-9]{64}")))
             }
             val second = dashboard.execute(JSONObject().put("operation", "knowledgeList")
                 .put("query", "").put("offset", first.getInt("nextOffset"))
