@@ -56,6 +56,7 @@ class CompanionBubbleChatPolicyTest {
         assertEquals(1, citations.size)
         assertEquals("合同.pdf", citations.single().displayName)
         assertEquals(1, citations.single().chunkIndex)
+        assertEquals(" · 保存文本第 2/3 段（非页码）", CompanionBubbleChatPolicy.citationSegmentLabel(citations.single()))
         assertTrue(CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("id", id).toString()).isEmpty())
         assertTrue(CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("id", id).put("revision", revision).put("text", "记忆正文").toString()).isEmpty())
     }

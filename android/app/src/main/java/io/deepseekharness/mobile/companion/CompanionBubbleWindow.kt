@@ -132,7 +132,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         fun citationCard(citation: CompanionBubbleChat.Citation) {
             val shouldFollow = atBottom()
             val coverage = when (citation.parsingCoverage) { "partial" -> " · 部分解析"; "not_parsed" -> " · 尚未解析"; else -> "" }
-            val segment = if (citation.chunkCount > 1) " · 第 ${citation.chunkIndex + 1}/${citation.chunkCount} 段" else ""
+            val segment = CompanionBubbleChatPolicy.citationSegmentLabel(citation)
             val view = TextView(context).apply {
                 text = "资料来源 · ${citation.displayName}$segment$coverage"
                 textSize = 12f; setTextColor(Color.rgb(48, 91, 125)); maxWidth = width - dp(45)

@@ -66,6 +66,10 @@ internal object CompanionBubbleChatPolicy {
         }.distinctBy { "${it.id}:${it.revision}" }.take(6)
     }
 
+    /** Stored text chunks preserve retrieval order; they are not PDF page or spreadsheet coordinates. */
+    fun citationSegmentLabel(citation: CompanionBubbleChat.Citation): String =
+        if (citation.chunkCount > 1) " · 保存文本第 ${citation.chunkIndex + 1}/${citation.chunkCount} 段（非页码）" else ""
+
 }
 
 /** Uses the same authenticated local Harness and its selected model as the main conversation. */
