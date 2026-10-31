@@ -71,6 +71,8 @@ class CompanionKnowledgeModelTest {
         rows.put(JSONObject().put("text","unrelated").put("source","text_file").put("createdAt",2))
         val first=JSONObject(CompanionKnowledgeModel.execute(true,JSONObject().put("query","").put("documentId",document).toString()){rows})
         assertEquals("part-0",first.getJSONArray("items").getJSONObject(0).getString("id"))
+        val location = first.getJSONArray("items").getJSONObject(0).getJSONObject("location")
+        assertEquals("stored_text_chunk", location.getString("kind")); assertEquals(0, location.getInt("chunkIndex")); assertTrue(location.isNull("page"))
         assertEquals(3,first.getInt("nextOffset"))
         val last=JSONObject(CompanionKnowledgeModel.execute(true,JSONObject().put("query","").put("documentId",document).put("offset",3).toString()){rows})
         assertEquals("part-3",last.getJSONArray("items").getJSONObject(0).getString("id"))
