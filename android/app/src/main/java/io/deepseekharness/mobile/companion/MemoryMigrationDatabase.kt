@@ -123,14 +123,17 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
         try {
             val generation = db.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='generation'", null).use { if (it.moveToFirst()) it.getLong(0) else 0L }
             if (generation != job.generation) return false
-            val pending = db.rawQuery("SELECT 1 FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=?", arrayOf(job.id, job.hash, job.event)).use { it.moveToFirst() }
+            val token = job.leaseToken ?: return false
+            // A worker may finish after its process died or its lease was recovered.  Such a
+            // stale result must not publish facts, tasks, or a completion marker.
+            val pending = db.rawQuery("SELECT 1 FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>?", arrayOf(job.id, job.hash, job.event, token, System.currentTimeMillis().toString())).use { it.moveToFirst() }
             val text = db.rawQuery("SELECT body FROM knowledge_records WHERE id=?", arrayOf(job.id)).use { if (it.moveToFirst()) JSONObject(it.getString(0)).getString("text") else null }
             if (!pending || text == null || CompanionMemorySuppression.digest(text) != job.hash) return false
             applyIncrementalInTransaction(rows)
             persistSharedTasks(job, text, result)
             beforeComplete()
             db.execSQL("INSERT OR IGNORE INTO shared_completed(record_id,text_hash) VALUES (?,?)", arrayOf(job.id, job.hash))
-            check(db.delete("shared_jobs", "record_id=? AND text_hash=? AND event_id=?", arrayOf(job.id, job.hash, job.event)) == 1)
+            check(db.delete("shared_jobs", "record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>?", arrayOf(job.id, job.hash, job.event, token, System.currentTimeMillis().toString())) == 1)
             db.setTransactionSuccessful()
             return true
         } finally { db.endTransaction() }

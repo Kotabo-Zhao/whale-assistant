@@ -100,7 +100,7 @@ class SharedMemoryJobsInstrumentedTest {
         val chunk=chunks.getJSONObject(0);val value=chunk.getString("text")
         val event="share:"+CompanionMemorySuppression.digest(value)
         SharedMemoryJobs.enqueueWithoutSchedule(context,chunk.getString("id"),value,event)
-        val job=SharedMemoryJobs.Job(chunk.getString("id"),CompanionMemorySuppression.digest(value),event)
+        val job=checkNotNull(SharedMemoryJobs.claim(context))
         val facts=JSONArray();CompanionUserMemory.add(facts,"atomic fact","user_edit",1,false)
         val result="""{"version":1,"claims":[],"items":[]}"""
         MemoryMigrationDatabase(UnifiedUnderstandingStore.path(context)).use { db ->
@@ -134,6 +134,31 @@ class SharedMemoryJobsInstrumentedTest {
         MemoryMigrationDatabase(UnifiedUnderstandingStore.path(context)).use { assertFalse(it.commitSharedJob(facts,job,result)) }
         assertEquals(0,memory.listForUser().length()) // A pre-restore worker cannot commit to the new generation.
         assertEquals(1L,SharedMemoryJobs.pendingCount(context))
+    }
+
+    @Test fun activeLeaseCannotBeRetriedAndCancellationInvalidatesItsClaim() {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        val tag = UUID.randomUUID().toString()
+        val dir = File(base.cacheDir, "shared-lease-$tag").apply { check(mkdirs()) }
+        val context = object : ContextWrapper(base) {
+            override fun getApplicationContext(): Context = this
+            override fun getNoBackupFilesDir(): File = dir
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences = base.getSharedPreferences("$tag-$name", mode)
+        }
+        val source = "lease source $tag"
+        val knowledge = CompanionKnowledgeStore(context)
+        assertTrue(knowledge.add(source))
+        val id = knowledge.search("").getJSONObject(0).getString("id")
+        val hash = CompanionMemorySuppression.digest(source)
+        SharedMemoryJobs.enqueueWithoutSchedule(context, id, source, "share:$hash")
+        val claim = checkNotNull(SharedMemoryJobs.claim(context))
+        assertEquals("running", SharedMemoryJobs.status(context, id, hash).getString("state"))
+        assertFalse(SharedMemoryJobs.retryRecord(context, id, hash))
+        assertTrue(SharedMemoryJobs.cancelRecord(context, id, hash))
+        assertEquals("cancelled", SharedMemoryJobs.status(context, id, hash).getString("state"))
+        val facts = JSONArray().put(JSONObject().put("text", "must not publish"))
+        val result = """{"version":1,"claims":[],"items":[]}"""
+        MemoryMigrationDatabase(UnifiedUnderstandingStore.path(context)).use { assertFalse(it.commitSharedJob(facts, claim, result)) }
     }
 
     @Test fun knowledgeMigrationRetainsLegacyButDoesNotResurrectDeletion() {

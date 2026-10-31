@@ -327,9 +327,13 @@ class CompanionMemoryStore(context: Context) {
             CompanionSharedMemory.add(rows, job.event, claims, System.currentTimeMillis(), false, ::isSuppressed, job.id, job.hash)
         }
         val additions = (0 until rows.length()).map { rows.getJSONObject(it).getString("id") }.filterNot { it in beforeIds }.toSet()
-        if (additions.isNotEmpty() && SemanticControl(app).memoryEnabled) SemanticControl(app).memoryChanged(additions)
-        MemoryMigrationDatabase(UnifiedUnderstandingStore.path(app)).use { it.commitSharedJob(rows, job, result) }.also {
-            if (additions.isNotEmpty() && SemanticControl(app).memoryEnabled) runCatching { SemanticIndexJobs.schedule(app, 5_000L) }
+        MemoryMigrationDatabase(UnifiedUnderstandingStore.path(app)).use { it.commitSharedJob(rows, job, result) }.also { committed ->
+            // If a lease expired, `rows` was only an in-memory proposal.  Never enqueue
+            // semantic work for facts that the guarded transaction declined to publish.
+            if (committed && additions.isNotEmpty() && SemanticControl(app).memoryEnabled) {
+                SemanticControl(app).memoryChanged(additions)
+                runCatching { SemanticIndexJobs.schedule(app, 5_000L) }
+            }
         }
     }
 

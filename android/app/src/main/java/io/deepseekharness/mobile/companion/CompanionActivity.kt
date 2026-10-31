@@ -1297,6 +1297,7 @@ class CompanionActivity : AppCompatActivity() {
                 android.widget.Toast.makeText(this, "资料已变化或无法读取处理状态，请重新查看。", android.widget.Toast.LENGTH_LONG).show()
             }.onSuccess { state ->
                 val queued = state.optString("state") == "queued"
+                val running = state.optString("state") == "running"
                 val failed = state.optString("state") == "failed"
                 val description = if (!state.optBoolean("memoryEnabled")) "记忆整理已关闭；重新开启后可继续处理。" else when (state.optString("state")) {
                     "queued" -> {
@@ -1317,6 +1318,7 @@ class CompanionActivity : AppCompatActivity() {
                         }
                         "等待或重试中；已重试 $attempts 次。下次：$time。" + if (error.isEmpty()) "" else " 上次原因：$error。"
                     }
+                    "running" -> "正在处理此版本；当前租约结束前不能重试。若不再需要，可停止整理，已在途的结果不会写入。"
                     "failed" -> {
                         val attempts = state.optInt("attempts")
                         val error = when (state.optString("lastErrorCode")) {
@@ -1351,7 +1353,7 @@ class CompanionActivity : AppCompatActivity() {
                         android.widget.Toast.makeText(this, if (result.getOrNull() == true) "已安排重试，系统可能延迟。" else "任务已变化或无法安排重试。", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
-                if (queued || failed) builder.setNeutralButton("停止整理") { _, _ ->
+                if (queued || running || failed) builder.setNeutralButton("停止整理") { _, _ ->
                     runMemoryIo("正在停止资料整理…", {
                         var cancelled = false
                         check(CompanionKnowledgeStore(this).withUnchangedRecord(id, text) {

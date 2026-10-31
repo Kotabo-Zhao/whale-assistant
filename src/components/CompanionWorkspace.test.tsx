@@ -107,6 +107,21 @@ it('资料处理状态与重试始终携带当前资料文本', async () => {
   fireEvent.click(screen.getByRole('button', { name: '重试' }))
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeProcessingRetry', id: 'k1', expectedText: '等待处理的资料' }))
 })
+
+it('运行中的资料租约不能被网页重试抢占，但仍可停止', async () => {
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => {
+    if (request.operation === 'knowledgeList') return Promise.resolve({ items: [{ id: 'k-running', text: '正在整理的资料' }] })
+    if (request.operation === 'knowledgeProcessingStatus') return Promise.resolve({ state: 'running', attempts: 1, nextAttemptAtMs: null, lastErrorCode: null, memoryEnabled: true })
+    return Promise.resolve({ ok: true })
+  })
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  fireEvent.click(await screen.findByRole('button', { name: '处理状态' }))
+  expect(await screen.findByText('正在处理此版本；当前租约结束前不能重试。若不再需要，可停止整理，已在途的结果不会写入。')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '停止整理' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeProcessingCancel', id: 'k-running', expectedText: '正在整理的资料' }))
+})
 it('资料详情展示保存的分段和原件关联，不把分段伪装成页码', async () => {
   const originalId = 'b'.repeat(64)
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'

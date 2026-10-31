@@ -18,16 +18,22 @@ internal object SharedMemoryJobs {
     private const val JOB_ID = 780432
     /** A bounded retry budget prevents a permanently invalid input from consuming model requests forever. */
     private const val MAX_AUTOMATIC_ATTEMPTS = 5
+    /** Model calls are remote and cannot be cancelled reliably, so a stale worker must lose its durable claim. */
+    private const val LEASE_DURATION_MS = 15 * 60_000L
     private val lock = Any()
     private val running = AtomicBoolean(false)
     private val executor = Executors.newSingleThreadExecutor()
     private fun database(context: Context): SQLiteDatabase {
         val db = SQLiteDatabase.openOrCreateDatabase(UnifiedUnderstandingStore.path(context), null)
-        db.execSQL("CREATE TABLE IF NOT EXISTS shared_jobs (record_id TEXT NOT NULL, text_hash TEXT NOT NULL, event_id TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT 'queued', PRIMARY KEY(record_id,text_hash,event_id))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS shared_jobs (record_id TEXT NOT NULL, text_hash TEXT NOT NULL, event_id TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT 'queued', lease_token TEXT, lease_until INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(record_id,text_hash,event_id))")
         val columns = db.rawQuery("PRAGMA table_info(shared_jobs)", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(1)) } }
         if ("attempts" !in columns) db.execSQL("ALTER TABLE shared_jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
         if ("next_at" !in columns) db.execSQL("ALTER TABLE shared_jobs ADD COLUMN next_at INTEGER NOT NULL DEFAULT 0")
         if ("state" !in columns) db.execSQL("ALTER TABLE shared_jobs ADD COLUMN state TEXT NOT NULL DEFAULT 'queued'")
+        if ("lease_token" !in columns) db.execSQL("ALTER TABLE shared_jobs ADD COLUMN lease_token TEXT")
+        if ("lease_until" !in columns) db.execSQL("ALTER TABLE shared_jobs ADD COLUMN lease_until INTEGER NOT NULL DEFAULT 0")
+        // A process may die while an HTTP request is in flight.  Only an expired lease may be recovered.
+        db.execSQL("UPDATE shared_jobs SET state='queued',lease_token=NULL,lease_until=0 WHERE state='running' AND lease_until<=?", arrayOf(System.currentTimeMillis()))
         db.execSQL("CREATE TABLE IF NOT EXISTS shared_completed (record_id TEXT NOT NULL, text_hash TEXT NOT NULL, PRIMARY KEY(record_id,text_hash))")
         // User cancellation is durable: bootstrap must not silently recreate a job the user stopped.
         db.execSQL("CREATE TABLE IF NOT EXISTS shared_cancelled (record_id TEXT NOT NULL, text_hash TEXT NOT NULL, PRIMARY KEY(record_id,text_hash))")
@@ -161,7 +167,8 @@ internal object SharedMemoryJobs {
     }
     internal fun retryRecord(context: Context, id: String, textHash: String): Boolean = synchronized(lock) {
         database(context.applicationContext).use { db ->
-            db.compileStatement("UPDATE shared_jobs SET state='queued',attempts=0,next_at=0 WHERE record_id=? AND text_hash=?").use { update ->
+            // Do not steal an active lease: the user can stop it, then explicitly retry.
+            db.compileStatement("UPDATE shared_jobs SET state='queued',attempts=0,next_at=0,lease_token=NULL,lease_until=0 WHERE record_id=? AND text_hash=? AND state IN ('queued','failed')").use { update ->
                 update.bindString(1, id); update.bindString(2, textHash)
                 update.executeUpdateDelete() > 0
             }
@@ -192,12 +199,31 @@ internal object SharedMemoryJobs {
             } finally { db.endTransaction() }
         }
     }
-    internal data class Job(val id: String, val hash: String, val event: String, val generation: Long = 0)
-    private fun next(context: Context): Job? = synchronized(lock) { database(context).use { db ->
-        db.rawQuery("SELECT record_id,text_hash,event_id FROM shared_jobs WHERE state='queued' AND next_at<=? ORDER BY next_at,rowid LIMIT 1", arrayOf(System.currentTimeMillis().toString())).use { if (it.moveToFirst()) Job(it.getString(0), it.getString(1), it.getString(2), db.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='generation'", null).use { g -> if (g.moveToFirst()) g.getLong(0) else 0L }) else null }
+    internal data class Job(val id: String, val hash: String, val event: String, val generation: Long = 0, val leaseToken: String? = null)
+    /** Atomically claim one due row.  A lease token gates every later completion or retry transition. */
+    internal fun claim(context: Context): Job? = synchronized(lock) { database(context).use { db ->
+        val now = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            val candidate = db.rawQuery("SELECT record_id,text_hash,event_id FROM shared_jobs WHERE (state='queued' AND next_at<=?) OR (state='running' AND lease_until<=?) ORDER BY CASE state WHEN 'queued' THEN 0 ELSE 1 END,next_at,rowid LIMIT 1", arrayOf(now.toString(), now.toString())).use {
+                if (it.moveToFirst()) Triple(it.getString(0), it.getString(1), it.getString(2)) else null
+            }
+            if (candidate == null) return@use null
+            val token = UUID.randomUUID().toString()
+            val claimed = db.compileStatement("UPDATE shared_jobs SET state='running',lease_token=?,lease_until=? WHERE record_id=? AND text_hash=? AND event_id=? AND ((state='queued' AND next_at<=?) OR (state='running' AND lease_until<=?))").use { update ->
+                update.bindString(1, token); update.bindLong(2, now + LEASE_DURATION_MS)
+                update.bindString(3, candidate.first); update.bindString(4, candidate.second); update.bindString(5, candidate.third)
+                update.bindLong(6, now); update.bindLong(7, now)
+                update.executeUpdateDelete() == 1
+            }
+            if (!claimed) return@use null
+            val generation = db.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='generation'", null).use { g -> if (g.moveToFirst()) g.getLong(0) else 0L }
+            db.setTransactionSuccessful()
+            Job(candidate.first, candidate.second, candidate.third, generation, token)
+        } finally { db.endTransaction() }
     } }
     private fun delayUntilNext(context: Context): Long? = synchronized(lock) { database(context).use { db ->
-        db.rawQuery("SELECT MIN(next_at) FROM shared_jobs WHERE state='queued'", null).use { c -> if (!c.moveToFirst() || c.isNull(0)) null else (c.getLong(0) - System.currentTimeMillis()).coerceAtLeast(0) }
+        db.rawQuery("SELECT MIN(CASE state WHEN 'queued' THEN next_at WHEN 'running' THEN lease_until END) FROM shared_jobs WHERE state IN ('queued','running')", null).use { c -> if (!c.moveToFirst() || c.isNull(0)) null else (c.getLong(0) - System.currentTimeMillis()).coerceAtLeast(0) }
     } }
     private fun failureKey(job: Job) = "${job.id}:${job.hash}"
 
@@ -217,27 +243,36 @@ internal object SharedMemoryJobs {
         context.getSharedPreferences("shared_job_failures_v1", Context.MODE_PRIVATE).edit().remove(failureKey(job)).apply()
     }
     private fun defer(context: Context, job: Job, error: Exception) = synchronized(lock) { database(context).use { db ->
+        val token = job.leaseToken ?: return@use
         val code = UnderstandingFailure.code(error)
-        val attempts = db.rawQuery("SELECT attempts FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=?", arrayOf(job.id, job.hash, job.event)).use { if (it.moveToFirst()) it.getInt(0) else return@use -1 }
+        val attempts = db.rawQuery("SELECT attempts FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>?", arrayOf(job.id, job.hash, job.event, token, System.currentTimeMillis().toString())).use { if (it.moveToFirst()) it.getInt(0) else return@use }
         val exhausted = attempts + 1 >= MAX_AUTOMATIC_ATTEMPTS
         val delay = UnderstandingFailure.retryDelayMs(code)
-        db.execSQL("UPDATE shared_jobs SET attempts=attempts+1,state=?,next_at=? WHERE record_id=? AND text_hash=? AND event_id=? AND COALESCE((SELECT CAST(value AS INTEGER) FROM shared_jobs_meta WHERE key='generation'),0)=?",
-            arrayOf(if (exhausted) "failed" else "queued", if (exhausted) 0L else System.currentTimeMillis() + delay, job.id, job.hash, job.event,job.generation))
-        if (currentGeneration(context, job)) context.getSharedPreferences("shared_job_failures_v1", Context.MODE_PRIVATE)
+        val transitioned = db.compileStatement("UPDATE shared_jobs SET attempts=attempts+1,state=?,next_at=?,lease_token=NULL,lease_until=0 WHERE record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>? AND COALESCE((SELECT CAST(value AS INTEGER) FROM shared_jobs_meta WHERE key='generation'),0)=?").use { update ->
+            update.bindString(1, if (exhausted) "failed" else "queued"); update.bindLong(2, if (exhausted) 0L else System.currentTimeMillis() + delay)
+            update.bindString(3, job.id); update.bindString(4, job.hash); update.bindString(5, job.event); update.bindString(6, token); update.bindLong(7, System.currentTimeMillis()); update.bindLong(8, job.generation)
+            update.executeUpdateDelete() == 1
+        }
+        if (transitioned) context.getSharedPreferences("shared_job_failures_v1", Context.MODE_PRIVATE)
             .edit().putString(failureKey(job), code).apply()
     } }
-    private fun currentGeneration(context: Context, job: Job): Boolean = synchronized(lock) { database(context).use { db ->
-        db.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='generation'", null).use { (if (it.moveToFirst()) it.getLong(0) else 0L) == job.generation }
+    private fun ownsLease(context: Context, job: Job): Boolean = synchronized(lock) { database(context).use { db ->
+        val token = job.leaseToken ?: return@use false
+        db.rawQuery("SELECT 1 FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>? AND COALESCE((SELECT CAST(value AS INTEGER) FROM shared_jobs_meta WHERE key='generation'),0)=?", arrayOf(job.id, job.hash, job.event, token, System.currentTimeMillis().toString(), job.generation.toString())).use { it.moveToFirst() }
     } }
     private fun remove(context: Context, job: Job) = synchronized(lock) { database(context).use { db ->
+        val token = job.leaseToken ?: return@use false
         db.beginTransaction()
         try {
             val generation=db.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='generation'",null).use { if(it.moveToFirst()) it.getLong(0) else 0L }
             if(generation==job.generation) {
-                db.execSQL("INSERT OR IGNORE INTO shared_completed(record_id,text_hash) VALUES (?,?)",arrayOf(job.id,job.hash))
-                db.delete("shared_jobs","record_id=? AND text_hash=? AND event_id=?",arrayOf(job.id,job.hash,job.event))
+                val deleted = db.delete("shared_jobs","record_id=? AND text_hash=? AND event_id=? AND state='running' AND lease_token=? AND lease_until>?",arrayOf(job.id,job.hash,job.event,token,System.currentTimeMillis().toString()))
+                if (deleted == 1) db.execSQL("INSERT OR IGNORE INTO shared_completed(record_id,text_hash) VALUES (?,?)",arrayOf(job.id,job.hash))
+                db.setTransactionSuccessful()
+                return@use deleted == 1
             }
             db.setTransactionSuccessful()
+            false
         } finally { db.endTransaction() }
     } }
     fun schedule(context: Context, delayMs: Long) {
@@ -250,11 +285,11 @@ internal object SharedMemoryJobs {
     }
     fun runOne(context: Context, stopped: AtomicBoolean, modelOverride: UnderstandingModel? = null): Boolean {
         val app = context.applicationContext
-        val job = next(app) ?: return false
+        val job = claim(app) ?: return false
         val knowledge = CompanionKnowledgeStore(app)
         val row = knowledge.findById(job.id)
         val text = row?.optString("text").orEmpty()
-        if (row == null || CompanionMemorySuppression.digest(text) != job.hash) { remove(app, job); clearFailure(app, job); return next(app) != null }
+        if (row == null || CompanionMemorySuppression.digest(text) != job.hash) { if (remove(app, job)) clearFailure(app, job); return hasDueWork(app) }
         try {
             check(CompanionMemoryStore(app).enabled) { "memory disabled" }
             val model = modelOverride ?: configuredUnderstandingModel(app)
@@ -262,23 +297,28 @@ internal object SharedMemoryJobs {
             val raw = model.analyze(requestId, text)
             val boundResult = bindResultToEvent(raw, requestId, job.event)
             val result = JSONObject(boundResult)
-            if (!currentGeneration(app, job)) return next(app) != null
+            if (!ownsLease(app, job)) return hasDueWork(app)
             if (stopped.get()) return true
+            var persisted = false
             knowledge.withUnchangedRecord(job.id, text) {
-                if (!stopped.get()) CompanionMemoryStore(app).commitSharedJob(job, result.getJSONArray("claims"), boundResult)
+                if (!stopped.get()) persisted = CompanionMemoryStore(app).commitSharedJob(job, result.getJSONArray("claims"), boundResult)
             }
+            if (persisted && !stopped.get()) clearFailure(app, job)
         } catch (e: Exception) {
             if (!stopped.get()) defer(app, job, e)
             throw e
         }
         if (stopped.get()) return true
-        if (currentGeneration(app, job)) { remove(app, job); clearFailure(app, job) }
-        return next(app) != null
+        return hasDueWork(app)
     }
     fun begin() = running.compareAndSet(false, true)
     fun end() { running.set(false) }
     fun pendingCount(context: Context): Long = synchronized(lock) { database(context).use { db ->
-        db.rawQuery("SELECT COUNT(*) FROM shared_jobs WHERE state='queued'", null).use { it.moveToFirst(); it.getLong(0) }
+        db.rawQuery("SELECT COUNT(*) FROM shared_jobs WHERE state IN ('queued','running')", null).use { it.moveToFirst(); it.getLong(0) }
+    } }
+    private fun hasDueWork(context: Context): Boolean = synchronized(lock) { database(context).use { db ->
+        val now = System.currentTimeMillis()
+        db.rawQuery("SELECT 1 FROM shared_jobs WHERE (state='queued' AND next_at<=?) OR (state='running' AND lease_until<=?) LIMIT 1", arrayOf(now.toString(), now.toString())).use { it.moveToFirst() }
     } }
     fun status(context: Context, value: String) {
         context.getSharedPreferences("shared_memory_status_v1", Context.MODE_PRIVATE).edit().putString("status", value).apply()
