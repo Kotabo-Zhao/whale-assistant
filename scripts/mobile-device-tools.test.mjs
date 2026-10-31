@@ -89,9 +89,11 @@ test('本地资料工具按关键词经过设备桥并拒绝无效查询', async
   const tool = f.tools.get('mobile_knowledge_search')
   await tool.execute({ query: '  会议 ', limit: 2 }, memoryExec)
   assert.deepEqual(f.requests, [{ command: 'companionKnowledge', param: `{"query":"会议","limit":2,"callerSession":"${virtualSession}"}` }])
+  await tool.execute({ query: '会议', fromMs: 100, toMs: 200 }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[1].param), { query: '会议', fromMs: 100, toMs: 200, callerSession: virtualSession })
   await assert.rejects(tool.execute({ query: '\u0001' }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
   await assert.rejects(tool.execute({ query: '会议', limit: 4 }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
-  assert.equal(f.requests.length, 1)
+  assert.equal(f.requests.length, 2)
   assert.ok(f.prompts.some(value => JSON.stringify(value).includes('mobile_knowledge_search')))
 })
 

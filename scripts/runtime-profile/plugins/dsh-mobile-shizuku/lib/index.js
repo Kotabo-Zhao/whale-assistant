@@ -754,6 +754,8 @@ export function apply(ctx) {
       query: { type: 'string', required: true, description: '关键词，最多 100 字；空字符串查询最近资料。' },
       limit: { type: 'integer', description: '返回条数，1～3，默认 3。' },
       offset: { type: 'integer', description: '从返回的 nextOffset 继续检索；数据变化时重新检索。' },
+      fromMs: { type: 'integer', description: '可选，资料创建时间下界（含），Unix 毫秒；与 toMs 同时使用时必须小于 toMs。' },
+      toMs: { type: 'integer', description: '可选，资料创建时间上界（不含），Unix 毫秒；必须大于 fromMs。' },
     },
     output: output(),
     execute: (args, exec) => {
@@ -762,7 +764,9 @@ export function apply(ctx) {
       if (typeof args.query !== 'string' || args.query.trim().length > 100 || /[\x00-\x1f\x7f]/u.test(args.query)) throw new Error('KNOWLEDGE_INPUT_INVALID')
       if (args.offset !== undefined && (!Number.isInteger(args.offset) || args.offset < 0 || args.offset > 2147483647)) throw new Error('KNOWLEDGE_INPUT_INVALID')
       if (args.limit !== undefined && (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 3)) throw new Error('KNOWLEDGE_INPUT_INVALID')
-      return companionBridge('companionKnowledge', { query: args.query.trim(), ...(args.documentId !== undefined ? { documentId: args.documentId } : {}), ...(args.originalId !== undefined ? { originalId: args.originalId } : {}), ...(args.offset !== undefined ? { offset: args.offset } : {}), ...(args.limit !== undefined ? { limit: args.limit } : {}) }, exec)
+      if (args.fromMs !== undefined && (!Number.isSafeInteger(args.fromMs) || args.fromMs < 0)) throw new Error('KNOWLEDGE_INPUT_INVALID')
+      if (args.toMs !== undefined && (!Number.isSafeInteger(args.toMs) || args.toMs < 0 || (args.fromMs !== undefined && args.toMs <= args.fromMs))) throw new Error('KNOWLEDGE_INPUT_INVALID')
+      return companionBridge('companionKnowledge', { query: args.query.trim(), ...(args.documentId !== undefined ? { documentId: args.documentId } : {}), ...(args.originalId !== undefined ? { originalId: args.originalId } : {}), ...(args.offset !== undefined ? { offset: args.offset } : {}), ...(args.limit !== undefined ? { limit: args.limit } : {}), ...(args.fromMs !== undefined ? { fromMs: args.fromMs } : {}), ...(args.toMs !== undefined ? { toMs: args.toMs } : {}) }, exec)
     },
     presentCall: () => present('检索本地资料', undefined),
   }))

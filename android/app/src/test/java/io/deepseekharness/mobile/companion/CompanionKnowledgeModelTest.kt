@@ -41,6 +41,15 @@ class CompanionKnowledgeModelTest {
         assertEquals(15, seen.size)
         assertEquals(15, seen.toSet().size)
     }
+    @Test fun searchCanRestrictKnowledgeToAnExplicitCreatedTimeRange() {
+        val rows = JSONArray()
+            .put(JSONObject().put("id", "old").put("text", "旧会议资料").put("source", "text_file").put("createdAt", 100L))
+            .put(JSONObject().put("id", "current").put("text", "当前会议资料").put("source", "text_file").put("createdAt", 200L))
+        val request = JSONObject().put("query", "会议").put("fromMs", 200L).put("toMs", 300L).toString()
+        val result = JSONObject(CompanionKnowledgeModel.execute(true, request) { rows })
+        assertEquals("current", result.getJSONArray("items").getJSONObject(0).getString("id"))
+        assertEquals(200L, result.getLong("fromMs")); assertEquals(300L, result.getLong("toMs"))
+    }
     @Test fun pointReadUsesLookupAndStillEnforcesConsentAndRevision() {
         val row = JSONObject().put("id", "record").put("text", "hello")
         var calls = 0
