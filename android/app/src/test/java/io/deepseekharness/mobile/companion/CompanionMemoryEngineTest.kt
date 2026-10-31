@@ -36,14 +36,14 @@ class CompanionMemoryEngineTest {
         assertTrue(replay.getBoolean("idempotent")); assertEquals(1, rows.getJSONObject(0).getJSONArray("history").length())
     }
 
-    @org.junit.Test fun databaseModeAcceptsMoreThanOneHundredAndPaginatesPastOldBoundary() {
+    @org.junit.Test fun databaseModeAcceptsLongHistoryAndPaginatesPastOldBoundary() {
         val rows = org.json.JSONArray()
-        repeat(105) { CompanionUserMemory.add(rows, "记忆第${it}条", "user_edit", 1L, legacyLimit = false) }
+        repeat(1_000) { CompanionUserMemory.add(rows, "记忆第${it}条", "user_edit", 1L, legacyLimit = false) }
         CompanionMemoryFormat.validateRows(rows, legacyLimit = false)
         org.junit.Assert.assertThrows(Exception::class.java) { CompanionMemoryFormat.validateRows(rows, legacyLimit = true) }
         val engine = CompanionMemoryEngine({ rows }, {}, legacyLimit = false)
-        val page = org.json.JSONObject(engine.execute("""{"op":"search","query":"","offset":100}"""))
-        org.junit.Assert.assertEquals(5, page.getJSONArray("items").length())
+        val page = org.json.JSONObject(engine.execute("""{"op":"search","query":"","offset":990}"""))
+        org.junit.Assert.assertEquals(10, page.getJSONArray("items").length())
     }
     @org.junit.Test fun privacyBackupDoesNotRestoreDeletedText() {
         val row = org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("text", "已删除的记忆")

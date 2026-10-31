@@ -27,6 +27,9 @@ class CompanionMemoryStore(context: Context) {
     fun execute(param: String): String = synchronized(lock) {
         if (!enabled) throw RuntimeFailure("MEMORY_DISABLED", "用户已关闭长期记忆")
         val request = runCatching { JSONObject(param) }.getOrNull()
+        // JSON was capped for safe file writes.  The first real Agent memory operation
+        // promotes it to the verified SQLite store, which has no record-count limit.
+        if (request != null && !usesDatabase()) migrateToDatabase()
         // The indexed route does not yet carry a timestamp predicate. Keep it for ordinary
         // retrieval, but use authoritative rows for an explicit range rather than silently
         // ignoring the user's requested dates.
@@ -66,7 +69,9 @@ class CompanionMemoryStore(context: Context) {
         if (!enabled) return@synchronized emptyMap()
         val found = mutableMapOf<String, JSONObject>()
         if (usesDatabase()) MemoryMigrationDatabase(UnifiedUnderstandingStore.path(app)).use { db ->
-            ids.forEach { id -> db.findById(id)?.takeIf(CompanionMemoryConfirmation::isConfirmed)?.let { found[id] = it } }
+            db.findByIds(ids).forEach { (id, row) ->
+                row.takeIf(CompanionMemoryConfirmation::isConfirmed)?.let { found[id] = it }
+            }
         } else {
             val wanted = ids.toSet(); val rows = loadLegacy()
             for (index in 0 until rows.length()) {
@@ -100,6 +105,7 @@ class CompanionMemoryStore(context: Context) {
         CompanionMemoryImport.plan(bytes, load(), !usesDatabase(), prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty(), prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty(), prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty())
     }
     internal fun applyImport(plan: MemoryImportPlan): Int = synchronized(lock) {
+        if (!usesDatabase()) migrateToDatabase()
         val current = load()
         require(current.toString() == plan.original) { "记忆已发生变化，请重新选择文件并核对" }
         val combined = JSONArray(plan.original)
@@ -148,6 +154,7 @@ class CompanionMemoryStore(context: Context) {
     }
     /** Merge only the automatic record for this source; preserve all user and assistant records. */
     internal fun updateNotificationSummary(packageName: String, title: String, text: String, now: Long): Boolean = synchronized(lock) {
+        if (!usesDatabase()) migrateToDatabase()
         val rows = load()
         if (prefs.getBoolean("automatic_memory_suppressed_all", false) ||
             prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().contains("notification:$packageName")) return@synchronized false
@@ -157,6 +164,7 @@ class CompanionMemoryStore(context: Context) {
     }
     /** Only replace the automatically maintained summary; never overwrite user-authored memories. */
     internal fun updateUsageSummary(text: String, now: Long): Boolean = synchronized(lock) {
+        if (!usesDatabase()) migrateToDatabase()
         val rows = load()
         if (prefs.getBoolean("automatic_memory_suppressed_all", false) ||
             prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().contains("usage")) return@synchronized false
@@ -258,6 +266,7 @@ class CompanionMemoryStore(context: Context) {
         CompanionMemorySimilarity.review(load(), text, excludeId)
     }
     internal fun addForUser(text: String, source: String, expected: String? = null): UserMemoryResult = synchronized(lock) {
+        if (!usesDatabase()) migrateToDatabase()
         val rows = load()
         if (expected != null && !CompanionMemorySimilarity.isCurrent(rows, expected)) return@synchronized UserMemoryResult.STALE
         val result = CompanionUserMemory.add(rows, text, source, System.currentTimeMillis(), !usesDatabase())
@@ -267,6 +276,7 @@ class CompanionMemoryStore(context: Context) {
     internal fun addUnderstandingForUser(text: String, source: String, eventId: String): UserMemoryResult = synchronized(lock) {
         require(source.startsWith("notification:") && CompanionSourcePolicy.validPackage(source.removePrefix("notification:")))
         require(eventId.matches(Regex("[a-zA-Z0-9._:-]{1,200}")))
+        if (!usesDatabase()) migrateToDatabase()
         val rows = load()
         val result = CompanionUserMemory.add(rows, text, "user_edit", System.currentTimeMillis(), !usesDatabase())
         if (result == UserMemoryResult.ADDED) {
@@ -312,6 +322,7 @@ class CompanionMemoryStore(context: Context) {
     internal fun saveSharedFacts(eventId: String, claims: JSONArray): Int = synchronized(lock) {
         require(eventId.matches(Regex("share:[a-f0-9]{64}")))
         if (!enabled || CompanionMemorySuppression.digest("event:$eventId") in prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty()) return@synchronized 0
+        if (!usesDatabase()) migrateToDatabase()
         val rows = load()
         val added = CompanionSharedMemory.add(rows, eventId, claims, System.currentTimeMillis(), !usesDatabase(), ::isSuppressed)
         if (added > 0) write(rows)

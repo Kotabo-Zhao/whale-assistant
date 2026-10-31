@@ -543,7 +543,7 @@ class CompanionActivity : AppCompatActivity() {
         }
         button("导出长期记忆") { if (!memoryBusy) memoryExport.launch("whale-memory.json") else paragraph("记忆文件操作正在进行，请稍候。") }
         val databaseActive = runCatching { memory.usesDatabase() }.getOrNull()
-        paragraph(when (databaseActive) { true -> "长期记忆存储：SQLite。旧版本应用无法读取数据库；原格式最多支持 100 条。超过时请先导出完整备份，并使用新版数据库恢复。"; false -> "长期记忆存储：原 JSON（最多 100 条）；迁移后不设固定条数上限。"; null -> "无法读取记忆存储状态。" })
+        paragraph(when (databaseActive) { true -> "长期记忆存储：SQLite，不设固定条数上限；检索只返回最相关的少量结果，避免记忆积累拖慢对话。旧版本应用无法读取数据库。"; false -> "长期记忆仍为原 JSON（最多 100 条）；下一次记忆读写会先自动核对并迁移到 SQLite。"; null -> "无法读取记忆存储状态。" })
         if (databaseActive == false) button("迁移长期记忆到数据库") {
             runMemoryIo("正在迁移并核对长期记忆…", { memory.migrateToDatabase() }) { result ->
                 android.widget.Toast.makeText(this, result.fold({ "已迁移并核对 $it 条记忆。" }, { "迁移失败，原记忆仍为当前数据。" }), android.widget.Toast.LENGTH_LONG).show()

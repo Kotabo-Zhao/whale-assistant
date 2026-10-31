@@ -229,6 +229,17 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
     fun findById(id: String): JSONObject? = db.rawQuery("SELECT body FROM memories WHERE id=?", arrayOf(id)).use {
         if (it.moveToFirst()) JSONObject(it.getString(0)) else null
     }
+    fun findByIds(ids: Collection<String>): Map<String, JSONObject> {
+        require(ids.size <= 110)
+        val wanted = ids.distinct()
+        if (wanted.isEmpty()) return emptyMap()
+        val placeholders = wanted.joinToString(",") { "?" }
+        return linkedMapOf<String, JSONObject>().also { result ->
+            db.rawQuery("SELECT id,body FROM memories WHERE id IN ($placeholders)", wanted.toTypedArray()).use { cursor ->
+                while (cursor.moveToNext()) result[cursor.getString(0)] = JSONObject(cursor.getString(1))
+            }
+        }
+    }
 
     data class Page(val rows: JSONArray, val next: Long?, val revision: Long)
     fun pageNewest(before: Long?, limit: Int, expectedRevision: Long? = null): Page {
