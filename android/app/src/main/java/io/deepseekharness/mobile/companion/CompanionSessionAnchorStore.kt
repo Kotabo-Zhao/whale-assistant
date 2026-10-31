@@ -60,5 +60,6 @@ internal class CompanionSessionAnchorStore(context: Context) {
         private fun lockFor(context: Context): Any = synchronized(locks) { locks.getOrPut(context) { Any() } }
         private fun encode(rows: List<Anchor>) = JSONArray().apply { rows.forEach { anchor -> put(JSONObject().put("sessionId", anchor.sessionId).put("role", anchor.role).put("atMs", anchor.atMs).put("summary", anchor.summary)) } }.toString()
         private fun decode(bytes: ByteArray): List<Anchor> { require(bytes.size <= 20_000); val root = JSONArray(String(bytes, Charsets.UTF_8)); require(root.length() <= MAX_ANCHORS); return (0 until root.length()).map { index -> root.getJSONObject(index).let { Anchor(it.getString("sessionId"), it.getString("role"), it.getLong("atMs"), it.getString("summary")) } }.also { rows -> rows.forEach { require(BubbleSessionRegistry.valid(it.sessionId) && it.role in setOf("user", "assistant") && it.atMs > 0 && it.summary.isNotBlank() && it.summary.length <= MAX_SUMMARY && !CONTROLS.containsMatchIn(it.summary)) } } }
+        fun validateArchive(bytes: ByteArray) { decode(bytes) }
     }
 }
