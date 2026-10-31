@@ -97,6 +97,15 @@ test('本地资料工具按关键词经过设备桥并拒绝无效查询', async
   assert.ok(f.prompts.some(value => JSON.stringify(value).includes('mobile_knowledge_search')))
 })
 
+test('最近资料工具使用显式协议并只接受受控来源和覆盖范围', async t => {
+  const f = fixture(t, () => ok('{"items":[]}'))
+  const tool = f.tools.get('mobile_knowledge_recent')
+  await tool.execute({ source: 'text_file', coverage: 'partial', offset: 3, limit: 2 }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[0].param), { op: 'recent', query: '', source: 'text_file', coverage: 'partial', offset: 3, limit: 2, callerSession: virtualSession })
+  await assert.rejects(tool.execute({ source: 'unknown' }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
+  await assert.rejects(tool.execute({ coverage: 'unknown' }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
+})
+
 test('整份资料原件删除要求同一检索结果的三项稳定标识', async t => {
   const f = fixture(t, () => ok('{"deletedRecords":2,"objectDeleted":true}'))
   const tool = f.tools.get('mobile_knowledge_forget_original')

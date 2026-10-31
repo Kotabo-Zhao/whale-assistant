@@ -76,6 +76,17 @@ class CompanionKnowledgeModelTest {
         assertEquals("part-3",last.getJSONArray("items").getJSONObject(0).getString("id"))
         assertTrue(last.isNull("nextOffset"))
     }
+    @Test fun recentSourceAndCoverageFiltersUseAuthoritativeRows() {
+        val rows = JSONArray()
+            .put(JSONObject().put("id", "full").put("text", "完整文档").put("source", "text_file").put("coverage", "extracted_text").put("createdAt", 10L))
+            .put(JSONObject().put("id", "part").put("text", "部分文档").put("source", "text_file").put("coverage", "partial").put("createdAt", 20L))
+            .put(JSONObject().put("id", "original").put("text", "原件记录").put("source", "original").put("coverage", "not_parsed").put("createdAt", 30L))
+        val request = JSONObject().put("query", "").put("source", "text_file").put("coverage", "partial").toString()
+        val result = JSONObject(CompanionKnowledgeModel.execute(true, request) { rows })
+        assertEquals("part", result.getJSONArray("items").getJSONObject(0).getString("id"))
+        assertEquals("text_file", result.getString("source")); assertEquals("partial", result.getString("coverage"))
+        assertThrows(RuntimeFailure::class.java) { CompanionKnowledgeModel.execute(true, "{\"query\":\"\",\"source\":\"invalid\"}") { fail("must not load"); JSONArray() } }
+    }
     @Test fun excerptsDoNotCutSurrogatePairsAtEitherBoundary() {
         val text = "a".repeat(99) + "🐋" + "x".repeat(199) + "needle" + "y".repeat(794) + "🐋" + "z".repeat(30)
         val rows = JSONArray().put(JSONObject().put("text", text).put("createdAt", 1).put("source", "shared_text"))

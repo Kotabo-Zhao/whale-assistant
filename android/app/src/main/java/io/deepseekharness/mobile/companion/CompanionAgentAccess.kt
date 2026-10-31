@@ -43,7 +43,7 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
                 .put("semanticAllowed", canReadMemory && canReadKnowledge && semantic.memoryEnabled))
             .put("knowledge", JSONObject().put("allowed", canReadKnowledge)
                 .put("errorCode", if (canReadKnowledge) JSONObject.NULL else "KNOWLEDGE_MODEL_DISABLED")
-                .put("recentTool", "mobile_knowledge_search").put("recentQuery", "")
+                .put("recentTool", "mobile_knowledge_recent")
                 .put("readTool", "mobile_knowledge_read").put("imageTool", "mobile_knowledge_image")
                 .put("statusTool", "mobile_knowledge_status")
                 .put("semanticAllowed", canReadKnowledge && semantic.enabled))
