@@ -252,6 +252,25 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = false; send.isEnabled = false; input.isEnabled = false; status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
             val prior = (history + CompanionBubbleChat.Message("user", message)).takeLast(19)
+            val latestPartial = java.util.concurrent.atomic.AtomicReference<String?>(null)
+            val partialScheduled = java.util.concurrent.atomic.AtomicBoolean(false)
+            val acceptingPartials = java.util.concurrent.atomic.AtomicBoolean(true)
+            var renderedPartial = false
+            fun renderPartial() {
+                val partial = latestPartial.getAndSet(null)
+                if (partial != null && !closed && request == generation && root === panel && acceptingPartials.get()) {
+                    val follow = atBottom()
+                    streamingBubble.text = CompanionRichText.render(partial)
+                    status.text = "正在流式输出…"
+                    if (follow) scroll.fullScroll(android.view.View.FOCUS_DOWN)
+                    panel.post { positionUpdater?.invoke() }
+                    renderedPartial = true
+                }
+                partialScheduled.set(false)
+                if (latestPartial.get() != null && acceptingPartials.get() && partialScheduled.compareAndSet(false, true)) {
+                    handler.postDelayed({ renderPartial() }, if (renderedPartial) 32 else 0)
+                }
+            }
             executor.execute {
                 val result = runCatching {
                     val settings = CompanionStore(context)
@@ -265,18 +284,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         knowledgeAllowed && SemanticControl(context).enabled,
                     )
                     chat.reply(prior, scope, memoryAllowed, knowledgeAllowed) { partial ->
-                        handler.post {
-                            if (closed || request != generation || root !== panel) return@post
-                            val follow = atBottom()
-                            streamingBubble.text = CompanionRichText.render(partial)
-                            status.text = "正在流式输出…"
-                            if (follow) scroll.fullScroll(android.view.View.FOCUS_DOWN)
-                            panel.post { positionUpdater?.invoke() }
+                        if (acceptingPartials.get()) {
+                            latestPartial.set(partial)
+                            if (partialScheduled.compareAndSet(false, true)) handler.post { renderPartial() }
                         }
                     }
                 }
                 handler.post {
                     if (closed || request != generation) return@post
+                    acceptingPartials.set(false); latestPartial.set(null)
                     val samePanel = root === panel
                     busy = false; send.isEnabled = true; input.isEnabled = true
                     result.onSuccess { answer ->
@@ -367,7 +383,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             view.onApplyWindowInsets(insets)
         }
         updatePosition()
-        if (runCatching { wm.addView(panel, params) }.isSuccess) { root = panel; positionUpdater = updatePosition }
+        if (runCatching { wm.addView(panel, params) }.isSuccess) {
+            root = panel; positionUpdater = updatePosition
+            executor.execute { chat.prewarm() }
+        }
     }
     fun followPet() { positionUpdater?.invoke() }
     fun hide() { previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null }
