@@ -1938,6 +1938,8 @@ export interface RuntimeBridge {
   /** 跳转到系统「显示在其他应用上层」设置页。该权限只能由用户手动开启。 */
   openOverlaySettings: () => Promise<void>
   companionDashboard: (request: Record<string, unknown>) => Promise<Record<string, unknown>>
+  /** Opens the native, version-checked knowledge detail; the original remains local until the user chooses a viewer. */
+  openCompanionKnowledge: (id: string, revision: string) => Promise<void>
   exportCompanionBackup: (kind: 'memory' | 'knowledge') => Promise<void>
   openCompanionSettings: () => Promise<void>
   getCompanionQuickSettings: () => Promise<CompanionQuickSettings>

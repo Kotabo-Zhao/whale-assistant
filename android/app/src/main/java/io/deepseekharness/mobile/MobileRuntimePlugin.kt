@@ -4025,6 +4025,23 @@ class MobileRuntimePlugin : Plugin() {
         }
     }
 
+    /** Opens the existing native knowledge detail rather than exposing a file URI to the web shell. */
+    @PluginMethod
+    fun openCompanionKnowledge(call: PluginCall) {
+        val id = call.getString("id")
+        val revision = call.getString("revision")
+        if (id?.matches(Regex("[a-f0-9-]{36}")) != true || revision?.matches(Regex("[a-f0-9]{64}")) != true) {
+            call.reject("资料标识无效", "KNOWLEDGE_REFERENCE_INVALID"); return
+        }
+        val opened = runCatching {
+            context.startActivity(Intent(context, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
+                .putExtra(io.deepseekharness.mobile.companion.CompanionActivity.OPEN_KNOWLEDGE_ID, id)
+                .putExtra(io.deepseekharness.mobile.companion.CompanionActivity.OPEN_KNOWLEDGE_REVISION, revision)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        }.isSuccess
+        if (opened) call.resolve() else call.reject("无法打开资料详情", "KNOWLEDGE_DETAIL_UNAVAILABLE")
+    }
+
     @PluginMethod
     fun exportCompanionBackup(call: PluginCall) {
         val kind = call.getString("kind")

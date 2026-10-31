@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn(), exportCompanionBackup: vi.fn(), insertTaskDraft: vi.fn() }))
+const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn(), exportCompanionBackup: vi.fn(), insertTaskDraft: vi.fn(), openCompanionKnowledge: vi.fn() }))
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { CompanionWorkspace } from './CompanionWorkspace'
 
-beforeEach(() => { vi.clearAllMocks(); bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] }); bridge.exportCompanionBackup.mockResolvedValue(undefined); bridge.insertTaskDraft.mockResolvedValue(undefined) })
+beforeEach(() => { vi.clearAllMocks(); bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] }); bridge.exportCompanionBackup.mockResolvedValue(undefined); bridge.insertTaskDraft.mockResolvedValue(undefined); bridge.openCompanionKnowledge.mockResolvedValue(undefined) })
 describe('助手工作台', () => {
   it('标签关联唯一内容面板并向辅助技术报告加载状态', async () => {
     render(<CompanionWorkspace />)
@@ -159,14 +159,17 @@ it('资料详情只在已有解析标记时说明部分解析的具体范围', a
 })
 it('资料可在全高详情页中阅读并带入对话草稿', async () => {
   const revision = 'a'.repeat(64)
+  const originalId = 'b'.repeat(64)
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'
-    ? { items: [{ id: 'k-detail', text: '这是完整的资料内容。', displayName: '旅行计划.docx', source: 'text_file', coverage: 'extracted_text', revision }] }
+    ? { items: [{ id: 'k-detail', text: '这是完整的资料内容。', displayName: '旅行计划.docx', source: 'text_file', coverage: 'extracted_text', revision, originalId }] }
     : { ok: true }))
   render(<CompanionWorkspace />)
   fireEvent.click(screen.getByRole('tab', { name: '资料' }))
   fireEvent.click(await screen.findByRole('button', { name: '查看详情' }))
   const dialog = screen.getByRole('dialog', { name: '旅行计划.docx' })
   expect(within(dialog).getByText('这是完整的资料内容。')).toBeInTheDocument()
+  fireEvent.click(within(dialog).getByRole('button', { name: '在助手中查看原件' }))
+  await waitFor(() => expect(bridge.openCompanionKnowledge).toHaveBeenCalledWith('k-detail', revision))
   fireEvent.click(within(dialog).getByRole('button', { name: '用此资料提问' }))
   await waitFor(() => expect(bridge.insertTaskDraft).toHaveBeenCalledWith(expect.stringContaining(`资料 ID：k-detail\n版本：${revision}`)))
   fireEvent.click(within(dialog).getByRole('button', { name: '关闭' }))

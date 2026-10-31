@@ -215,6 +215,12 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     if (!/^[a-f0-9-]{36}$/.test(row.id) || revision === null) { setMessage('资料版本无效，请刷新后重试。'); return }
     await askKnowledgeReference(row.id, revision)
   }
+  const openKnowledgeOriginal = async (row: Row) => {
+    const revision = knowledgeRevision(row)
+    if (originalId(row) === null || revision === null) { setMessage('这条资料没有可验证的本地原件，请刷新后重试。'); return }
+    try { await runtimeBridge.openCompanionKnowledge(row.id, revision) }
+    catch { setMessage('无法打开原件详情；资料没有发送。请稍后重试。') }
+  }
   const readKnowledgeProcessing = async (row: Row) => {
     setBusy(true); setMessage('')
     try {
@@ -424,7 +430,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       {knowledgeDetailMeta(knowledgeDetail) && <p className="knowledge-detail-meta">{knowledgeDetailMeta(knowledgeDetail)}</p>}
       {knowledgeImagePreview?.id === knowledgeDetail.id && <img className="knowledge-image-preview" src={knowledgeImagePreview.source} alt={`图片预览：${typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料图片'}`} />}
       <p className="knowledge-detail-content">{knowledgeDetail.text}</p>
-      <div className="workspace-card-actions">{canPreviewKnowledgeImage(knowledgeDetail) && <button type="button" disabled={busy} onClick={() => { void showKnowledgeImagePreview(knowledgeDetail) }}>{knowledgeImagePreview?.id === knowledgeDetail.id ? '隐藏图片预览' : '显示图片预览'}</button>}{knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void askKnowledge(knowledgeDetail) }}>用此资料提问</button>}<button type="button" onClick={() => { setKnowledgeDetail(null); setKnowledgeImagePreview(null) }}>返回资料列表</button></div>
+      <div className="workspace-card-actions">{canPreviewKnowledgeImage(knowledgeDetail) && <button type="button" disabled={busy} onClick={() => { void showKnowledgeImagePreview(knowledgeDetail) }}>{knowledgeImagePreview?.id === knowledgeDetail.id ? '隐藏图片预览' : '显示图片预览'}</button>}{originalId(knowledgeDetail) !== null && knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void openKnowledgeOriginal(knowledgeDetail) }}>在助手中查看原件</button>}{knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void askKnowledge(knowledgeDetail) }}>用此资料提问</button>}<button type="button" onClick={() => { setKnowledgeDetail(null); setKnowledgeImagePreview(null) }}>返回资料列表</button></div>
     </section></div>}
   </section>
 }
