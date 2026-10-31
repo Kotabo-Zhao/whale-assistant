@@ -7,6 +7,7 @@ import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
 import { TaskStarter } from './components/TaskStarter'
 import { CompanionSettingsButton } from './components/CompanionSettingsButton'
+import { CompanionWorkspace } from './components/CompanionWorkspace'
 import type { AutomationRuleDefaults } from './components/AutomationRuleForm'
 import { AutomationDisclaimer } from './components/AutomationDisclaimer'
 import { AutomationTaskCard } from './components/AutomationTaskCard'
@@ -351,6 +352,8 @@ function matchesSettingsHomeQuery(entry: SettingsHomeEntry, query: string): bool
 const APP_VIEWS: AppView[] = [
   'conversation',
   'harness',
+  'assistant-memory',
+  'assistant-tasks',
   'sessions',
   'settings',
   'settings-models',
@@ -5350,6 +5353,10 @@ export function App() {
         return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onUpdate={requestRuntimeUpdate} />
       case 'sessions':
         return <SessionManager onBack={() => backToView('conversation')} onOpenHarness={launchHarness} />
+      case 'assistant-memory':
+        return <CompanionWorkspace initialPanel="memory" />
+      case 'assistant-tasks':
+        return <CompanionWorkspace initialPanel="reminders" />
       case 'terminal':
         return <TerminalScreen bridge={runtimeBridge} fontSize={settings?.terminalFontSize ?? 14} onAuthorize={requestShizukuPermission} onBack={() => backToView('settings')} onConnect={connectShizuku} onError={terminalError} onOpenEnvironment={() => setActiveView('environment')} onOpenShizuku={openShizuku} runtime={runtime} shizuku={shizuku} />
       case 'plugins':

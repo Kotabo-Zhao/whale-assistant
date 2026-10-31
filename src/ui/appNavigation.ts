@@ -1,6 +1,8 @@
 export type AppView =
   | 'conversation'
   | 'harness'
+  | 'assistant-memory'
+  | 'assistant-tasks'
   | 'sessions'
   | 'settings'
   | 'settings-models'
@@ -27,11 +29,12 @@ export type AppView =
   | 'versions'
   | 'files'
 
-export type PrimaryDestination = 'conversation' | 'harness' | 'plugins' | 'settings'
+export type PrimaryDestination = 'conversation' | 'harness' | 'assistant-memory' | 'assistant-tasks' | 'plugins' | 'settings'
 
 /** 所有设置子页及工具页在两种导航中使用同一个归属。 */
 export function primaryDestination(view: AppView): PrimaryDestination {
   if (view === 'conversation' || view === 'sessions') return 'conversation'
+  if (view === 'assistant-memory' || view === 'assistant-tasks') return view
   if (view === 'harness' || view === 'plugins') return view
   return 'settings'
 }

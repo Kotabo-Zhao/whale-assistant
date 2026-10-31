@@ -9,5 +9,7 @@ describe('主导航归属', () => {
     expect(primaryDestination('sessions')).toBe('conversation')
     expect(primaryDestination('harness')).toBe('harness')
     expect(primaryDestination('plugins')).toBe('plugins')
+    expect(primaryDestination('assistant-memory')).toBe('assistant-memory')
+    expect(primaryDestination('assistant-tasks')).toBe('assistant-tasks')
   })
 })

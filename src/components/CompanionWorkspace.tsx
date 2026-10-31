@@ -14,8 +14,8 @@ const parseMinute = (value: string) => { const [hour, minute] = value.split(':')
 const memoryCategory = (row: Row) => row.status === 'pending' ? '待确认' : row.source === 'shared_understanding' ? '分享内容' : row.source === 'auto_notification' || row.source === 'auto_notification_group' || row.source === 'user_notification' ? '通知整理' : row.source === 'auto_usage' ? '使用习惯' : row.source === 'auto_understanding' || row.source === 'user_understanding' ? '后台理解' : '手动与对话记忆'
 const days = ['每天', '每周一', '每周二', '每周三', '每周四', '每周五', '每周六', '每周日']
 
-export function CompanionWorkspace() {
-  const [panel, setPanel] = useState<Panel>('reminders')
+export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPanel?: Panel }) {
+  const [panel, setPanel] = useState<Panel>(initialPanel)
   const [items, setItems] = useState<Row[]>([])
   const [recurring, setRecurring] = useState<Row[]>([])
   const [suggestions, setSuggestions] = useState<Row[]>([])

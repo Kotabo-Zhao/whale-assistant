@@ -368,9 +368,9 @@ describe('返回键与视图历史', () => {
   it('底部四个标签切换页面并保持唯一选中项与返回历史', async () => {
     await renderAtMainView()
     const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
-    expect(nav.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['首页', '对话', '插件', '设置'])
-    expect(nav.getAllByRole('button').map(button => button.textContent)).toEqual(['首页', '对话', '插件', '设置'])
-    for (const [name, hash] of [['对话', '#harness'], ['插件', '#plugins'], ['设置', '#settings']]) {
+    expect(nav.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['对话', '记忆', '事项', '我的'])
+    expect(nav.getAllByRole('button').map(button => button.textContent)).toEqual(['对话', '记忆', '事项', '我的'])
+    for (const [name, hash] of [['对话', '#harness'], ['记忆', '#assistant-memory'], ['事项', '#assistant-tasks'], ['我的', '#settings']]) {
       fireEvent.click(nav.getByRole('button', { name: new RegExp(`^${name}$`) }))
       await waitFor(() => expect(window.location.hash).toBe(hash))
       expect(nav.getAllByRole('button', { current: 'page' })).toHaveLength(1)

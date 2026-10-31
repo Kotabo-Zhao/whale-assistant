@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Blocks, MessageSquare, Settings2 } from 'lucide-react'
+import { Blocks, Brain, ListTodo, MessageSquare, Settings2 } from 'lucide-react'
 import appMark from '../assets/app-mark.png'
 import { t, useLanguage } from '../i18n'
 import { primaryDestination, type AppView } from '../ui/appNavigation'
@@ -45,12 +45,13 @@ export function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
         <span>{t('会话')}</span>
       </button>
       <nav className="sidebar-nav">
-        {item('conversation', '首页', <MessageSquare size={20} />, activeView === 'conversation')}
-        {item('harness', '对话', <MessageSquare size={20} />, activeView === 'harness')}
-        {item('plugins', '插件管理', <Blocks size={20} />, activeView === 'plugins')}
+        {item('harness', '对话', <MessageSquare size={20} />, activeView === 'harness' || activeView === 'conversation')}
+        {item('assistant-memory', '记忆', <Brain size={20} />, activeView === 'assistant-memory')}
+        {item('assistant-tasks', '事项', <ListTodo size={20} />, activeView === 'assistant-tasks')}
+        {item('settings', '我的', <Settings2 size={20} />, settingsActive)}
       </nav>
       <div className="sidebar-bottom">
-        {item('settings', '应用设置', <Settings2 size={20} />, settingsActive)}
+        {item('plugins', '插件管理', <Blocks size={20} />, activeView === 'plugins')}
       </div>
     </aside>
   )
@@ -60,10 +61,10 @@ export function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
 export function BottomNavigation({ activeView, onNavigate }: AppSidebarProps) {
   useLanguage()
   const items: { view: AppView; label: string; icon: ReactNode; active: boolean }[] = [
-    { view: 'conversation', label: '首页', icon: <MessageSquare size={20} />, active: activeView === 'conversation' || activeView === 'sessions' },
-    { view: 'harness', label: '对话', icon: <MessageSquare size={20} />, active: activeView === 'harness' },
-    { view: 'plugins', label: '插件', icon: <Blocks size={20} />, active: activeView === 'plugins' },
-    { view: 'settings', label: '设置', icon: <Settings2 size={20} />, active: primaryDestination(activeView) === 'settings' },
+    { view: 'harness', label: '对话', icon: <MessageSquare size={20} />, active: activeView === 'harness' || activeView === 'conversation' || activeView === 'sessions' },
+    { view: 'assistant-memory', label: '记忆', icon: <Brain size={20} />, active: activeView === 'assistant-memory' },
+    { view: 'assistant-tasks', label: '事项', icon: <ListTodo size={20} />, active: activeView === 'assistant-tasks' },
+    { view: 'settings', label: '我的', icon: <Settings2 size={20} />, active: primaryDestination(activeView) === 'settings' },
   ]
   return (
     <nav className="bottom-navigation" aria-label={t('底部导航')}>
