@@ -25,6 +25,10 @@ internal class CompanionKnowledgeStore(context: Context) {
     internal fun recent(offset: Int, limit: Int): JSONArray = synchronized(lock) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.recent(offset, limit) }
     }
+    /** Paged local management query; unlike [search], this never returns the full collection. */
+    internal fun searchPage(query: String, offset: Int, limit: Int): Pair<JSONArray, Int?> = synchronized(lock) {
+        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.searchPage(query, offset, limit) }
+    }
     internal fun pageAfter(position: Long, limit: Int): List<Pair<Long, JSONObject>> = synchronized(lock) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.pageAfter(position, limit) }
     }

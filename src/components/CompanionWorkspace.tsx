@@ -38,8 +38,11 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const swipeStart = useRef<{ x: number; y: number; id: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [knowledgeNextOffset, setKnowledgeNextOffset] = useState<number | null>(null)
+  const [loadingMoreKnowledge, setLoadingMoreKnowledge] = useState(false)
   const pending = useRef(false)
   const previousPanel = useRef(panel)
+  const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
   useEffect(() => {
     let live = true
     if (previousPanel.current !== panel) {
@@ -47,14 +50,22 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       previousPanel.current = panel
     }
     setLoading(true); setLoadFailed(false)
-    const operation = panel === 'reminders' ? 'reminderList' : panel === 'memory' ? 'memoryList' : 'knowledgeList'
-    void Promise.resolve().then(() => runtimeBridge.companionDashboard({ operation, query: '' })).then(result => {
+    const request: CompanionRequest = panel === 'reminders'
+      ? { operation: 'reminderList', query: '' }
+      : panel === 'memory'
+        ? { operation: 'memoryList', query: '' }
+        : { operation: 'knowledgeList', query: knowledgeQuery, offset: 0 }
+    void Promise.resolve().then(() => runtimeBridge.companionDashboard(request)).then(result => {
       const nextItems = rows(result.items); const nextRecurring = rows(result.recurring ?? []); const nextSuggestions = rows(result.suggestions ?? [])
-      if (live) { setItems(nextItems); setRecurring(nextRecurring); setSuggestions(nextSuggestions); if (typeof result.quietStart === 'number') setQuietStart(formatMinute(result.quietStart)); if (typeof result.quietEnd === 'number') setQuietEnd(formatMinute(result.quietEnd)); setNotificationStatus(typeof result.notificationStatus === 'string' ? result.notificationStatus : '') }
+      if (live) {
+        setItems(nextItems); setRecurring(nextRecurring); setSuggestions(nextSuggestions)
+        setKnowledgeNextOffset(panel === 'knowledge' && Number.isSafeInteger(result.nextOffset) && (result.nextOffset as number) >= 0 ? result.nextOffset as number : null)
+        if (typeof result.quietStart === 'number') setQuietStart(formatMinute(result.quietStart)); if (typeof result.quietEnd === 'number') setQuietEnd(formatMinute(result.quietEnd)); setNotificationStatus(typeof result.notificationStatus === 'string' ? result.notificationStatus : '')
+      }
     }).catch(() => { if (live) { setLoadFailed(true); setMessage('无法读取数据，原有内容已保留。') } })
     .finally(() => { if (live) setLoading(false) })
     return () => { live = false }
-  }, [panel, revision])
+  }, [panel, revision, knowledgeQuery])
   const run = async (request: CompanionRequest, success: string) => {
     if (pending.current) return null
     pending.current = true
@@ -98,7 +109,20 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     try { await runtimeBridge.exportCompanionBackup(kind); setMessage('备份已保存。') }
     catch { setMessage('未完成导出，原数据不受影响。') } finally { setBusy(false) }
   }
-  const list = items.filter(row => row.text.toLowerCase().includes(query.trim().toLowerCase()))
+  const loadMoreKnowledge = async () => {
+    if (busy || loadingMoreKnowledge || panel !== 'knowledge' || knowledgeNextOffset === null) return
+    setLoadingMoreKnowledge(true); setMessage('')
+    try {
+      const result = await runtimeBridge.companionDashboard({ operation: 'knowledgeList', query: knowledgeQuery, offset: knowledgeNextOffset })
+      const next = rows(result.items)
+      setItems(current => {
+        const merged = new Map(current.map(row => [row.id, row])); next.forEach(row => merged.set(row.id, row)); return [...merged.values()]
+      })
+      setKnowledgeNextOffset(Number.isSafeInteger(result.nextOffset) && (result.nextOffset as number) >= 0 ? result.nextOffset as number : null)
+    } catch { setMessage('无法加载更多资料，已显示的内容不受影响。') }
+    finally { setLoadingMoreKnowledge(false) }
+  }
+  const list = panel === 'knowledge' ? items : items.filter(row => row.text.toLowerCase().includes(query.trim().toLowerCase()))
   const groups = [...new Set(list.map(memoryCategory))].map(name => ({ name, rows: list.filter(row => memoryCategory(row) === name) }))
   return <section className="companion-workspace" aria-labelledby="companion-workspace-title">
     <div className="workspace-heading"><div><span className="workspace-kicker">YOUR ASSISTANT</span><h3 id="companion-workspace-title">助手工作台</h3><p>提醒、资料与长期记忆集中管理，数据保存在手机本地。</p></div>
@@ -164,10 +188,10 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           </details>
           {revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
-      </details>)}</div> : <div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>本地资料 · {row.source ?? '来源未知'}</small></div><div className="workspace-card-actions">
+      </details>)}</div> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>本地资料 · {row.source ?? '来源未知'}</small></div><div className="workspace-card-actions">
         <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>
         <button type="button" onClick={() => { if (window.confirm('删除这条资料？')) void run({ operation: 'knowledgeDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>
-      </div></article>)}</div>}
+      </div></article>)}</div>{knowledgeNextOffset !== null && <button className="button button-secondary" type="button" disabled={busy || loadingMoreKnowledge} onClick={() => { void loadMoreKnowledge() }}>{loadingMoreKnowledge ? '正在加载资料…' : '加载更多资料'}</button>}</>}
       {panel === 'memory' && <div className="workspace-hint"><p>删除自动通知或使用习惯记忆后，对应来源会暂停自动整理，避免下次采集立即重新生成。恢复只影响已开启的自动整理功能。</p><button type="button" className="button button-secondary" onClick={() => { if (window.confirm('恢复已删除来源的自动整理？新通知和使用统计可能再次形成记忆。')) void run({ operation: 'memoryResumeAutomatic' }, '自动整理来源已恢复。') }}>恢复已删除来源的自动整理</button></div>}
       {panel === 'memory' && items.length > 0 && <button className="button button-danger-quiet" type="button" onClick={() => { if (window.confirm('清空全部长期记忆并暂停通知和使用习惯的自动整理？此操作无法撤销。')) void run({ operation: 'memoryClear', confirmed: true }, '长期记忆已清空。') }}>清空全部长期记忆</button>}
     </>}

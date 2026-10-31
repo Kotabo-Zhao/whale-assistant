@@ -59,7 +59,25 @@ internal class CompanionDashboard(private val context: Context) {
             "memoryDelete" -> success(memory.deleteForUser(text("id"), text("expected")))
             "memoryResumeAutomatic" -> { memory.resumeAutomaticSources(); JSONObject().put("ok", true) }
             "memoryClear" -> { require(request.optBoolean("confirmed")); memory.clearForUser(); JSONObject().put("ok", true) }
-            "knowledgeList" -> JSONObject().put("items", knowledge.search(request.optString("query")))
+            "knowledgeList" -> {
+                val rawQuery = request.opt("query")
+                val query = when (rawQuery) {
+                    null, JSONObject.NULL -> ""
+                    is String -> rawQuery
+                    else -> throw IllegalArgumentException("资料查询参数无效")
+                }
+                val rawOffset = request.opt("offset")
+                val offset = when (rawOffset) {
+                    null, JSONObject.NULL -> 0
+                    is Int -> rawOffset
+                    is Long -> rawOffset.takeIf { it in 0..Int.MAX_VALUE.toLong() }?.toInt()
+                        ?: throw IllegalArgumentException("资料查询参数无效")
+                    else -> throw IllegalArgumentException("资料查询参数无效")
+                }
+                require(query.length <= 100 && offset >= 0) { "资料查询参数无效" }
+                val (items, nextOffset) = knowledge.searchPage(query, offset, 20)
+                JSONObject().put("items", items).put("nextOffset", nextOffset ?: JSONObject.NULL)
+            }
             "knowledgeAdd" -> JSONObject().put("ok", knowledge.add(text("text"), "text_file"))
             "knowledgeEdit" -> success(knowledge.edit(text("id"), text("expectedText"), text("text")))
             "knowledgeDelete" -> success(knowledge.remove(text("id"), text("expectedText")))

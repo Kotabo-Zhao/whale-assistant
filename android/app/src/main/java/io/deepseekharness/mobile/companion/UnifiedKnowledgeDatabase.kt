@@ -48,6 +48,28 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         }
         return result
     }
+
+    /**
+     * UI pagination never materializes the full collection. Text matching stays local and uses the
+     * same case-insensitive substring semantics as the legacy JSON store; callers receive one
+     * extra-row-derived continuation rather than an assertion that this is the whole result set.
+     */
+    fun searchPage(query: String, offset: Int, limit: Int): Pair<JSONArray, Int?> {
+        require(query.length <= 100 && offset >= 0 && limit in 1..50)
+        val normalized = query.trim()
+        val result = JSONArray()
+        var matched = 0
+        db.rawQuery("SELECT body FROM knowledge_records ORDER BY position DESC", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val row = JSONObject(cursor.getString(0))
+                if (normalized.isNotEmpty() && !row.getString("text").contains(normalized, ignoreCase = true)) continue
+                if (matched++ < offset) continue
+                if (result.length() == limit) return result to (offset + result.length())
+                result.put(row)
+            }
+        }
+        return result to null
+    }
     fun pageAfter(position: Long, limit: Int): List<Pair<Long, JSONObject>> {
         require(position >= -1 && limit in 1..128)
         return db.rawQuery("SELECT position,body FROM knowledge_records WHERE position>? ORDER BY position LIMIT ?", arrayOf(position.toString(), limit.toString())).use { cursor ->
