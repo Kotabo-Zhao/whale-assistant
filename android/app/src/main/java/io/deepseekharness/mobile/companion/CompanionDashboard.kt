@@ -144,6 +144,29 @@ internal class CompanionDashboard(private val context: Context) {
                     .put("quietStart", store.quietHoursStart).put("quietEnd", store.quietHoursEnd)
                     .put("notificationStatus", CompanionReminderHealth.read(context).name)
             }
+            "taskList" -> UnifiedUnderstandingStore.open(context).use { data ->
+                JSONObject().put("items", JSONArray().apply {
+                    data.queue.listItems(100).forEach { item -> put(JSONObject()
+                        .put("id", item.id).put("text", item.title).put("state", item.state)
+                        .put("sourceKind", if (item.eventId.startsWith("share:")) "shared_material" else "notification")
+                        .put("reminderStatus", item.reminderStatus).put("reminderAtMs", item.reminderAtMs ?: JSONObject.NULL)
+                        .put("revision", CompanionTaskModel.revision(item)))
+                })
+            }
+            "taskUpdate" -> {
+                val id = text("id")
+                val expectedState = text("expectedState")
+                val expectedRevision = text("expectedRevision")
+                val next = text("state")
+                require(expectedState in setOf("candidate", "open", "done", "cancelled") && next in setOf("open", "done", "cancelled")) { "事项状态无效" }
+                val updated = UnifiedUnderstandingStore.open(context).use { data ->
+                    val current = data.queue.item(id) ?: return@use false
+                    require(current.state == expectedState && CompanionTaskModel.revision(current) == expectedRevision) { "事项已变化，请刷新后重试" }
+                    data.queue.updateItem(id, expectedState, next)
+                }
+                if (updated && next in setOf("done", "cancelled")) runCatching { CompanionReminder(context).removeLinked(id) }
+                success(updated)
+            }
             "quietHoursSet" -> {
                 val start = request.getInt("start"); val end = request.getInt("end")
                 require(start in 0 until 1440 && end in 0 until 1440) { "时间无效" }

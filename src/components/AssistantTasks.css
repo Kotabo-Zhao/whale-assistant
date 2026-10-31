@@ -1,0 +1,13 @@
+.assistant-tasks { display: grid; gap: 14px; max-width: 920px; margin: 0 auto; }
+.assistant-tasks > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.assistant-tasks h2 { margin: 3px 0; font-size: 1.35rem; }
+.assistant-tasks header p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.6; }
+.assistant-task-filters, .assistant-task-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.assistant-task-filters button, .assistant-task-actions button { display: inline-flex; align-items: center; min-height: 40px; gap: 5px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius-inner); color: var(--card-ink, var(--ink)); background: var(--surface); cursor: pointer; }
+.assistant-task-filters button[aria-selected="true"] { color: var(--accent, var(--blue)); border-color: var(--accent, var(--blue)); background: var(--blue-soft); }
+.assistant-task-list { display: grid; gap: 10px; }
+.assistant-task-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-card); background: color-mix(in srgb, var(--card-color, var(--surface)) var(--card-opacity, 100%), transparent); }
+.assistant-task-card > div:first-child { display: grid; min-width: 0; gap: 5px; }
+.assistant-task-card strong, .assistant-task-card small { overflow-wrap: anywhere; }
+.assistant-task-card small { color: var(--card-muted, var(--muted)); }
+@media (max-width: 520px) { .assistant-task-card { align-items: stretch; flex-direction: column; } .assistant-task-actions button { min-height: 44px; } }

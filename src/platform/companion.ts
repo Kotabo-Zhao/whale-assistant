@@ -1,6 +1,7 @@
 /** 助手管理请求的共享契约；原生仍校验所有字段与数据版本。 */
 export type CompanionRequest =
-  | { operation: 'memoryList' | 'reminderList'; query?: string }
+  | { operation: 'memoryList' | 'reminderList' | 'taskList'; query?: string }
+  | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; state: 'open' | 'done' | 'cancelled' }
   | { operation: 'memoryPage'; before: number; revision: number }
   | { operation: 'knowledgeList'; query?: string; offset?: number; source?: 'shared_text' | 'text_file' | 'original' | 'image_analysis'; coverage?: 'not_parsed' | 'partial' | 'extracted_text' | 'model_description' }
   | { operation: 'overview' | 'memorySuggestionsReset' | 'memoryResumeAutomatic' }

@@ -6,6 +6,7 @@ import appMark from './assets/app-mark.png'
 import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
 import { TaskStarter } from './components/TaskStarter'
+import { AssistantTasks } from './components/AssistantTasks'
 import { CompanionSettingsButton } from './components/CompanionSettingsButton'
 import { CompanionWorkspace } from './components/CompanionWorkspace'
 import type { AutomationRuleDefaults } from './components/AutomationRuleForm'
@@ -5356,7 +5357,7 @@ export function App() {
       case 'assistant-memory':
         return <CompanionWorkspace initialPanel="memory" />
       case 'assistant-tasks':
-        return <CompanionWorkspace initialPanel="reminders" />
+        return <AssistantTasks />
       case 'terminal':
         return <TerminalScreen bridge={runtimeBridge} fontSize={settings?.terminalFontSize ?? 14} onAuthorize={requestShizukuPermission} onBack={() => backToView('settings')} onConnect={connectShizuku} onError={terminalError} onOpenEnvironment={() => setActiveView('environment')} onOpenShizuku={openShizuku} runtime={runtime} shizuku={shizuku} />
       case 'plugins':
