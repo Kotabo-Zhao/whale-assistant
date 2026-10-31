@@ -103,6 +103,14 @@ test('事项工具携带调用会话并限制检索参数', async t => {
   await assert.rejects(tool.execute({ query: '\u0001' }, memoryExec), /TASK_INPUT_INVALID/)
 })
 
+test('事项更新必须携带读取时状态，并限制为单项状态或提醒操作', async t => {
+  const f = fixture(t, () => ok('{"id":"00000000-0000-0000-0000-000000000001"}'))
+  const tool = f.tools.get('mobile_task_update')
+  await tool.execute({ id: '00000000-0000-0000-0000-000000000001', expectedState: 'candidate', state: 'open' }, memoryExec)
+  assert.deepEqual(f.requests, [{ command: 'companionTasks', param: `{"op":"update","id":"00000000-0000-0000-0000-000000000001","expectedState":"candidate","state":"open","callerSession":"${virtualSession}"}` }])
+  await assert.rejects(tool.execute({ id: '00000000-0000-0000-0000-000000000001', expectedState: 'candidate', state: 'done', reminderAtMs: 1900000000000 }, memoryExec), /TASK_INPUT_INVALID/)
+})
+
 test('长期记忆工具通过本机桥保存、检索和删除，并验证输入', async t => {
   const f = fixture(t, () => ok('{"items":[]}'))
   await f.tools.get('mobile_memory_save').execute({ text: '喜欢蓝色' }, memoryExec)

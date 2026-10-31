@@ -316,6 +316,12 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
         items
     }
     data class Item(val id: String, val title: String, val state: String, val eventId: String, val reminderStatus: Int = 0)
+    fun item(id: String): Item? = db.rawQuery(
+        "SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.id=?", arrayOf(id)
+    ).use { c -> if (c.moveToFirst()) Item(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4)) else null }
+    fun sharedRecordId(eventId: String): String? = db.rawQuery(
+        "SELECT record_id FROM knowledge_source_events WHERE event_id=? LIMIT 1", arrayOf(eventId)
+    ).use { c -> if (c.moveToFirst()) c.getString(0) else null }
     fun listItems(limit: Int): List<Item> {
         require(limit in 1..100)
         return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id ORDER BY i.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->

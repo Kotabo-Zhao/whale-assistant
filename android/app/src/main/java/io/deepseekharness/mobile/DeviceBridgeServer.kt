@@ -359,9 +359,38 @@ class DeviceBridgeServer(
                         val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("TASK_INPUT_INVALID", "事项查询参数无效") }
                         val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
                         access.requireTasks()
-                        val result = io.deepseekharness.mobile.companion.CompanionTaskModel.execute(
-                            io.deepseekharness.mobile.companion.CompanionStore(context).notificationModelAccess, param
-                        ) { limit -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.listItems(limit) } }
+                        val tasks = io.deepseekharness.mobile.companion.CompanionTaskModel
+                        val result = if (request.optString("op", "search") == "update") {
+                            val update = tasks.parseUpdate(param)
+                            val now = System.currentTimeMillis()
+                            val changed = io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
+                                val current = store.queue.item(update.id) ?: throw RuntimeFailure("TASK_NOT_FOUND", "事项不存在或已删除")
+                                if (current.state != update.expectedState) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
+                                val saved = if (update.reminderAtMs != null) store.queue.setItemReminder(update.id, update.expectedState, update.reminderAtMs, now)
+                                else store.queue.updateItem(update.id, update.expectedState, update.nextState!!)
+                                if (!saved) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
+                                store.queue.item(update.id) ?: throw RuntimeFailure("TASK_CONFLICT", "事项已变化，请先重新读取")
+                            }
+                            try {
+                                if (update.reminderAtMs != null) io.deepseekharness.mobile.companion.CompanionReminder(context).upsertLinked(changed.id, changed.title, update.reminderAtMs)
+                                else if (update.nextState in setOf("done", "cancelled")) io.deepseekharness.mobile.companion.CompanionReminder(context).removeLinked(changed.id)
+                            } catch (e: Exception) {
+                                if (update.reminderAtMs != null) runCatching { io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(changed.id, update.reminderAtMs) } }
+                                throw RuntimeFailure("TASK_REMINDER_UNAVAILABLE", "事项已更新，但关联提醒未能安排；已撤销本次提醒状态", e)
+                            }
+                            val refreshed = io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
+                                val item = store.queue.item(changed.id) ?: throw RuntimeFailure("TASK_NOT_FOUND", "事项不存在或已删除")
+                                tasks.updated(item, store.queue.sharedRecordId(item.eventId))
+                            }
+                            refreshed
+                        } else {
+                            io.deepseekharness.mobile.companion.CompanionTaskModel.execute(
+                                io.deepseekharness.mobile.companion.CompanionStore(context).notificationModelAccess,
+                                param,
+                                { limit -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.listItems(limit) } },
+                                { eventId -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.sharedRecordId(eventId) } },
+                            )
+                        }
                         access.requireTasks()
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return
