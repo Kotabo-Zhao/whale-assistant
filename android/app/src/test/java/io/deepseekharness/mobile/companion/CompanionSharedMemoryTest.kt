@@ -41,4 +41,10 @@ class CompanionSharedMemoryTest {
         assertEquals(recordId, public.getString("sourceRecordId")); assertEquals(revision, public.getString("sourceRevision"))
         assertFalse(public.has("originalText"))
     }
+    @Test fun rejectsMalformedKnowledgeReference() {
+        val event = "share:" + "e".repeat(64)
+        assertThrows(IllegalArgumentException::class.java) {
+            CompanionSharedMemory.add(JSONArray(), event, JSONArray().put(JSONObject().put("text", "不能伪造引用")), 1L, false, { false }, "not-a-record", "f".repeat(64))
+        }
+    }
 }
