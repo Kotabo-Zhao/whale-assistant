@@ -656,13 +656,34 @@ class CompanionActivity : AppCompatActivity() {
                 .setItems(backgroundProviders.map { it.displayName }.toTypedArray()) { _, index ->
                     val provider = backgroundProviders[index].id
                     androidx.appcompat.app.AlertDialog.Builder(this).setTitle("切换后台模型服务？")
-                        .setMessage("之后的资料和通知整理会发送给 ${backgroundProviders[index].displayName}，使用模型设置中的密钥和默认模型；自定义供应商使用其模型列表第一项。已经发出的请求仍由原服务处理。请确认所选服务支持 JSON 格式输出，可能产生费用。")
+                        .setMessage("之后的资料和通知整理会发送给 ${backgroundProviders[index].displayName}，使用模型设置中的密钥和默认模型；自定义供应商可在下一项选择其已配置模型。已经发出的请求仍由原服务处理。请确认所选服务支持 JSON 格式输出，可能产生费用。")
                         .setNegativeButton("取消", null).setPositiveButton("切换") { _, _ ->
                             val result = runCatching { store.understandingProvider = provider }
                             android.widget.Toast.makeText(this, if (result.isSuccess) "后台模型服务已切换。" else "无法保存设置。", android.widget.Toast.LENGTH_LONG).show()
                             render()
                         }.show()
                 }.setNegativeButton("取消", null).show()
+        }
+        val selectedBackgroundProvider = io.deepseekharness.mobile.runtime.RuntimeStore(this).settings().customModelProviders
+            .firstOrNull { it.id == store.understandingProvider }
+        if (selectedBackgroundProvider != null) {
+            val selectedModel = store.understandingModel?.takeIf { chosen -> selectedBackgroundProvider.models.any { it.id == chosen } }
+                ?: selectedBackgroundProvider.models.firstOrNull()?.id
+            button("后台整理模型 · ${selectedModel ?: "未配置"}") {
+                val models = selectedBackgroundProvider.models
+                if (models.isEmpty()) {
+                    android.widget.Toast.makeText(this, "当前自定义供应商没有已保存模型，请先在模型设置中添加。", android.widget.Toast.LENGTH_LONG).show()
+                } else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择后台整理模型")
+                    .setItems(models.map { "${it.name} · ${it.id}" }.toTypedArray()) { _, index ->
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("切换后台整理模型？")
+                            .setMessage("之后的资料和通知整理会使用 ${models[index].name}。模型输出仍会先经过本地结构校验，可能产生费用。")
+                            .setNegativeButton("取消", null).setPositiveButton("切换") { _, _ ->
+                                val result = runCatching { store.understandingModel = models[index].id }
+                                android.widget.Toast.makeText(this, if (result.isSuccess) "后台整理模型已切换。" else "无法保存模型选择。", android.widget.Toast.LENGTH_LONG).show()
+                                render()
+                            }.show()
+                    }.setNegativeButton("取消", null).show()
+            }
         }
         toggle("后台理解新通知", store.backgroundUnderstanding) { enabled ->
             if (!enabled) { store.backgroundUnderstanding = false; render() }

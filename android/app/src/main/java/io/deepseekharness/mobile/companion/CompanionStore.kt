@@ -24,7 +24,19 @@ class CompanionStore(context: Context) {
         get() = prefs.getString("understanding_provider", "deepseek") ?: "deepseek"
         set(value) {
             require(value in understandingProviderChoices(io.deepseekharness.mobile.runtime.RuntimeStore(app).settings()).map { it.id })
-            check(prefs.edit().putString("understanding_provider", value).commit())
+            // A custom model choice belongs to one provider; never silently carry it to another.
+            check(prefs.edit().putString("understanding_provider", value).remove("understanding_model").commit())
+        }
+    /** Optional custom-provider model selection. Built-ins keep using the runtime default-model setting. */
+    var understandingModel: String?
+        get() = prefs.getString("understanding_model", null)
+        set(value) {
+            if (value == null) { check(prefs.edit().remove("understanding_model").commit()); return }
+            require(value.isNotBlank() && value.length <= 200 && value.none { it.isISOControl() })
+            val provider = io.deepseekharness.mobile.runtime.RuntimeStore(app).settings().customModelProviders
+                .firstOrNull { it.id == understandingProvider } ?: throw IllegalArgumentException("当前后台供应商不支持独立模型选择")
+            require(provider.models.any { it.id == value }) { "后台模型已不在当前供应商配置中" }
+            check(prefs.edit().putString("understanding_model", value).commit())
         }
     var backgroundUnderstanding: Boolean
         get() = prefs.getBoolean("background_understanding", false)

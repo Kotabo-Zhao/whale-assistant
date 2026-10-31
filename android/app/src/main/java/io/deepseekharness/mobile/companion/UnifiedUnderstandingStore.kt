@@ -78,7 +78,9 @@ internal fun configuredUnderstandingModel(context: Context): UnderstandingModel 
         throw UnderstandingRequestException("configuration", "已选择的后台模型供应商已删除，请在助手设置中重新选择")
     }
     val key = settings.readModelCredential(provider) ?: throw UnderstandingRequestException("credentials", "后台模型凭据不可用")
-    val model = customProvider?.models?.firstOrNull()?.id
+    val requestedCustomModel = CompanionStore(context).understandingModel
+    val model = customProvider?.models?.firstOrNull { it.id == requestedCustomModel }?.id
+        ?: customProvider?.models?.firstOrNull()?.id
         ?: when (provider) {
             "deepseek" -> runtimeSettings.defaultModels[ModelProvider.DEEPSEEK] ?: "deepseek-flash"
             else -> runtimeSettings.defaultModels[ModelProvider.parse(provider)]
