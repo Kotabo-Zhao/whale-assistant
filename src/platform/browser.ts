@@ -579,6 +579,7 @@ export function createBrowserBridge(): RuntimeBridge {
     // 浏览器里没有可跳转的系统设置页；静默无操作，不抛错以免打断预览。
     openOverlaySettings: (): Promise<void> => Promise.resolve(),
     companionDashboard: () => Promise.reject(new Error('浏览器预览不支持助手数据')),
+    openCompanionKnowledge: (): Promise<void> => Promise.reject(new Error('浏览器预览不支持原件详情')),
     exportCompanionBackup: () => Promise.reject(new Error('浏览器预览不支持备份')),
     openCompanionSettings: (): Promise<void> => Promise.reject(new Error('浏览器预览不支持助手设置')),
     getCompanionQuickSettings: () => Promise.reject(new Error('浏览器预览不支持助手设置')),
