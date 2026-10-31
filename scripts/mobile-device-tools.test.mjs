@@ -295,6 +295,26 @@ test('资料图片工具解开受授权桥返回的图像信封，并保留调�
   assert.equal(result.image.attachmentId, 'knowledge-image')
 })
 
+test('资料图片工具在当前模型不支持图片或无法识别路由时不读取原件', async t => {
+  const id = virtualSession
+  const revision = 'a'.repeat(64)
+  const textOnly = fixture(t, () => ok('{"imageBase64":"should-not-be-read"}'), {
+    llm: { resolveModelInfo: async () => ({ inputModalities: ['text'] }) },
+  })
+  await assert.rejects(textOnly.tools.get('mobile_knowledge_image').execute({ id, revision }, {
+    agent: { session: { id: virtualSession, requestHeader: () => ({ config: { provider: 'test', model: 'text-only' } }) } },
+  }), /IMAGE_MODEL_REQUIRED/u)
+  assert.equal(textOnly.requests.length, 0)
+
+  const unknownRoute = fixture(t, () => ok('{"imageBase64":"should-not-be-read"}'), {
+    llm: { resolveModelInfo: async () => ({ inputModalities: ['image'] }) },
+  })
+  await assert.rejects(unknownRoute.tools.get('mobile_knowledge_image').execute({ id, revision }, {
+    agent: { session: { id: virtualSession, requestHeader: () => ({ config: {} }) } },
+  }), /IMAGE_MODEL_REQUIRED/u)
+  assert.equal(unknownRoute.requests.length, 0)
+})
+
 test('旧版副屏截图缺少帧元数据时不宣称拿到了新帧', t => {
   const f = fixture(t, () => ok('{}'))
   const tool = f.tools.get('mobile_virtual_screen_screenshot')
