@@ -44,13 +44,15 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [memoryRevision, setMemoryRevision] = useState<number | null>(null)
   const [loadingMoreMemory, setLoadingMoreMemory] = useState(false)
   const [undoKnowledge, setUndoKnowledge] = useState<Row | null>(null)
+  const [memorySource, setMemorySource] = useState('all')
+  const [memoryOrder, setMemoryOrder] = useState<'recent' | 'oldest' | 'source' | 'type'>('recent')
   const pending = useRef(false)
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
   useEffect(() => {
     let live = true
     if (previousPanel.current !== panel) {
-      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage('')
+      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent')
       previousPanel.current = panel
     }
     setLoading(true); setLoadFailed(false)
@@ -151,7 +153,16 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     finally { setLoadingMoreMemory(false) }
   }
   const list = panel === 'knowledge' ? items : items.filter(row => row.text.toLowerCase().includes(query.trim().toLowerCase()))
-  const groups = [...new Set(list.map(memoryCategory))].map(name => ({ name, rows: list.filter(row => memoryCategory(row) === name) }))
+  const memorySources = [...new Set(items.map(row => row.source).filter((source): source is string => typeof source === 'string' && source !== ''))].sort()
+  const memoryList = panel !== 'memory' ? list : [...list]
+    .filter(row => memorySource === 'all' || row.source === memorySource)
+    .sort((left, right) => {
+      if (memoryOrder === 'source') return String(left.source ?? '').localeCompare(String(right.source ?? '')) || Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0)
+      if (memoryOrder === 'type') return memoryCategory(left).localeCompare(memoryCategory(right)) || Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0)
+      const direction = memoryOrder === 'oldest' ? 1 : -1
+      return direction * (Number(left.createdAt ?? 0) - Number(right.createdAt ?? 0))
+    })
+  const groups = [...new Set(memoryList.map(memoryCategory))].map(name => ({ name, rows: memoryList.filter(row => memoryCategory(row) === name) }))
   return <section className="companion-workspace" aria-labelledby="companion-workspace-title">
     <div className="workspace-heading"><div><span className="workspace-kicker">YOUR ASSISTANT</span><h3 id="companion-workspace-title">助手工作台</h3><p>提醒、资料与长期记忆集中管理，数据保存在手机本地。</p></div>
       <button className="icon-button" type="button" aria-label="刷新助手数据" disabled={busy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></div>
@@ -194,13 +205,17 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
         <button type="button" className="button button-secondary" onClick={() => { void run({ operation: 'memorySuggestionsReset' }, '已重置忽略记录。') }}>重置已忽略候选</button>
       </details>}
       <label>搜索<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={panel === 'memory' ? '搜索已确认及待确认的记忆' : '搜索本地资料'} /></label>
+      {panel === 'memory' && <div className="workspace-form-row memory-filter-row">
+        <label>来源筛选<select value={memorySource} onChange={event => setMemorySource(event.target.value)}><option value="all">全部来源</option>{memorySources.map(source => <option key={source} value={source}>{source}</option>)}</select></label>
+        <label>排序<select value={memoryOrder} onChange={event => setMemoryOrder(event.target.value as typeof memoryOrder)}><option value="recent">最近</option><option value="oldest">最早</option><option value="source">来源</option><option value="type">类型</option></select></label>
+      </div>}
       <label>{panel === 'memory' ? '记忆内容' : '资料内容'}<textarea value={text} maxLength={panel === 'memory' ? 600 : 8000} rows={3} onChange={e => setText(e.target.value)} placeholder={panel === 'memory' ? '写下希望助手记住的事实或偏好' : '输入或导入需要保存的资料'} /></label>
       <div className="workspace-card-actions"><button className="button button-primary" type="button" disabled={busy || !text.trim()} onClick={() => {
         if (panel === 'memory') { void startMemoryReview(editing ? 'edit' : 'add', editing ?? undefined); return }
         void run(editing ? { operation: 'knowledgeEdit', id: editing.id, expectedText: editing.text, text: text.trim() } : { operation: 'knowledgeAdd', text: text.trim() }, '资料已处理。')
       }}>{editing ? '保存修改' : '添加'}</button>{editing && <button type="button" onClick={() => { setEditing(null); setText('') }}>取消编辑</button>}</div>
       {review && <div className="workspace-review"><strong>核对相关记忆</strong><p>相关内容仅供参考，请确认是否重复、冲突或包含敏感信息。</p>{review.candidates.map((row, i) => <p key={i}>{row.status}：{row.text}</p>)}<div className="workspace-card-actions"><button type="button" onClick={() => setReview(null)}>取消</button><button type="button" disabled={busy} onClick={() => { void saveMemory() }}>确认保存</button></div></div>}
-      {panel === 'memory' && list.length > 0 && <p className="workspace-hint">展开分类查看缩略卡片，点击卡片查看详情；左滑可删除。</p>}
+      {panel === 'memory' && memoryList.length > 0 && <p className="workspace-hint">展开分类查看缩略卡片，点击卡片查看详情；左滑可删除。</p>}
       {panel === 'memory' ? <><div className="memory-groups">{groups.map(group => <details className="memory-group" key={group.name} open={query.trim() ? true : undefined}>
         <summary><span>{group.name}</span><small>{group.rows.length} 条</small></summary>
         <div className="workspace-list">{group.rows.map(row => <article className="workspace-card workspace-memory-card" key={row.id}
