@@ -175,6 +175,8 @@ export const english: Readonly<Record<string, string>> = {
   "对话": "Conversation",
   "返回对话": "Back to conversation",
   "新建会话": "New session",
+  "收起会话": "Show fewer sessions",
+  "展开其余 {0} 个会话": "Show {0} more sessions",
   "新会话 {0}": "New session {0}",
   "搜索会话": "Search sessions",
   "{0} 个会话": "{0} sessions",

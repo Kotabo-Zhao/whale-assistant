@@ -120,7 +120,7 @@ internal object BackgroundUnderstanding {
             try {
                 val event = store.queue.eventFor(claim) ?: error("event unavailable")
                 if (!allowed(app, pkg) || stopped.get()) { store.queue.retry(claim, now + 60_000); return true }
-                val output = configuredDeepSeekUnderstandingModel(app).analyze(event.first, event.second)
+                val output = configuredUnderstandingModel(app).analyze(event.first, event.second)
                 if (stopped.get()) { store.queue.retry(claim, System.currentTimeMillis() + 60_000L); return true }
                 if (!allowed(app, pkg)) { store.queue.setSourceEnabled(claim.source, false); return store.queue.pendingCount() > 0 }
                 check(CompanionMemoryStore(app).commitUnderstanding(store.queue, claim, event.first, output))

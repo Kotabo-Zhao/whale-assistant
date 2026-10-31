@@ -11,3 +11,14 @@
 .companion-settings-group > summary { cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
 .companion-settings-group > summary small { color: var(--muted); line-height: 1.5; }
 .companion-settings-group .toggle-row { margin-top: 10px; }
+
+/* 工作台已有自己的分组；不再用多重内边距挤压正文。 */
+.companion-workspace-group { padding:0; min-width:0; overflow:hidden; }
+.companion-workspace-group > summary { padding:12px 14px; }
+.companion-workspace-group .companion-workspace { margin:0; padding:12px 14px 16px; border:0; border-top:1px solid var(--line); border-radius:0; background:transparent; }
+@media (max-width: 480px) {
+  .companion-settings { min-width:0; padding:12px; }
+  .companion-workspace-group > summary { padding:11px 10px; }
+  .companion-workspace-group .companion-workspace { padding:10px 8px 14px; }
+  .companion-settings-group:not(.companion-workspace-group) { padding:10px; }
+}

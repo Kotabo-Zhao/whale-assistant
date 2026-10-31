@@ -246,8 +246,78 @@ class DeviceBridgeServer(
                         if (param.length > 1024) throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料查询参数过长")
                         val context = appContext ?: throw RuntimeFailure("KNOWLEDGE_UNAVAILABLE", "资料服务不可用")
                         val store = io.deepseekharness.mobile.companion.CompanionStore(context)
-                        val result = io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, param) {
-                            io.deepseekharness.mobile.companion.CompanionKnowledgeStore(context).search(it)
+                        val knowledge = io.deepseekharness.mobile.companion.CompanionKnowledgeStore(context)
+                        val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料查询参数无效") }
+                        if (request.optString("op") == "hybrid") {
+                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
+                            val result = io.deepseekharness.mobile.companion.SemanticKnowledgeSearch.execute(context, param)
+                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                            return
+                        }
+                        if (request.optString("op") == "forget" || request.optString("op") == "undo") {
+                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
+                            val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
+                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
+                            val result = if (request.optString("op") == "undo") {
+                                JSONObject().put("id", id).put("restored", knowledge.undoRemove(id))
+                                    .put("notice", "仅恢复资料记录；已删除的派生记忆不会自动恢复。")
+                            } else {
+                                val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
+                                val text = row.getString("text")
+                                if (request.optString("revision") != io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(text))
+                                    throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                                val earliestUndoUntil = System.currentTimeMillis() + 10 * 60_000L
+                                if (!knowledge.remove(id, text)) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                                JSONObject().put("id", id).put("deleted", 1).put("undoUntilMs", earliestUndoUntil)
+                                    .put("originalRetained", true).put("otherRecordsRetained", true)
+                                    .put("notice", "已删除选中的资料记录及关联派生记忆；原件、其他分段和外部副本仍保留。")
+                            }
+                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
+                            return
+                        }
+                        if (request.optString("op") == "image") {
+                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
+                            val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
+                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
+                            val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
+                            val hash = io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(row.getString("text"))
+                            if (request.optString("revision") != hash) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                            val originalId = row.optString("originalId").takeIf { it.matches(Regex("[a-f0-9]{64}")) }
+                                ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料没有关联的原图片")
+                            var image: String? = null
+                            if (!knowledge.withUnchangedRecord(id, row.getString("text")) {
+                                image = io.deepseekharness.mobile.companion.KnowledgeImageModel.preview(context, originalId)
+                            }) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "对话访问已关闭")
+                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, checkNotNull(image), false, null))
+                            return
+                        }
+                        if (request.optString("op") in setOf("status", "retry")) {
+                            if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
+                            val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
+                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
+                            val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
+                            val hash = io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(row.getString("text"))
+                            val revision = request.opt("revision") as? String ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料版本无效")
+                            if (revision != hash) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                            var status: JSONObject? = null
+                            val memoryEnabled = io.deepseekharness.mobile.companion.CompanionMemoryStore(context).enabled
+                            if (request.optString("op") == "retry" && !memoryEnabled) throw RuntimeFailure("MEMORY_DISABLED", "请先开启记忆整理")
+                            var retryScheduled = false
+                            if (!knowledge.withUnchangedRecord(id, row.getString("text")) {
+                                if (request.optString("op") == "retry") {
+                                    retryScheduled = io.deepseekharness.mobile.companion.SharedMemoryJobs.retryRecord(context, id, hash)
+                                    if (retryScheduled) io.deepseekharness.mobile.companion.SharedMemoryJobs.schedule(context, 0)
+                                }
+                                status = io.deepseekharness.mobile.companion.SharedMemoryJobs.status(context, id, hash)
+                            }) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                            val result = checkNotNull(status).put("id", id).put("revision", hash).put("retryScheduled", retryScheduled).put("memoryEnabled", memoryEnabled)
+                                .put("notice", "队列状态不代表模型已完整理解原文件；错误代码仅表示上次已记录的失败分类。")
+                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
+                            return
+                        }
+                        val result = io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, param, knowledge::findById, knowledge::recent) {
+                            knowledge.search(it)
                         }
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return
@@ -265,7 +335,10 @@ class DeviceBridgeServer(
                     if (commandName == "companionMemory") {
                         if (param.length > 4096) throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数过长")
                         val context = appContext ?: throw RuntimeFailure("MEMORY_UNAVAILABLE", "记忆服务不可用")
-                        val result = io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(param)
+                        val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数无效") }
+                        val result = if (request.optString("op") == "hybrid")
+                            io.deepseekharness.mobile.companion.SemanticMemorySearch.execute(context, param)
+                        else io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(param)
                         if (io.deepseekharness.mobile.companion.CompanionMemoryHint.shouldNotify(param, result)) {
                             OverlayBallService.companionPendingMemoryHint()
                         }

@@ -56,6 +56,8 @@ class MainActivity : BridgeActivity() {
         registerPlugin(MobileRuntimePlugin::class.java)
         super.onCreate(savedInstanceState)
         io.deepseekharness.mobile.companion.SharedMemoryJobs.bootstrap(applicationContext)
+        val semantic = io.deepseekharness.mobile.companion.SemanticControl(applicationContext)
+        if (semantic.enabled && !semantic.isComplete()) runCatching { io.deepseekharness.mobile.companion.SemanticIndexJobs.schedule(applicationContext, 5_000) }
         io.deepseekharness.mobile.companion.CompanionRecurringReminder.requestRecovery(applicationContext)
         AppWindowInsets.apply(this)
         handleExternalFileIntent(intent, acceptText = savedInstanceState == null)
@@ -88,7 +90,10 @@ class MainActivity : BridgeActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.getBooleanExtra(EXTRA_SHOW_HARNESS, false)) harnessSurface.showIfOwned()
+        if (intent.getBooleanExtra(EXTRA_SHOW_HARNESS, false)) {
+            val sessionId = runCatching { HarnessPageUrl.requireValidSessionId(intent.getStringExtra(HarnessActivity.EXTRA_SESSION_ID)) }.getOrNull()
+            if (sessionId == null || !openHarnessSurface(sessionId)) harnessSurface.showIfOwned()
+        }
         handleExternalFileIntent(intent)
     }
 

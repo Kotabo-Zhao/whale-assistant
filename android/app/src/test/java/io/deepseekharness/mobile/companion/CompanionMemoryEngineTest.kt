@@ -8,6 +8,20 @@ import org.junit.Test
 import java.nio.file.Files
 
 class CompanionMemoryEngineTest {
+    @Test fun correctionRejectsStaleInputAndSuppressesOldFact() {
+        var rows = JSONArray()
+        val blocked = mutableSetOf<String>()
+        val engine = CompanionMemoryEngine({ JSONArray(rows.toString()) }, { rows = it }, true,
+            suppressed = { it in blocked }, onDelete = { blocked.add(it.getString("text")) })
+        val id = JSONObject(engine.execute("""{"op":"save","text":"我住北京"}""")).getString("id")
+        fun update(old: String) = JSONObject().put("op", "update").put("id", id).put("expectedText", old).put("text", "我住上海").toString()
+        assertThrows(RuntimeFailure::class.java) { engine.execute(update("过期内容")) }
+        assertTrue(JSONObject(engine.execute(update("我住北京"))).getBoolean("updated"))
+        assertEquals("我住上海", rows.getJSONObject(0).getString("text"))
+        assertThrows(RuntimeFailure::class.java) { engine.execute("""{"op":"save","text":"我住北京"}""") }
+        assertThrows(RuntimeFailure::class.java) { engine.execute(update("我住北京")) }
+    }
+
     @org.junit.Test fun databaseModeAcceptsMoreThanOneHundredAndPaginatesPastOldBoundary() {
         val rows = org.json.JSONArray()
         repeat(105) { CompanionUserMemory.add(rows, "记忆第${it}条", "user_edit", 1L, legacyLimit = false) }

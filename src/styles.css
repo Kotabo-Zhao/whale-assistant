@@ -1760,17 +1760,11 @@ button:disabled {
   color: var(--blue);
 }
 
-/*
- * 一张卡片最多占两屏（`vh` 就是手机上看得见的那块）。
- *
- * 独立设置页里最长的几张卡会占很多屏幕空间，因此将卡片高度限制为两屏并在卡片内滚动。
- * 滚动到卡片边界时必须允许浏览器把后续手势交给外层页面，否则用户会觉得页面无法下拉。
- */
+/* 设置内容随页面滚动，避免卡片内部出现第二个狭窄滚动区。 */
 .settings-section,
 .settings-form > .settings-subsection {
-  max-height: 200vh;
-  overflow-y: auto;
-  overscroll-behavior-y: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .section-title {
@@ -3743,3 +3737,13 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
 .conversation-gate .launch-icon { border-radius: 16px; background: linear-gradient(135deg, var(--assistant-brand-13), var(--assistant-brand-14)); }
 .conversation-gate .launch-actions .button-primary { min-height: 48px; padding-inline: 24px; }
 @media (max-width: 360px) { .home-welcome { padding: 20px; } .home-welcome-mark { width: 58px; height: 58px; border-radius: 18px; } .home-welcome-mark img { width: 40px; height: 40px; } }
+
+/* 手机优先保留信息宽度；长标题和状态允许换行。 */
+@media (max-width: 620px) {
+  .screen { padding-inline: 12px; }
+  .settings-section, .settings-subsection { padding: 12px; }
+  .screen-heading { flex-wrap:wrap; align-items:flex-start; gap:10px; }
+  .management-row { min-width:0; grid-template-columns:36px minmax(0,1fr) auto; gap:8px; padding-inline:10px; }
+  .management-copy { min-width:0; overflow-wrap:anywhere; }
+  .dialog { padding:16px; }
+}

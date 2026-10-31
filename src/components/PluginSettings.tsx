@@ -363,8 +363,8 @@ export function PluginSettings({ bridge, runtime, onBack, onStopRequested }: { b
       </div>
     </section>}
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
-    <section className="plugin-import" aria-labelledby="plugin-import-title">
-      <h2 id="plugin-import-title">{t('通过 npm 包名或链接导入')}</h2>
+    <details className="plugin-import plugin-import-collapsible" aria-labelledby="plugin-import-title">
+      <summary id="plugin-import-title">{t('通过 npm 包名或链接导入')}</summary>
       <p className="plugin-description">{t('支持 npm 包名、精确版本（如 example-plugin@1.2.3）、HTTPS 压缩包直链和 git+https 仓库地址。导入时不执行安装脚本，并检查运行环境要求；指定版本不保证安卓兼容。')}</p>
       <div className="plugin-import-row">
         <input type="text" aria-label={t('插件来源')} placeholder={t('例如插件包名，或 https://…/plugin.tgz')} value={source} disabled={busy} onChange={event => setSource(event.target.value)} />
@@ -375,7 +375,7 @@ export function PluginSettings({ bridge, runtime, onBack, onStopRequested }: { b
         <input type="text" aria-label={t('预期包名')} value={expected} disabled={busy} onChange={event => setExpected(event.target.value)} />
       </label>
       <p className="plugin-hint">{t('通过链接导入时，可填写预期包名，以核对安装结果；如果链接中有多个插件包，可用它指定要安装的包。')}</p>
-    </section>
+    </details>
     {catalog && <RecoveryNotice recovery={catalog.recovery} unresolved={unresolved} locked={locked} onRepair={repair} onPrune={prune} />}
 
     {/* 搜索与分类过滤 */}

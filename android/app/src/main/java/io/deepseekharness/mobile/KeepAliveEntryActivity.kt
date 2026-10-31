@@ -24,6 +24,7 @@ class KeepAliveEntryActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         // 不设置布局：本 Activity 只负责转发，不应出现任何可见界面。
         val embedded = MainHarnessSurface.hasOwnedSurface()
+        val requestedSession = runCatching { HarnessPageUrl.requireValidSessionId(intent?.getStringExtra(HarnessActivity.EXTRA_SESSION_ID)) }.getOrNull()
         val target = if (embedded) {
             MainActivity::class.java
         } else if (AppAuthenticationState.isHarnessAuthenticated()) {
@@ -33,7 +34,8 @@ class KeepAliveEntryActivity : AppCompatActivity() {
         }
         try {
             startActivity(
-                Intent(this, target).putExtra(MainActivity.EXTRA_SHOW_HARNESS, embedded).addFlags(
+                Intent(this, target).putExtra(MainActivity.EXTRA_SHOW_HARNESS, embedded)
+                    .putExtra(HarnessActivity.EXTRA_SESSION_ID, requestedSession).addFlags(
                     // NEW_TASK：从通知启动时本 Activity 可能不在任何任务栈中。
                     // REORDER_TO_FRONT：入口 Activity 临时位于栈顶时，把已有目标活动
                     // 移到前台而不是再创建一个 HarnessActivity；这样不会触发旧实例

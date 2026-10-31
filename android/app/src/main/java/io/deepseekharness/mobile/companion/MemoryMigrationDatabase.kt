@@ -100,6 +100,24 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
         }
     }
 
+    /** Facts, search indexes and durable completion are committed together. */
+    fun commitSharedJob(rows: JSONArray, job: SharedMemoryJobs.Job, beforeComplete: () -> Unit = {}): Boolean {
+        db.beginTransaction()
+        try {
+            val generation = db.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='generation'", null).use { if (it.moveToFirst()) it.getLong(0) else 0L }
+            if (generation != job.generation) return false
+            val pending = db.rawQuery("SELECT 1 FROM shared_jobs WHERE record_id=? AND text_hash=? AND event_id=?", arrayOf(job.id, job.hash, job.event)).use { it.moveToFirst() }
+            val text = db.rawQuery("SELECT body FROM knowledge_records WHERE id=?", arrayOf(job.id)).use { if (it.moveToFirst()) JSONObject(it.getString(0)).getString("text") else null }
+            if (!pending || text == null || CompanionMemorySuppression.digest(text) != job.hash) return false
+            applyIncremental(rows)
+            beforeComplete()
+            db.execSQL("INSERT OR IGNORE INTO shared_completed(record_id,text_hash) VALUES (?,?)", arrayOf(job.id, job.hash))
+            check(db.delete("shared_jobs", "record_id=? AND text_hash=? AND event_id=?", arrayOf(job.id, job.hash, job.event)) == 1)
+            db.setTransactionSuccessful()
+            return true
+        } finally { db.endTransaction() }
+    }
+
     /** Preserve stable positions and update only changed rows when existing order is unchanged. */
     fun applyIncremental(rows: JSONArray) {
         CompanionMemoryFormat.validateRows(rows, legacyLimit = false)
@@ -152,6 +170,9 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
     }
 
     fun count(): Long = db.rawQuery("SELECT COUNT(*) FROM memories", null).use { it.moveToFirst(); it.getLong(0) }
+    fun findById(id: String): JSONObject? = db.rawQuery("SELECT body FROM memories WHERE id=?", arrayOf(id)).use {
+        if (it.moveToFirst()) JSONObject(it.getString(0)) else null
+    }
 
     data class Page(val rows: JSONArray, val next: Long?, val revision: Long)
     fun pageNewest(before: Long?, limit: Int, expectedRevision: Long? = null): Page {

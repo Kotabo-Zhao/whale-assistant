@@ -88,7 +88,7 @@ test('本地资料工具按关键词经过设备桥并拒绝无效查询', async
   const tool = f.tools.get('mobile_knowledge_search')
   await tool.execute({ query: '  会议 ', limit: 2 }, {})
   assert.deepEqual(f.requests, [{ command: 'companionKnowledge', param: '{"query":"会议","limit":2}' }])
-  await assert.rejects(tool.execute({ query: ' ' }, {}), /KNOWLEDGE_INPUT_INVALID/)
+  await assert.rejects(tool.execute({ query: '\u0001' }, {}), /KNOWLEDGE_INPUT_INVALID/)
   await assert.rejects(tool.execute({ query: '会议', limit: 4 }, {}), /KNOWLEDGE_INPUT_INVALID/)
   assert.equal(f.requests.length, 1)
   assert.ok(f.prompts.some(value => JSON.stringify(value).includes('mobile_knowledge_search')))
@@ -654,4 +654,28 @@ test('回退组合信号仍然跟着会话取消中止请求', async t => {
   assert.equal(seen[0].aborted, false)
   controller.abort()
   assert.equal(seen[0].aborted, true)
+})
+
+test('最近资料和分段读取携带来源与版本', async t => {
+  const f = fixture(t, () => ok('{"items":[]}'))
+  await f.tools.get('mobile_knowledge_search').execute({ query: '', offset: 3 }, {})
+  await f.tools.get('mobile_knowledge_read').execute({ id: virtualSession, revision: 'a'.repeat(64), offset: 4000 }, {})
+  assert.deepEqual(JSON.parse(f.requests[0].param), { query: '', offset: 3 })
+  assert.equal(JSON.parse(f.requests[1].param).revision, 'a'.repeat(64))
+  await assert.rejects(f.tools.get('mobile_knowledge_read').execute({ id: virtualSession, revision: 'invalid' }, {}), /KNOWLEDGE_INPUT_INVALID/)
+})
+
+test('纠正记忆通过设备桥携带旧值，拒绝缺失目标', async t => {
+  const f = fixture(t, () => ok('{"updated":true}'))
+  const tool = f.tools.get('mobile_memory_update')
+  await tool.execute({ id: virtualSession, expectedText: '旧住址', text: '新住址' }, {})
+  assert.deepEqual(JSON.parse(f.requests[0].param), { op: 'update', id: virtualSession, expectedText: '旧住址', text: '新住址' })
+  await assert.rejects(tool.execute({ id: 'bad', expectedText: '旧住址', text: '新住址' }, {}), /MEMORY_INPUT_INVALID/)
+})
+
+test('文档分段检索携带文档标识与游标', async t => {
+  const f = fixture(t, () => ok('{"items":[]}'))
+  await f.tools.get('mobile_knowledge_search').execute({ query: '', documentId: 'a'.repeat(64), offset: 3 }, {})
+  assert.deepEqual(JSON.parse(f.requests[0].param), { query: '', documentId: 'a'.repeat(64), offset: 3 })
+  await assert.rejects(f.tools.get('mobile_knowledge_search').execute({ query: '', documentId: '../bad' }, {}), /KNOWLEDGE_INPUT_INVALID/)
 })

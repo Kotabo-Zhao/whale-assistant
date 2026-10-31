@@ -32,10 +32,22 @@ internal class UnifiedUnderstandingStore(path: File) : AutoCloseable {
     }
 }
 
-/** Uses the existing encrypted credential store. Construct only after separate model-use consent. */
-internal fun configuredDeepSeekUnderstandingModel(context: Context): UnderstandingModel {
+/** Both background pipelines resolve the same explicit provider and encrypted credential. */
+internal fun configuredUnderstandingModel(context: Context): UnderstandingModel {
     val settings = RuntimeStore(context)
-    val key = settings.readModelCredential("deepseek") ?: error("DeepSeek 凭据不可用")
-    val model = settings.settings().defaultModels[ModelProvider.DEEPSEEK] ?: error("尚未设置 DeepSeek 默认模型")
-    return DeepSeekUnderstandingModel(key, model)
+    val provider = CompanionStore(context).understandingProvider
+    val endpoint = when (provider) {
+        "deepseek" -> "https://api.deepseek.com/chat/completions"
+        "openai" -> "https://api.openai.com/v1/chat/completions"
+        "openrouter" -> "https://openrouter.ai/api/v1/chat/completions"
+        "groq" -> "https://api.groq.com/openai/v1/chat/completions"
+        "xai" -> "https://api.x.ai/v1/chat/completions"
+        "mistral" -> "https://api.mistral.ai/v1/chat/completions"
+        else -> error("后台模型供应商不可用")
+    }
+    val modelProvider = ModelProvider.parse(provider)
+    val key = settings.readModelCredential(provider) ?: throw UnderstandingRequestException("credentials", "后台模型凭据不可用")
+    val model = settings.settings().defaultModels[modelProvider]
+        ?: if (provider == "deepseek") "deepseek-flash" else throw UnderstandingRequestException("configuration", "请先设置后台供应商的默认模型")
+    return DeepSeekUnderstandingModel(key, model, endpoint)
 }

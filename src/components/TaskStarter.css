@@ -16,3 +16,8 @@
 .task-starter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 @media (max-width: 480px) { .task-starter { padding: 15px; } .task-starter-heading { display: block; } .task-starter-heading p { margin-top: 5px; } }
 @media (prefers-reduced-motion: reduce) { .task-starter-card { transition: none; } }
+
+@media (max-width: 360px) {
+  .task-starter-grid { grid-template-columns:minmax(0,1fr); }
+  .task-starter-card { min-height:0; }
+}

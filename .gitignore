@@ -89,3 +89,6 @@ legal/operit-license.tar
 
 # 介绍视频及其生成脚本、配乐均为本地素材，不纳入版本管理
 video/
+
+# 本地浏览器预览配置含会话、Cookie 与缓存，不纳入源码仓库
+reports/**/chrome-profile/

@@ -18,6 +18,8 @@ class WhaleDocumentTextTest {
     }
     @Test fun textIsBoundedAndInvalidUtf8Rejected() {
         val file = kotlin.io.path.createTempFile().toFile().apply { deleteOnExit(); writeText("a".repeat(9000)) }
+        assertEquals("a".repeat(9000), WhaleDocumentText.extract(file, "txt", null))
+        file.writeText("a".repeat(2_000_001))
         assertTrue(WhaleDocumentText.extract(file, "txt", null)!!.contains("已截取"))
         file.writeBytes(byteArrayOf(0xC3.toByte(), 0x28))
         assertThrows(Exception::class.java) { WhaleDocumentText.extract(file, "txt", null) }

@@ -6,7 +6,7 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="48dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="12dp"
@@ -78,10 +78,10 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="56dp"
         android:orientation="horizontal"
         android:paddingHorizontal="8dp"
-        android:paddingVertical="6dp"
+        android:paddingVertical="4dp"
         android:background="@color/harness_toolbar_background">
         <LinearLayout
             android:id="@+id/harness_tab_home"

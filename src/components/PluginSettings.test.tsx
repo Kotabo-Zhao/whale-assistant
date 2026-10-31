@@ -193,6 +193,7 @@ describe('插件导入与回滚', () => {
     const bridge = setup()
     const button = await screen.findByRole('button', { name: '导入' })
     expect(button).toBeDisabled()
+    fireEvent.click(screen.getByText('通过 npm 包名或链接导入'))
     fireEvent.change(screen.getByRole('textbox', { name: '插件来源' }), { target: { value: 'dsh-plugin-example' } })
     expect(button).toBeEnabled()
     fireEvent.click(button)
@@ -204,6 +205,7 @@ describe('插件导入与回滚', () => {
   it('地址形态可带期望包名，随请求一起送给原生', async () => {
     const bridge = setup()
     await screen.findByRole('button', { name: '导入' })
+    fireEvent.click(screen.getByText('通过 npm 包名或链接导入'))
     fireEvent.change(screen.getByRole('textbox', { name: '插件来源' }), { target: { value: 'https://example.com/plugin.tgz' } })
     fireEvent.change(screen.getByRole('textbox', { name: '预期包名' }), { target: { value: 'dsh-plugin-example' } })
     fireEvent.click(screen.getByRole('button', { name: '导入' }))
@@ -212,6 +214,7 @@ describe('插件导入与回滚', () => {
   it('来源不合格时显示受控文案，不回显用户填的内容', async () => {
     const bridge = setup()
     const button = await screen.findByRole('button', { name: '导入' })
+    fireEvent.click(screen.getByText('通过 npm 包名或链接导入'))
     fireEvent.change(screen.getByRole('textbox', { name: '插件来源' }), { target: { value: 'http://user:secret-payload@example.com/plugin.tgz' } })
     bridge.managePlugins.mockRejectedValueOnce({ code: 'PLUGIN_SOURCE_INVALID', message: '' })
     fireEvent.click(button)
@@ -221,6 +224,7 @@ describe('插件导入与回滚', () => {
   it('缺 git 与探测未确认是两条不同的提示，不许混为一谈', async () => {
     const bridge = setup()
     const button = await screen.findByRole('button', { name: '导入' })
+    fireEvent.click(screen.getByText('通过 npm 包名或链接导入'))
     fireEvent.change(screen.getByRole('textbox', { name: '插件来源' }), { target: { value: 'git+https://example.com/repo.git' } })
     bridge.managePlugins.mockRejectedValueOnce({ code: 'PLUGIN_GIT_MISSING', message: '' })
     fireEvent.click(button)

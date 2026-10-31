@@ -25,6 +25,7 @@ internal object WhaleDocumentImport {
         val inbox = RuntimeSharedInbox(RuntimeStore(app))
         val target = File(inbox.stagingDirectory(), "${UUID.randomUUID()}-shared-document.$ext")
         var extracted: String? = null
+        var originalId = ""
         val sourceDigest = java.security.MessageDigest.getInstance("SHA-256")
         inbox.withPendingFile { pending ->
             requireNotNull(app.contentResolver.openInputStream(uri)).use { input ->
@@ -37,12 +38,30 @@ internal object WhaleDocumentImport {
                     require(total > 0)
                 }
             }
+            originalId = sourceDigest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+            KnowledgeObjects(app).store(pending, originalId, MAX_BYTES)
+            CompanionKnowledgeStore(app).registerOriginal(originalId, name, mime.orEmpty())
             extracted = runCatching { WhaleDocumentText.extract(pending, ext, mime) }.getOrNull()
             RuntimeSharedInbox.withLock { Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE) }
         }
         val text = extracted?.takeIf { it.isNotBlank() }
         val knowledge = CompanionKnowledgeStore(app)
-        val added = text?.let { runCatching { knowledge.add(it, "text_file") }.getOrNull() }
+        if (text != null) {
+            val saved = runCatching { knowledge.addDocument(text, originalId, name, requireOriginal = true) }
+            val delivered = runCatching { inbox.deliver() }.getOrDefault(false)
+            val where = if (delivered) "文件已保存到收件箱" else "文件已暂存，运行环境就绪后可用"
+            if (saved.isFailure) return "$where；解析文字未保存，请稍后重试"
+            val coverage = if (text.contains("[内容过长，已截取]") || text.contains("[仅提取前")) "partial" else "extracted_text"
+            knowledge.updateOriginalCoverage(originalId, coverage)
+            val rows = saved.getOrThrow()
+            for (i in 0 until rows.length()) {
+                val row = rows.getJSONObject(i)
+                if (row.getString("text").isBlank()) continue
+                SharedMemoryJobs.enqueueWithoutSchedule(app, row.getString("id"), row.getString("text"), "share:" + CompanionMemorySuppression.digest(row.getString("text")))
+            }
+            SharedMemoryJobs.schedule(app, 0)
+            return "$where；已分段保存，后台整理中" + if (text.contains("[内容过长，已截取]") || text.contains("[仅提取前")) "（解析范围有限，原文件已保留）" else ""
+        }
         val key = runCatching { RuntimeStore(app).readModelCredential("deepseek") }.getOrNull()
         val scan = if (text == null && ext == "pdf" && !key.isNullOrBlank())
             runCatching { RuntimeSharedInbox.withLock { WhaleDocumentText.renderPdfPages(target) } }.getOrNull() else null
@@ -55,59 +74,21 @@ internal object WhaleDocumentImport {
                 }
                 val heading = if (scan.second > descriptions.size) "扫描 PDF：仅分析前 ${descriptions.size} / ${scan.second} 页\n" else "扫描 PDF 分析：\n"
                 val contents = (heading + descriptions.joinToString("\n\n")).take(CompanionKnowledgeData.MAX_TEXT)
-                knowledge.add(contents, "text_file")
-                val stableId = "share:" + sourceDigest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
-                check(SharedMemoryJobs.enqueue(app, contents, stableId))
-                val rows = knowledge.search("")
-                val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("text") == contents } ?: error("source unavailable")
-                val eventId = UUID.randomUUID().toString()
-                val model = org.json.JSONObject(DeepSeekUnderstandingModel(key, "deepseek-flash").analyze(eventId, contents))
-                check(knowledge.withUnchangedRecord(row.getString("id"), contents) {
-                    CompanionMemoryStore(app).saveSharedFacts(stableId, model.getJSONArray("claims"))
-                })
-                SharedMemoryJobs.complete(app, contents, stableId)
+                val analysis = knowledge.registerImageAnalysis(originalId, contents)
+                val stableId = "share:$originalId"
+                SharedMemoryJobs.enqueueWithoutSchedule(app, analysis.getString("id"), analysis.getString("text"), stableId)
+                knowledge.updateOriginalCoverage(originalId, if (scan.second > scan.first.size) "partial" else "model_description")
+                SharedMemoryJobs.schedule(app, 0)
             }.isSuccess
             return if (!analyzed) "$where；扫描文件分析未完成" else if (scan.second > scan.first.size)
                 "$where；扫描文件仅分析前 ${scan.first.size} 页，其余未完成" else where
         }
-        if (added == null) return "$where；文件内容未完成解析或资料未保存，请检查格式、密码及容量"
-        if (!added) return where
-        val memoryEvent = "share:" + CompanionMemorySuppression.digest(text!!)
-        check(SharedMemoryJobs.enqueue(app, text, memoryEvent))
-        if (key.isNullOrBlank()) return "$where；文字已保存，模型分析需要 DeepSeek API 密钥"
-        val row = runCatching {
-            val rows = knowledge.search("")
-            (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("text") == text }
-        }.getOrNull()
-        if (row == null) return "$where；文字已保存，分析未完成"
-        val understood = runCatching {
-            val eventId = UUID.randomUUID().toString()
-            val result = org.json.JSONObject(DeepSeekUnderstandingModel(key, "deepseek-flash").analyze(eventId, text!!))
-            val claims = result.getJSONArray("claims")
-            val items = result.optJSONArray("items") ?: org.json.JSONArray()
-            val summary = buildString {
-                for (i in 0 until claims.length()) append("• ").append(claims.getJSONObject(i).getString("text")).append('\n')
-                for (i in 0 until items.length()) append("• 待办建议：").append(items.getJSONObject(i).getString("title")).append('\n')
-            }.trim()
-            check(knowledge.withUnchangedRecord(row.getString("id"), text) {
-                CompanionMemoryStore(app).saveSharedFacts(memoryEvent, claims)
-            })
-            if (summary.isNotEmpty()) {
-                val prefix = "DeepSeek 分析（待核对）：\n" + summary.take(1800) + "\n\n文档提取内容：\n"
-                val available = CompanionKnowledgeData.MAX_TEXT - prefix.length
-                val raw = if (text.length > available) text.take((available - 12).coerceAtLeast(0)) + "\n[内容过长，已截取]" else text
-                // Stale edits/deletions are never recreated by a late model response.
-                check(knowledge.edit(row.getString("id"), text, prefix + raw))
-                SharedMemoryJobs.completeVersion(app, row.getString("id"), prefix + raw)
-            }
-            SharedMemoryJobs.complete(app, text, memoryEvent)
-        }.isSuccess
-        return if (understood) where else "$where；文字已保存，DeepSeek 分析未完成"
+        return "$where；文件内容未完成解析，请检查格式或密码"
     }
 }
 
 internal object WhaleDocumentText {
-    private const val MAX_EXTRACT = 8000
+    private const val MAX_EXTRACT = 2_000_000
     fun extract(file: File, ext: String, mime: String?): String? {
         if (ext in setOf("txt", "md", "csv", "tsv", "json", "xml", "log", "yaml", "yml", "html", "htm") || mime?.startsWith("text/") == true) {
             val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
@@ -129,16 +110,21 @@ internal object WhaleDocumentText {
         if (ext == "xlsx") return spreadsheet(file)
         return null
     }
-    private fun bounded(value: String): String = if (value.length > MAX_EXTRACT) value.take(MAX_EXTRACT - 12) + "\n[内容过长，已截取]" else value
+    private fun bounded(value: String): String {
+        if(value.length <= MAX_EXTRACT) return value
+        var end=MAX_EXTRACT-12
+        if(Character.isHighSurrogate(value[end-1]) && Character.isLowSurrogate(value[end])) end--
+        return value.take(end)+"\n[内容过长，已截取]"
+    }
     private fun pdf(file: File): String? {
         if (android.os.Build.VERSION.SDK_INT < 35) return null
         val out = StringBuilder()
         android.graphics.pdf.PdfRenderer(android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)).use { pdf ->
-            for (i in 0 until minOf(pdf.pageCount, 50)) {
+            for (i in 0 until minOf(pdf.pageCount, 500)) {
                 pdf.openPage(i).use { page -> page.textContents.forEach { out.append(it.text).append('\n') } }
                 if (out.length > MAX_EXTRACT) break
             }
-            if (pdf.pageCount > 50) out.append("\n[仅提取前50页]")
+            if (pdf.pageCount > 500) out.append("\n[仅提取前500页]")
         }
         return bounded(out.toString()).takeIf { it.isNotBlank() }
     }

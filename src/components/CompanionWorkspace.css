@@ -47,3 +47,18 @@
 .memory-group,.memory-group .workspace-list,.workspace-memory-card,.memory-card-detail,.memory-card-detail summary { min-width:0; max-width:100%; box-sizing:border-box; }
 .memory-group .workspace-list { grid-template-columns:minmax(0,1fr); }
 .memory-preview { display:block; flex:1 1 0; min-width:0; }
+
+/* 缩小屏幕时让正文优先占宽，按钮可换行但不挤压输入和卡片。 */
+.companion-workspace, .workspace-heading > div, .workspace-tabs, .workspace-backup, .workspace-list, .workspace-card, .workspace-review { min-width:0; max-width:100%; box-sizing:border-box; }
+.workspace-tabs button { min-width:0; }
+.workspace-backup > .button { min-width:0; }
+.workspace-card-actions { min-width:0; }
+.workspace-card-actions button { white-space:normal; }
+@media (max-width: 420px) {
+  .workspace-heading { align-items:flex-start; }
+  .workspace-tabs { gap:2px; }
+  .workspace-tabs button { gap:3px; padding:8px 2px; font-size:.78rem; }
+  .workspace-card { padding:11px; }
+  .workspace-review { padding:11px; }
+  .memory-group { padding:4px 6px; }
+}

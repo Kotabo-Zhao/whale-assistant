@@ -105,7 +105,7 @@ class OverlayBallService : Service() {
     private val reminderHints = io.deepseekharness.mobile.companion.CompanionHintQueue<QueuedReminderHint>()
     private val hintHandler = Handler(Looper.getMainLooper())
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
-    private val bubbleChat by lazy { io.deepseekharness.mobile.companion.CompanionBubbleWindow(this, windowManager, { state -> petChatState = state; if (state == "reply") petReplyAt = SystemClock.uptimeMillis() }) { intArrayOf(layoutParams.x, layoutParams.y, layoutParams.width, layoutParams.height) } }
+    private val bubbleChat by lazy { io.deepseekharness.mobile.companion.CompanionBubbleWindow(this, windowManager, { state -> petChatState = state; if (state == "reply") petReplyAt = SystemClock.uptimeMillis() }, { sessionId -> openHarness(sessionId) }) { intArrayOf(layoutParams.x, layoutParams.y, layoutParams.width, layoutParams.height) } }
     private var proactiveMemoryRunning = false
     private var calendarQueryRunning = false
     private var usageQueryRunning = false
@@ -337,7 +337,7 @@ class OverlayBallService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun removeCompanionHint() {
-        hintView?.let { runCatching { windowManager.removeView(it) } }
+        hintView?.let { view -> view.animate().cancel(); runCatching { windowManager.removeView(view) } }
         hintView = null
         reminderHintVisible = false
         if (!calendarServiceDestroyed && reminderHints.isNotEmpty()) hintHandler.post {
@@ -491,7 +491,7 @@ class OverlayBallService : Service() {
         }
     }
 
-    private fun showCompanionHint(message: String, reminder: Boolean = false, onTap: (() -> Unit)? = null): Boolean {
+    private fun showCompanionHint(message: String, reminder: Boolean = false, notificationStyle: Boolean = false, onTap: (() -> Unit)? = null): Boolean {
         if (CompanionStore(this).inQuietHours()) return false
         if (!ballAttached || ballView == null || stopIfOverlayPermissionRevoked()) return false
         if (getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false) return false
@@ -506,9 +506,13 @@ class OverlayBallService : Service() {
         val density = metrics.density
         val screenWidth = metrics.widthPixels.coerceAtLeast(1)
         val screenHeight = metrics.heightPixels.coerceAtLeast(1)
-        val width = (220 * density).toInt().coerceIn(1, screenWidth)
+        val width = ((if (notificationStyle) 232 else 220) * density).toInt().coerceIn(1, screenWidth)
         val margin = (24 * density).toInt().coerceAtLeast(0)
-        val bubble = TextView(overlayPalette()).apply {
+        val bubble: View = if (notificationStyle) {
+            io.deepseekharness.mobile.companion.CompanionNotificationBubble.create(this, message).apply {
+                setOnClickListener { removeCompanionHint(); onTap?.invoke() }
+            }
+        } else TextView(overlayPalette()).apply {
             text = message
             textSize = 14f
             setTextColor(overlayColor(R.color.overlay_panel_foreground))
@@ -524,6 +528,12 @@ class OverlayBallService : Service() {
         val position = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(screenWidth, screenHeight,
             layoutParams.x, layoutParams.y, layoutParams.width, layoutParams.height,
             width, bubble.measuredHeight.coerceIn(1, screenHeight), margin, (8 * density).toInt().coerceAtLeast(0))
+        if (notificationStyle) {
+            val belowPet = position.y >= layoutParams.y + layoutParams.height
+            val petOnRight = layoutParams.x + layoutParams.width / 2 >= position.x + width / 2
+            bubble.background = io.deepseekharness.mobile.companion.SpeechBubbleDrawable(
+                android.graphics.Color.rgb(255, 250, 253), density, belowPet, petOnRight)
+        }
         val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -535,6 +545,12 @@ class OverlayBallService : Service() {
         removeCompanionHint()
         if (runCatching { windowManager.addView(bubble, params) }.isSuccess) {
             hintView = bubble
+            if (notificationStyle && android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                bubble.alpha = 0f; bubble.scaleX = 0.94f; bubble.scaleY = 0.94f
+                bubble.translationY = (if (position.y < layoutParams.y) 5 else -5) * density
+                bubble.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setDuration(220)
+                    .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+            }
             reminderHintVisible = reminder
             lastHintAt = now
             val accessibility = getSystemService(android.view.accessibility.AccessibilityManager::class.java)
@@ -900,13 +916,13 @@ class OverlayBallService : Service() {
      * 会被静默丢弃。也不直接重建管理页：那会破坏正在显示的
      * HarnessActivity 并撤销会话凭据。
      */
-    private fun openHarness() {
-        val intent = Intent(this, KeepAliveEntryActivity::class.java).addFlags(
+    private fun openHarness(sessionId: String? = null) {
+        val intent = Intent(this, KeepAliveEntryActivity::class.java).putExtra(HarnessActivity.EXTRA_SESSION_ID, sessionId).addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP,
         )
         val pending = PendingIntent.getActivity(
             this,
-            0,
+            if (sessionId == null) 0 else 164,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -2017,7 +2033,7 @@ class OverlayBallService : Service() {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
                     if (!CompanionStore(service).notificationMemorySuggestions) return@let
-                    service.showCompanionHint("发现一条可能值得记住的信息，点击核对。") {
+                    service.showCompanionHint("发现一条小记忆～", notificationStyle = true) {
                         runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
                             .putExtra("open_memory_suggestions", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     }
@@ -2030,7 +2046,7 @@ class OverlayBallService : Service() {
         internal fun companionNotificationHint() {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
-                    service.showCompanionHint("有一条新通知，点击查看。") {
+                    service.showCompanionHint("叮咚～新消息到啦", notificationStyle = true) {
                         runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
                             .putExtra("open_notification_list", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     }
@@ -2040,7 +2056,7 @@ class OverlayBallService : Service() {
         internal fun companionCandidateHint() {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
-                    service.showCompanionHint("可能有待处理事项，点击查看。") {
+                    service.showCompanionHint("有件事需要留意～", notificationStyle = true) {
                         runCatching { service.startActivity(Intent(service, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
                             .putExtra("open_notification_candidates", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     }

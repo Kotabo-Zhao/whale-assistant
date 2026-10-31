@@ -47,7 +47,7 @@ class WhaleMemoryShareActivity : Activity() {
                 requireNotNull(text)
                 CompanionKnowledgeStore(app).add(text, "shared_text")
                 check(SharedMemoryJobs.enqueue(app, text))
-                if (runCatching { CompanionSharedMemory.understandText(app, text) }.getOrDefault(false)) SharedMemoryJobs.complete(app, text)
+                SharedMemoryJobs.schedule(app, 0)
                 "已保存"
             }
             runOnUiThread {

@@ -16,3 +16,8 @@
 .assistant-settings-entry > summary { cursor: pointer; min-height: 48px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
 .assistant-settings-entry > summary small { color: var(--muted); }
 @media (max-width: 420px) { .assistant-overview { padding: 15px; } .assistant-metrics { gap: 6px; } .assistant-metrics > div { padding: 10px; } }
+
+@media (max-width: 620px) {
+  .assistant-settings-entry { padding:12px; }
+  .assistant-settings-entry .companion-settings { margin:12px 0 0; padding:12px 0 0; border:0; border-top:1px solid var(--line); border-radius:0; background:transparent; }
+}

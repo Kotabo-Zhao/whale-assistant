@@ -48,3 +48,11 @@
   .session-open { grid-template-columns: 36px minmax(0, 1fr); gap: 8px; }
   .session-icon { width: 36px; height: 36px; }
 }
+
+/* 标题可显示两行，避免长会话只能看到很短的开头。 */
+.session-copy strong { white-space:normal; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
+@media (max-width: 520px) {
+  .session-toolbar { flex-direction:row; align-items:center; }
+  .session-search { min-width:0; }
+  .session-count { align-self:center; }
+}

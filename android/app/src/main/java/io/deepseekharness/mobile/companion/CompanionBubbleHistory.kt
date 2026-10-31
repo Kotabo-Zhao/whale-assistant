@@ -23,6 +23,19 @@ internal class CompanionBubbleHistory(context: Context) {
         try { output = file.startWrite(); output.write(bytes); file.finishWrite(output) }
         catch (e: Exception) { if (output != null) file.failWrite(output); throw e }
     }
+    /** Preserve the local transcript before starting an explicitly requested new topic. */
+    @Synchronized fun archiveAndClear() {
+        check(writable) { "聊天记录无法读取，未开启新话题" }
+        if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return
+        val bytes = file.readFully()
+        decode(bytes)
+        val archive = AtomicFile(File(file.baseFile.parentFile, "companion-bubble-history-${java.util.UUID.randomUUID()}.json"))
+        var output: java.io.FileOutputStream? = null
+        try { output = archive.startWrite(); output.write(bytes); archive.finishWrite(output) }
+        catch (e: Exception) { if (output != null) archive.failWrite(output); throw e }
+        file.delete()
+        check(!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) { "无法切换话题，原记录已保留" }
+    }
     companion object {
         fun encode(snapshot: Snapshot): ByteArray {
             require(snapshot.sessionId.isNotBlank() && snapshot.sessionId.length <= 256)

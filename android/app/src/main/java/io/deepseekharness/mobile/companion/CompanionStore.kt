@@ -15,6 +15,13 @@ class CompanionStore(context: Context) {
     var proactiveMemoryChat: Boolean
         get() = prefs.getBoolean("proactive_memory_chat", false)
         set(value) { prefs.edit().putBoolean("proactive_memory_chat", value).apply() }
+    /** Explicit provider selection; changing this changes where background content is sent. */
+    var understandingProvider: String
+        get() = prefs.getString("understanding_provider", "deepseek") ?: "deepseek"
+        set(value) {
+            require(value in setOf("deepseek", "openai", "openrouter", "groq", "xai", "mistral"))
+            check(prefs.edit().putString("understanding_provider", value).commit())
+        }
     var backgroundUnderstanding: Boolean
         get() = prefs.getBoolean("background_understanding", false)
         set(value) {
@@ -70,7 +77,13 @@ class CompanionStore(context: Context) {
     /** Separate consent for sharing excerpts with the configured model. */
     var knowledgeModelAccess: Boolean
         get() = prefs.getBoolean("knowledge_model_access", false)
-        set(value) { prefs.edit().putBoolean("knowledge_model_access", value).apply() }
+        set(value) {
+            check(prefs.edit().putBoolean("knowledge_model_access", value).commit())
+            if (!value) {
+                SemanticControl(app).setEnabled(false)
+                SemanticIndexJobs.cancel(app)
+            }
+        }
     /** Explicit separate consent for sharing calendar titles with the configured model. */
     var calendarModelAccess: Boolean
         get() = prefs.getBoolean("calendar_model_access", false)

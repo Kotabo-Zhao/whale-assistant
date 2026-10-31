@@ -31,6 +31,11 @@ internal object WhaleImageImport {
         }
         val target = File(dir, "${UUID.randomUUID()}-shared-image$suffix")
         val sourceDigest = java.security.MessageDigest.getInstance("SHA-256")
+        val mime = runCatching { app.contentResolver.getType(uri) }.getOrNull().orEmpty()
+        val name = runCatching { app.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            if (it.moveToFirst()) it.getString(0) else null
+        } }.getOrNull().orEmpty()
+        var originalId = ""
         inbox.withPendingFile { pending ->
             val input = requireNotNull(app.contentResolver.openInputStream(uri))
             input.use { source ->
@@ -49,6 +54,9 @@ internal object WhaleImageImport {
                     require(size > 0)
                 }
             }
+            originalId = sourceDigest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+            KnowledgeObjects(app).store(pending, originalId, MAX_BYTES)
+            CompanionKnowledgeStore(app).registerOriginal(originalId, name, mime)
             RuntimeSharedInbox.withLock { Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE) }
         }
         val apiKey = runCatching { RuntimeStore(app).readModelCredential("deepseek") }.getOrNull()
@@ -81,22 +89,14 @@ internal object WhaleImageImport {
         }.getOrNull()
         val knowledge = CompanionKnowledgeStore(app)
         val saved = analysis?.takeIf { it.isNotBlank() && it.length <= CompanionKnowledgeData.MAX_TEXT && '\u0000' !in it }
-            ?.let { runCatching { knowledge.add(it, "text_file") }.isSuccess } ?: false
+            ?.let { runCatching { knowledge.registerImageAnalysis(originalId, it) }.getOrNull() }
         val delivered = runCatching { inbox.deliver() }.getOrDefault(false)
         val where = if (delivered) "图片已保存到收件箱" else "图片已暂存，运行环境就绪后可用"
-        if (!saved) return "$where；图片分析未完成，请检查图片格式、模型及网络"
-        val stableId = "share:" + sourceDigest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
-        check(SharedMemoryJobs.enqueue(app, analysis, stableId))
-        val memorySaved = runCatching {
-            val rows = knowledge.search("")
-            val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("text") == analysis } ?: error("source unavailable")
-            val eventId = UUID.randomUUID().toString()
-            val result = org.json.JSONObject(DeepSeekUnderstandingModel(apiKey, "deepseek-flash").analyze(eventId, analysis))
-            check(knowledge.withUnchangedRecord(row.getString("id"), analysis) {
-                CompanionMemoryStore(app).saveSharedFacts(stableId, result.getJSONArray("claims"))
-            })
-            SharedMemoryJobs.complete(app, analysis, stableId)
-        }.isSuccess
-        return if (memorySaved) where else "$where；图片资料已保存，长期记忆分析未完成"
+        if (saved == null) return "$where；图片分析未完成，请检查图片格式、模型及网络"
+        knowledge.updateOriginalCoverage(originalId, "model_description")
+        val stableId = "share:$originalId"
+        SharedMemoryJobs.enqueueWithoutSchedule(app, saved.getString("id"), saved.getString("text"), stableId)
+        SharedMemoryJobs.schedule(app, 0)
+        return where
     }
 }

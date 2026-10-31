@@ -145,3 +145,22 @@
 .plugin-list-state { display: grid; justify-items: start; gap: 12px; margin-top: 16px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); color: var(--ink); }
 .plugin-list-state p { margin: 0; color: var(--muted); line-height: 1.6; }
 .plugin-list-state button { min-height: 48px; }
+
+@media (max-width: 620px) {
+  .plugin-screen, .mobile-market, .plugin-file, .mobile-market-list, .mobile-market-list li { min-width:0; box-sizing:border-box; }
+  .mobile-market { padding:12px; }
+  .mobile-market-list li { gap:8px; padding:10px; }
+  .mobile-market-list li > div { flex:1 1 0; }
+  .plugin-file-actions, .plugin-stop { flex-direction:row; flex-wrap:wrap; }
+  .plugin-file-actions .button, .plugin-stop .button { width:auto; flex:1 1 120px; }
+  .plugin-children li label { max-width:none; }
+}
+@media (max-width: 360px) {
+  .mobile-market-filters { grid-template-columns:minmax(0,1fr); }
+  .mobile-market-list li { flex-wrap:wrap; }
+}
+
+.plugin-import-collapsible > summary { cursor:pointer; min-height:44px; display:flex; align-items:center; font-weight:700; }
+.plugin-import-collapsible > summary::after { content:'+'; margin-left:auto; color:var(--blue); font-size:1.25rem; }
+.plugin-import-collapsible[open] > summary::after { content:'−'; }
+.plugin-import-collapsible > p { margin-top:8px; }
