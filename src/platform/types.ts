@@ -419,6 +419,11 @@ export interface RuntimeSessionWorkspace {
   entries: RuntimeSessionWorkspaceEntry[]
 }
 
+/** Identities of Harness sessions created by the desktop companion; no transcript metadata. */
+export interface RuntimeCompanionSessionLinks {
+  sessionIds: string[]
+}
+
 export interface RuntimeSessionWorkspaceUpdate {
   id: string
   /** `null` removes the local override. */
@@ -2109,6 +2114,8 @@ export interface RuntimeBridge {
   listSessions: () => Promise<RuntimeSessionListResult>
   /** Reads local-only aliases, groups and archive flags for Harness sessions. */
   getSessionWorkspace: () => Promise<RuntimeSessionWorkspace>
+  /** Reads only which Harness sessions were created by the desktop companion. */
+  getCompanionSessionLinks: () => Promise<RuntimeCompanionSessionLinks>
   /** Changes only those local annotations; it never edits or deletes a Harness transcript. */
   updateSessionWorkspace: (update: RuntimeSessionWorkspaceUpdate) => Promise<RuntimeSessionWorkspace>
   /**

@@ -62,6 +62,7 @@ import type {
   RuntimeSessionListReason,
   RuntimeSessionListResult,
   RuntimeSessionSummary,
+  RuntimeCompanionSessionLinks,
   RuntimeSessionWorkspace,
   RuntimeSessionWorkspaceEntry,
   RuntimeSessionSnapshot,
@@ -2394,6 +2395,18 @@ export function validateRuntimeSessionWorkspace(value: unknown): RuntimeSessionW
     return { id, ...(title === undefined ? {} : { title }), ...(group === undefined ? {} : { group }), archived }
   })
   return { entries }
+}
+
+/** Desktop companion links are identity-only, bounded, and use the same session id contract. */
+export function validateRuntimeCompanionSessionLinks(value: unknown): RuntimeCompanionSessionLinks {
+  const result = asRecord(value, '桌宠会话关联')
+  if (!Array.isArray(result.sessionIds) || result.sessionIds.length > 200) throw new Error('桌宠会话关联格式无效')
+  const seen = new Set<string>()
+  const sessionIds = result.sessionIds.map(id => {
+    if (!isCatalogSessionId(id) || !seen.add(id)) throw new Error('桌宠会话标识无效')
+    return id
+  })
+  return { sessionIds }
 }
 
 /**

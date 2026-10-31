@@ -45,6 +45,7 @@ import {
   validateAppUpdateProgress,
   validateRuntimeProgress,
   validateRuntimeReleaseList,
+  validateRuntimeCompanionSessionLinks,
   validateRuntimeSessionListResult,
   validateRuntimeSessionSnapshotRestoreResult,
   validateRuntimeSessionSnapshotState,
@@ -73,6 +74,17 @@ import {
   HARNESS_LOG_MAX_CHARS,
   HARNESS_LOG_WINDOW_OPTIONS,
 } from './types'
+
+describe('桌宠会话关联校验', () => {
+  it('只接受有界、去重的 Harness 会话身份，不接受正文或其他形状', () => {
+    expect(validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1'] }))
+      .toEqual({ sessionIds: ['session-companion-1'] })
+    expect(() => validateRuntimeCompanionSessionLinks({ sessionIds: ['session-companion-1', 'session-companion-1'] }))
+      .toThrow('桌宠会话标识无效')
+    expect(() => validateRuntimeCompanionSessionLinks({ sessionIds: ['../session'] }))
+      .toThrow('桌宠会话标识无效')
+  })
+})
 import type { RuntimeSettings } from './types'
 
 const ipv4 = (...octets: number[]): string => octets.join('.')

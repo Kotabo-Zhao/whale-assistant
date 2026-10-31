@@ -1724,6 +1724,22 @@ class MobileRuntimePlugin : Plugin() {
         execute(call) { sessionWorkspacePayload(sessionWorkspace.entries()) }
     }
 
+    /**
+     * Returns only the identities of Harness sessions that the desktop companion created.
+     * It is deliberately separate from user-owned workspace annotations and contains no title,
+     * message text or local bubble history.
+     */
+    @PluginMethod
+    fun companionSessionLinks(call: PluginCall) {
+        execute(call) {
+            JSObject().put("sessionIds", JSArray().apply {
+                io.deepseekharness.mobile.companion.BubbleSessionRegistry(context).sessionIds()
+                    .filter { it.startsWith("session-") }
+                    .forEach(::put)
+            })
+        }
+    }
+
     /** Updates only local organisational metadata; it never edits or deletes a Harness session. */
     @PluginMethod
     fun updateSessionWorkspace(call: PluginCall) {

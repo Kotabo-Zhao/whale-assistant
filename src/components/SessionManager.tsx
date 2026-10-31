@@ -94,6 +94,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   const [reloadToken, setReloadToken] = useState(0)
   const [retrying, setRetrying] = useState(false)
   const [workspace, setWorkspace] = useState<RuntimeSessionWorkspaceEntry[]>([])
+  const [companionSessionIds, setCompanionSessionIds] = useState<Set<string>>(new Set())
   const [showArchived, setShowArchived] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const loadingRef = useRef(false)
@@ -135,6 +136,18 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
       if (active) setWorkspace(value.entries)
     }).catch(() => {
       if (active) setWorkspace([])
+    })
+    return () => { active = false }
+  }, [])
+
+  // This contains only registered session identities. It lets the user resume the exact Harness
+  // conversation created from the pet without copying either conversation's message bodies.
+  useEffect(() => {
+    let active = true
+    runtimeBridge.getCompanionSessionLinks().then(value => {
+      if (active) setCompanionSessionIds(new Set(value.sessionIds))
+    }).catch(() => {
+      if (active) setCompanionSessionIds(new Set())
     })
     return () => { active = false }
   }, [])
@@ -304,6 +317,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
                   ? t('由 Harness 管理会话内容')
                   : t('最近更新 {0}', formatUpdatedAt(session.updatedAt ?? 0))}</small>
                 {session.group && <small>分组：{session.group}</small>}
+                {companionSessionIds.has(session.id) && <small>鲸鱼娘关联会话 · 打开后继续同一 Harness 上下文</small>}
               </span>
             </button>
             {/* 只有本地占位条目能在这里移除：真实会话的删除不在这条只读通道里，

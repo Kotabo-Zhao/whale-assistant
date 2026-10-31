@@ -388,6 +388,12 @@ describe('浏览器桥的运行时会话快照', () => {
 })
 
 describe('浏览器桥的会话工作区元数据', () => {
+  it('桌宠会话关联在浏览器预览中如实不可用，不返回伪造身份', async () => {
+    const bridge = createBrowserBridge()
+
+    await expect(bridge.getCompanionSessionLinks()).rejects.toThrow('浏览器模式下没有桌宠会话关联')
+  })
+
   it('没有会话列表通道：如实拒绝，不编造一份列表', async () => {
     const bridge = createBrowserBridge()
 

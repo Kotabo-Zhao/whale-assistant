@@ -14,6 +14,10 @@ internal class BubbleSessionRegistry(context: Context) {
     fun contains(sessionId: String): Boolean = synchronized(lock) {
         valid(sessionId) && sessionId in prefs.getStringSet("sessions", emptySet()).orEmpty()
     }
+    /** Metadata-only link list for the main workspace; never exposes the local bubble transcript. */
+    fun sessionIds(): List<String> = synchronized(lock) {
+        prefs.getStringSet("sessions", emptySet()).orEmpty().filter(::valid).sorted()
+    }
     /** Exported identities contain no transcript or credentials. */
     fun exportArchive(): ByteArray = synchronized(lock) {
         JSONArray(prefs.getStringSet("sessions", emptySet()).orEmpty().sorted()).toString().toByteArray(Charsets.UTF_8)
