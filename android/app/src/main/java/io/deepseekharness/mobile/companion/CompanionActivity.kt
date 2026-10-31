@@ -424,7 +424,18 @@ class CompanionActivity : AppCompatActivity() {
                         android.widget.Toast.makeText(this, "资料已删除或版本已变化，请重新检索。", android.widget.Toast.LENGTH_LONG).show(); return@onSuccess
                     }
                     val name = row.optString("displayName").takeIf { it.isNotBlank() } ?: "资料来源"
-                    val coverage = when (row.optString("coverage")) { "partial" -> "\n解析覆盖：部分内容"; "not_parsed" -> "\n解析覆盖：尚未解析"; else -> "" }
+                    val coverage = when (row.optString("coverage")) {
+                        "partial" -> {
+                            val pageLimit = Regex("\\[仅提取前\\s*(\\d+)\\s*页\\]").find(text)?.groupValues?.getOrNull(1)
+                            "\n解析覆盖：" + when {
+                                pageLimit != null -> "仅提取前 $pageLimit 页文字"
+                                text.contains("[内容过长，已截取]") -> "提取文字达到上限后已截取"
+                                else -> "仅保存了部分提取文字"
+                            }
+                        }
+                        "not_parsed" -> "\n解析覆盖：尚未解析"
+                        else -> ""
+                    }
                     androidx.appcompat.app.AlertDialog.Builder(this).setTitle(name).setMessage(text + coverage)
                         .setNegativeButton("关闭", null)
                         .setNeutralButton("查看原件") { _, _ -> openKnowledgeOriginal(row.optString("originalId")) }
