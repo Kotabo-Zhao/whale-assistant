@@ -121,3 +121,28 @@ describe('插件恢复的人工修复入口', () => {
     expect(screen.getByText('Relinks plugins back into the runtime from the preserved packages without downloading again. Plugins whose package files are gone cannot be repaired and must be reinstalled.')).toBeInTheDocument()
   })
 })
+
+
+describe('插件列表不可用时的恢复', () => {
+  it('读取列表卡住时仍可停止启动中的运行环境，且不并发修改插件', async () => {
+    let finish: (value: PluginCatalog) => void = () => {}
+    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockReturnValue(new Promise<PluginCatalog>(resolve => { finish = resolve })), stopRuntime: vi.fn().mockResolvedValue({ ...runtime, phase: 'ready' }) }
+    render(<PluginSettings bridge={bridge} runtime={{ ...runtime, phase: 'running' }} onBack={vi.fn()} />)
+    expect(bridge.managePlugins).toHaveBeenCalledWith({ operation: 'list' })
+    const button = screen.getByRole('button', { name: '停止运行环境' })
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+    await waitFor(() => expect(bridge.stopRuntime).toHaveBeenCalledTimes(1))
+    expect(bridge.managePlugins).toHaveBeenCalledTimes(1)
+    await act(async () => { finish({ plugins: [] }); await Promise.resolve() })
+  })
+
+  it('列表报错后可按输入包名停用插件，不需要先读取列表', async () => {
+    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockRejectedValueOnce({ code: 'PLUGIN_OPERATION_FAILED' }).mockResolvedValueOnce({ plugins: [] }) }
+    render(<PluginSettings bridge={bridge} runtime={runtime} onBack={vi.fn()} />)
+    const input = await screen.findByRole('textbox', { name: '要停用的插件包名' })
+    fireEvent.change(input, { target: { value: 'billion-context' } })
+    fireEvent.click(screen.getByRole('button', { name: '停用指定插件' }))
+    await waitFor(() => expect(bridge.managePlugins).toHaveBeenLastCalledWith({ operation: 'enable', id: 'billion-context', enabled: false }))
+  })
+})

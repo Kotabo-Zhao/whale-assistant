@@ -71,3 +71,35 @@ it('损坏的列表响应显示读取失败而不是空列表', async () => {
   await screen.findByText('无法读取数据，原有内容已保留。')
   expect(screen.queryByText('当前分类还没有内容，可以在下方添加或导入。')).not.toBeInTheDocument()
 })
+
+it('左滑记忆卡片后确认删除，使用当前记录快照', async () => {
+  bridge.companionDashboard.mockImplementation((req: { operation: string }) => Promise.resolve(req.operation === 'memoryList'
+    ? { items: [{ id: 'm1', text: '喜欢咖啡', _review: 'snapshot' }] } : { items: [], ok: true }))
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '长期记忆' }))
+  fireEvent.click(await screen.findByText('手动与对话记忆'))
+  const card = (await screen.findAllByText('喜欢咖啡'))[0].closest('article')!
+  expect(within(card).queryByRole('button', { name: '删除' })).not.toBeInTheDocument()
+  fireEvent.touchStart(card, { touches: [{ clientX: 250, clientY: 20 }] })
+  fireEvent.touchEnd(card, { changedTouches: [{ clientX: 100, clientY: 20 }] })
+  fireEvent.click(within(card).getByRole('button', { name: '删除' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith(expect.objectContaining({ operation: 'memoryDelete', id: 'm1', expected: 'snapshot' })))
+  expect(confirm).toHaveBeenCalled()
+  confirm.mockRestore()
+})
+
+it('按来源折叠记忆，展开卡片后才显示全文', async () => {
+  const longText = '分享资料：' + '鲸鱼喜欢游泳。'.repeat(15)
+  bridge.companionDashboard.mockImplementation((req: { operation: string }) => Promise.resolve(req.operation === 'memoryList' ? { items: [{ id: 'm2', text: longText, source: 'shared_understanding' }] } : { items: [] }))
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '长期记忆' }))
+  const group = (await screen.findByText('分享内容')).closest('details')!
+  expect(group).not.toHaveAttribute('open')
+  fireEvent.click(within(group).getByText('分享内容'))
+  const card = group.querySelector('article')!
+  const detail = card.querySelector('details')!
+  expect(detail).not.toHaveAttribute('open')
+  fireEvent.click(detail.querySelector('summary')!)
+  expect(detail).toHaveAttribute('open')
+})

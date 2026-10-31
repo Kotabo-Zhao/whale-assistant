@@ -8,10 +8,8 @@ import io.deepseekharness.mobile.AppAuthenticationState
 import io.deepseekharness.mobile.runtime.diagnostics.DiagnosticEvent
 import io.deepseekharness.mobile.runtime.diagnostics.DiagnosticLevel
 import java.io.File
-import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.ServerSocket
-import java.net.URL
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.TimeUnit
@@ -108,6 +106,13 @@ class RuntimeSupervisor(
      */
     @Volatile private var harnessOutput: ProcessOutputTail? = null
     @Volatile private var lastHarnessOutput: String? = null
+    private var lastReadinessProbe = "not_started"
+    private fun reportReadinessProbe(value: String) {
+        if (value != lastReadinessProbe) {
+            lastReadinessProbe = value
+            android.util.Log.i("dsh-runtime", "harness readiness probe=$value")
+        }
+    }
     private var harnessAccess: HarnessAccess? = null
     private var deviceBridgeAccess: DeviceBridgeAccess? = null
 
@@ -713,6 +718,7 @@ class RuntimeSupervisor(
     }
 
     private fun waitForHarness(process: Process, port: Int, output: ProcessOutputTail): String {
+        lastReadinessProbe = "not_started"
         val startedAtNanos = System.nanoTime()
         val deadline = startedAtNanos + TimeUnit.SECONDS.toNanos(START_TIMEOUT_SECONDS)
         var authServiceReady = false
@@ -742,6 +748,7 @@ class RuntimeSupervisor(
                 ),
             )
         }
+        android.util.Log.w("dsh-runtime", "harness readiness timeout probe=$lastReadinessProbe authReady=$authServiceReady entryCaptured=${output.harnessLaunchUrl() != null}")
         if (authServiceReady && output.harnessLaunchUrl() == null) {
             throw RuntimeFailure("HARNESS_AUTH_UNAVAILABLE", "Harness 未提供有效的网页认证入口")
         }
@@ -749,25 +756,20 @@ class RuntimeSupervisor(
     }
 
     private fun hasExpectedAuthChallenge(port: Int): Boolean {
-        val connection = try {
-            URL("http://127.0.0.1:$port/").openConnection() as HttpURLConnection
-        } catch (_: Exception) {
-            return false
-        }
         return try {
-            connection.instanceFollowRedirects = false
-            connection.useCaches = false
-            connection.connectTimeout = HTTP_PROBE_TIMEOUT_MS
-            connection.readTimeout = HTTP_PROBE_TIMEOUT_MS
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Accept", "text/html")
-            connection.setRequestProperty("Connection", "close")
-            connection.responseCode == HttpURLConnection.HTTP_UNAUTHORIZED &&
-                connection.getHeaderField("WWW-Authenticate") == EXPECTED_AUTH_CHALLENGE
-        } catch (_: Exception) {
+            val matches = HarnessLoopback.hasChallenge(port, HTTP_PROBE_TIMEOUT_MS, EXPECTED_AUTH_CHALLENGE)
+            reportReadinessProbe(if (matches) "challenge_match" else "challenge_mismatch")
+            matches
+        } catch (error: Exception) {
+            reportReadinessProbe(when (error) {
+                is java.net.SocketTimeoutException -> "timeout"
+                is java.net.ConnectException -> "connect_failed"
+                is java.net.ProtocolException -> "protocol_error"
+                is java.io.IOException -> "io_error"
+                is SecurityException -> "security_error"
+                else -> "other_error"
+            })
             false
-        } finally {
-            connection.disconnect()
         }
     }
 

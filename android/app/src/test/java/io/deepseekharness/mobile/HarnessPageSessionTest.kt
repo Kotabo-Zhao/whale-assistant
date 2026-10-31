@@ -8,6 +8,10 @@ import org.junit.Test
 import java.net.URI
 
 class HarnessPageSessionTest {
+    @Test fun staleBrowserCookieIsExpiredWithoutClearingOtherCookies() {
+        assertEquals("dsh_browser_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax", HarnessSessionCookie.expiredBrowserSession())
+        assertTrue(!HarnessSessionCookie.expiredBrowserSession().contains(HarnessActivity.AUTH_TOKEN_COOKIE))
+    }
     @Test fun managementBackRestoresOnlyStillOwnedHiddenView() {
         assertTrue(HarnessManageReturnPolicy.shouldRestore(true, true, true, false))
         assertEquals(false, HarnessManageReturnPolicy.shouldRestore(false, true, true, false))

@@ -124,12 +124,39 @@ class CompanionActivity : AppCompatActivity() {
         if (uri != null) {
             runMemoryIo("正在导出记忆…", {
                 // Read and validate before opening the selected output, so a bad store cannot overwrite it.
-                val bytes = CompanionMemoryStore(this).exportForUser()
+                val bytes = CompanionMemoryStore(this).exportBackup()
                 val stream = contentResolver.openOutputStream(uri, "wt") ?: error("无法打开文件")
                 stream.use { it.write(bytes); it.flush() }
             }) { result ->
                 android.widget.Toast.makeText(this, if (result.isSuccess) "记忆已导出" else "导出失败，请检查保存位置；原记忆未改变。", android.widget.Toast.LENGTH_LONG).show()
             }
+        }
+    }
+
+    private val understandingExport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) runMemoryIo("正在导出后台数据…", {
+            val bytes = UnifiedUnderstandingStore.open(this).use { it.queue.exportArchive() }
+            (contentResolver.openOutputStream(uri, "wt") ?: error("无法打开文件")).use { it.write(bytes); it.flush() }
+        }) { result -> android.widget.Toast.makeText(this, if (result.isSuccess) "后台数据已导出。" else "导出失败，原数据未改变。", android.widget.Toast.LENGTH_LONG).show() }
+    }
+
+    private val understandingImport = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runMemoryIo("正在读取后台备份…", {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val output = java.io.ByteArrayOutputStream(); val buffer = ByteArray(8192)
+                while (true) { val n = input.read(buffer); if (n < 0) break; require(n > 0 && output.size() + n <= 8_000_000); output.write(buffer, 0, n) }
+                output.toByteArray()
+            } ?: error("无法读取文件")
+        }) { result ->
+            result.onSuccess { bytes ->
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("合并后台数据备份？")
+                    .setMessage("将合并事件、模型结果、事项和删除记录；不会恢复旧任务或授权。现有事项状态优先，来源被删除的记录不会恢复。")
+                    .setNegativeButton("取消", null).setPositiveButton("合并") { _, _ ->
+                        runMemoryIo("正在校验并合并…", { UnifiedUnderstandingStore.open(this).use { it.queue.importArchive(bytes) } }) { outcome ->
+                            android.widget.Toast.makeText(this, outcome.fold({ "已合并 $it 条事件。" }, { "备份无效或冲突，数据库未改变。" }), android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }.show()
+            }.onFailure { android.widget.Toast.makeText(this, "无法读取后台备份。", android.widget.Toast.LENGTH_LONG).show() }
         }
     }
 
@@ -231,6 +258,7 @@ class CompanionActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CompanionRecurringReminder.requestRecovery(applicationContext)
+        memoryExecutor.execute { runCatching { CompanionReminder(applicationContext).restore() } }
         store = CompanionStore(this)
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -336,8 +364,37 @@ class CompanionActivity : AppCompatActivity() {
                 .setPositiveButton("搜索") { _, _ -> showMemories(input.text.toString().trim()) }.show()
         }
         button("导出长期记忆") { if (!memoryBusy) memoryExport.launch("whale-memory.json") else paragraph("记忆文件操作正在进行，请稍候。") }
+        val databaseActive = runCatching { memory.usesDatabase() }.getOrNull()
+        paragraph(when (databaseActive) { true -> "长期记忆存储：SQLite。旧版本应用无法读取数据库；原格式最多支持 100 条。超过时请先导出完整备份，并使用新版数据库恢复。"; false -> "长期记忆存储：原 JSON（最多 100 条）；迁移后不设固定条数上限。"; null -> "无法读取记忆存储状态。" })
+        if (databaseActive == false) button("迁移长期记忆到数据库") {
+            runMemoryIo("正在迁移并核对长期记忆…", { memory.migrateToDatabase() }) { result ->
+                android.widget.Toast.makeText(this, result.fold({ "已迁移并核对 $it 条记忆。" }, { "迁移失败，原记忆仍为当前数据。" }), android.widget.Toast.LENGTH_LONG).show()
+                render()
+            }
+        }
+        if (databaseActive == true) button("将长期记忆回退到原格式") {
+            runMemoryIo("正在导出并核对长期记忆…", { memory.rollbackToLegacy() }) { result ->
+                android.widget.Toast.makeText(this, result.fold({ "已回退并核对 $it 条记忆。" }, { "回退失败；旧格式最多 100 条，数据库仍为当前数据。" }), android.widget.Toast.LENGTH_LONG).show()
+                render()
+            }
+        }
+        button("校验长期记忆迁移副本") {
+            runMemoryIo("正在核对记忆迁移副本…", {
+                val snapshot = CompanionMemoryStore(this).exportForUser()
+                val original = CompanionMemoryFormat.parse(snapshot)
+                UnifiedUnderstandingStore.open(this).use { destination ->
+                    if (!destination.memories.isImported()) destination.stageLegacy(snapshot)
+                    check(destination.memories.readAll().toString() == original.toString()) { "staged snapshot differs" }
+                    check(CompanionMemoryFormat.parse(destination.exportLegacyRollback()).toString() == original.toString()) { "rollback export differs" }
+                    original.length()
+                }
+            }) { result ->
+                val message = result.fold({ "已校验 $it 条迁移副本及旧格式导出；正式记忆仍使用原文件。" }, { "迁移副本核对失败或已过期；原记忆没有改动。" })
+                android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
         button("从文件导入记忆") { if (!memoryBusy) memoryImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("记忆文件操作正在进行，请稍候。") }
-        paragraph("导出为未加密 JSON，包含所有记忆和来源；由你选择保存位置，云盘等服务可能同步文件。导入前会显示待新增内容，由你确认后合并。")
+        paragraph("备份为未加密 JSON，包含记忆、来源和删除抑制；云盘可能同步。单次备份限 8 MB；导入前核对合并，超过 100 条需先启用数据库。")
         button("清空全部长期记忆") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清空长期记忆？")
                 .setMessage("这会删除全部长期记忆，无法撤销。")
@@ -345,7 +402,31 @@ class CompanionActivity : AppCompatActivity() {
                     runCatching { memory.clearForUser() }.onSuccess { render() }.onFailure { paragraph("无法清空记忆，原数据已保留。") }
                 }.show()
         }
+        toggle("桌宠对话使用相关记忆", store.bubbleMemoryAccess) { enabled ->
+            if (!enabled) { store.bubbleMemoryAccess = false; render() }
+            else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许桌宠对话使用记忆？")
+                .setMessage("发送消息时，匹配的已确认记忆会随对话发送给 DeepSeek 模型服务；可随时关闭。")
+                .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.bubbleMemoryAccess = true; render() }.show()
+        }
+        toggle("桌宠根据记忆主动搭话", store.proactiveMemoryChat) { enabled ->
+            if (!enabled) { store.proactiveMemoryChat = false; render() }
+            else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许桌宠主动搭话？")
+                .setMessage("解锁时可能在屏幕气泡展示一条已确认记忆，旁人或录屏可能看到。每日最多一次，遵守免打扰。提示本身不会发送给模型。")
+                .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.proactiveMemoryChat = true; render() }.show()
+        }
         heading("本地资料", "knowledge")
+        val sharedQueueStatus = TextView(this).apply { text = "正在读取资料整理状态…"; textSize = 14f; setTextColor(muted) }
+        content.addView(sharedQueueStatus)
+        memoryExecutor.execute {
+            val count = runCatching { SharedMemoryJobs.pendingCount(applicationContext) }.getOrNull()
+            val status = SharedMemoryJobs.readStatus(applicationContext)
+            memoryHandler.post { if (!isFinishing && !isDestroyed && sharedQueueStatus.isAttachedToWindow) {
+                sharedQueueStatus.text = if (count == null) "无法读取资料整理队列" else "资料整理：$status · 等待 $count 条"
+            } }
+        }
+        button("重试资料整理") { runMemoryIo("正在安排后台整理…", { SharedMemoryJobs.retryNow(applicationContext) }) { result ->
+            android.widget.Toast.makeText(this, if (result.isSuccess) "已请求后台整理。" else "无法安排后台整理，请稍后重试。", android.widget.Toast.LENGTH_SHORT).show()
+        } }
         paragraph("可从分享或文本文件保存资料，并在这里查看、搜索和删除。对话访问默认关闭；开启后助手检索到的资料可能发送给模型服务。")
         toggle("允许助手对话访问本地资料", store.knowledgeModelAccess) { enabled ->
             if (!enabled) { store.knowledgeModelAccess = false; render() }
@@ -370,8 +451,94 @@ class CompanionActivity : AppCompatActivity() {
         toggle("通知到达时显示桌面气泡", store.notificationBubbles) { store.notificationBubbles = it }
         toggle("候选事项发送系统通知", store.candidateNotifications) { store.candidateNotifications = it }
         paragraph("本地规则识别可能的日程、取件或待回复，只显示通用提示；规则可能误判或遗漏。系统通知最多 30 分钟一次，需要通知权限，并遵守免打扰；不会自动回复或创建事项。")
-        toggle("收集通知摘要", store.notificationCapture) { store.notificationCapture = it; render() }
+        toggle("收集通知摘要", store.notificationCapture) { value ->
+            if (runCatching { store.notificationCapture = value }.isFailure) android.widget.Toast.makeText(this, "无法更新通知采集，请稍后重试。", android.widget.Toast.LENGTH_LONG).show()
+            render()
+        }
         paragraph("开启后记录通知来源、标题和正文，最多 50 条；只在读取或新增时清理超过 7 天的记录。验证码与密码使用简单规则过滤，不能保证识别所有敏感内容。")
+        toggle("后台理解新通知", store.backgroundUnderstanding) { enabled ->
+            if (!enabled) { store.backgroundUnderstanding = false; render() }
+            else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("启用通知后台理解？")
+                .setMessage("启用后，新采集且未排除的通知标题和正文会通过非计费网络发送到已配置的 DeepSeek 服务分析，每天最多 20 次请求，可能产生费用。简单敏感信息过滤不能保证完整；结果为待核对候选。关闭开关会停止后续处理，已发送的内容无法撤回。")
+                .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("启用") { _, _ ->
+                    if (runCatching { store.backgroundUnderstanding = true }.isFailure) android.widget.Toast.makeText(this, "无法核对旧任务，后台理解未启用。", android.widget.Toast.LENGTH_LONG).show()
+                    render()
+                }.show()
+        }
+        toggle("自动保存后台记忆", store.backgroundAutoMemory) { enabled ->
+            if (!enabled) { store.backgroundAutoMemory = false; render() }
+            else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("自动保存模型提取的记忆？")
+                .setMessage("需要先迁移到 SQLite 并启用后台理解。模型提取可能有误，保存的记录标为待核实，可编辑或删除；删除的相同文字不会自动重建。")
+                .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("启用") { _, _ -> store.backgroundAutoMemory = true; render() }.show()
+        }
+        val understandingState = getSharedPreferences("understanding_runtime_v1", Context.MODE_PRIVATE)
+        paragraph("后台理解：${if (store.backgroundUnderstanding) understandingState.getString("status", "已开启，等待新通知") else "已关闭"}。需要通知采集、系统授权、DeepSeek 凭据和非计费网络；系统可能延迟处理。")
+        button("查看后台理解候选") {
+            val results = runCatching { UnifiedUnderstandingStore.open(this).use { it.queue.recentEvidence(30) } }.getOrNull()
+            if (results == null) paragraph("无法读取后台理解结果。")
+            else {
+                val candidates = results.flatMap { evidence ->
+                    val claims = org.json.JSONObject(evidence.result).optJSONArray("claims") ?: org.json.JSONArray()
+                    (0 until claims.length()).mapNotNull { claims.optJSONObject(it)?.optString("text")?.takeIf(String::isNotBlank) }
+                        .map { it to evidence }
+                }
+                if (candidates.isEmpty()) androidx.appcompat.app.AlertDialog.Builder(this).setTitle("后台理解候选").setMessage("暂无候选。").setPositiveButton("关闭", null).show()
+                else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择候选并核对依据")
+                    .setItems(candidates.map { it.first }.toTypedArray()) { _, index ->
+                        val (text, evidence) = candidates[index]
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对候选记忆")
+                            .setMessage("候选：$text\n\n来源：${evidence.source.removePrefix("notification:")}\n依据：${evidence.event}\n\n模型可能误解通知内容，确认后才会存入长期记忆。")
+                            .setNegativeButton("取消", null).setPositiveButton("保存为记忆") { _, _ ->
+                                runMemoryIo("正在保存记忆…", {
+                                    val current = UnifiedUnderstandingStore.open(this).use { it.queue.recentEvidence(100).any { row -> row == evidence } }
+                                    check(current) { "candidate changed" }
+                                    CompanionMemoryStore(this).addUnderstandingForUser(text, evidence.source, evidence.eventId)
+                                }) { outcome ->
+                                    val message = outcome.fold({ if (it == UserMemoryResult.ADDED) "已保存记忆和来源标识。" else "已有相同记忆。" }, { "保存失败或候选已变化，请重新核对。" })
+                                    android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }.show()
+                    }.setNegativeButton("关闭", null).show()
+            }
+        }
+        button("查看后台识别的事项") {
+            val items = runCatching { UnifiedUnderstandingStore.open(this).use { it.queue.listItems(100) } }.getOrNull()
+            if (items == null) paragraph("无法读取事项。")
+            else if (items.isEmpty()) paragraph("暂无识别事项。")
+            else {
+                val labels = items.map { "[${when (it.state) { "candidate" -> "待核实"; "open" -> "待处理"; "done" -> "已完成"; else -> "已取消" }}] ${it.title}" + if (it.reminderStatus == 2) " · 提醒时间待核实，已暂停" else "" }.toTypedArray()
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("事项")
+                    .setItems(labels) { _, index ->
+                        val item = items[index]
+                        val event = runCatching { UnifiedUnderstandingStore.open(this).use { it.queue.sourceEvent(item.eventId) } }.getOrNull()
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle(item.title)
+                            .setMessage("依据：${event?.second ?: "来源已清除"}\n模型识别可能有误。提醒时间由你选择，完成或取消事项会使关联提醒失效。")
+                            .setItems(arrayOf("标记待处理", "标记已完成", "取消事项", "设置或修改关联提醒")) { _, action ->
+                                if (action == 3) { chooseItemReminder(item); return@setItems }
+                                val next = listOf("open", "done", "cancelled")[action]
+                                runMemoryIo("正在更新事项…", {
+                                    val updated = UnifiedUnderstandingStore.open(this).use { it.queue.updateItem(item.id, item.state, next) }
+                                    if (updated && next in setOf("done", "cancelled")) runCatching { CompanionReminder(this).removeLinked(item.id) }
+                                    updated
+                                }) { result ->
+                                    android.widget.Toast.makeText(this, if (result.getOrDefault(false)) "事项已更新。" else "事项已变化或更新失败，请重新查看。", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }.setNegativeButton("关闭", null).show()
+                    }.setNegativeButton("关闭", null).show()
+            }
+        }
+        button("导出后台事件和事项") { if (!memoryBusy) understandingExport.launch("whale-understanding.json") }
+        button("导入后台事件和事项") { if (!memoryBusy) understandingImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+        paragraph("后台备份单独保存，为未加密 JSON，包含通知原文、事项和删除记录；最多 8 MB。恢复只合并数据，不恢复授权或排队任务。")
+        button("清空后台理解事件和候选") {
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清空后台理解数据？")
+                .setMessage("将删除本机后台理解的事件、候选、识别事项和待处理任务，不删除原有长期记忆或通知列表。已发送给模型服务的内容无法由此撤回；开关保持当前设置，之后的新通知仍可进入处理。")
+                .setNegativeButton("取消", null).setPositiveButton("清空") { _, _ ->
+                    runMemoryIo("正在清空后台理解数据…", { UnifiedUnderstandingStore.open(this).use { it.queue.clearCollectedData() } }) { result ->
+                        android.widget.Toast.makeText(this, if (result.isSuccess) "后台理解数据已清空。" else "清空失败，请重试。", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }.show()
+        }
         val notificationAllowed = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
         paragraph(if (notificationAllowed) "系统通知读取授权：已授予。系统可能停止服务或限制后台运行。" else "系统通知读取授权：未授予。开启采集后还需在系统设置中授权。")
         button("打开系统通知读取授权") { openSettings(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS) }
@@ -690,59 +857,66 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun searchKnowledge() {
-        val input = android.widget.EditText(this).apply {
-            hint = "搜索文字，留空查看全部"
-            setSingleLine(true)
-            filters = arrayOf(android.text.InputFilter.LengthFilter(200))
+        runMemoryIo("正在读取本地资料…", { CompanionKnowledgeStore(this).search("") }) { result ->
+            result.onSuccess { showKnowledgeResults(it) }
+                .onFailure { android.widget.Toast.makeText(this, "资料库无法读取，原数据已保留。", android.widget.Toast.LENGTH_LONG).show() }
         }
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("搜索本地资料")
-            .setView(input).setNegativeButton("取消", null).setPositiveButton("搜索") { _, _ ->
-                val query = input.text.toString()
-                runMemoryIo("正在读取本地资料…", { CompanionKnowledgeStore(this).search(query) }) { result ->
-                    result.onSuccess { rows -> showKnowledgeResults(rows) }
-                        .onFailure { paragraph("资料库无法读取，原数据已保留。") }
-                }
-            }.show()
     }
 
     private fun showKnowledgeResults(rows: org.json.JSONArray) {
-        if (rows.length() == 0) { paragraph("没有匹配的本地资料。") ; return }
-        val labels = Array(rows.length()) { index ->
-            val row = rows.getJSONObject(index)
-            val date = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.getLong("createdAt")))
-            val excerpt = row.getString("text").replace('\n', ' ').take(100)
-            val source = if (row.getString("source") == "text_file") "文本文件" else "分享文字"
-            "$date · $source\n$excerpt"
+        val input = android.widget.EditText(this).apply {
+            hint = "搜索资料"; setSingleLine(true)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(200))
         }
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地资料（${rows.length()} 条）")
-            .setItems(labels) { _, index ->
-                val row = rows.getJSONObject(index)
-                val text = row.getString("text")
-                val id = row.getString("id")
-                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("资料内容")
-                    .setMessage(text).setNegativeButton("关闭", null)
-                    .setNeutralButton("使用资料") { _, _ ->
-                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择操作")
-                            .setItems(arrayOf("放入对话草稿", "复制资料", "编辑本地资料")) { _, choice ->
-                                when (choice) {
-                                    0 -> prepareKnowledgeForChat(text)
-                                    1 -> getSystemService(android.content.ClipboardManager::class.java)
-                                        ?.setPrimaryClip(android.content.ClipData.newPlainText("本地资料", text))
-                                    2 -> editKnowledge(id, text)
-                                }
-                            }.setNegativeButton("取消", null).show()
-                    }
-                    .setPositiveButton("删除") { _, _ ->
-                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除这条本地资料？")
-                            .setMessage("删除不可撤销；已复制或另存的内容不会随之删除。")
-                            .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
-                                runMemoryIo("正在删除资料…", { CompanionKnowledgeStore(this).remove(id, text) }) { result ->
-                                    result.onSuccess { removed -> paragraph(if (removed) "资料已删除。" else "资料已变化或不存在，请重新查看。") }
-                                        .onFailure { paragraph("无法确认删除结果，请重新查看。") }
-                                }
-                            }.show()
-                    }.show()
-            }.setNegativeButton("关闭", null).show()
+        val list = android.widget.ListView(this)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(16), 0)
+            addView(input); addView(list, LinearLayout.LayoutParams(-1, dp(380)))
+        }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地资料（${rows.length()} 条）")
+            .setView(layout).setNegativeButton("关闭", null).create()
+        var visible = emptyList<org.json.JSONObject>()
+        fun update() {
+            val query = input.text.toString().trim()
+            visible = (0 until rows.length()).map { rows.getJSONObject(it) }
+                .filter { query.isEmpty() || it.getString("text").contains(query, ignoreCase = true) }
+            val labels = visible.map { row ->
+                val date = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.getLong("createdAt")))
+                "$date  ·  ${row.getString("text").replace('\n', ' ').take(90)}"
+            }
+            list.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
+        }
+        input.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { update() }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        list.setOnItemClickListener { _, _, index, _ ->
+            val row = visible[index]; val text = row.getString("text"); val id = row.getString("id")
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("资料内容").setMessage(text)
+                .setNegativeButton("返回", null)
+                .setNeutralButton("编辑") { _, _ -> dialog.dismiss(); editKnowledge(id, text) }
+                .setPositiveButton("操作") { _, _ ->
+                    androidx.appcompat.app.AlertDialog.Builder(this).setTitle("资料操作")
+                        .setItems(arrayOf("放入对话草稿", "复制资料", "删除资料")) { _, choice ->
+                            when (choice) {
+                                0 -> prepareKnowledgeForChat(text)
+                                1 -> getSystemService(android.content.ClipboardManager::class.java)
+                                    ?.setPrimaryClip(android.content.ClipData.newPlainText("本地资料", text))
+                                2 -> androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除这条本地资料？")
+                                    .setMessage("删除不可撤销；已复制或另存的内容不会随之删除。")
+                                    .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                                        runMemoryIo("正在删除资料…", { CompanionKnowledgeStore(this).remove(id, text) }) { result ->
+                                            dialog.dismiss()
+                                            android.widget.Toast.makeText(this, result.fold({ if (it) "资料已删除。" else "资料已变化或不存在。" }, { "删除失败。" }), android.widget.Toast.LENGTH_LONG).show()
+                                            searchKnowledge()
+                                        }
+                                    }.show()
+                            }
+                        }.setNegativeButton("取消", null).show()
+                }.show()
+        }
+        update(); dialog.show()
     }
 
     private fun editKnowledge(id: String, original: String) {
@@ -834,8 +1008,30 @@ class CompanionActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择不采集的应用")
             .setMultiChoiceItems(labels, checked) { _, index, value -> checked[index] = value }
             .setNegativeButton("取消", null)
-            .setPositiveButton("保存") { _, _ -> store.setExcludedPackages(packages.filterIndexed { index, _ -> checked[index] }.toSet()) }
+            .setPositiveButton("保存") { _, _ ->
+                if (runCatching { store.setExcludedPackages(packages.filterIndexed { index, _ -> checked[index] }.toSet()) }.isFailure)
+                    android.widget.Toast.makeText(this, "无法更新排除来源，请稍后重试。", android.widget.Toast.LENGTH_LONG).show()
+            }
             .show()
+    }
+
+    private fun chooseItemReminder(item: UnderstandingQueue.Item) {
+        if (item.state !in setOf("candidate", "open")) { paragraph("请先将事项标记为待处理。"); return }
+        val selected = Calendar.getInstance().apply { add(Calendar.MINUTE, 5) }
+        android.app.DatePickerDialog(this, { _, year, month, day ->
+            selected.set(Calendar.YEAR, year); selected.set(Calendar.MONTH, month); selected.set(Calendar.DAY_OF_MONTH, day)
+            android.app.TimePickerDialog(this, { _, hour, minute ->
+                selected.set(Calendar.HOUR_OF_DAY, hour); selected.set(Calendar.MINUTE, minute); selected.set(Calendar.SECOND, 0); selected.set(Calendar.MILLISECOND, 0)
+                val due = selected.timeInMillis
+                runMemoryIo("正在保存关联提醒…", {
+                    val saved = UnifiedUnderstandingStore.open(this).use { it.queue.setItemReminder(item.id, item.state, due, System.currentTimeMillis()) }
+                    check(saved) { "事项已变化" }
+                    CompanionReminder(this).upsertLinked(item.id, item.title, due)
+                }) { result ->
+                    android.widget.Toast.makeText(this, if (result.isSuccess) "关联提醒已安排；系统可能延迟。" else "未能确认安排结果，请重新查看事项和提醒。", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }, selected.get(Calendar.HOUR_OF_DAY), selected.get(Calendar.MINUTE), true).show()
+        }, selected.get(Calendar.YEAR), selected.get(Calendar.MONTH), selected.get(Calendar.DAY_OF_MONTH)).show()
     }
 
     private fun createReminder(initialText: String = "", suggestedTime: Long? = null, suggestionNote: String = "根据通知文字、记录时间和当前本地时区推测了时间；可能误判，请核对日期、时区和具体时间。") {
@@ -1363,6 +1559,7 @@ class CompanionActivity : AppCompatActivity() {
 
     private fun showMemories(query: String = "") {
         val memory = CompanionMemoryStore(this)
+        if (query.isEmpty() && runCatching { memory.usesDatabase() }.getOrDefault(false)) { showMemoryPage(memory, null, null); return }
         val generation = ++memoryViewGeneration
         runMemoryIo("正在读取长期记忆…", {
             val all = memory.listForUser()
@@ -1381,23 +1578,66 @@ class CompanionActivity : AppCompatActivity() {
         }
     }
 
-    private fun showMemoryRecords(memory: CompanionMemoryStore, records: org.json.JSONArray) {
+    private fun showMemoryPage(memory: CompanionMemoryStore, before: Long?, revision: Long?) {
+        val generation = ++memoryViewGeneration
+        runMemoryIo("正在读取长期记忆…", { memory.pageForUser(before, revision) }) { result ->
+            if (generation != memoryViewGeneration) return@runMemoryIo
+            result.onSuccess { page ->
+                val next = page.next
+                showMemoryRecords(memory, page.rows, if (next == null) null else { { showMemoryPage(memory, next, page.revision) } })
+            }.onFailure { paragraph("记忆已变化或读取失败，请重新打开记忆列表。") }
+        }
+    }
+
+    private fun showMemoryRecords(memory: CompanionMemoryStore, records: org.json.JSONArray, onNext: (() -> Unit)? = null) {
         if (records.length() == 0) { paragraph("没有匹配的记忆，请尝试其他关键词。"); return }
         val labels = Array(records.length()) {
             val row = records.getJSONObject(it)
-            val source = when (row.optString("source")) { "assistant_tool" -> "助手记忆工具"; "user_edit" -> "用户编辑"; "user_notification" -> "用户根据通知整理"; else -> "来源未知" }
+            val source = when (row.optString("source")) { "assistant_tool" -> "助手记忆工具"; "user_edit" -> "用户编辑"; "user_notification" -> "用户根据通知整理"; "shared_understanding" -> "分享内容自动理解"; "user_understanding" -> "用户核对的后台理解（${row.optString("evidenceSource").removePrefix("notification:")}）"; "auto_understanding" -> "后台自动提取（${row.optString("evidenceSource").removePrefix("notification:")}）"; else -> "来源未知" }
             val time = row.optLong("createdAt", 0)
             val date = if (time > 0) DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(time)) else "时间未知"
-            val status = if (row.optString("status") == "pending") "待确认" else "已确认"
+            val status = if (row.optString("status") == "pending") "待确认" else if (row.optString("source") == "auto_understanding" || (row.optString("source") == "shared_understanding" && row.optLong("confirmedAt") <= 0)) "自动保存·待核实" else "已确认"
             "[$status] ${row.getString("text")}\n来源：$source · $date"
         }
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择要编辑或删除的记忆")
-            .setItems(labels) { _, index ->
+        val density = resources.displayMetrics.density
+        fun dp(n: Int) = (n * density).toInt()
+        val list = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(dp(14), dp(4), dp(14), dp(4))
+        }
+        val scroll = android.widget.ScrollView(this).apply { addView(list) }
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("记忆卡片 · 左滑删除")
+            .setView(scroll).setNegativeButton("关闭", null)
+        if (onNext != null) builder.setNeutralButton("下一页") { _, _ -> onNext() }
+        val dialog = builder.create()
+        fun confirmDelete(index: Int) {
+            val row = records.getJSONObject(index)
+            val id = row.getString("id")
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("删除这条记忆？")
+                .setMessage(labels[index]).setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                    runMemoryIo("正在删除记忆…", { memory.deleteForUser(id, row.toString()) }) { result ->
+                        val deleted = result.getOrDefault(false)
+                        android.widget.Toast.makeText(this, if (deleted) "记忆已删除。" else "记忆已变化或删除失败，请重新查看。", android.widget.Toast.LENGTH_LONG).show()
+                        if (deleted) { dialog.dismiss(); showMemories() }
+                    }
+                }.show()
+        }
+        fun openRecord(index: Int) {
+            dialog.dismiss()
                 val id = records.getJSONObject(index).getString("id")
+                val selected = records.getJSONObject(index)
+                val evidenceText = if (selected.optString("source") in setOf("user_understanding", "auto_understanding")) {
+                    val event = runCatching { UnifiedUnderstandingStore.open(this).use { it.queue.sourceEvent(selected.optString("evidenceEventId")) } }.getOrNull()
+                    if (event != null && event.first == selected.optString("evidenceSource")) "\n\n依据：${event.second}" else "\n\n原始依据不可用（可能已清除）。"
+                } else ""
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("管理记忆")
-                    .setMessage(labels[index]).setNegativeButton("关闭", null)
-                    .setNeutralButton(if (records.getJSONObject(index).optString("status") == "pending") "确认记住" else "编辑") { _, _ ->
-                        if (records.getJSONObject(index).optString("status") == "pending") {
+                    .setMessage(labels[index] + evidenceText).setNegativeButton("关闭", null)
+                    .setNeutralButton(if (selected.optString("status") == "pending" || selected.optString("source") == "auto_understanding" || (selected.optString("source") == "shared_understanding" && selected.optLong("confirmedAt") <= 0)) "确认记住" else "编辑") { _, _ ->
+                        if (selected.optString("source") == "auto_understanding" || (selected.optString("source") == "shared_understanding" && selected.optLong("confirmedAt") <= 0)) {
+                            runMemoryIo("正在确认记忆…", { memory.confirmAutomaticUnderstanding(id, selected.toString()) }) { outcome ->
+                                android.widget.Toast.makeText(this, if (outcome.getOrDefault(false)) "已确认记忆。" else "记忆已变化或确认失败。", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        } else if (records.getJSONObject(index).optString("status") == "pending") {
                             val original = records.getJSONObject(index).getString("text")
                             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("确认方式")
                                 .setItems(arrayOf("直接确认", "编辑后确认")) { _, action ->
@@ -1424,7 +1664,44 @@ class CompanionActivity : AppCompatActivity() {
                         }
                             }.show()
                     }.show()
-            }.setNegativeButton("关闭", null).show()
+
+        }
+        for (index in labels.indices) {
+            val card = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(android.graphics.Color.rgb(248, 250, 255)); cornerRadius = dp(16).toFloat()
+                    setStroke(dp(1), android.graphics.Color.rgb(216, 228, 245))
+                }
+            }
+            val text = android.widget.TextView(this).apply {
+                this.text = labels[index]; textSize = 15f; setTextColor(android.graphics.Color.rgb(44, 54, 75))
+                setPadding(dp(14), dp(14), dp(14), dp(14)); isClickable = true
+                setOnClickListener { openRecord(index) }
+            }
+            val remove = android.widget.Button(this).apply {
+                this.text = "删除"; contentDescription = "删除这条记忆"; visibility = android.view.View.GONE
+                setOnClickListener { confirmDelete(index) }
+            }
+            var downX = 0f; var downY = 0f
+            text.setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; true }
+                    android.view.MotionEvent.ACTION_UP -> {
+                        val dx = event.x - downX; val dy = event.y - downY
+                        if (kotlin.math.abs(dx) > dp(48) && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                            remove.visibility = if (dx < 0) android.view.View.VISIBLE else android.view.View.GONE
+                        } else if (kotlin.math.abs(dy) < dp(16)) view.performClick()
+                        true
+                    }
+                    else -> true
+                }
+            }
+            card.addView(text, android.widget.LinearLayout.LayoutParams(0, -2, 1f)); card.addView(remove)
+            list.addView(card, android.widget.LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        }
+        dialog.show()
     }
 
     private fun editConfirmedMemory(memory: CompanionMemoryStore, row: org.json.JSONObject) {

@@ -7,7 +7,7 @@ import java.util.UUID
 /** A bounded local rollup of observed notifications, not a conclusion about the user. */
 internal object CompanionNotificationMemory {
     private const val MAX_EVENTS = 4
-    fun upsert(rows: JSONArray, packageName: String, title: String, body: String, now: Long): Boolean {
+    fun upsert(rows: JSONArray, packageName: String, title: String, body: String, now: Long, legacyLimit: Boolean = true): Boolean {
         if (now <= 0 || CompanionAutomaticMemory.fromNotification(packageName, title, body) == null) return false
         val event = CompanionNotificationRecords.truncate(listOf(title.trim(), body.trim()).filter { it.isNotEmpty() }.distinct().joinToString("："), 100)
         if (event.isBlank()) return false
@@ -29,7 +29,7 @@ internal object CompanionNotificationMemory {
         if (existing != null) {
             existing.put("events", JSONArray(events)).put("text", summary).put("updatedAt", now)
         } else {
-            if (rows.length() >= 100) return false
+            if (legacyLimit && rows.length() >= 100) return false
             rows.put(JSONObject().put("id", UUID.randomUUID().toString()).put("text", summary)
                 .put("source", "auto_notification_group").put("sourcePackage", packageName)
                 .put("events", JSONArray(events)).put("status", "confirmed").put("createdAt", now))

@@ -100,6 +100,21 @@ describe('会话管理页', () => {
     expect(screen.queryByRole('button', { name: /删除会话/ })).not.toBeInTheDocument()
   })
 
+  it('会话较多时默认折叠，搜索仍覆盖折叠内容', async () => {
+    listSessions.mockResolvedValue({ status: 'ready', truncated: false, sessions:
+      Array.from({ length: 8 }, (_, i) => ({ id: `session-${i}`, title: `会话 ${i}`, updatedAt: Date.UTC(2026, 0, 2) - i })) })
+    render(<SessionManager onBack={vi.fn()} onOpenHarness={vi.fn()} />)
+    expect(await screen.findByText('会话 0')).toBeInTheDocument()
+    expect(screen.queryByText('会话 7')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索会话' }), { target: { value: '会话 7' } })
+    expect(screen.getByText('会话 7')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索会话' }), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: '展开其余 3 个会话' }))
+    expect(screen.getByText('会话 7')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '收起会话' }))
+    expect(screen.queryByText('会话 7')).not.toBeInTheDocument()
+  })
+
   it('读不到会话列表时显示诚实提示，而不是「暂无会话」', async () => {
     listSessions.mockResolvedValue({ status: 'unavailable', reason: 'RUNTIME_NOT_INSTALLED' })
     const { unmount } = render(<SessionManager onBack={vi.fn()} onOpenHarness={vi.fn()} />)

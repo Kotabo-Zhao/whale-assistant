@@ -8,6 +8,58 @@ import org.junit.Test
 import java.nio.file.Files
 
 class CompanionMemoryEngineTest {
+    @org.junit.Test fun databaseModeAcceptsMoreThanOneHundredAndPaginatesPastOldBoundary() {
+        val rows = org.json.JSONArray()
+        repeat(105) { CompanionUserMemory.add(rows, "记忆第${it}条", "user_edit", 1L, legacyLimit = false) }
+        CompanionMemoryFormat.validateRows(rows, legacyLimit = false)
+        org.junit.Assert.assertThrows(Exception::class.java) { CompanionMemoryFormat.validateRows(rows, legacyLimit = true) }
+        val engine = CompanionMemoryEngine({ rows }, {}, legacyLimit = false)
+        val page = org.json.JSONObject(engine.execute("""{"op":"search","query":"","offset":100}"""))
+        org.junit.Assert.assertEquals(5, page.getJSONArray("items").length())
+    }
+    @org.junit.Test fun privacyBackupDoesNotRestoreDeletedText() {
+        val row = org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("text", "已删除的记忆")
+        val digest = CompanionMemorySuppression.digest("已删除的记忆")
+        val bytes = CompanionMemoryBackup.encode(org.json.JSONArray().put(row), true, setOf("usage"), setOf(digest))
+        val plan = CompanionMemoryImport.plan(bytes, org.json.JSONArray())
+        org.junit.Assert.assertEquals(0, org.json.JSONArray(plan.additions).length())
+        org.junit.Assert.assertTrue(plan.suppressedAll)
+        org.junit.Assert.assertTrue(digest in plan.deletedHashes)
+        org.junit.Assert.assertTrue("usage" in plan.suppressedSources)
+    }
+    @org.junit.Test fun deletedEvidenceBlocksRephrasedClaimsOnImport() {
+        val event = "event-1"
+        val row = org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("text", "不同措辞")
+            .put("source", "auto_understanding").put("evidenceSource", "notification:com.example.app").put("evidenceEventId", event)
+        val tombstone = CompanionMemorySuppression.digest("event:$event")
+        val bytes = CompanionMemoryBackup.encode(org.json.JSONArray().put(row), false, emptySet(), emptySet(), setOf(tombstone))
+        val plan = CompanionMemoryImport.plan(bytes, org.json.JSONArray())
+        org.junit.Assert.assertEquals(0, org.json.JSONArray(plan.additions).length())
+        org.junit.Assert.assertTrue(tombstone in plan.deletedEvents)
+        val oldBackup = CompanionMemoryBackup.encode(org.json.JSONArray().put(row), false, emptySet(), emptySet())
+        val local = CompanionMemoryImport.plan(oldBackup, org.json.JSONArray(), existingDeletedEvents = setOf(tombstone))
+        org.junit.Assert.assertEquals(0, org.json.JSONArray(local.additions).length())
+    }
+    @org.junit.Test fun deletedSignaturesBlockCloseCrossEventRewordingAndSurviveBackup() {
+        val signature = requireNotNull(CompanionMemorySuppression.encodeSignature("我每天喜欢喝一杯咖啡"))
+        org.junit.Assert.assertTrue(CompanionMemorySuppression.matches("我每天喜欢喝一杯咖啡呀", setOf(signature)))
+        org.junit.Assert.assertFalse(CompanionMemorySuppression.matches("今天晚上要出门散步", setOf(signature)))
+        val row = org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("text", "我每天喜欢喝一杯咖啡呀")
+        val bytes = CompanionMemoryBackup.encode(org.json.JSONArray().put(row), false, emptySet(), emptySet(), signatures = setOf(signature))
+        val plan = CompanionMemoryImport.plan(bytes, org.json.JSONArray())
+        org.junit.Assert.assertEquals(0, org.json.JSONArray(plan.additions).length())
+        org.junit.Assert.assertTrue(signature in plan.deletedSignatures)
+    }
+    @org.junit.Test fun importPreservesValidatedUnderstandingEvidence() {
+        val row = org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("text", "快递到站")
+            .put("source", "user_understanding").put("evidenceSource", "notification:com.example.app").put("evidenceEventId", "event-1")
+        val bytes = CompanionMemoryExport.encode(org.json.JSONArray().put(row))
+        val imported = org.json.JSONArray(CompanionMemoryImport.plan(bytes, org.json.JSONArray()).additions).getJSONObject(0)
+        org.junit.Assert.assertEquals("notification:com.example.app", imported.getString("evidenceSource"))
+        org.junit.Assert.assertEquals("event-1", imported.getString("evidenceEventId"))
+        row.put("evidenceSource", "notification:../invalid")
+        org.junit.Assert.assertThrows(Exception::class.java) { CompanionMemoryImport.plan(CompanionMemoryExport.encode(org.json.JSONArray().put(row)), org.json.JSONArray()) }
+    }
     @Test fun similarMemoryReviewIsAdvisoryBoundedAndBecomesStaleAfterChanges() {
         val rows = JSONArray()
         CompanionUserMemory.add(rows, "我喜欢喝咖啡", "user_edit", 1L)

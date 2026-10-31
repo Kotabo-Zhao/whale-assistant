@@ -12,6 +12,10 @@ internal class CompanionKnowledgeStore(context: Context) {
     private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "companion-knowledge-v1.json"))
 
     fun search(query: String): JSONArray = synchronized(lock) { CompanionKnowledgeData.search(load(), query) }
+    internal fun findById(id: String): JSONObject? = synchronized(lock) {
+        val rows = load()
+        (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id }?.let { JSONObject(it.toString()) }
+    }
     fun exportForUser(): ByteArray = synchronized(lock) { CompanionKnowledgeBackup.encode(load()) }
     fun previewImport(bytes: ByteArray): KnowledgeImportPlan = synchronized(lock) { CompanionKnowledgeBackup.plan(bytes, load()) }
     fun applyImport(plan: KnowledgeImportPlan): Int = synchronized(lock) {
@@ -39,6 +43,13 @@ internal class CompanionKnowledgeStore(context: Context) {
         val rows = load()
         val kept = CompanionKnowledgeData.remove(rows, id, expectedText) ?: return@synchronized false
         write(kept)
+        true
+    }
+    /** Serialize the check with edits/deletes before publishing derived facts. */
+    internal fun withUnchangedRecord(id: String, expectedText: String, action: () -> Unit): Boolean = synchronized(lock) {
+        val rows = load()
+        if ((0 until rows.length()).none { rows.getJSONObject(it).optString("id") == id && rows.getJSONObject(it).optString("text") == expectedText }) return@synchronized false
+        action()
         true
     }
     private fun load(): JSONArray {

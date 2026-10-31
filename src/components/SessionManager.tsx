@@ -88,6 +88,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   const [localSessions, setLocalSessions] = useState<SessionEntry[]>([])
   const [catalog, setCatalog] = useState<SessionCatalogState>({ status: 'loading' })
   const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
   const [retrying, setRetrying] = useState(false)
   const loadingRef = useRef(false)
@@ -231,7 +232,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
             <strong>{t(sessions.length === 0 ? '暂无会话' : '没有匹配的会话')}</strong>
             <p>{t(sessions.length === 0 ? '点击「新建会话」开始工作。' : '换一个关键词，或新建会话开始工作。')}</p>
           </div>
-        ) : filtered.map(session => (
+        ) : (expanded || query.trim() !== '' ? filtered : filtered.slice(0, 5)).map(session => (
           <article className="session-card" key={session.id}>
             <button className="session-open" type="button" onClick={() => onOpenHarness(session.local ? undefined : session.id)} disabled={disabled}>
               <span className="session-icon"><MessageCircle size={18} /></span>
@@ -253,6 +254,11 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
           </article>
         ))}
       </section>
+
+      {catalog.status === 'ready' && query.trim() === '' && filtered.length > 5 && (
+        <button className="button button-secondary session-expand" type="button" onClick={() => setExpanded(value => !value)}
+          aria-expanded={expanded}>{expanded ? t('收起会话') : t('展开其余 {0} 个会话', filtered.length - 5)}</button>
+      )}
 
       {catalog.status === 'ready' && catalog.truncated && (
         <p className="session-note">{t('会话较多，这里只列出最近更新的一部分。')}</p>

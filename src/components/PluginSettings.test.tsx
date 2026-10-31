@@ -11,7 +11,7 @@ const catalog: PluginCatalog = { plugins: [
   { id: 'example-plugin', file: 'config/plugins.yml', version: '1.0.0', rollback: '0.9.0', enabled: true, protected: false, official: false, installed: true, readable: true, children: [{ id: 'optional', name: 'example-plugin/optional', enabled: true, effectiveEnabled: true, protected: false }] },
 ] }
 function setup(state = runtime, groups: PluginCatalog = catalog) {
-  const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValue(groups), stopRuntime: vi.fn().mockResolvedValue({ ...runtime, phase: 'ready' }) }
+  const bridge = { ...createBrowserBridge(), getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: null }), managePlugins: vi.fn().mockResolvedValue(groups), stopRuntime: vi.fn().mockResolvedValue({ ...runtime, phase: 'ready' }) }
   render(<PluginSettings bridge={bridge} runtime={state} onBack={vi.fn()} />)
   return bridge
 }
@@ -79,7 +79,7 @@ describe('应用外层插件管理', () => {
     }) } } as unknown as Response)
     try {
       const failure = Object.assign(new Error('catalog-example dsh=0.2.1'), { code: 'PLUGIN_ENGINE_SCAN_INCOMPLETE' })
-      const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(failure) }
+      const bridge = { ...createBrowserBridge(), getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: null }), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(failure) }
       render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
       await screen.findByText('example-plugin')
       fireEvent.click(screen.getByRole('tab', { name: '浏览商店' }))
@@ -94,7 +94,7 @@ describe('应用外层插件管理', () => {
   })
   it('商店请求需确认，并且安装成功后才清除', async () => {
     const proposal = { id: '00000000-0000-0000-0000-000000000001', packageName: 'example-market-plugin', createdAt: 1000, kind: 'install' as const, suggestedVersion: null }
-    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValue(catalog), stopRuntime: vi.fn(),
+    const bridge = { ...createBrowserBridge(), getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: null }), managePlugins: vi.fn().mockResolvedValue(catalog), stopRuntime: vi.fn(),
       getMarketProposal: vi.fn().mockResolvedValueOnce(proposal).mockResolvedValue(null), dismissMarketProposal: vi.fn().mockResolvedValue(true) }
     render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
     await screen.findByText('example-market-plugin')
@@ -105,7 +105,7 @@ describe('应用外层插件管理', () => {
   })
   it('商店更新需确认并显示建议版本，调用受控更新', async () => {
     const proposal = { id: '00000000-0000-0000-0000-000000000003', packageName: 'example-plugin', createdAt: 1000, kind: 'update' as const, suggestedVersion: '1.2.3' }
-    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValue(catalog), getMarketProposal: vi.fn().mockResolvedValueOnce(proposal).mockResolvedValue(null), dismissMarketProposal: vi.fn().mockResolvedValue(true) }
+    const bridge = { ...createBrowserBridge(), getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: null }), managePlugins: vi.fn().mockResolvedValue(catalog), getMarketProposal: vi.fn().mockResolvedValueOnce(proposal).mockResolvedValue(null), dismissMarketProposal: vi.fn().mockResolvedValue(true) }
     render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
     expect(await screen.findByText('1.2.3')).toBeInTheDocument()
     expect(screen.getByText(/可能与商店建议版本不同/)).toBeInTheDocument()
@@ -115,7 +115,7 @@ describe('应用外层插件管理', () => {
   })
   it('运行中确认更新会自动停止，更新失败时保留请求', async () => {
     const proposal = { id: '00000000-0000-0000-0000-000000000004', packageName: 'example-plugin', createdAt: 1000, kind: 'update' as const, suggestedVersion: null }
-    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(new Error('failed')), stopRuntime: vi.fn().mockResolvedValue({ ...runtime, phase: 'ready' }), getMarketProposal: vi.fn().mockResolvedValue(proposal), dismissMarketProposal: vi.fn() }
+    const bridge = { ...createBrowserBridge(), getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: null }), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(new Error('failed')), stopRuntime: vi.fn().mockResolvedValue({ ...runtime, phase: 'ready' }), getMarketProposal: vi.fn().mockResolvedValue(proposal), dismissMarketProposal: vi.fn() }
     render(<PluginSettings bridge={bridge} runtime={{ ...runtime, phase: 'running' }} onBack={() => {}} />)
     const confirm = await screen.findByRole('button', { name: '确认更新请求' })
     await waitFor(() => expect(confirm).toBeEnabled())
@@ -126,7 +126,7 @@ describe('应用外层插件管理', () => {
   })
   it('安装失败时保留商店请求', async () => {
     const proposal = { id: '00000000-0000-0000-0000-000000000002', packageName: 'example-market-plugin', createdAt: 1000, kind: 'install' as const, suggestedVersion: null }
-    const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(new Error('failed')),
+    const bridge = { ...createBrowserBridge(), getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: null }), managePlugins: vi.fn().mockResolvedValueOnce(catalog).mockRejectedValueOnce(new Error('failed')),
       getMarketProposal: vi.fn().mockResolvedValue(proposal), dismissMarketProposal: vi.fn() }
     render(<PluginSettings bridge={bridge} runtime={runtime} onBack={() => {}} />)
     await screen.findByText('example-market-plugin')
@@ -346,7 +346,7 @@ it('搜索无结果提供清除筛选并恢复原列表', async () => {
   expect(screen.getByRole('searchbox', { name: '搜索插件' })).toHaveValue('')
 })
 it('首次读取失败不显示空列表，重试成功后解除错误', async () => {
-  const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(catalog) }
+  const bridge = { ...createBrowserBridge(), getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: null }), managePlugins: vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(catalog) }
   render(<PluginSettings bridge={bridge} runtime={runtime} onBack={vi.fn()} />)
   await screen.findByText('暂时无法读取插件列表')
   expect(screen.queryByText('暂无插件。安装运行环境后点击「刷新」。')).not.toBeInTheDocument()

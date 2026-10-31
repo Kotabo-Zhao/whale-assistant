@@ -81,7 +81,21 @@ class OverlayBallService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var ballView: View? = null
-    private var companionAnimator: android.animation.ObjectAnimator? = null
+    private var companionAnimator: android.animation.ValueAnimator? = null
+    private var petDrawable: io.deepseekharness.mobile.overlay.CompanionPetDrawable? = null
+    private var petTapAt = -1L
+    private var petChatState = "idle"
+    private var petReplyAt = 0L
+    private var petBlinkAt = -1000L
+    private val blinkOpen = Runnable { petDrawable?.blinkAmount = 0f }
+    private val blinkTick = object : Runnable {
+        override fun run() {
+            if (!ballAttached || avatarDestroyed || !android.animation.ValueAnimator.areAnimatorsEnabled()) return
+            petBlinkAt = SystemClock.uptimeMillis()
+            hintHandler.postDelayed(blinkOpen, 300)
+            hintHandler.postDelayed(this, if (petChatState == "thinking") 3300 else 4800)
+        }
+    }
     private val avatarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-avatar").apply { isDaemon = true } }
     @Volatile private var avatarDestroyed = false
     @Volatile private var avatarGeneration = 0L
@@ -91,6 +105,8 @@ class OverlayBallService : Service() {
     private val reminderHints = io.deepseekharness.mobile.companion.CompanionHintQueue<QueuedReminderHint>()
     private val hintHandler = Handler(Looper.getMainLooper())
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
+    private val bubbleChat by lazy { io.deepseekharness.mobile.companion.CompanionBubbleWindow(this, windowManager, { state -> petChatState = state; if (state == "reply") petReplyAt = SystemClock.uptimeMillis() }) { intArrayOf(layoutParams.x, layoutParams.y, layoutParams.width, layoutParams.height) } }
+    private var proactiveMemoryRunning = false
     private var calendarQueryRunning = false
     private var usageQueryRunning = false
     private var usageMemoryRunning = false
@@ -101,6 +117,7 @@ class OverlayBallService : Service() {
             checkUsageSuggestion()
             checkUsageMemory()
             checkDailyBriefHint()
+            checkProactiveMemoryChat()
             hintHandler.postDelayed(this, 5L * 60 * 1000)
         }
     }
@@ -295,6 +312,7 @@ class OverlayBallService : Service() {
         avatarExecutor.shutdownNow()
         calendarExecutor.shutdownNow()
         hintHandler.removeCallbacksAndMessages(null)
+        bubbleChat.destroy()
         removeCompanionHint()
         detachConversation()
         // 二级球必须先摘：它们的位置依赖 layoutParams，虽然在 onDestroy 里已经用不到，
@@ -419,6 +437,31 @@ class OverlayBallService : Service() {
                 runCatching { startActivity(Intent(this, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
                     .putExtra("open_calendar_brief", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }) store.dailyBriefLastDay = io.deepseekharness.mobile.companion.CompanionDailyBriefPolicy.dayKey(now)
+    }
+
+    private fun checkProactiveMemoryChat() {
+        val settings = CompanionStore(this)
+        if (proactiveMemoryRunning || !settings.proactiveMemoryChat || settings.inQuietHours() || !ballAttached || bubbleChat.visible || conversationView != null ||
+            getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false ||
+            getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return
+        val prefs = getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
+        val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date())
+        if (prefs.getString("day", null) == day) return
+        val previous = prefs.getString("last", null)
+        proactiveMemoryRunning = true
+        calendarExecutor.execute {
+            val memory = runCatching {
+                val store = io.deepseekharness.mobile.companion.CompanionMemoryStore(applicationContext)
+                if (!store.enabled) null else io.deepseekharness.mobile.companion.CompanionBubbleChatPolicy.proactiveMemory(store.listForUser(), previous)
+            }.getOrNull()
+            hintHandler.post {
+                proactiveMemoryRunning = false
+                if (calendarServiceDestroyed || memory == null || !CompanionStore(this).proactiveMemoryChat || bubbleChat.visible) return@post
+                val digest = io.deepseekharness.mobile.companion.CompanionBubbleChatPolicy.memoryDigest(memory)
+                val opening = "你之前提到：$memory。最近还想聊聊吗？"
+                if (showCompanionHint(opening) { bubbleChat.show(opening) }) prefs.edit().putString("day", day).putString("last", digest).apply()
+            }
+        }
     }
 
     private fun checkCalendarHint() {
@@ -610,9 +653,9 @@ class OverlayBallService : Service() {
         params.x = x
         params.y = y
 
-        // 单击直接在当前应用上方展开对话；长按保留副屏等快捷操作。
+        // 单击打开原生气泡对话；长按保留 Harness 和副屏等快捷操作。
         view.setOnClickListener {
-            if (!stopIfOverlayPermissionRevoked()) toggleConversation()
+            if (!stopIfOverlayPermissionRevoked()) { petTapAt = SystemClock.uptimeMillis(); detachSecondaryChoices(); bubbleChat.toggle() }
         }
         view.setOnLongClickListener {
             if (!stopIfOverlayPermissionRevoked()) toggleSecondaryChoices()
@@ -657,11 +700,30 @@ class OverlayBallService : Service() {
         }
         ballView = view
         layoutParams = params
-        companionAnimator = android.animation.ObjectAnimator.ofFloat(view, View.TRANSLATION_Y, 0f, -3f * metrics.density, 0f).apply {
-            duration = 3200
-            repeatCount = android.animation.ValueAnimator.INFINITE
-            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
-            start()
+        val avatar = view.findViewById<android.widget.ImageView>(R.id.companion_avatar)
+        if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            var thinkingBlend = 0f
+            companionAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 3600; repeatCount = android.animation.ValueAnimator.INFINITE
+                interpolator = android.view.animation.LinearInterpolator()
+                addUpdateListener {
+                    val now = SystemClock.uptimeMillis()
+                    if (petChatState == "reply" && now - petReplyAt > 1800) petChatState = "idle"
+                    val target = if (petChatState == "thinking") 1f else 0f
+                    thinkingBlend += (target - thinkingBlend) * 0.08f
+                    val reply = if (petChatState == "reply") now - petReplyAt else -1L
+                    val pose = io.deepseekharness.mobile.overlay.CompanionPetMotion.pose(now, thinkingBlend, reply)
+                    val tap = io.deepseekharness.mobile.overlay.CompanionPetMotion.tapScale(now - petTapAt)
+                    petDrawable?.blinkAmount = io.deepseekharness.mobile.overlay.CompanionPetMotion.blink(now - petBlinkAt)
+                    petDrawable?.bend = kotlin.math.sin(now * 2.0 * Math.PI / (if (petChatState == "thinking") 2300.0 else 3800.0)).toFloat()
+                    avatar.pivotY = avatar.height * 0.78f
+                    avatar.rotation = pose.rotation
+                    avatar.translationY = -metrics.density * pose.lift
+                    avatar.scaleX = pose.scaleX * tap
+                    avatar.scaleY = pose.scaleY * tap
+                }
+                start()
+            }
         }
         // 乐观置位：addView 返回时窗口已登记，首次遍历（附着回调）还没跑完，
         // 这一小段空窗期不能把刚挂上的球误判成陈旧视图。
@@ -670,24 +732,35 @@ class OverlayBallService : Service() {
         return true
     }
 
-    /** Decode only as many pixels as the square overlay can display, away from the UI thread. */
+    /** Decode both aligned expression frames at overlay resolution, off the UI thread. */
     private fun loadCompanionAvatar(view: View, size: Int) {
         val generation = ++avatarGeneration
         avatarExecutor.execute {
-            val bitmap = runCatching {
+            val pair = runCatching {
                 val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true; inScaled = false }
-                android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_companion, bounds)
+                android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_open_v2, bounds)
                 val sample = io.deepseekharness.mobile.overlay.CompanionAvatarSizing.sample(bounds.outWidth, bounds.outHeight, size)
                 val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample; inScaled = false }
-                android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_companion, options)
+                val open = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_open_v2, options) ?: error("open frame unavailable")
+                val closed = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_blink_v2, options)
+                if (closed == null || open.width != closed.width || open.height != closed.height) {
+                    open.recycle(); closed?.recycle(); error("blink frame unavailable")
+                }
+                open to closed
             }.getOrNull() ?: return@execute
-            if (avatarDestroyed) { bitmap.recycle(); return@execute }
+            if (avatarDestroyed) { pair.first.recycle(); pair.second.recycle(); return@execute }
             val posted = hintHandler.post {
                 if (!avatarDestroyed && avatarGeneration == generation && ballView === view && ballAttached) {
-                    view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageBitmap(bitmap)
-                } else bitmap.recycle()
+                    val next = io.deepseekharness.mobile.overlay.CompanionPetDrawable(pair.first, pair.second)
+                    val old = petDrawable
+                    hintHandler.removeCallbacks(blinkTick); hintHandler.removeCallbacks(blinkOpen)
+                    petDrawable = next
+                    view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
+                    old?.close()
+                    if (android.animation.ValueAnimator.areAnimatorsEnabled()) hintHandler.postDelayed(blinkTick, 2400)
+                } else { pair.first.recycle(); pair.second.recycle() }
             }
-            if (!posted) bitmap.recycle()
+            if (!posted) { pair.first.recycle(); pair.second.recycle() }
         }
     }
 
@@ -705,15 +778,20 @@ class OverlayBallService : Service() {
         preferences.writePosition(x, y)
         detachSecondaryChoices()
         removeCompanionHint()
+        bubbleChat.hide()
         loadCompanionAvatar(view, size)
         return true
     }
 
     private fun detachBall() {
         reminderHints.clear()
+        bubbleChat.hide()
         avatarGeneration++
+        hintHandler.removeCallbacks(blinkTick); hintHandler.removeCallbacks(blinkOpen)
         companionAnimator?.cancel()
         companionAnimator = null
+        ballView?.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(null)
+        petDrawable?.close(); petDrawable = null; petTapAt = -1L
         ballView?.let { view ->
             ballAttached = false
             runCatching { windowManager.removeView(view) }
@@ -760,6 +838,7 @@ class OverlayBallService : Service() {
                     layoutParams.x = x
                     layoutParams.y = y
                     runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
+                    if (bubbleChat.visible) bubbleChat.followPet()
                     // 二级球跟随主球：它们的位置全部由主球坐标推导，因此这里不需要缓存
                     // 每个按钮的旧坐标，直接按新坐标重排一次即可。
                     layoutSecondaryChoices()
@@ -799,6 +878,7 @@ class OverlayBallService : Service() {
                         layoutParams.x, metrics.widthPixels, size,
                     )
                     runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
+                    if (bubbleChat.visible) bubbleChat.followPet()
                     preferences.writePosition(layoutParams.x, layoutParams.y)
                     layoutSecondaryChoices()
                 }
@@ -829,6 +909,7 @@ class OverlayBallService : Service() {
     }
 
     private fun toggleConversation() {
+        bubbleChat.hide()
         if (conversationView != null || conversationOpening) {
             detachConversation()
         } else {
@@ -1088,6 +1169,7 @@ class OverlayBallService : Service() {
             HarnessCacheMode.NORMAL -> WebSettings.LOAD_DEFAULT
             HarnessCacheMode.BYPASS -> WebSettings.LOAD_NO_CACHE
         }
+        CookieManager.getInstance().setCookie(HarnessSessionCookie.origin(origin.port), HarnessSessionCookie.expiredBrowserSession())
         CookieManager.getInstance().setCookie(HarnessSessionCookie.origin(origin.port), cookie) { accepted ->
             if (conversationWebView !== web) return@setCookie
             // 悬浮球窗口可能早于整页 Activity 创建；Cookie 还没写好就加载入口页一定会失败。
@@ -1911,7 +1993,7 @@ class OverlayBallService : Service() {
                 activeService?.let { service ->
                     val message = io.deepseekharness.mobile.companion.CompanionHintContent.recurring(text, CompanionStore(service).recurringBubbleDetails)
                     service.showCompanionHint(message, reminder = true) {
-                        if (service.conversationView == null && !service.conversationOpening) service.toggleConversation()
+                        if (service.conversationView == null && !service.conversationOpening) service.bubbleChat.show(message)
                     }
                 }
             }

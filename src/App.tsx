@@ -5353,7 +5353,7 @@ export function App() {
       case 'terminal':
         return <TerminalScreen bridge={runtimeBridge} fontSize={settings?.terminalFontSize ?? 14} onAuthorize={requestShizukuPermission} onBack={() => backToView('settings')} onConnect={connectShizuku} onError={terminalError} onOpenEnvironment={() => setActiveView('environment')} onOpenShizuku={openShizuku} runtime={runtime} shizuku={shizuku} />
       case 'plugins':
-        return <PluginSettings bridge={runtimeBridge} runtime={runtime} onBack={() => backToView('settings')} />
+        return <PluginSettings bridge={runtimeBridge} runtime={runtime} onBack={() => backToView('settings')} onStopRequested={() => { stopRequested.current = true }} />
       case 'environment':
         return <EnvironmentScreen busy={busy} bundledSource={settings === null || settings.manifestUrl.trim() === ''} runtime={runtime} onBack={() => backToView('settings')} onInstall={installRuntime} onReset={() => setResetOpen(true)} onStart={() => launchHarness()} onStop={stopRuntime} onUpdate={requestRuntimeUpdate} />
       case 'versions':

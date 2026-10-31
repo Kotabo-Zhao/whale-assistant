@@ -293,6 +293,7 @@ class HarnessActivity : AppCompatActivity() {
             setAcceptThirdPartyCookies(webView, false)
         }
         // 每轮绑定单独持有 gate；上一轮迟到的 Cookie 回调不能触发新一轮导航。
+        cookies.setCookie(HarnessSessionCookie.origin(origin.port), HarnessSessionCookie.expiredBrowserSession())
         cookies.setCookie(HarnessSessionCookie.origin(origin.port), cookie) { accepted ->
             pageRetryHandler.post {
                 if (isFinishing || isDestroyed || pageLoadGate !== gate ||

@@ -6,7 +6,25 @@ import org.json.JSONObject
 
 /** 本地有界记录；不通过 Harness 或网络发送。 */
 class CompanionStore(context: Context) {
+    private val app = context.applicationContext
     private val prefs = context.applicationContext.getSharedPreferences("companion_private_v1", Context.MODE_PRIVATE)
+
+    var bubbleMemoryAccess: Boolean
+        get() = prefs.getBoolean("bubble_memory_access", false)
+        set(value) { prefs.edit().putBoolean("bubble_memory_access", value).apply() }
+    var proactiveMemoryChat: Boolean
+        get() = prefs.getBoolean("proactive_memory_chat", false)
+        set(value) { prefs.edit().putBoolean("proactive_memory_chat", value).apply() }
+    var backgroundUnderstanding: Boolean
+        get() = prefs.getBoolean("background_understanding", false)
+        set(value) {
+            if (value) check(BackgroundUnderstanding.stop(app)) { "无法核对旧任务，后台理解未启用" }
+            check(prefs.edit().putBoolean("background_understanding", value).commit())
+            if (!value) BackgroundUnderstanding.stop(app)
+        }
+    var backgroundAutoMemory: Boolean
+        get() = prefs.getBoolean("background_auto_memory", false)
+        set(value) { prefs.edit().putBoolean("background_auto_memory", value).apply() }
 
     var notificationBubbles: Boolean
         get() = prefs.getBoolean("notification_bubbles", true)
@@ -40,7 +58,11 @@ class CompanionStore(context: Context) {
     fun clearDismissedMemorySuggestions() { prefs.edit().remove("dismissed_memory_suggestions").apply() }
     var notificationCapture: Boolean
         get() = prefs.getBoolean("capture", false)
-        set(value) { prefs.edit().putBoolean("capture", value).apply() }
+        set(value) {
+            if (value && !notificationCapture && backgroundUnderstanding) check(BackgroundUnderstanding.stop(app)) { "无法核对旧任务，通知采集未启用" }
+            check(prefs.edit().putBoolean("capture", value).commit())
+            if (!value) BackgroundUnderstanding.stop(app)
+        }
     /** Separate from collection: allowing model access can send notification text externally. */
     var notificationModelAccess: Boolean
         get() = prefs.getBoolean("notification_model_access", false)
@@ -100,7 +122,10 @@ class CompanionStore(context: Context) {
     }
 
     fun excludedPackages(): Set<String> = prefs.getStringSet("excluded_packages", emptySet())?.toSet() ?: emptySet()
-    fun setExcludedPackages(packages: Set<String>) { prefs.edit().putStringSet("excluded_packages", packages.toSet()).apply() }
+    fun setExcludedPackages(packages: Set<String>) {
+        check(BackgroundUnderstanding.revokeExcluded(app, excludedPackages() + packages)) { "无法更新来源任务状态" }
+        check(prefs.edit().putStringSet("excluded_packages", packages.toSet()).commit())
+    }
 
     fun record(packageName: String, title: String, text: String, now: Long = System.currentTimeMillis(), notificationKey: String? = null): Boolean = synchronized(lock) {
         if (!notificationCapture || packageName in excludedPackages() || sensitive("$title $text")) return@synchronized false

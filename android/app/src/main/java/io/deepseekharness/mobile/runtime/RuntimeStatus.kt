@@ -85,7 +85,14 @@ class RuntimeStatus(private val store: RuntimeStore) {
         harnessUrl = null
         errorCode = null
         recordIntent(phase, forceStop = true)
-        return snapshot()
+        // Callers such as plugin management stop the runtime without owning the
+        // main screen's state. Publish READY so it does not remain at STOPPING.
+        return snapshot().also { current ->
+            lastNotifiedPhase = phase
+            lastNotifiedBytes = downloadedBytes
+            lastNotificationNanos = System.nanoTime()
+            progressListener?.invoke(current)
+        }
     }
 
     @Synchronized

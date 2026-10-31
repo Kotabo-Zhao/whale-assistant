@@ -131,6 +131,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         clearAuthCache()
         container?.visibility = View.VISIBLE
         val cookies = CookieManager.getInstance().apply { setAcceptCookie(true); setAcceptThirdPartyCookies(view, false) }
+        cookies.setCookie(HarnessSessionCookie.origin(targetOrigin.port), HarnessSessionCookie.expiredBrowserSession())
         cookies.setCookie(HarnessSessionCookie.origin(targetOrigin.port), cookie) { accepted ->
             handler.post {
                 if (!current(nextGate)) return@post

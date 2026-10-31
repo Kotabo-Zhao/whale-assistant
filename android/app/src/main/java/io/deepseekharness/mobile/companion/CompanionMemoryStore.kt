@@ -20,20 +20,58 @@ class CompanionMemoryStore(context: Context) {
 
     fun execute(param: String): String = synchronized(lock) {
         if (!enabled) throw RuntimeFailure("MEMORY_DISABLED", "用户已关闭长期记忆")
-        CompanionMemoryEngine(::load, ::write, prefs.getBoolean("automatic_assistant_memory", false)).execute(param)
+        val request = runCatching { JSONObject(param) }.getOrNull()
+        if (usesDatabase() && request?.optString("op") == "search") {
+            val query = (request.opt("query") as? String)?.trim() ?: throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数无效")
+            val raw = if (request.has("offset")) request.opt("offset") else 0
+            if (query.length > 100 || (raw !is Int && raw !is Long)) throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数无效")
+            val offset = (raw as Number).toLong()
+            if (offset !in 0L..Int.MAX_VALUE.toLong()) throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数无效")
+            val path = UnifiedUnderstandingStore.path(app)
+            if (!path.isFile) throw RuntimeFailure("MEMORY_READ_FAILED", "记忆数据库不可用")
+            return@synchronized MemoryMigrationDatabase(path).use { it.search(query, offset.toInt()).toString() }
+        }
+        CompanionMemoryEngine(::load, ::write, prefs.getBoolean("automatic_assistant_memory", false), !usesDatabase(), ::isSuppressed, ::rememberDeleted).execute(param)
     }
 
     /** UI management remains available even when model access is disabled. */
     fun listForUser(): JSONArray = synchronized(lock) { load() }
+    internal fun pageForUser(before: Long?, expectedRevision: Long?): MemoryMigrationDatabase.Page = synchronized(lock) {
+        check(usesDatabase()) { "分页仅支持数据库存储" }
+        val path = UnifiedUnderstandingStore.path(app)
+        check(path.isFile) { "memory database missing" }
+        MemoryMigrationDatabase(path).use { db -> db.pageNewest(before, 50, expectedRevision).also { CompanionMemoryFormat.validateRows(it.rows, legacyLimit = false) } }
+    }
     fun exportForUser(): ByteArray = synchronized(lock) { CompanionMemoryExport.encode(load()) }
+    internal fun exportBackup(): ByteArray = synchronized(lock) {
+        val bytes = CompanionMemoryBackup.encode(load(), prefs.getBoolean("automatic_memory_suppressed_all", false),
+            prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty(), prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty(),
+            prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty(), prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty())
+        require(bytes.size <= CompanionMemoryImport.MAX_BYTES) { "备份超过单次导出大小限制" }
+        bytes
+    }
     internal fun previewImport(bytes: ByteArray): MemoryImportPlan = synchronized(lock) {
-        CompanionMemoryImport.plan(bytes, load())
+        CompanionMemoryImport.plan(bytes, load(), !usesDatabase(), prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty(), prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty(), prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty())
     }
     internal fun applyImport(plan: MemoryImportPlan): Int = synchronized(lock) {
         val current = load()
         require(current.toString() == plan.original) { "记忆已发生变化，请重新选择文件并核对" }
         val combined = JSONArray(plan.original)
         val additions = JSONArray(plan.additions)
+        val hashes = prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty() + plan.deletedHashes
+        val deletedEvents = prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty() + plan.deletedEvents
+        val signatures = prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty() + plan.deletedSignatures
+        val sources = prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty() + plan.suppressedSources
+        for (index in 0 until additions.length()) check(CompanionMemorySuppression.digest(additions.getJSONObject(index).getString("text")) !in hashes) { "删除记录已变化，请重新核对" }
+        for (index in 0 until additions.length()) {
+            val evidence = additions.getJSONObject(index).optString("evidenceEventId")
+            check(evidence.isEmpty() || CompanionMemorySuppression.digest("event:$evidence") !in deletedEvents) { "来源删除记录已变化，请重新核对" }
+            check(!CompanionMemorySuppression.matches(additions.getJSONObject(index).getString("text"), signatures)) { "删除记录已变化，请重新核对" }
+        }
+        check(prefs.edit().putStringSet("memory_deleted_hashes", hashes).putStringSet("automatic_memory_suppressed_sources", sources)
+            .putStringSet("memory_deleted_events", deletedEvents)
+            .putStringSet("memory_deleted_signatures", signatures)
+            .putBoolean("automatic_memory_suppressed_all", prefs.getBoolean("automatic_memory_suppressed_all", false) || plan.suppressedAll).commit()) { "无法保存删除抑制" }
         for (index in 0 until additions.length()) combined.put(additions.getJSONObject(index))
         if (additions.length() > 0) write(combined)
         additions.length()
@@ -52,12 +90,22 @@ class CompanionMemoryStore(context: Context) {
         write(rows)
         true
     }
+    internal fun confirmAutomaticUnderstanding(id: String, expected: String): Boolean = synchronized(lock) {
+        val rows = load()
+        val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id } ?: return@synchronized false
+        val source = row.optString("source")
+        if (source !in setOf("auto_understanding", "shared_understanding") || row.toString() != expected) return@synchronized false
+        if (source == "auto_understanding") row.put("source", "user_understanding")
+        row.put("confirmedAt", System.currentTimeMillis())
+        write(rows)
+        true
+    }
     /** Merge only the automatic record for this source; preserve all user and assistant records. */
     internal fun updateNotificationSummary(packageName: String, title: String, text: String, now: Long): Boolean = synchronized(lock) {
         val rows = load()
         if (prefs.getBoolean("automatic_memory_suppressed_all", false) ||
             prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().contains("notification:$packageName")) return@synchronized false
-        val changed = CompanionNotificationMemory.upsert(rows, packageName, title, text, now)
+        val changed = CompanionNotificationMemory.upsert(rows, packageName, title, text, now, !usesDatabase())
         if (changed) write(rows)
         changed
     }
@@ -66,7 +114,7 @@ class CompanionMemoryStore(context: Context) {
         val rows = load()
         if (prefs.getBoolean("automatic_memory_suppressed_all", false) ||
             prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().contains("usage")) return@synchronized false
-        val changed = CompanionUsageMemory.upsert(rows, text, now)
+        val changed = CompanionUsageMemory.upsert(rows, text, now, !usesDatabase())
         if (changed) write(rows)
         changed
     }
@@ -74,6 +122,7 @@ class CompanionMemoryStore(context: Context) {
         val rows = load()
         val kept = CompanionUserMemory.delete(rows, id, expected) ?: return@synchronized false
         val removed = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
+        if (removed != null) rememberDeleted(removed)
         val key = removed?.let { CompanionAutomaticMemoryDeletion.sourceKey(it) }
         if (key != null) {
             val blocked = prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().toMutableSet()
@@ -84,11 +133,44 @@ class CompanionMemoryStore(context: Context) {
         true
     }
     fun clearForUser() = synchronized(lock) {
+        val rows = load()
+        val blocked = prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty().toMutableSet()
+        val blockedEvents = prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty().toMutableSet()
+        val signatures = prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty().toMutableSet()
+        for (i in 0 until rows.length()) {
+            val row = rows.getJSONObject(i)
+            blocked.add(CompanionMemorySuppression.digest(row.getString("text")))
+            CompanionMemorySuppression.encodeSignature(row.getString("text"))?.let(signatures::add)
+            row.optString("evidenceEventId").takeIf(String::isNotBlank)?.let { blockedEvents.add(CompanionMemorySuppression.digest("event:$it")) }
+        }
+        check(prefs.edit().putStringSet("memory_deleted_hashes", blocked).putStringSet("memory_deleted_events", blockedEvents).putStringSet("memory_deleted_signatures", signatures).commit()) { "无法保存删除记录" }
         check(prefs.edit().putBoolean("automatic_memory_suppressed_all", true).commit()) { "无法保存自动整理暂停状态" }
         write(JSONArray())
     }
     fun resumeAutomaticSources() = synchronized(lock) {
         check(prefs.edit().remove("automatic_memory_suppressed_all").remove("automatic_memory_suppressed_sources").commit()) { "无法恢复自动整理" }
+    }
+    private fun isSuppressed(text: String): Boolean = prefs.getBoolean("automatic_memory_suppressed_all", false) ||
+        prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty().contains(CompanionMemorySuppression.digest(text)) ||
+        CompanionMemorySuppression.matches(text, prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty())
+    private fun rememberDeleted(row: JSONObject) {
+        val blocked = prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty().toMutableSet()
+        blocked.add(CompanionMemorySuppression.digest(row.getString("text")))
+        val events = prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty().toMutableSet()
+        val signatures = prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty().toMutableSet()
+        CompanionMemorySuppression.encodeSignature(row.getString("text"))?.let(signatures::add)
+        row.optString("evidenceEventId").takeIf(String::isNotBlank)?.let { events.add(CompanionMemorySuppression.digest("event:$it")) }
+        check(prefs.edit().putStringSet("memory_deleted_hashes", blocked).putStringSet("memory_deleted_events", events).putStringSet("memory_deleted_signatures", signatures).commit()) { "无法保存删除记录" }
+    }
+    private fun allowExplicit(text: String, eventId: String? = null) {
+        val blocked = prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty().toMutableSet()
+        val events = prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty().toMutableSet()
+        val signatures = prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty().toMutableSet()
+        val changed = blocked.remove(CompanionMemorySuppression.digest(text))
+        val eventChanged = eventId != null && events.remove(CompanionMemorySuppression.digest("event:$eventId"))
+        val similar = signatures.filter { CompanionMemorySuppression.matches(text, setOf(it)) }
+        signatures.removeAll(similar.toSet())
+        if (changed || eventChanged || similar.isNotEmpty()) check(prefs.edit().putStringSet("memory_deleted_hashes", blocked).putStringSet("memory_deleted_events", events).putStringSet("memory_deleted_signatures", signatures).commit()) { "无法更新删除记录" }
     }
     /** Explicit user-authored memory; does not ingest notification text automatically. */
     internal fun reviewForUser(text: String, excludeId: String? = null): MemorySimilarityReview = synchronized(lock) {
@@ -97,19 +179,107 @@ class CompanionMemoryStore(context: Context) {
     internal fun addForUser(text: String, source: String, expected: String? = null): UserMemoryResult = synchronized(lock) {
         val rows = load()
         if (expected != null && !CompanionMemorySimilarity.isCurrent(rows, expected)) return@synchronized UserMemoryResult.STALE
-        val result = CompanionUserMemory.add(rows, text, source, System.currentTimeMillis())
-        if (result == UserMemoryResult.ADDED) write(rows)
+        val result = CompanionUserMemory.add(rows, text, source, System.currentTimeMillis(), !usesDatabase())
+        if (result == UserMemoryResult.ADDED) { write(rows); allowExplicit(text) }
+        result
+    }
+    internal fun addUnderstandingForUser(text: String, source: String, eventId: String): UserMemoryResult = synchronized(lock) {
+        require(source.startsWith("notification:") && CompanionSourcePolicy.validPackage(source.removePrefix("notification:")))
+        require(eventId.matches(Regex("[a-zA-Z0-9._:-]{1,200}")))
+        val rows = load()
+        val result = CompanionUserMemory.add(rows, text, "user_edit", System.currentTimeMillis(), !usesDatabase())
+        if (result == UserMemoryResult.ADDED) {
+            rows.getJSONObject(rows.length() - 1).put("source", "user_understanding").put("evidenceSource", source).put("evidenceEventId", eventId)
+            write(rows)
+            allowExplicit(text, eventId)
+        }
         result
     }
     fun updateForUser(id: String, expected: String, text: String, reviewedSnapshot: String? = null): Boolean = synchronized(lock) {
         val rows = load()
         if (reviewedSnapshot != null && !CompanionMemorySimilarity.isCurrent(rows, reviewedSnapshot)) return@synchronized false
+        val previous = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
+        val oldAutomatic = previous?.takeIf { it.optString("source") in setOf("auto_understanding", "shared_understanding") && it.toString() == expected && it.optString("text") != text.trim() }?.let { JSONObject(it.toString()) }
         if (!CompanionUserMemory.update(rows, id, expected, text, System.currentTimeMillis())) return@synchronized false
+        if (oldAutomatic != null) rememberDeleted(oldAutomatic)
         write(rows)
+        allowExplicit(text)
         true
+    }
+    internal fun commitUnderstanding(queue: UnderstandingQueue, claim: UnderstandingQueue.Claim, eventId: String, result: String): Boolean = synchronized(lock) {
+        val settings = CompanionStore(app)
+        val auto = usesDatabase() && enabled && settings.backgroundUnderstanding && settings.backgroundAutoMemory &&
+            !prefs.getBoolean("automatic_memory_suppressed_all", false) &&
+            CompanionMemorySuppression.digest("event:$eventId") !in prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty() &&
+            claim.source !in prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty()
+        val hashes = prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty().toMutableSet()
+        val signatures = prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty()
+        if (auto && signatures.isNotEmpty()) {
+            val claims = JSONObject(result).getJSONArray("claims")
+            for (i in 0 until claims.length()) {
+                val text = claims.getJSONObject(i).getString("text")
+                if (CompanionMemorySuppression.matches(text, signatures)) hashes.add(CompanionMemorySuppression.digest(text))
+            }
+        }
+        queue.commitResult(claim, eventId, result, auto, hashes)
+    }
+
+    /** Explicitly shared material may yield unverified facts, subject to deletion tombstones. */
+    internal fun saveSharedFacts(eventId: String, claims: JSONArray): Int = synchronized(lock) {
+        require(eventId.matches(Regex("share:[a-f0-9]{64}")))
+        if (!enabled || CompanionMemorySuppression.digest("event:$eventId") in prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty()) return@synchronized 0
+        val rows = load()
+        val added = CompanionSharedMemory.add(rows, eventId, claims, System.currentTimeMillis(), !usesDatabase(), ::isSuppressed)
+        if (added > 0) write(rows)
+        added
+    }
+
+    internal fun usesDatabase(): Boolean = synchronized(lock) { prefs.getBoolean("memory_sqlite_active", false) }
+
+    /** Switch only after the complete legacy snapshot has been verified in SQLite. */
+    internal fun migrateToDatabase(): Int = synchronized(lock) {
+        if (usesDatabase()) return@synchronized load().length()
+        val legacy = loadLegacy()
+        val snapshot = CompanionMemoryExport.encode(legacy)
+        UnifiedUnderstandingStore.open(app).use { store ->
+            if (store.memories.isImported()) store.memories.replaceAll(legacy) else store.stageLegacy(snapshot)
+            check(store.memories.readAll().toString() == legacy.toString()) { "迁移核对失败" }
+            check(CompanionMemoryFormat.parse(store.exportLegacyRollback()).toString() == legacy.toString()) { "回退格式核对失败" }
+        }
+        if (!prefs.edit().putBoolean("memory_sqlite_active", true).commit()) {
+            prefs.edit().putBoolean("memory_sqlite_active", false).commit()
+            error("无法保存迁移状态")
+        }
+        legacy.length()
+    }
+
+    /** Write and verify the current state before selecting the legacy reader again. */
+    internal fun rollbackToLegacy(): Int = synchronized(lock) {
+        if (!usesDatabase()) return@synchronized loadLegacy().length()
+        val current = load()
+        writeLegacy(current)
+        check(loadLegacy().toString() == current.toString()) { "回退核对失败" }
+        if (!prefs.edit().putBoolean("memory_sqlite_active", false).commit()) {
+            prefs.edit().putBoolean("memory_sqlite_active", true).commit()
+            error("无法保存回退状态")
+        }
+        current.length()
     }
 
     private fun load(): JSONArray {
+        if (!usesDatabase()) return loadLegacy()
+        try {
+            val path = UnifiedUnderstandingStore.path(app)
+            check(path.isFile) { "memory database missing" }
+            return MemoryMigrationDatabase(path).use { db ->
+                check(db.isImported()) { "memory database not initialized" }
+                val rows = db.readAll()
+                CompanionMemoryFormat.validateRows(rows, legacyLimit = false)
+            }
+        } catch (e: Exception) { throw RuntimeFailure("MEMORY_READ_FAILED", "无法读取记忆数据库，未切换到旧数据", e) }
+    }
+
+    private fun loadLegacy(): JSONArray {
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return JSONArray()
         try {
             return CompanionMemoryFormat.parse(file.readFully())
@@ -119,6 +289,15 @@ class CompanionMemoryStore(context: Context) {
     }
 
     private fun write(rows: JSONArray) {
+        if (!usesDatabase()) { writeLegacy(rows); return }
+        try {
+            val path = UnifiedUnderstandingStore.path(app)
+            check(path.isFile) { "memory database missing" }
+            MemoryMigrationDatabase(path).use { it.applyIncremental(rows) }
+        } catch (e: Exception) { throw RuntimeFailure("MEMORY_WRITE_FAILED", "记忆保存失败，原数据已保留", e) }
+    }
+
+    private fun writeLegacy(rows: JSONArray) {
         var stream: java.io.FileOutputStream? = null
         try {
             val bytes = CompanionKnowledgeData.utf8(JSONObject().put("version", 1).put("items", rows).toString())
@@ -143,7 +322,10 @@ internal object CompanionMemoryFormat {
         val version = root.opt("version")
         require((version is Int || version is Long) && (version as Number).toLong() == 1L) { "unknown memory version" }
         val rows = root.getJSONArray("items")
-        require(rows.length() <= 100) { "too many memories" }
+        return validateRows(rows, legacyLimit = true)
+    }
+    fun validateRows(rows: JSONArray, legacyLimit: Boolean): JSONArray {
+        if (legacyLimit) require(rows.length() <= 100) { "too many memories" }
         val ids = mutableSetOf<String>()
         for (index in 0 until rows.length()) {
             val row = rows.getJSONObject(index)
@@ -188,6 +370,7 @@ internal object CompanionUserMemory {
         require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value) && now > 0) { "内容为空、过长或可能含敏感信息" }
         require((0 until rows.length()).none { it != index && rows.getJSONObject(it).getString("text") == value }) { "已有相同记忆" }
         row.put("text", value).put("source", "user_edit").put("updatedAt", now)
+        row.remove("evidenceSource"); row.remove("evidenceEventId")
         return true
     }
     fun delete(rows: JSONArray, id: String, expected: String): JSONArray? {
@@ -197,13 +380,13 @@ internal object CompanionUserMemory {
         for (i in 0 until rows.length()) if (rows.getJSONObject(i).getString("id") != id) kept.put(rows.getJSONObject(i))
         return kept
     }
-    fun add(rows: JSONArray, text: String, source: String, now: Long): UserMemoryResult {
+    fun add(rows: JSONArray, text: String, source: String, now: Long, legacyLimit: Boolean = true): UserMemoryResult {
         val value = text.trim()
         require(source in setOf("user_edit", "user_notification", "auto_notification", "auto_usage", "auto_notification_group")) { "记忆来源无效" }
         require(value.isNotEmpty() && value.length <= 600 && !CompanionStore.sensitive(value)) { "内容为空、过长或可能含敏感信息" }
         val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("text") == value }
         if (existing != null) return if (existing.optString("status") == "pending") UserMemoryResult.EXISTING_PENDING else UserMemoryResult.EXISTING_CONFIRMED
-        require(rows.length() < 100) { "记忆已满，请先删除不需要的条目" }
+        if (legacyLimit) require(rows.length() < 100) { "记忆已满，请先删除不需要的条目" }
         rows.put(JSONObject().put("id", UUID.randomUUID().toString()).put("text", value)
             .put("source", source).put("status", "confirmed").put("createdAt", now).put("confirmedAt", now))
         return UserMemoryResult.ADDED
@@ -211,7 +394,7 @@ internal object CompanionUserMemory {
 }
 
 /** Pure operation layer; store serializes access and provides atomic persistence. */
-internal class CompanionMemoryEngine(private val load: () -> JSONArray, private val write: (JSONArray) -> Unit, private val automaticAssistantMemory: Boolean = false) {
+internal class CompanionMemoryEngine(private val load: () -> JSONArray, private val write: (JSONArray) -> Unit, private val automaticAssistantMemory: Boolean = false, private val legacyLimit: Boolean = true, private val suppressed: (String) -> Boolean = { false }, private val onDelete: (JSONObject) -> Unit = {}) {
     fun execute(param: String): String {
         val request = try { JSONObject(param) } catch (_: Exception) { throw invalid() }
         val op = request.opt("op") as? String ?: throw invalid()
@@ -219,11 +402,12 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
             "save" -> {
                 val text = (request.opt("text") as? String)?.trim() ?: throw invalid()
                 if (text.isBlank() || text.length > 600 || CompanionStore.sensitive(text)) throw invalid()
+                if (suppressed(text)) throw RuntimeFailure("MEMORY_SUPPRESSED", "该记忆已被删除或暂停自动整理")
                 val rows = load()
                 val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("text") == text }
                 if (existing != null) return JSONObject().put("id", existing.getString("id")).put("alreadyExists", true)
                     .put("pending", existing.optString("status") == "pending").toString()
-                if (rows.length() >= 100) throw RuntimeFailure("MEMORY_FULL", "记忆已满，请先删除不需要的条目")
+                if (legacyLimit && rows.length() >= 100) throw RuntimeFailure("MEMORY_FULL", "记忆已满，请先删除不需要的条目")
                 val row = JSONObject().put("id", UUID.randomUUID().toString()).put("text", text)
                     .put("createdAt", System.currentTimeMillis()).put("source", "assistant_tool").put("status", if (automaticAssistantMemory) "confirmed" else "pending")
                 rows.put(row); write(rows)
@@ -235,13 +419,13 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                 val rawOffset = if (request.has("offset")) request.opt("offset") else 0
                 if (rawOffset !is Int && rawOffset !is Long) throw invalid()
                 val offset = (rawOffset as Number).toLong()
-                if (offset !in 0L..100L) throw invalid()
+                if (offset !in 0L..Int.MAX_VALUE.toLong() || (legacyLimit && offset > 100)) throw invalid()
                 val rows = load()
                 val confirmed = (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.optString("status") != "pending" }
                 val result = CompanionMemorySearch.find(confirmed, query, offset.toInt())
                 val items = JSONArray()
                 result.items.forEach { row -> items.put(CompanionMemorySearch.publicItem(row)) }
-                val next = offset.toInt() + result.items.size
+                val next = offset + result.items.size
                 JSONObject().put("items", items).put("total", confirmed.size).put("matchedCount", result.matchedCount)
                     .put("offset", offset).put("nextOffset", if (next < result.matchedCount) next else JSONObject.NULL)
                     .put("truncated", next < result.matchedCount).put("matchMode", result.mode)
@@ -253,7 +437,7 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                 val rows = load(); val kept = JSONArray(); var removed = false
                 for (index in 0 until rows.length()) {
                     val row = rows.getJSONObject(index)
-                    if (row.getString("id") == id) removed = true else kept.put(row)
+                    if (row.getString("id") == id) { onDelete(row); removed = true } else kept.put(row)
                 }
                 if (removed) write(kept)
                 JSONObject().put("removed", removed).toString()
@@ -270,10 +454,10 @@ internal object CompanionMemorySearch {
     data class Result(val items: List<JSONObject>, val mode: String, val matchedCount: Int)
     /** Only intentionally supported fields leave the local store. */
     fun publicItem(row: JSONObject): JSONObject {
-        val knownSources = setOf("assistant_tool", "user_edit", "user_notification", "auto_notification", "auto_usage", "auto_notification_group")
+        val knownSources = setOf("assistant_tool", "user_edit", "user_notification", "user_understanding", "auto_understanding", "shared_understanding", "auto_notification", "auto_usage", "auto_notification_group")
         val source = (row.opt("source") as? String)?.takeIf { it in knownSources } ?: "unknown"
         val result = JSONObject().put("id", row.getString("id")).put("text", row.getString("text"))
-            .put("source", source).put("status", "confirmed")
+            .put("source", source).put("status", if (source == "auto_understanding" || (source == "shared_understanding" && row.optLong("confirmedAt") <= 0)) "unverified" else "confirmed")
         for (key in listOf("createdAt", "updatedAt", "confirmedAt")) {
             val value = row.opt(key)
             if (value is Number && value.toLong() > 0) result.put(key, value.toLong())
@@ -315,7 +499,7 @@ internal object CompanionMemorySearch {
         return best
     }
     fun find(rows: List<JSONObject>, query: String, offset: Int = 0): Result {
-        require(offset in 0..100)
+        require(offset >= 0)
         val newestFirst = rows.asReversed()
         if (query.isEmpty()) return Result(newestFirst.drop(offset).take(10), "recent", newestFirst.size)
         val exact = newestFirst.filter { it.getString("text").contains(query, ignoreCase = true) }
@@ -345,18 +529,46 @@ internal object CompanionMemoryExport {
     }
 }
 
-internal data class MemoryImportPlan(val original: String, val additions: String, val skipped: Int)
+internal data class MemoryImportPlan(val original: String, val additions: String, val skipped: Int, val deletedHashes: Set<String> = emptySet(), val suppressedSources: Set<String> = emptySet(), val suppressedAll: Boolean = false, val deletedEvents: Set<String> = emptySet(), val deletedSignatures: Set<String> = emptySet())
+
+internal object CompanionMemoryBackup {
+    fun encode(items: JSONArray, all: Boolean, sources: Set<String>, hashes: Set<String>, events: Set<String> = emptySet(), signatures: Set<String> = emptySet()): ByteArray = CompanionKnowledgeData.utf8(
+        JSONObject().put("version", 2).put("items", items).put("suppressedAll", all)
+            .put("suppressedSources", JSONArray(sources.sorted())).put("deletedHashes", JSONArray(hashes.sorted())).put("deletedEvents", JSONArray(events.sorted())).put("deletedSignatures", JSONArray(signatures.sorted().map { JSONArray(it) })).toString(2)
+    )
+}
 
 /** Strict, bounded import; existing identifiers and text win, with no implicit replacement. */
 internal object CompanionMemoryImport {
-    const val MAX_BYTES = 256_000
-    fun plan(bytes: ByteArray, current: JSONArray): MemoryImportPlan {
+    const val MAX_BYTES = 8_000_000
+    fun plan(bytes: ByteArray, current: JSONArray, legacyLimit: Boolean = true, existingDeletedHashes: Set<String> = emptySet(), existingDeletedEvents: Set<String> = emptySet(), existingDeletedSignatures: Set<String> = emptySet()): MemoryImportPlan {
         require(bytes.size <= MAX_BYTES) { "文件超过大小上限" }
         val decoded = Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString()
         val root = JSONObject(decoded)
-        require(root.getInt("version") == 1) { "不支持的记忆文件版本" }
+        val version = root.getInt("version")
+        require(version == 1 || version == 2) { "不支持的记忆文件版本" }
+        val hashes = mutableSetOf<String>()
+        val events = mutableSetOf<String>()
+        val signatures = mutableSetOf<String>()
+        val sources = mutableSetOf<String>()
+        val suppressAll: Boolean
+        if (version == 2) {
+            require(root.opt("suppressedAll") is Boolean) { "删除记录无效" }
+            suppressAll = root.getBoolean("suppressedAll")
+            val deleted = root.getJSONArray("deletedHashes")
+            val blocked = root.getJSONArray("suppressedSources")
+            for (i in 0 until deleted.length()) { val hash = deleted.getString(i); require(hash.matches(Regex("[a-f0-9]{64}"))); hashes.add(hash) }
+            val removedEvents = if (root.has("deletedEvents")) root.getJSONArray("deletedEvents") else JSONArray()
+            for (i in 0 until removedEvents.length()) { val hash = removedEvents.getString(i); require(hash.matches(Regex("[a-f0-9]{64}"))); events.add(hash) }
+            val removedSignatures = if (root.has("deletedSignatures")) root.getJSONArray("deletedSignatures") else JSONArray()
+            for (i in 0 until removedSignatures.length()) {
+                val parsed = CompanionMemorySuppression.parseSignature(removedSignatures.getJSONArray(i).toString())
+                signatures.add(JSONArray(parsed.sorted()).toString())
+            }
+            for (i in 0 until blocked.length()) { val source = blocked.getString(i); require(source == "usage" || (source.startsWith("notification:") && CompanionSourcePolicy.validPackage(source.removePrefix("notification:")))); sources.add(source) }
+        } else suppressAll = false
         val incoming = root.getJSONArray("items")
-        require(incoming.length() <= 100 && current.length() <= 100) { "记忆条目过多" }
+        if (legacyLimit) require(incoming.length() <= 100 && current.length() <= 100) { "记忆条目过多" }
         val ids = mutableSetOf<String>()
         val texts = mutableSetOf<String>()
         for (index in 0 until current.length()) {
@@ -365,13 +577,17 @@ internal object CompanionMemoryImport {
         }
         val additions = JSONArray()
         var skipped = 0
+        val forbidden = existingDeletedHashes + hashes
+        val forbiddenEvents = existingDeletedEvents + events
+        val forbiddenSignatures = existingDeletedSignatures + signatures
         for (index in 0 until incoming.length()) {
             val row = incoming.getJSONObject(index)
             val id = row.opt("id") as? String ?: error("记忆 ID 无效")
             val text = row.opt("text") as? String ?: error("记忆内容无效")
             require(id.matches(Regex("[a-f0-9-]{36}")) && text.isNotBlank() && text.length <= 600 && !CompanionStore.sensitive(text)) { "记忆内容无效或可能含敏感信息" }
             CompanionKnowledgeData.utf8(text)
-            if (id in ids || text in texts) { skipped++; continue }
+            val eventId = row.optString("evidenceEventId")
+            if (id in ids || text in texts || CompanionMemorySuppression.digest(text) in forbidden || (eventId.isNotEmpty() && CompanionMemorySuppression.digest("event:$eventId") in forbiddenEvents) || CompanionMemorySuppression.matches(text, forbiddenSignatures)) { skipped++; continue }
             ids.add(id); texts.add(text)
             // Preserve only known bounded metadata; unknown fields are not imported.
             val copy = JSONObject().put("id", id).put("text", text)
@@ -379,7 +595,18 @@ internal object CompanionMemoryImport {
             require(status in setOf("confirmed", "pending")) { "记忆状态无效" }
             if (status == "pending") copy.put("status", "pending")
             val source = row.optString("source", "")
-            if (source in setOf("assistant_tool", "user_edit", "user_notification", "auto_notification", "auto_usage", "auto_notification_group")) copy.put("source", source)
+            if (source in setOf("assistant_tool", "user_edit", "user_notification", "user_understanding", "auto_understanding", "shared_understanding", "auto_notification", "auto_usage", "auto_notification_group")) copy.put("source", source)
+            if (source == "shared_understanding") {
+                val eventId = row.optString("evidenceEventId")
+                require(eventId.matches(Regex("share:[a-f0-9]{64}"))) { "分享记忆依据无效" }
+                copy.put("evidenceEventId", eventId)
+            }
+            if (source == "user_understanding" || source == "auto_understanding") {
+                val evidenceSource = row.opt("evidenceSource") as? String ?: error("记忆来源缺失")
+                val eventId = row.opt("evidenceEventId") as? String ?: error("记忆依据缺失")
+                require(evidenceSource.startsWith("notification:") && CompanionSourcePolicy.validPackage(evidenceSource.removePrefix("notification:")) && eventId.matches(Regex("[a-zA-Z0-9._:-]{1,200}"))) { "记忆依据无效" }
+                copy.put("evidenceSource", evidenceSource).put("evidenceEventId", eventId)
+            }
             if (source == "auto_notification_group") {
                 val packageName = row.opt("sourcePackage") as? String ?: error("通知来源缺失")
                 val events = row.optJSONArray("events") ?: error("通知记录缺失")
@@ -398,8 +625,8 @@ internal object CompanionMemoryImport {
             }
             additions.put(copy)
         }
-        require(current.length() + additions.length() <= 100) { "合并后超过 100 条上限" }
-        return MemoryImportPlan(current.toString(), additions.toString(), skipped)
+        if (legacyLimit) require(current.length() + additions.length() <= 100) { "合并后超过 100 条上限" }
+        return MemoryImportPlan(current.toString(), additions.toString(), skipped, hashes, sources, suppressAll, events, signatures)
     }
 }
 

@@ -1,5 +1,9 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "按包名停用插件": "Disable a plugin by package name",
+  "列表无法读取时，可输入已安装的插件包名并停用；插件文件和数据会保留。请先停止运行环境。": "If the list cannot be read, enter an installed package name to disable it. Plugin files and data are kept. Stop the runtime first.",
+  "要停用的插件包名": "Plugin package name to disable",
+  "停用指定插件": "Disable specified plugin",
   "自动记住对话中的偏好": "Automatically remember conversation preferences",
   "开启后助手提出的长期事实会直接保存，无需逐条确认；可能记错，可随时查看、修改或删除。": "When enabled, the assistant saves proposed long-term facts without individual confirmation. It can make mistakes; review, edit or delete them anytime.",
   "自动整理应用使用习惯": "Automatically summarize app usage",

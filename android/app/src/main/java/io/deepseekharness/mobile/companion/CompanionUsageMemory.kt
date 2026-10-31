@@ -22,7 +22,7 @@ internal object CompanionUsageMemory {
         }
         return CompanionNotificationRecords.truncate(combined, 600)
     }
-    fun upsert(rows: JSONArray, text: String, now: Long): Boolean {
+    fun upsert(rows: JSONArray, text: String, now: Long, legacyLimit: Boolean = true): Boolean {
         require(text.isNotBlank() && text.length <= 600 && now > 0 && !CompanionStore.sensitive(text))
         val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("source") == "auto_usage" }
         if (existing != null) {
@@ -30,7 +30,7 @@ internal object CompanionUsageMemory {
             existing.put("text", text).put("updatedAt", now)
             return true
         }
-        if (rows.length() >= 100) return false
+        if (legacyLimit && rows.length() >= 100) return false
         rows.put(JSONObject().put("id", UUID.randomUUID().toString()).put("text", text).put("source", "auto_usage").put("status", "confirmed").put("createdAt", now))
         return true
     }

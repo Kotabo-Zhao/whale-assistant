@@ -93,7 +93,7 @@ internal class CompanionDashboard(private val context: Context) {
     }
 
     fun export(kind: String): ByteArray = when (kind) {
-        "memory" -> memory.exportForUser()
+        "memory" -> memory.exportBackup()
         "knowledge" -> knowledge.exportForUser()
         else -> throw IllegalArgumentException("不支持的备份类型")
     }

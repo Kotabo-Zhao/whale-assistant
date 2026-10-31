@@ -6,7 +6,7 @@ import android.service.notification.StatusBarNotification
 import io.deepseekharness.mobile.OverlayBallService
 
 class CompanionNotificationService : NotificationListenerService() {
-    override fun onListenerConnected() { super.onListenerConnected(); current = this }
+    override fun onListenerConnected() { super.onListenerConnected(); current = this; BackgroundUnderstanding.resume(applicationContext) }
     override fun onListenerDisconnected() { if (current === this) current = null; super.onListenerDisconnected() }
     override fun onDestroy() { if (current === this) current = null; super.onDestroy() }
 
@@ -44,6 +44,7 @@ class CompanionNotificationService : NotificationListenerService() {
         if (title.isBlank() && text.isBlank()) return
         if (CompanionStore.sensitive("$title $text")) return
         if (runCatching { store.record(sbn.packageName, title, text, notificationKey = sbn.key) }.getOrDefault(false)) {
+            if (store.backgroundUnderstanding) BackgroundUnderstanding.ingest(applicationContext, sbn.packageName, title, text, sbn.key, sbn.postTime)
             if (store.automaticNotificationMemory) {
                 val app = applicationContext
                 val sourcePackage = sbn.packageName

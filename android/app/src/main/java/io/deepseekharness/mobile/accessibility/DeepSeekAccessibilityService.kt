@@ -1410,6 +1410,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
      */
     private fun automationTask(root: AccessibilityNodeInfo, packageName: String, param: String): DeviceCommandResult = synchronized(AutomationTaskInterruptionStore.lock) {
         val ledger = automationTaskLedger
+        if (PluginMaintenanceLease.active()) return@synchronized taskFailure(AutomationTaskCodes.BUSY, "插件维护中，请等待完成后重新观察界面", ledger.snapshot(), true)
         val interruption = AutomationTaskInterruptionStore(this)
         val digest = windowDigest(root)
         val facts = AutomationTaskFacts(foregroundPackage = packageName, windowDigest = digest)

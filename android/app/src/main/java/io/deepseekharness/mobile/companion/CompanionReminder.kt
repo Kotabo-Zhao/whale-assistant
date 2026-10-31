@@ -39,11 +39,37 @@ internal class CompanionReminder(private val context: Context) {
         }
     }
 
+    /** Stable item ID makes retries and rescheduling idempotent. */
+    fun upsertLinked(id: String, text: String, whenMillis: Long) = synchronized(lock) {
+        require(id.matches(Regex("[a-f0-9-]{36}")))
+        require(text.isNotBlank() && text.length <= 200 && !CompanionStore.sensitive(text))
+        require(CompanionReminderPolicy.isFuture(whenMillis, System.currentTimeMillis()))
+        check(UnifiedUnderstandingStore.open(context).use { it.queue.itemReminderCurrent(id, whenMillis) }) { "事项提醒已变化" }
+        val rows = read()
+        val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
+        require(existing == null || existing.optBoolean("linkedItem", false)) { "提醒标识冲突" }
+        if (existing == null) require(rows.length() < 100) { "提醒已满，请先删除" }
+        val row = existing ?: JSONObject().put("id", id).put("linkedItem", true).also { rows.put(it) }
+        row.put("text", text.trim()).put("at", whenMillis).put("state", "scheduled")
+        save(rows)
+        try { schedule(row) } catch (e: Exception) { row.put("state", "failed"); save(rows); throw e }
+    }
+
     fun remove(id: String) = synchronized(lock) {
         val rows = read(); val kept = JSONArray()
-        for (i in 0 until rows.length()) if (rows.getJSONObject(i).getString("id") != id) kept.put(rows.getJSONObject(i))
+        for (i in 0 until rows.length()) {
+            val row = rows.getJSONObject(i)
+            if (row.getString("id") != id) kept.put(row)
+            else if (row.optBoolean("linkedItem", false)) UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(id, row.getLong("at")) }
+        }
         save(kept)
         alarm?.cancel(pending(id))
+    }
+
+    fun removeLinked(id: String) = synchronized(lock) {
+        val rows = read()
+        val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
+        if (row?.optBoolean("linkedItem", false) == true) remove(id)
     }
 
     fun restore() = synchronized(lock) {
@@ -51,16 +77,26 @@ internal class CompanionReminder(private val context: Context) {
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i)
             if (row.optString("state") != "scheduled") continue
+            if (row.optBoolean("linkedItem", false) && !linkedCurrent(row)) { row.put("state", "cancelled"); alarm?.cancel(pending(row.getString("id"))); changed = true; continue }
             if (CompanionReminderPolicy.isMissed(row.optLong("at"), System.currentTimeMillis())) { row.put("state", "missed"); changed = true }
             else try { schedule(row) } catch (_: Exception) { row.put("state", "failed"); changed = true }
         }
         if (changed) save(rows)
+        val desired = runCatching { UnifiedUnderstandingStore.open(context).use { it.queue.desiredItemReminders() } }.getOrNull().orEmpty()
+        for ((id, text, at) in desired) if (CompanionReminderPolicy.isFuture(at, System.currentTimeMillis())) {
+            val current = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id }
+            if (current == null || current.optLong("at") != at || current.optString("state") != "scheduled") runCatching { upsertLinked(id, text, at) }
+        }
     }
 
     fun deliver(id: String) = synchronized(lock) {
         val rows = read()
         val row = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id } ?: return
         if (row.optString("state") != "scheduled") return
+        if (row.optBoolean("linkedItem", false)) {
+            if (!linkedCurrent(row)) { restore(); return }
+            if (row.optLong("at") > System.currentTimeMillis()) return
+        }
         val permitted = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         if (!permitted) { row.put("state", "failed"); save(rows); return }
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -81,6 +117,9 @@ internal class CompanionReminder(private val context: Context) {
         val manager = alarm ?: error("系统提醒服务不可用")
         manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, row.getLong("at"), pending(row.getString("id")))
     }
+    private fun linkedCurrent(row: JSONObject): Boolean = runCatching {
+        UnifiedUnderstandingStore.open(context).use { it.queue.itemReminderCurrent(row.getString("id"), row.getLong("at")) }
+    }.getOrDefault(false)
     private fun pending(id: String): PendingIntent {
         val intent = Intent(context, CompanionReminderReceiver::class.java).setData(Uri.parse("dsh-reminder://local/$id"))
         return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)

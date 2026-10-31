@@ -9,7 +9,7 @@ const runtime: RuntimeState = { phase: 'running', installedVersion: 'test', arch
 function fixture() {
   let finish!: () => void
   const stopped = new Promise<void>(resolve => { finish = resolve })
-  const bridge = { ...createBrowserBridge(), managePlugins: vi.fn().mockResolvedValue({ plugins: [] }), stopRuntime: vi.fn().mockImplementation(async () => { await stopped; return runtime }) }
+  const bridge = { ...createBrowserBridge(), getAutomationTaskState: vi.fn().mockResolvedValue({ connected: true, task: null }), managePlugins: vi.fn().mockResolvedValue({ plugins: [] }), stopRuntime: vi.fn().mockImplementation(async () => { await stopped; return runtime }) }
   const view = render(<PluginSettings bridge={bridge} runtime={runtime} onBack={vi.fn()} />)
   return { bridge, finish, ...view }
 }
@@ -22,7 +22,7 @@ it('停止期间重复安装只产生一次停止和一次导入', async () => {
   await openMarket()
   fireEvent.click(screen.getByText('测试安装'))
   fireEvent.click(screen.getByText('测试安装'))
-  expect(bridge.stopRuntime).toHaveBeenCalledTimes(1)
+  await waitFor(() => expect(bridge.stopRuntime).toHaveBeenCalledTimes(1))
   expect(screen.getByText('正在停止对话与终端')).toBeInTheDocument()
   expect(bridge.managePlugins).toHaveBeenCalledTimes(1)
   await act(async () => { finish(); await Promise.resolve() })
@@ -51,7 +51,7 @@ it('手动导入复用停止流程，停止完成前不写插件', async () => {
   await waitFor(() => expect(screen.getByRole('button', { name: '刷新' })).toBeEnabled())
   fireEvent.change(screen.getByRole('textbox', { name: '插件来源' }), { target: { value: 'custom-plugin@1.2.3' } })
   fireEvent.click(screen.getByRole('button', { name: '导入' }))
-  expect(bridge.stopRuntime).toHaveBeenCalledTimes(1)
+  await waitFor(() => expect(bridge.stopRuntime).toHaveBeenCalledTimes(1))
   expect(screen.getByText('正在停止对话与终端')).toBeInTheDocument()
   expect(bridge.managePlugins).toHaveBeenCalledTimes(1)
   await act(async () => { finish(); await Promise.resolve() })
@@ -81,4 +81,18 @@ it('停止完成后显示安装阶段，原生返回前不宣称成功', async (
   expect(screen.queryByText('插件已导入，下次启动生效')).not.toBeInTheDocument()
   await act(async () => { installed(); await Promise.resolve() })
   expect(screen.getByText('插件已导入，下次启动生效')).toBeInTheDocument()
+})
+
+it('任务服务不可用时保持等待，取消不会停止运行时或安装', async () => {
+  const { bridge } = fixture()
+  bridge.getAutomationTaskState.mockResolvedValue({ connected: false, task: null })
+  vi.spyOn(bridge, 'getAccessibilityAutomationState').mockResolvedValue({ ...(await bridge.getAccessibilityAutomationState()), serviceStatus: 'enabled_disconnected' })
+  await openMarket()
+  fireEvent.click(screen.getByText('测试安装'))
+  await screen.findByText('等待手机任务服务连接')
+  expect(bridge.stopRuntime).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '取消等待安装' }))
+  await screen.findByText('已取消等待，插件未安装')
+  expect(bridge.managePlugins).toHaveBeenCalledTimes(1)
+  expect(bridge.stopRuntime).not.toHaveBeenCalled()
 })

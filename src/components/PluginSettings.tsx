@@ -1,3 +1,4 @@
+import { pluginTaskBarrier } from '../platform/pluginMaintenance'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown, Package, RefreshCw, X } from 'lucide-react'
 import { t, useLanguage } from '../i18n'
@@ -9,6 +10,9 @@ import { MobileMarket } from './MobileMarket'
 const GENERIC_PLUGIN_FAILURE = '插件操作失败，请检查运行时状态后重试'
 
 const errorMessages: Record<string, string> = {
+  PLUGIN_TASK_BUSY: '手机任务尚未结束或需要处理，未修改插件',
+  PLUGIN_TASK_UNAVAILABLE: '无法核对手机任务状态，请恢复任务服务后重试',
+  PLUGIN_WAIT_CANCELLED: '已取消等待，插件未安装',
   RUNTIME_BUSY: '请先停止 Harness 和 Ubuntu 终端',
   PLUGIN_STOP_FAILED: '停止运行环境失败，请重试',
   RUNTIME_NOT_INSTALLED: '请先安装 Ubuntu 运行时',
@@ -140,7 +144,7 @@ function RecoveryNotice({ recovery, unresolved, locked, onRepair, onPrune }: {
   </section>
 }
 
-export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBridge; runtime: RuntimeState; onBack: () => void }) {
+export function PluginSettings({ bridge, runtime, onBack, onStopRequested }: { bridge: RuntimeBridge; runtime: RuntimeState; onBack: () => void; onStopRequested?: () => void }) {
   useLanguage()
   const [catalog, setCatalog] = useState<PluginCatalog | null>(null)
   const [catalogReadFailed, setCatalogReadFailed] = useState(false)
@@ -149,6 +153,9 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const [proposalBusy, setProposalBusy] = useState(false)
   const [proposalError, setProposalError] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [loadingList, setLoadingList] = useState(false)
+  const [stopping, setStopping] = useState(false)
+  const [recoveryName, setRecoveryName] = useState('')
   const [progress, setProgress] = useState('')
   const [marketAttempt, setMarketAttempt] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
@@ -166,8 +173,14 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   const pluginListRef = useRef<HTMLDivElement | null>(null)
   const active = useRef(true)
   const pending = useRef(false)
+  const listing = useRef(false)
+  const stopPending = useRef(false)
+  const maintenance = useRef<AbortController | null>(null)
+  const [waiting, setWaiting] = useState(false)
   const run = useCallback(async (request: PluginRequest, marketPackage?: string, prepare?: () => Promise<void>): Promise<boolean> => {
-    if (pending.current) return false
+    if (pending.current || stopPending.current) return false
+    listing.current = request.operation === 'list'
+    setLoadingList(listing.current)
     setMarketAttempt(marketPackage ?? null)
     pending.current = true
     setBusy(true); setProgress('正在准备插件操作'); setNotice(''); setNoticeDetail(''); setFailed(false)
@@ -200,12 +213,12 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         setFailed(true)
       }
       return false
-    } finally { pending.current = false; if (active.current) setBusy(false) }
+    } finally { pending.current = false; listing.current = false; if (active.current) { setBusy(false); setLoadingList(false) } }
   }, [bridge])
   useEffect(() => {
     active.current = true
     void run({ operation: 'list' })
-    return () => { active.current = false }
+    return () => { active.current = false; maintenance.current?.abort() }
   }, [run])
   const refreshProposal = useCallback(async () => {
     try { const value = await bridge.getMarketProposal(); if (active.current) { setProposal(value); setProposalError(false) } }
@@ -224,19 +237,45 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   }
   useEffect(() => { setStopped(false) }, [runtime.phase])
   const stop = async (): Promise<void> => {
-    if (pending.current) return
-    pending.current = true; setMarketAttempt(null); setBusy(true); setProgress('正在停止对话与终端'); setNotice(''); setNoticeDetail('')
+    // A list request can be waiting for the startup lock. Stop must remain available
+    // so the native cancellation signal can release that lock; never interrupt writes.
+    if (stopPending.current || (pending.current && !listing.current)) return
+    stopPending.current = true; setStopping(true); setMarketAttempt(null); setProgress('正在停止对话与终端'); setNotice(''); setNoticeDetail('')
     try {
+      onStopRequested?.()
       await bridge.stopRuntime()
       if (active.current) { setStopped(true); setNotice('运行环境已停止，可以管理插件'); setFailed(false) }
     } catch { if (active.current) { setNotice('停止运行环境失败，请重试'); setFailed(true) } }
-    finally { pending.current = false; if (active.current) setBusy(false) }
+    finally { stopPending.current = false; if (active.current) setStopping(false) }
   }
   const runManaged = async (request: PluginRequest, marketPackage?: string) => {
     return run(request, marketPackage, async () => {
+      const controller = new AbortController()
+      maintenance.current = controller
+      setWaiting(true)
+      try {
+        while (true) {
+          if (controller.signal.aborted || !active.current) throw Object.assign(new Error('已取消等待'), { code: 'PLUGIN_WAIT_CANCELLED' })
+          const state = await bridge.getAutomationTaskState().catch(() => { throw Object.assign(new Error('无法核对手机任务状态'), { code: 'PLUGIN_TASK_UNAVAILABLE' }) })
+          if (controller.signal.aborted || !active.current) throw Object.assign(new Error('已取消等待'), { code: 'PLUGIN_WAIT_CANCELLED' })
+          const serviceStatus = !state.connected && !state.interrupted
+            ? (await bridge.getAccessibilityAutomationState().catch(() => { throw Object.assign(new Error('无法核对手机任务状态'), { code: 'PLUGIN_TASK_UNAVAILABLE' }) })).serviceStatus
+            : undefined
+          if (controller.signal.aborted || !active.current) throw Object.assign(new Error('已取消等待'), { code: 'PLUGIN_WAIT_CANCELLED' })
+          const barrier = pluginTaskBarrier(state, serviceStatus)
+          if (barrier === 'clear') break
+          setProgress(barrier === 'active' ? '等待手机任务结束后安装' : barrier === 'interrupted' ? '请先处理已中断的手机任务' : '等待手机任务服务连接')
+          await new Promise<void>(resolve => {
+            const done = () => { window.clearTimeout(timer); controller.signal.removeEventListener('abort', done); resolve() }
+            const timer = window.setTimeout(done, 1500)
+            controller.signal.addEventListener('abort', done, { once: true })
+          })
+        }
+      } finally { maintenance.current = null; if (active.current) setWaiting(false) }
       if (stopped) return
       try {
         setProgress('正在停止对话与终端')
+        onStopRequested?.()
         await bridge.stopRuntime()
         if (active.current) setStopped(true)
       } catch {
@@ -246,8 +285,8 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
   }
 
   const installFromMarket = (name: string) => runManaged({ operation: 'import', source: name }, name)
-  const marketLocked = busy || (!stopped && ['stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
-  const locked = busy || (!stopped && ['running', 'stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
+  const marketLocked = busy || stopping || (!stopped && ['stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
+  const locked = busy || stopping || (!stopped && ['running', 'stopping', 'preparing', 'downloading', 'verifying', 'extracting'].includes(runtime.phase))
   /** 显式重试一次修复：与自愈共用同一个原生入口，但不受它的代次闸门与冷却窗口约束。 */
   const repair = useCallback(() => { void run({ operation: 'repair' }) }, [run])
   /** 清理保留区中未被引用的历史孤立副本。 */
@@ -285,8 +324,8 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     <div className="screen-heading management-heading">
       <div><p className="eyebrow">{t('应用管理')}</p><h1>{t('插件管理')}</h1></div>
       <div className="heading-actions">
-        <button className="button button-secondary compact-button" type="button" disabled={busy || proposalBusy} onClick={() => { void run({ operation: 'list' }); void refreshProposal() }}><RefreshCw size={18} />{t('刷新')}</button>
-        <button className="icon-button" type="button" title={t('返回设置')} aria-label={t('返回设置')} onClick={onBack} disabled={busy}><ArrowLeft size={19} /></button>
+        <button className="button button-secondary compact-button" type="button" disabled={busy || stopping || proposalBusy} onClick={() => { void run({ operation: 'list' }); void refreshProposal() }}><RefreshCw size={18} />{t('刷新')}</button>
+        <button className="icon-button" type="button" title={t('返回设置')} aria-label={t('返回设置')} onClick={onBack} disabled={busy || stopping}><ArrowLeft size={19} /></button>
       </div>
     </div>
     <p className="plugin-description">{t('浏览社区插件、安装并管理已有插件，都在这里完成。')}</p>
@@ -294,7 +333,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
       <button type="button" role="tab" aria-selected={workspaceView === 'market'} onClick={() => setWorkspaceView('market')}>{t('浏览商店')}</button>
       <button type="button" role="tab" aria-selected={workspaceView === 'installed'} onClick={() => setWorkspaceView('installed')}>{t('管理已安装')}</button>
     </nav>
-    <div className="plugin-stop"><span>{t('安装、导入和更新会自动停止对话与终端，下次启动生效。启用、回滚与修复前请先停止运行环境。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={busy} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
+    <div className="plugin-stop"><span>{t('安装、导入和更新会自动停止对话与终端，下次启动生效。启用、回滚与修复前请先停止运行环境。')}</span><button className="button button-danger-quiet compact-button" type="button" disabled={stopping || (busy && !loadingList)} onClick={() => { void stop() }}>{t('停止运行环境')}</button></div>
     {(proposal || proposalError) && <section className="plugin-import" aria-label={t('商店待处理请求')}>
       <h2>{t('商店待处理请求')}</h2>
       <p>{t('这是旧商店留下的请求。确认后会自动停止运行环境，并使用同一个安装器检查兼容性。')}</p>
@@ -305,6 +344,7 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
         <button className="button button-primary compact-button" type="button" disabled={proposalBusy || marketLocked} onClick={() => { void handleProposal(true) }}>{t(proposal.kind === 'update' ? '确认更新请求' : '确认安装请求')}</button>
       </div>}
     </section>}
+    {waiting && <button className="button button-secondary" type="button" onClick={() => maintenance.current?.abort()}>取消等待安装</button>}
     <div hidden={workspaceView !== 'market'}>
     <MobileMarket locked={marketLocked} onInstall={name => { void installFromMarket(name) }}
       installState={marketAttempt ? { name: marketAttempt, busy, failed, notice, detail: noticeDetail, progress } : null} installed={installedMarketPackages} onManage={manageMarketPackage} />
@@ -314,6 +354,14 @@ export function PluginSettings({ bridge, runtime, onBack }: { bridge: RuntimeBri
     {notice && !(workspaceView === 'market' && marketAttempt) && <p className="plugin-notice" role={failed ? 'alert' : 'status'}>{t(notice)}{noticeDetail !== '' && `（${noticeDetail}）`}</p>}
     {busy && !(workspaceView === 'market' && marketAttempt) && <div className="plugin-operation-progress" role="status" aria-live="polite"><RefreshCw size={18} aria-hidden="true" /><span>{t(progress)}</span></div>}
     <div hidden={workspaceView !== 'installed'}>
+    {catalogReadFailed && <section className="plugin-import" aria-label={t('按包名停用插件')}>
+      <h2>{t('按包名停用插件')}</h2>
+      <p>{t('列表无法读取时，可输入已安装的插件包名并停用；插件文件和数据会保留。请先停止运行环境。')}</p>
+      <div className="plugin-import-row">
+        <input aria-label={t('要停用的插件包名')} value={recoveryName} onChange={event => setRecoveryName(event.target.value)} placeholder="billion-context" disabled={locked} />
+        <button className="button button-secondary compact-button" type="button" disabled={locked || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(recoveryName.trim()) || recoveryName.includes('..')} onClick={() => { void run({ operation: 'enable', id: recoveryName.trim(), enabled: false }) }}>{t('停用指定插件')}</button>
+      </div>
+    </section>}
     {/* 受控导入：来源形态在原生与访客两侧各校验一次，这里只负责收集与提示，不做任何解析。 */}
     <section className="plugin-import" aria-labelledby="plugin-import-title">
       <h2 id="plugin-import-title">{t('通过 npm 包名或链接导入')}</h2>

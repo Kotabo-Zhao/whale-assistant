@@ -47,6 +47,10 @@ internal object HarnessSessionCookie {
 
     fun expired(): String =
         "${HarnessActivity.AUTH_TOKEN_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"
+
+    /** A browser cookie from an earlier runtime would suppress the native Basic challenge. */
+    fun expiredBrowserSession(): String =
+        "dsh_browser_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
 }
 
 internal object HarnessPageUrl {

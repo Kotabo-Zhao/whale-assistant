@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const { createManager, npmMetadataCheck, readRegistryMetadata, declaredDshRange, installAfterMetadata, installExplicitVersion, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, engineScanIncomplete, selectFromPackument, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
+const { createManager, npmMetadataCheck, readRegistryMetadata, readVersionList, declaredDshRange, installAfterMetadata, installExplicitVersion, within, parseVersion, compareVersions, satisfiesRange, selectNewestCompatible, engineScanIncomplete, selectFromPackument, safeDetail, packageNameOf, collectBareSpecifiers, validateImportSource, gitAvailability, GRAPH_LIMITS } =
   require('../android/app/src/main/assets/support/plugin-manager.cjs')
 
 test('npm 元数据预检区分平台不兼容、原生扩展和无法核验', () => {
@@ -42,6 +42,16 @@ test('无法核验或平台不支持时不下载插件', () => {
   assert.deepEqual(calls, [])
   check({ status: 0, stdout: JSON.stringify({ name: 'test-plugin', version: '1.2.3', cpu: ['arm64'] }) })
   assert.deepEqual(calls, ['test-plugin@1.2.3'])
+})
+
+test('大量历史版本走受限的 npm 回退检查，不把正常列表误报为元数据损坏', () => {
+  const versions = Array.from({ length: 7200 }, (_, n) => `0.0.${n}-pr.1`)
+  versions.push('0.1.209')
+  const read = rows => readVersionList({ status: 0, stdout: JSON.stringify(rows) }, 'billion-context')
+  assert.equal(read(versions).length, 7201)
+  assert.equal(selectNewestCompatible(read(versions), '0.2.1-rc.1', () => null).version, '0.1.209')
+  assert.throws(() => read(Array.from({ length: 20001 }, () => '1.0.0')), /PLUGIN_METADATA_UNAVAILABLE/)
+  assert.throws(() => readVersionList({ status: 1, stdout: '' }, 'billion-context'), /PLUGIN_METADATA_UNAVAILABLE/)
 })
 
 test('无法读取元数据不能伪装为未声明引擎范围', () => {
@@ -471,6 +481,16 @@ test('禁止禁用安全组件及核心文件，允许管理官方可选插件',
   assert.throws(() => manager.setEnabled('@deepseek-ai/dsh-base', false), /PLUGIN_PROTECTED/)
   assert.throws(() => manager.setChildEnabled('@deepseek-ai/dsh-base', 'sandbox', false), /PLUGIN_PROTECTED/)
   assert.equal(manager.setChildEnabled('@deepseek-ai/dsh-base', 'optional', false).plugins[0].children[1].enabled, false)
+})
+
+test('子插件覆盖配置损坏导致列表失败时仍可关闭指定插件', t => {
+  const { manager, write, profile } = fixture(t)
+  write('root/.dsh-mobile/launcher-plugins.patch.json', { invalid: true })
+  assert.throws(() => manager.list(), /PLUGIN_CONFIG_INVALID/)
+  const result = manager.setEnabled('test-plugin', false)
+  assert.equal(result.plugins.find(row => row.id === 'test-plugin').enabled, false)
+  assert.equal(result.plugins.find(row => row.id === 'test-plugin').readable, false)
+  assert.equal(JSON.parse(fs.readFileSync(profile, 'utf8')).dsh.profile.bundles.includes('test-plugin'), false)
 })
 
 test('配置损坏时仍能禁用问题第三方文件', t => {

@@ -6,6 +6,7 @@
 .session-search { flex: 1; color: var(--card-muted, var(--muted)); }
 .session-count { flex: none; color: var(--card-muted, var(--muted)); font-size: .75rem; white-space: nowrap; }
 .session-list { display: grid; gap: 10px; }
+.session-expand { margin-top: 12px; width: 100%; }
 .session-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

@@ -11,6 +11,7 @@ const rows = companionRows
 const expected = (row: Row) => typeof row._review === 'string' ? row._review : ''
 const formatMinute = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
 const parseMinute = (value: string) => { const [hour, minute] = value.split(':').map(Number); return hour * 60 + minute }
+const memoryCategory = (row: Row) => row.status === 'pending' ? '待确认' : row.source === 'shared_understanding' ? '分享内容' : row.source === 'auto_notification' || row.source === 'auto_notification_group' || row.source === 'user_notification' ? '通知整理' : row.source === 'auto_usage' ? '使用习惯' : row.source === 'auto_understanding' || row.source === 'user_understanding' ? '后台理解' : '手动与对话记忆'
 const days = ['每天', '每周一', '每周二', '每周三', '每周四', '每周五', '每周六', '每周日']
 
 export function CompanionWorkspace() {
@@ -33,6 +34,8 @@ export function CompanionWorkspace() {
   const [review, setReview] = useState<{ snapshot: string; candidates: Row[]; action: 'add' | 'edit' | 'approve'; row?: Row } | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [revision, setRevision] = useState(0)
+  const [revealedMemory, setRevealedMemory] = useState<string | null>(null)
+  const swipeStart = useRef<{ x: number; y: number; id: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const pending = useRef(false)
@@ -96,6 +99,7 @@ export function CompanionWorkspace() {
     catch { setMessage('未完成导出，原数据不受影响。') } finally { setBusy(false) }
   }
   const list = items.filter(row => row.text.toLowerCase().includes(query.trim().toLowerCase()))
+  const groups = [...new Set(list.map(memoryCategory))].map(name => ({ name, rows: list.filter(row => memoryCategory(row) === name) }))
   return <section className="companion-workspace" aria-labelledby="companion-workspace-title">
     <div className="workspace-heading"><div><span className="workspace-kicker">YOUR ASSISTANT</span><h3 id="companion-workspace-title">助手工作台</h3><p>提醒、资料与长期记忆集中管理，数据保存在手机本地。</p></div>
       <button className="icon-button" type="button" aria-label="刷新助手数据" disabled={busy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></div>
@@ -132,11 +136,11 @@ export function CompanionWorkspace() {
         {panel === 'knowledge' && <label className="button button-secondary"><Upload size={17} />导入文本<input type="file" accept="text/plain,.txt" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void readFile(file, 'text'); e.target.value = '' }} /></label>}</div>
       <p className="workspace-hint">备份为未加密 JSON；导入只合并新增内容，确认前不会写入。</p>
       {preview && <div className="workspace-review"><strong>核对导入内容</strong><p>新增 {preview.items.length} 条，跳过 {preview.skipped} 条已有内容。</p>{preview.items.map(row => <p key={row.id}>{row.text}</p>)}<div className="workspace-card-actions"><button type="button" onClick={() => setPreview(null)}>取消</button><button type="button" disabled={busy} onClick={() => { void run({ operation: 'applyImport', token: preview.token }, '已合并备份。') }}>确认合并</button></div></div>}
-      {panel === 'memory' && <div className="workspace-review"><strong>通知中的记忆候选</strong><p>候选来自通知，可能由他人发送或已经过时；只有你核对并保存后才会成为记忆。</p>
+      {panel === 'memory' && <details className="workspace-review"><summary><strong>通知中的记忆候选（{suggestions.length}）</strong></summary><p>候选来自通知，可能由他人发送或已经过时；只有你核对并保存后才会成为记忆。</p>
         {suggestions.length === 0 && <p>暂无候选；可在上方开启从通知中寻找候选。</p>}
         {suggestions.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>{row.source} · {typeof row.time === 'number' ? new Date(row.time).toLocaleString() : ''}</small></div><div className="workspace-card-actions"><button type="button" onClick={() => { setEditing(null); setText(row.text) }}>整理成记忆</button><button type="button" onClick={() => { void run({ operation: 'memorySuggestionDismiss', id: row.id }, '已忽略候选。') }}>忽略</button></div></article>)}
         <button type="button" className="button button-secondary" onClick={() => { void run({ operation: 'memorySuggestionsReset' }, '已重置忽略记录。') }}>重置已忽略候选</button>
-      </div>}
+      </details>}
       <label>搜索<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={panel === 'memory' ? '搜索已确认及待确认的记忆' : '搜索本地资料'} /></label>
       <label>{panel === 'memory' ? '记忆内容' : '资料内容'}<textarea value={text} maxLength={panel === 'memory' ? 600 : 8000} rows={3} onChange={e => setText(e.target.value)} placeholder={panel === 'memory' ? '写下希望助手记住的事实或偏好' : '输入或导入需要保存的资料'} /></label>
       <div className="workspace-card-actions"><button className="button button-primary" type="button" disabled={busy || !text.trim()} onClick={() => {
@@ -144,10 +148,26 @@ export function CompanionWorkspace() {
         void run(editing ? { operation: 'knowledgeEdit', id: editing.id, expectedText: editing.text, text: text.trim() } : { operation: 'knowledgeAdd', text: text.trim() }, '资料已处理。')
       }}>{editing ? '保存修改' : '添加'}</button>{editing && <button type="button" onClick={() => { setEditing(null); setText('') }}>取消编辑</button>}</div>
       {review && <div className="workspace-review"><strong>核对相关记忆</strong><p>相关内容仅供参考，请确认是否重复、冲突或包含敏感信息。</p>{review.candidates.map((row, i) => <p key={i}>{row.status}：{row.text}</p>)}<div className="workspace-card-actions"><button type="button" onClick={() => setReview(null)}>取消</button><button type="button" disabled={busy} onClick={() => { void saveMemory() }}>确认保存</button></div></div>}
-      <div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>{panel === 'memory' ? (row.status === 'pending' ? '待确认' : row.source === 'auto_notification' || row.source === 'auto_notification_group' || row.source === 'auto_usage' ? '自动记录' : '已确认') : '本地资料'} · {row.source === 'auto_notification' || row.source === 'auto_notification_group' ? '自动整理的通知，未经核实' : row.source === 'auto_usage' ? '自动整理的使用统计' : row.source ?? '来源未知'}</small></div><div className="workspace-card-actions">
-        {panel === 'memory' && row.status === 'pending' && <button type="button" onClick={() => { void startMemoryReview('approve', row) }}>确认</button>}
+      {panel === 'memory' && list.length > 0 && <p className="workspace-hint">展开分类查看缩略卡片，点击卡片查看详情；左滑可删除。</p>}
+      {panel === 'memory' ? <div className="memory-groups">{groups.map(group => <details className="memory-group" key={group.name} open={query.trim() ? true : undefined}>
+        <summary><span>{group.name}</span><small>{group.rows.length} 条</small></summary>
+        <div className="workspace-list">{group.rows.map(row => <article className="workspace-card workspace-memory-card" key={row.id}
+          onTouchStart={event => { if (event.touches.length === 1) swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY, id: row.id } }}
+          onTouchEnd={event => { const start = swipeStart.current; swipeStart.current = null; if (!start || start.id !== row.id || !event.changedTouches.length) return; const dx = event.changedTouches[0].clientX - start.x; const dy = event.changedTouches[0].clientY - start.y; if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) setRevealedMemory(dx < 0 ? row.id : null) }}>
+          <details className="memory-card-detail"><summary><span className="memory-preview">{row.text}</span><small>{row.status === 'pending' ? '待确认' : row.status === 'unverified' || (row.source === 'shared_understanding' && !row.confirmedAt) ? '待核实' : '已保存'}</small></summary>
+            <p>{row.text}</p><small>来源：{row.source ?? '未知'}</small>
+            <div className="workspace-card-actions">
+              {row.status === 'pending' && <button type="button" onClick={() => { void startMemoryReview('approve', row) }}>确认</button>}
+              <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>
+              <button type="button" onClick={() => setRevealedMemory(revealedMemory === row.id ? null : row.id)}>操作</button>
+            </div>
+          </details>
+          {revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
+        </article>)}</div>
+      </details>)}</div> : <div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>本地资料 · {row.source ?? '来源未知'}</small></div><div className="workspace-card-actions">
         <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>
-        <button type="button" onClick={() => { if (window.confirm(`删除这条${panel === 'memory' ? '记忆' : '资料'}？`)) void run({ operation: panel === 'memory' ? 'memoryDelete' : 'knowledgeDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button></div></article>)}</div>
+        <button type="button" onClick={() => { if (window.confirm('删除这条资料？')) void run({ operation: 'knowledgeDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>
+      </div></article>)}</div>}
       {panel === 'memory' && <div className="workspace-hint"><p>删除自动通知或使用习惯记忆后，对应来源会暂停自动整理，避免下次采集立即重新生成。恢复只影响已开启的自动整理功能。</p><button type="button" className="button button-secondary" onClick={() => { if (window.confirm('恢复已删除来源的自动整理？新通知和使用统计可能再次形成记忆。')) void run({ operation: 'memoryResumeAutomatic' }, '自动整理来源已恢复。') }}>恢复已删除来源的自动整理</button></div>}
       {panel === 'memory' && items.length > 0 && <button className="button button-danger-quiet" type="button" onClick={() => { if (window.confirm('清空全部长期记忆并暂停通知和使用习惯的自动整理？此操作无法撤销。')) void run({ operation: 'memoryClear', confirmed: true }, '长期记忆已清空。') }}>清空全部长期记忆</button>}
     </>}

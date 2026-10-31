@@ -415,6 +415,9 @@ class MobileRuntimeController(
     /** 权限：仅应用内部；生命周期锁防止插件写入与启动、安装、终端并发。 */
     fun managePlugins(operation: String, id: String?, enabled: Boolean?, childId: String?, source: String? = null): com.getcapacitor.JSObject = lifecycleLock.withLock {
         ensureOpen()
+        val maintenance = operation != "list"
+        if (maintenance) io.deepseekharness.mobile.accessibility.PluginMaintenanceLease.acquire(appContext)
+        try {
         if (operation != "list") {
             if (supervisor.isRunning() || terminals.hasRuntimeSessions()) {
                 throw RuntimeFailure("RUNTIME_BUSY", "请先停止 Harness 和 Ubuntu 终端")
@@ -445,6 +448,9 @@ class MobileRuntimeController(
             return@withLock withRecovery(plugins.run("list", null, null, null, null))
         }
         return@withLock withRecovery(plugins.run(operation, id, enabled, childId, source))
+        } finally {
+            if (maintenance) io.deepseekharness.mobile.accessibility.PluginMaintenanceLease.release()
+        }
     }
 
     /** 插件页面只需要受控迁移状态；计数由原生侧生成，避免把路径或访客日志回传到 WebView。 */

@@ -8,6 +8,8 @@ const { createRequire } = require('node:module')
 
 const NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/
 const VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?$/
+// Large registries can publish thousands of prereleases; bound the fallback without rejecting them.
+const MAX_VERSION_LIST = 20000
 const officialPackage = name => name.startsWith('@deepseek-ai/') || name === '@deepseek-harness/dsh-mobile-shizuku'
 const protectedPackage = name => officialPackage(name) || ['react', 'react-dom', 'cordis'].includes(name)
 
@@ -437,6 +439,16 @@ function selectFromPackument(payload, id, runtimeDsh, platform, arch) {
     })
   } catch { return { available: false } }
   return { available: true, selection, checked: parsed.length, rejected }
+}
+
+/** Validate the bounded npm versions response without treating a large history as corruption. */
+function readVersionList(reply, id) {
+  if (!reply || reply.status !== 0) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+  let versions
+  try { versions = JSON.parse(reply.stdout) } catch { fail('PLUGIN_METADATA_UNAVAILABLE', id) }
+  if (typeof versions === 'string') versions = [versions]
+  if (!Array.isArray(versions) || versions.length === 0 || versions.length > MAX_VERSION_LIST) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+  return versions
 }
 
 /** A bounded, anonymous HTTPS child process. No user credentials or custom registries are inherited. */
@@ -1825,7 +1837,16 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
     config.value.dshMobile = { ...config.value.dshMobile, bundleOrder: order, disabledBundles: config.names.filter(name => !bundles.includes(name)) }
     atomic(profile, config.value)
     snapshotQuiet()
-    return { ...list(), lock: lockQuiet() }
+    // When the detailed catalogue is broken, a user-requested disable must still
+    // be usable as a recovery path. Report the groups as unreadable rather than
+    // claiming the missing patch details were inspected.
+    let catalogResult
+    try { catalogResult = list() }
+    catch (error) {
+      if (enabled) throw error
+      catalogResult = { plugins: basicList().plugins.map(group => ({ ...group, file: 'cordis.patch.yml', children: [], readable: false })) }
+    }
+    return { ...catalogResult, lock: lockQuiet() }
   }
   /**
    * 恢复入口：先回滚未提交的安装事务，再尝试回填被重建掉的启停状态。
@@ -1943,12 +1964,8 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
       installAfterMetadata(() => cache.get(version), install, id, version, process.platform, process.arch)
       return
     }
-    const listed = spawnSync(process.execPath, [npm, 'view', id, 'versions', '--json', ...common], { env: environment, encoding: 'utf8', timeout: 45000, maxBuffer: 1024 * 1024 })
-    if (listed.status !== 0) fail('PLUGIN_METADATA_UNAVAILABLE', id)
-    let versions
-    try { versions = JSON.parse(listed.stdout) } catch { fail('PLUGIN_METADATA_UNAVAILABLE', id) }
-    if (typeof versions === 'string') versions = [versions]
-    if (!Array.isArray(versions) || versions.length === 0 || versions.length > 5000) fail('PLUGIN_METADATA_UNAVAILABLE', id)
+    const listed = spawnSync(process.execPath, [npm, 'view', id, 'versions', '--json', ...common], { env: environment, encoding: 'utf8', timeout: 45000, maxBuffer: 2 * 1024 * 1024 })
+    const versions = readVersionList(listed, id)
     const cache = new Map()
     let rejected = null
     const selection = selectNewestCompatible(versions, runtimeDsh,
@@ -2358,6 +2375,7 @@ module.exports = {
   createManager,
   npmMetadataCheck,
   readRegistryMetadata,
+  readVersionList,
   declaredDshRange,
   installAfterMetadata,
   installExplicitVersion,
