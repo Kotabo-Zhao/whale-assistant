@@ -40,6 +40,9 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [loadFailed, setLoadFailed] = useState(false)
   const [knowledgeNextOffset, setKnowledgeNextOffset] = useState<number | null>(null)
   const [loadingMoreKnowledge, setLoadingMoreKnowledge] = useState(false)
+  const [memoryNextBefore, setMemoryNextBefore] = useState<number | null>(null)
+  const [memoryRevision, setMemoryRevision] = useState<number | null>(null)
+  const [loadingMoreMemory, setLoadingMoreMemory] = useState(false)
   const pending = useRef(false)
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
@@ -60,6 +63,8 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       if (live) {
         setItems(nextItems); setRecurring(nextRecurring); setSuggestions(nextSuggestions)
         setKnowledgeNextOffset(panel === 'knowledge' && Number.isSafeInteger(result.nextOffset) && (result.nextOffset as number) >= 0 ? result.nextOffset as number : null)
+        setMemoryNextBefore(panel === 'memory' && Number.isSafeInteger(result.nextBefore) && (result.nextBefore as number) >= 0 ? result.nextBefore as number : null)
+        setMemoryRevision(panel === 'memory' && Number.isSafeInteger(result.revision) && (result.revision as number) >= 0 ? result.revision as number : null)
         if (typeof result.quietStart === 'number') setQuietStart(formatMinute(result.quietStart)); if (typeof result.quietEnd === 'number') setQuietEnd(formatMinute(result.quietEnd)); setNotificationStatus(typeof result.notificationStatus === 'string' ? result.notificationStatus : '')
       }
     }).catch(() => { if (live) { setLoadFailed(true); setMessage('无法读取数据，原有内容已保留。') } })
@@ -122,6 +127,18 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     } catch { setMessage('无法加载更多资料，已显示的内容不受影响。') }
     finally { setLoadingMoreKnowledge(false) }
   }
+  const loadMoreMemory = async () => {
+    if (busy || loadingMoreMemory || panel !== 'memory' || memoryNextBefore === null || memoryRevision === null) return
+    setLoadingMoreMemory(true); setMessage('')
+    try {
+      const result = await runtimeBridge.companionDashboard({ operation: 'memoryPage', before: memoryNextBefore, revision: memoryRevision })
+      const next = rows(result.items)
+      setItems(current => { const merged = new Map(current.map(row => [row.id, row])); next.forEach(row => merged.set(row.id, row)); return [...merged.values()] })
+      setMemoryNextBefore(Number.isSafeInteger(result.nextBefore) && (result.nextBefore as number) >= 0 ? result.nextBefore as number : null)
+      setMemoryRevision(Number.isSafeInteger(result.revision) && (result.revision as number) >= 0 ? result.revision as number : null)
+    } catch { setMessage('记忆已变化或无法加载更多，请重新读取。') }
+    finally { setLoadingMoreMemory(false) }
+  }
   const list = panel === 'knowledge' ? items : items.filter(row => row.text.toLowerCase().includes(query.trim().toLowerCase()))
   const groups = [...new Set(list.map(memoryCategory))].map(name => ({ name, rows: list.filter(row => memoryCategory(row) === name) }))
   return <section className="companion-workspace" aria-labelledby="companion-workspace-title">
@@ -173,7 +190,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       }}>{editing ? '保存修改' : '添加'}</button>{editing && <button type="button" onClick={() => { setEditing(null); setText('') }}>取消编辑</button>}</div>
       {review && <div className="workspace-review"><strong>核对相关记忆</strong><p>相关内容仅供参考，请确认是否重复、冲突或包含敏感信息。</p>{review.candidates.map((row, i) => <p key={i}>{row.status}：{row.text}</p>)}<div className="workspace-card-actions"><button type="button" onClick={() => setReview(null)}>取消</button><button type="button" disabled={busy} onClick={() => { void saveMemory() }}>确认保存</button></div></div>}
       {panel === 'memory' && list.length > 0 && <p className="workspace-hint">展开分类查看缩略卡片，点击卡片查看详情；左滑可删除。</p>}
-      {panel === 'memory' ? <div className="memory-groups">{groups.map(group => <details className="memory-group" key={group.name} open={query.trim() ? true : undefined}>
+      {panel === 'memory' ? <><div className="memory-groups">{groups.map(group => <details className="memory-group" key={group.name} open={query.trim() ? true : undefined}>
         <summary><span>{group.name}</span><small>{group.rows.length} 条</small></summary>
         <div className="workspace-list">{group.rows.map(row => <article className="workspace-card workspace-memory-card" key={row.id}
           onTouchStart={event => { if (event.touches.length === 1) swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY, id: row.id } }}
@@ -188,7 +205,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           </details>
           {revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
-      </details>)}</div> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>本地资料 · {row.source ?? '来源未知'}</small></div><div className="workspace-card-actions">
+      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>本地资料 · {row.source ?? '来源未知'}</small></div><div className="workspace-card-actions">
         <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>
         <button type="button" onClick={() => { if (window.confirm('删除这条资料？')) void run({ operation: 'knowledgeDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>
       </div></article>)}</div>{knowledgeNextOffset !== null && <button className="button button-secondary" type="button" disabled={busy || loadingMoreKnowledge} onClick={() => { void loadMoreKnowledge() }}>{loadingMoreKnowledge ? '正在加载资料…' : '加载更多资料'}</button>}</>}

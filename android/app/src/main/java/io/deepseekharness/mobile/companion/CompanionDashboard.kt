@@ -41,9 +41,19 @@ internal class CompanionDashboard(private val context: Context) {
                 val store = CompanionStore(context)
                 val suggestions = if (store.notificationMemorySuggestions)
                     CompanionMemorySuggestions.fromRecords(store.read(), store.excludedPackages(), store.dismissedMemorySuggestions()) else emptyList()
-                JSONObject().put("items", reviewedRows(memory.listForUser())).put("suggestions", JSONArray().apply {
+                val page = if (memory.usesDatabase()) memory.pageForUser(null, null) else null
+                JSONObject().put("items", reviewedRows(page?.rows ?: memory.listForUser())).put("suggestions", JSONArray().apply {
                     suggestions.forEach { put(JSONObject().put("id", it.id).put("text", it.excerpt).put("source", it.packageName).put("time", it.time)) }
-                })
+                }).apply {
+                    if (page != null) { put("nextBefore", page.next ?: JSONObject.NULL); put("revision", page.revision) }
+                }
+            }
+            "memoryPage" -> {
+                require(memory.usesDatabase()) { "记忆数据库不可用" }
+                val before = request.opt("before") as? Number ?: throw IllegalArgumentException("记忆分页参数无效")
+                val revision = request.opt("revision") as? Number ?: throw IllegalArgumentException("记忆分页参数无效")
+                val page = memory.pageForUser(before.toLong(), revision.toLong())
+                JSONObject().put("items", reviewedRows(page.rows)).put("nextBefore", page.next ?: JSONObject.NULL).put("revision", page.revision)
             }
             "memorySuggestionDismiss" -> { CompanionStore(context).dismissMemorySuggestion(text("id")); JSONObject().put("ok", true) }
             "memorySuggestionsReset" -> { CompanionStore(context).clearDismissedMemorySuggestions(); JSONObject().put("ok", true) }

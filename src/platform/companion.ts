@@ -1,6 +1,7 @@
 /** 助手管理请求的共享契约；原生仍校验所有字段与数据版本。 */
 export type CompanionRequest =
   | { operation: 'memoryList' | 'reminderList'; query?: string }
+  | { operation: 'memoryPage'; before: number; revision: number }
   | { operation: 'knowledgeList'; query?: string; offset?: number }
   | { operation: 'overview' | 'memorySuggestionsReset' | 'memoryResumeAutomatic' }
   | { operation: 'memoryReview'; text: string; id?: string }
