@@ -9,15 +9,16 @@ import type { RuntimeSessionListResult } from '../platform/types'
  * （实测报 `ReferenceError: Cannot access 'listSessions' before initialization`），
  * 所以桩本身也要用 `vi.hoisted` 一起提前建好。
  */
-const { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace, insertTaskDraft } = vi.hoisted(() => ({
+const { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace, insertTaskDraft, openCompanionKnowledge } = vi.hoisted(() => ({
   listSessions: vi.fn<() => Promise<RuntimeSessionListResult>>(),
   getSessionWorkspace: vi.fn().mockResolvedValue({ entries: [] }),
   getCompanionSessionLinks: vi.fn().mockResolvedValue({ sessionIds: [], anchors: [] }),
   resumeCompanionSession: vi.fn().mockResolvedValue(undefined),
   updateSessionWorkspace: vi.fn(),
   insertTaskDraft: vi.fn().mockResolvedValue(undefined),
+  openCompanionKnowledge: vi.fn().mockResolvedValue(undefined),
 }))
-vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace, insertTaskDraft } }))
+vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions, getSessionWorkspace, getCompanionSessionLinks, resumeCompanionSession, updateSessionWorkspace, insertTaskDraft, openCompanionKnowledge } }))
 
 import { SessionManager } from './SessionManager'
 
@@ -112,6 +113,8 @@ describe('会话管理页', () => {
     expect(source).toHaveTextContent('保存文本第 1/2 段（非页码）')
     expect(source).toHaveTextContent('部分解析')
     fireEvent.click(source)
+    await waitFor(() => expect(openCompanionKnowledge).toHaveBeenCalledWith('123e4567-e89b-12d3-a456-426614174000', 'a'.repeat(64)))
+    fireEvent.click(screen.getByRole('button', { name: '用此资料提问' }))
     await waitFor(() => expect(runtimeBridge.insertTaskDraft).toHaveBeenCalledWith(expect.stringContaining('资料 ID：123e4567-e89b-12d3-a456-426614174000')))
     expect(screen.getByText('这些是本机受限摘要，不是完整对话，也不会自动写入 Harness。')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /桌宠会话/ }))

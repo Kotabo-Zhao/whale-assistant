@@ -131,6 +131,11 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
       .then(() => setSourceDraft('已放入对话草稿，请补充问题并核对后发送。'))
       .catch(() => setSourceDraft('当前对话不可用；资料没有发送。请稍后重试。'))
   }
+  const openCitation = (citation: RuntimeCompanionSourceCard) => {
+    setSourceDraft(null)
+    runtimeBridge.openCompanionKnowledge(citation.id, citation.revision)
+      .catch(() => setSourceDraft('无法打开资料详情；资料没有发送。请稍后重试。'))
+  }
 
   /**
    * 挂载时读一次真实会话元数据。
@@ -423,9 +428,9 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
                 <ol>
                   {companionAnchors.get(session.id)!.slice(0, 6).map(anchor => <li key={`${anchor.role}-${anchor.atMs}-${anchor.summary}`}>
                     <time dateTime={new Date(anchor.atMs).toISOString()}>{formatUpdatedAt(anchor.atMs)}</time> · {anchor.role === 'user' ? '你' : '鲸鱼娘'}：{anchor.summary}
-                    {(anchor.citations ?? []).map(citation => <button className="session-source-card" type="button" key={`${citation.id}-${citation.revision}`} onClick={() => useCitation(citation)}>
+                    {(anchor.citations ?? []).map(citation => <span className="session-source-row" key={`${citation.id}-${citation.revision}`}><button className="session-source-card" type="button" onClick={() => openCitation(citation)}>
                       资料来源 · {citation.displayName}{citation.chunkCount > 1 ? ` · 保存文本第 ${citation.chunkIndex + 1}/${citation.chunkCount} 段（非页码）` : ''}{citation.parsingCoverage === 'partial' ? ' · 部分解析' : citation.parsingCoverage === 'not_parsed' ? ' · 尚未解析' : citation.parsingCoverage === 'extracted_text' ? ' · 已提取文字' : citation.parsingCoverage === 'image_description' ? ' · 模型图片描述' : ''}
-                    </button>)}
+                    </button><button className="session-source-ask" type="button" onClick={() => useCitation(citation)}>用此资料提问</button></span>)}
                   </li>)}
                 </ol>
               </details>
