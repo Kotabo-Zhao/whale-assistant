@@ -362,10 +362,10 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
             <p>{t(sessions.length === 0 ? '点击「新建会话」开始工作。' : '换一个关键词，或新建会话开始工作。')}</p>
           </div>
         ) : sections.map(section => <div className="session-period" key={section.label}>
-          <h2><button type="button" className="session-period-toggle" aria-expanded={!collapsedPeriods.has(section.label)} onClick={() => setCollapsedPeriods(current => {
+          <h2><button type="button" className="session-period-toggle" aria-label={`${collapsedPeriods.has(section.label) ? '展开' : '收起'}${section.label}会话（${section.sessions.length}）`} aria-expanded={!collapsedPeriods.has(section.label)} onClick={() => setCollapsedPeriods(current => {
             const next = new Set(current); if (next.has(section.label)) next.delete(section.label); else next.add(section.label); return next
           })}>
-            {collapsedPeriods.has(section.label) ? <ChevronRight size={16} /> : <ChevronDown size={16} />}{section.label}<span>（{section.sessions.length}）</span>
+            {collapsedPeriods.has(section.label) ? <ChevronRight aria-hidden="true" size={16} /> : <ChevronDown aria-hidden="true" size={16} />}{section.label}<span aria-hidden="true">（{section.sessions.length}）</span>
           </button></h2>
           {!collapsedPeriods.has(section.label) && section.sessions.map(session => (
           <article className="session-card" key={session.id}>
@@ -373,7 +373,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
               const next = new Set(current); if (next.has(session.id)) next.delete(session.id); else next.add(session.id); return next
             })} />}
             <button className="session-open" type="button" onClick={() => onOpenHarness(session.local ? undefined : session.id)} disabled={disabled}>
-              <span className="session-icon"><MessageCircle size={18} /></span>
+              <span className="session-icon" aria-hidden="true"><MessageCircle size={18} /></span>
               <span className="session-copy">
                 {/* 读不到标题的会话保留在列表里，但显示「未命名会话」——不拿 id 或时间冒充标题。 */}
                 <strong>{session.title === '' ? t('未命名会话') : session.title}</strong>

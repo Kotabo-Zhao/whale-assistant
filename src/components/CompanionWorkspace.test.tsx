@@ -6,6 +6,16 @@ import { CompanionWorkspace } from './CompanionWorkspace'
 
 beforeEach(() => { vi.clearAllMocks(); bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] }); bridge.exportCompanionBackup.mockResolvedValue(undefined) })
 describe('助手工作台', () => {
+  it('标签关联唯一内容面板并向辅助技术报告加载状态', async () => {
+    render(<CompanionWorkspace />)
+    const memoryTab = screen.getByRole('tab', { name: '长期记忆' })
+    expect(memoryTab).toHaveAttribute('aria-controls', 'companion-workspace-panel-memory')
+    fireEvent.click(memoryTab)
+    await screen.findByLabelText('记忆内容')
+    const panel = screen.getByRole('tabpanel')
+    expect(panel).toHaveAttribute('id', 'companion-workspace-panel-memory')
+    expect(panel).toHaveAttribute('aria-labelledby', 'companion-workspace-tab-memory')
+  })
   it('新建一次性提醒使用本机时间并调用原有提醒服务', async () => {
     render(<CompanionWorkspace />)
     await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'reminderList', query: '' }))

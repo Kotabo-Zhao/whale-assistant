@@ -168,13 +168,13 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       <button className="icon-button" type="button" aria-label="刷新助手数据" disabled={busy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></div>
     <div className="workspace-tabs" role="tablist" aria-label="助手工作台分类">
       {([{ id: 'reminders', label: '提醒', icon: <Bell size={17} /> }, { id: 'knowledge', label: '资料', icon: <BookOpen size={17} /> }, { id: 'memory', label: '长期记忆', icon: <Brain size={17} /> }] as const).map(tab =>
-        <button key={tab.id} role="tab" aria-selected={panel === tab.id} type="button" disabled={busy} onClick={() => { setQuery(''); setPanel(tab.id) }}>{tab.icon}{tab.label}</button>)}
+        <button key={tab.id} id={`companion-workspace-tab-${tab.id}`} role="tab" aria-selected={panel === tab.id} aria-controls={`companion-workspace-panel-${tab.id}`} tabIndex={panel === tab.id ? 0 : -1} type="button" disabled={busy} onClick={() => { setQuery(''); setPanel(tab.id) }}>{tab.icon}{tab.label}</button>)}
     </div>
-    {message && <p className="workspace-message" role="status">{message}</p>}
-    {loading && <p className="workspace-hint">正在读取本地数据…</p>}
+    {message && <p className="workspace-message" role="status" aria-live="polite">{message}</p>}
+    {loading && <p className="workspace-hint" role="status">正在读取本地数据…</p>}
     {loadFailed && <button className="button button-secondary" onClick={() => setRevision(v => v + 1)}>重新读取数据</button>}
     {!loading && !loadFailed && items.length === 0 && recurring.length === 0 && <p className="workspace-hint">当前分类还没有内容，可以在下方添加或导入。</p>}
-    <fieldset className="workspace-fields" disabled={busy}>
+    <fieldset id={`companion-workspace-panel-${panel}`} className="workspace-fields" role="tabpanel" aria-labelledby={`companion-workspace-tab-${panel}`} aria-busy={busy || loading} disabled={busy}>
     {panel === 'reminders' ? <>
       <p className="workspace-hint">提醒需要系统通知权限；省电和后台限制可能延迟送达。{notificationStatus && (notificationStatus === 'READY' ? '通知权限已就绪。' : '当前通知状态未就绪，请检查系统通知设置。')}</p>
       <div className="workspace-form-row"><label>免打扰开始<input type="time" value={quietStart} onChange={e => setQuietStart(e.target.value)} /></label><label>免打扰结束<input type="time" value={quietEnd} onChange={e => setQuietEnd(e.target.value)} /></label></div>
