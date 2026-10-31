@@ -353,6 +353,19 @@ class DeviceBridgeServer(
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return
                     }
+                    if (commandName == "companionTasks") {
+                        if (param.length > 1024) throw RuntimeFailure("TASK_INPUT_INVALID", "事项查询参数过长")
+                        val context = appContext ?: throw RuntimeFailure("TASK_UNAVAILABLE", "事项服务不可用")
+                        val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("TASK_INPUT_INVALID", "事项查询参数无效") }
+                        val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
+                        access.requireTasks()
+                        val result = io.deepseekharness.mobile.companion.CompanionTaskModel.execute(
+                            io.deepseekharness.mobile.companion.CompanionStore(context).notificationModelAccess, param
+                        ) { limit -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.listItems(limit) } }
+                        access.requireTasks()
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                        return
+                    }
                     if (commandName == "companionRecurring") {
                         val context = appContext ?: throw RuntimeFailure("REMINDER_UNAVAILABLE", "提醒服务不可用")
                         val result = io.deepseekharness.mobile.companion.CompanionRecurringBridge(context).execute(param)

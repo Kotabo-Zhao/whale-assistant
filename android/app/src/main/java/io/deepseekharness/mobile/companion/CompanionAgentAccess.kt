@@ -22,6 +22,9 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
     fun requireKnowledge() {
         if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
     }
+    fun requireTasks() {
+        if (!store.notificationModelAccess) throw RuntimeFailure("TASK_MODEL_DISABLED", "用户未允许对话访问通知事项")
+    }
 
     /** No stored content is returned, including when permission is disabled. */
     fun capabilities(): String {
@@ -44,6 +47,9 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
                 .put("readTool", "mobile_knowledge_read").put("imageTool", "mobile_knowledge_image")
                 .put("statusTool", "mobile_knowledge_status")
                 .put("semanticAllowed", canReadKnowledge && semantic.enabled))
+            .put("tasks", JSONObject().put("allowed", store.notificationModelAccess)
+                .put("errorCode", if (store.notificationModelAccess) JSONObject.NULL else "TASK_MODEL_DISABLED")
+                .put("searchTool", "mobile_task_search"))
             .put("notice", "按需检索，不自动读取全部内容；未知资料关键词时查询最近资料，再用 id/revision 读取原文。权限状态可能变化，以每次工具回执为准。")
             .toString()
     }
