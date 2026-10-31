@@ -37,6 +37,33 @@ class SharedMemoryJobsInstrumentedTest {
         assertEquals("queued", SharedMemoryJobs.status(context, id, hash).getString("state"))
     }
 
+    @Test fun failedJobStopsAutomaticRetriesUntilTheUserRetries() {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        val tag = UUID.randomUUID().toString()
+        val dir = File(base.cacheDir, "shared-retry-budget-$tag").apply { check(mkdirs()) }
+        val context = object : ContextWrapper(base) {
+            override fun getApplicationContext(): Context = this
+            override fun getNoBackupFilesDir(): File = dir
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences = base.getSharedPreferences("$tag-$name", mode)
+        }
+        val source = "retry budget $tag"
+        val knowledge = CompanionKnowledgeStore(context)
+        assertTrue(knowledge.add(source))
+        val id = knowledge.search("").getJSONObject(0).getString("id")
+        val hash = CompanionMemorySuppression.digest(source)
+        SharedMemoryJobs.enqueueWithoutSchedule(context, id, source, "share:$hash")
+        repeat(5) { attempt ->
+            assertThrows(Exception::class.java) { SharedMemoryJobs.runOne(context, AtomicBoolean(false), UnderstandingModel { _, _ -> error("offline") }) }
+            if (attempt < 4) SharedMemoryJobs.resetDelays(context)
+        }
+        assertEquals("failed", SharedMemoryJobs.status(context, id, hash).getString("state"))
+        assertEquals(5, SharedMemoryJobs.status(context, id, hash).getInt("attempts"))
+        assertEquals(0L, SharedMemoryJobs.pendingCount(context))
+        assertTrue(SharedMemoryJobs.retryRecord(context, id, hash))
+        assertEquals("queued", SharedMemoryJobs.status(context, id, hash).getString("state"))
+        assertEquals(0, SharedMemoryJobs.status(context, id, hash).getInt("attempts"))
+    }
+
     @Test fun chunksAtomicCompletionAndUnifiedRestore() {
         val base=InstrumentationRegistry.getInstrumentation().targetContext
         val tag=UUID.randomUUID().toString()
