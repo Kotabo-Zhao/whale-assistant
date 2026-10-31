@@ -68,4 +68,10 @@ class CompanionBubbleChatPolicyTest {
         assertTrue(guidance.contains("mobile_knowledge_read")); assertTrue(guidance.contains("id、revision 与 location"))
         assertTrue(guidance.contains("不得推断"))
     }
+    @Test fun capabilityGuidanceExplainsRuntimeInjectedSessionIdentity() {
+        val guidance = CompanionBubbleChatPolicy.capabilityGuidance()
+        assertTrue(guidance.contains("mobile_companion_capabilities"))
+        assertTrue(guidance.contains("不得填写 callerSession"))
+        assertTrue(guidance.contains("自动附带"))
+    }
 }

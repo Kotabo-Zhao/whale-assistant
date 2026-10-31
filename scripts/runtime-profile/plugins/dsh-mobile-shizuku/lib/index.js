@@ -994,7 +994,7 @@ export function apply(ctx) {
   }))
   ctx.tools.register(defineTool({
     name: 'mobile_companion_capabilities',
-    description: '查询当前会话实际的记忆、资料和语义检索授权，不读取正文。首次处理个人资料、访问被拒绝或用户改变设置后可用；权限会变化，以具体工具回执为准。',
+    description: '查询当前会话实际的记忆、资料和语义检索授权，不读取正文。首次处理个人资料、访问被拒绝或用户改变设置后可用；权限会变化，以具体工具回执为准。callerSession 由工具运行时从当前 Agent 会话自动附带，调用参数不得自行填写或伪造。',
     parameters: {},
     output: output(),
     execute: (_args, exec) => companionBridge('companionMemory', { op: 'capabilities' }, exec),

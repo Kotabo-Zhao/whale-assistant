@@ -106,6 +106,14 @@ test('最近资料工具使用显式协议并只接受受控来源和覆盖范�
   await assert.rejects(tool.execute({ coverage: 'unknown' }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
 })
 
+test('能力工具说明会话身份由运行时注入，模型参数不能伪造', t => {
+  const f = fixture(t, () => ok('{}'))
+  const tool = f.tools.get('mobile_companion_capabilities')
+  assert.match(tool.description, /callerSession/u)
+  assert.match(tool.description, /自动附带/u)
+  assert.match(tool.description, /不得自行填写或伪造/u)
+})
+
 test('整份资料原件删除要求同一检索结果的三项稳定标识', async t => {
   const f = fixture(t, () => ok('{"deletedRecords":2,"objectDeleted":true}'))
   const tool = f.tools.get('mobile_knowledge_forget_original')
