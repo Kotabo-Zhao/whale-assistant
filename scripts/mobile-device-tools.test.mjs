@@ -258,6 +258,27 @@ test('副屏截图保持真实附件格式，并说明缩放后的副屏操作�
   assert.match(text, /不能仅凭该帧确认刚才的动作已完成/)
 })
 
+test('资料图片工具解开受授权桥返回的图像信封，并保留调用会话', async t => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64')
+  let saved
+  const f = fixture(t, () => ok(JSON.stringify({ imageBase64: png })), {
+    llm: { resolveModelInfo: async () => ({ inputModalities: ['image'] }) },
+    attachments: { saveImage: async options => {
+      saved = options
+      return { attachmentId: 'knowledge-image', mediaType: 'image/png', bytes: 8, width: 1, height: 1 }
+    } },
+  })
+  const id = virtualSession
+  const revision = 'a'.repeat(64)
+  const result = await f.tools.get('mobile_knowledge_image').execute({ id, revision }, {
+    agent: { session: { id: virtualSession, requestHeader: () => ({ config: { provider: 'test', model: 'vision' } }) } },
+  })
+  assert.deepEqual(f.requests, [{ command: 'companionKnowledge', param: JSON.stringify({ op: 'image', id, revision, callerSession: virtualSession }) }])
+  assert.equal(saved.name, 'android-knowledge-image.png')
+  assert.equal(saved.mediaType, 'image/png')
+  assert.equal(result.image.attachmentId, 'knowledge-image')
+})
+
 test('旧版副屏截图缺少帧元数据时不宣称拿到了新帧', t => {
   const f = fixture(t, () => ok('{}'))
   const tool = f.tools.get('mobile_virtual_screen_screenshot')

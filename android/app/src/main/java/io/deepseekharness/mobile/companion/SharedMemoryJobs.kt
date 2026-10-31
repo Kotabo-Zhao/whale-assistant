@@ -166,19 +166,12 @@ internal object SharedMemoryJobs {
         db.rawQuery("SELECT MIN(next_at) FROM shared_jobs", null).use { c -> if (!c.moveToFirst() || c.isNull(0)) null else (c.getLong(0) - System.currentTimeMillis()).coerceAtLeast(0) }
     } }
     private fun failureKey(job: Job) = "${job.id}:${job.hash}"
-    private fun failureCode(error: Exception): String = when (error) {
-        is UnderstandingRequestException -> error.code
-        is java.net.SocketTimeoutException -> "timeout"
-        is java.io.IOException -> "network"
-        is org.json.JSONException, is IllegalArgumentException -> "invalid_model_output"
-        else -> "processing_failed"
-    }
     private fun clearFailure(context: Context, job: Job) {
         context.getSharedPreferences("shared_job_failures_v1", Context.MODE_PRIVATE).edit().remove(failureKey(job)).apply()
     }
     private fun defer(context: Context, job: Job, error: Exception) = synchronized(lock) { database(context).use { db ->
-        val code = failureCode(error)
-        val delay = if (code in setOf("credentials", "configuration", "request_rejected")) 6 * 60 * 60_000L else 30 * 60_000L
+        val code = UnderstandingFailure.code(error)
+        val delay = UnderstandingFailure.retryDelayMs(code)
         db.execSQL("UPDATE shared_jobs SET attempts=attempts+1,next_at=? WHERE record_id=? AND text_hash=? AND event_id=? AND COALESCE((SELECT CAST(value AS INTEGER) FROM shared_jobs_meta WHERE key='generation'),0)=?",
             arrayOf(System.currentTimeMillis() + delay, job.id, job.hash, job.event,job.generation))
         if (currentGeneration(context, job)) context.getSharedPreferences("shared_job_failures_v1", Context.MODE_PRIVATE)

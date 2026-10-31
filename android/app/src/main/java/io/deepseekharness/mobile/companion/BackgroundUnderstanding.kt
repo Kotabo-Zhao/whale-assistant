@@ -89,9 +89,11 @@ internal object BackgroundUnderstanding {
         prefs.edit().putString("day", day).putInt("calls", count + 1).commit()
     }
 
-    fun status(context: Context, value: String) {
-        context.getSharedPreferences("understanding_runtime_v1", Context.MODE_PRIVATE).edit()
-            .putString("status", value).putLong("updated", System.currentTimeMillis()).apply()
+    fun status(context: Context, value: String, errorCode: String? = null) {
+        val editor = context.getSharedPreferences("understanding_runtime_v1", Context.MODE_PRIVATE).edit()
+            .putString("status", value).putLong("updated", System.currentTimeMillis())
+        if (errorCode == null) editor.remove("lastErrorCode") else editor.putString("lastErrorCode", errorCode)
+        editor.apply()
     }
 
     fun hasPending(context: Context): Boolean = runCatching {
@@ -126,9 +128,10 @@ internal object BackgroundUnderstanding {
                 check(CompanionMemoryStore(app).commitUnderstanding(store.queue, claim, event.first, output))
                 runCatching { CompanionReminder(app).restore() }
                 status(app, "已完成一条分析，结果待查看")
-            } catch (_: Exception) {
-                store.queue.retry(claim, System.currentTimeMillis() + 30 * 60_000L)
-                status(app, "模型处理失败，将稍后重试")
+            } catch (error: Exception) {
+                val code = UnderstandingFailure.code(error)
+                store.queue.retry(claim, System.currentTimeMillis() + UnderstandingFailure.retryDelayMs(code))
+                status(app, "${UnderstandingFailure.summary(code)}，将稍后重试", code)
             }
             return store.queue.pendingCount() > 0
         }
@@ -144,7 +147,11 @@ class UnderstandingJobService : JobService() {
         BackgroundUnderstanding.jobRunning.set(true)
         executor.execute {
             val more = runCatching { BackgroundUnderstanding.runOne(applicationContext, runStopped) }
-                .getOrElse { BackgroundUnderstanding.status(applicationContext, "后台任务失败，将稍后重试"); true }
+                .getOrElse { error ->
+                    val code = UnderstandingFailure.code(error)
+                    BackgroundUnderstanding.status(applicationContext, "${UnderstandingFailure.summary(code)}，将稍后重试", code)
+                    true
+                }
             if (!runStopped.get()) {
                 jobFinished(params, false)
                 BackgroundUnderstanding.jobRunning.set(false)

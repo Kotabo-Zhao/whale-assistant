@@ -413,22 +413,25 @@ async function assertImageCapableRoute(ctx, exec) {
 
 async function captureScreenshot(ctx, exec, command = 'screenshot', param = '') {
   await assertImageCapableRoute(ctx, exec)
-  // 副屏响应是带元数据的 JSON 信封，允许少量字段开销；图像 Base64 本身仍受原上限约束。
-  const result = await callBridge(command, param, exec.signal, command === 'virtualScreenCapture' ? MAX_SCREENSHOT_BASE64_CHARS + 2048 : MAX_SCREENSHOT_BASE64_CHARS)
+  // 副屏和资料图片均使用 JSON 信封，允许少量字段开销；图像 Base64 本身仍受原上限约束。
+  const imageEnvelope = command === 'virtualScreenCapture' || command === 'companionKnowledge'
+  const result = await callBridge(command, param, exec.signal, imageEnvelope ? MAX_SCREENSHOT_BASE64_CHARS + 2048 : MAX_SCREENSHOT_BASE64_CHARS)
   if (result.truncated) throw new Error('DEVICE_SCREENSHOT_TOO_LARGE')
   let encoded = result.output.replace(/\s/gu, '')
   let frameMeta = {}
-  if (command === 'virtualScreenCapture' && result.output.trimStart().startsWith('{')) {
+  if (imageEnvelope && result.output.trimStart().startsWith('{')) {
     try {
       const envelope = JSON.parse(result.output)
       if (typeof envelope.imageBase64 === 'string') {
         encoded = envelope.imageBase64.replace(/\s/gu, '')
-        frameMeta = {
-          ...(typeof envelope.packageName === 'string' ? { packageName: envelope.packageName } : {}),
-          ...(Number.isSafeInteger(envelope.frameAtElapsedMs) ? { frameAtElapsedMs: envelope.frameAtElapsedMs } : {}),
-          ...(typeof envelope.frameReused === 'boolean' ? { frameReused: envelope.frameReused } : {}),
-          // 宿主判定该帧为空白（目标未渲染）时透传，插件不做二次判定。
-          ...(typeof envelope.frameBlank === 'boolean' ? { frameBlank: envelope.frameBlank } : {}),
+        if (command === 'virtualScreenCapture') {
+          frameMeta = {
+            ...(typeof envelope.packageName === 'string' ? { packageName: envelope.packageName } : {}),
+            ...(Number.isSafeInteger(envelope.frameAtElapsedMs) ? { frameAtElapsedMs: envelope.frameAtElapsedMs } : {}),
+            ...(typeof envelope.frameReused === 'boolean' ? { frameReused: envelope.frameReused } : {}),
+            // 宿主判定该帧为空白（目标未渲染）时透传，插件不做二次判定。
+            ...(typeof envelope.frameBlank === 'boolean' ? { frameBlank: envelope.frameBlank } : {}),
+          }
         }
       }
     } catch {
@@ -443,7 +446,10 @@ async function captureScreenshot(ctx, exec, command = 'screenshot', param = '') 
   if (data.length < pngSignature.length || pngSignature.some((byte, index) => data[index] !== byte)) {
     throw new Error('DEVICE_SCREENSHOT_INVALID')
   }
-  const image = await ctx.attachments.saveImage({ data, mediaType: 'image/png', name: command === 'screenshot' ? 'android-screen.png' : 'android-virtual-screen.png' })
+  const name = command === 'screenshot' ? 'android-screen.png'
+    : command === 'companionKnowledge' ? 'android-knowledge-image.png'
+      : 'android-virtual-screen.png'
+  const image = await ctx.attachments.saveImage({ data, mediaType: 'image/png', name })
   // 附件服务可能把 PNG 转成 JPEG/WebP；返回真实格式，不伪造为源文件的 MIME。
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(image.mediaType)) throw new Error('DEVICE_SCREENSHOT_INVALID')
   return {
