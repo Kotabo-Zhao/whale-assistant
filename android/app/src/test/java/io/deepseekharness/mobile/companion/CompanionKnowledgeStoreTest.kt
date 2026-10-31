@@ -69,6 +69,19 @@ class CompanionKnowledgeStoreTest {
         assertEquals("text_file", JSONArray(plan.additions).getJSONObject(0).getString("source"))
         assertThrows(Exception::class.java) { CompanionKnowledgeData.add(rows, "bad", 2, "other") }
     }
+    @Test fun originalAndImageAnalysisRowsRequireStableLinksAndCoverage() {
+        val originalId = "a".repeat(64)
+        val original = JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("text", "[原件已保存，解析状态需另行核对]")
+            .put("source", "original").put("createdAt", 1).put("originalId", originalId).put("displayName", "报告.pdf")
+            .put("mime", "application/pdf").put("coverage", "not_parsed")
+        val image = JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("text", "一只鲸鱼")
+            .put("source", "image_analysis").put("createdAt", 2).put("originalId", originalId).put("coverage", "model_description")
+        assertEquals(2, CompanionKnowledgeData.validateRows(JSONArray().put(original).put(image), false).length())
+        val missingOriginal = JSONObject(image.toString()).remove("originalId")
+        assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.validateRows(JSONArray().put(missingOriginal), false) }
+        val mismatchedCoverage = JSONObject(image.toString()).put("coverage", "partial")
+        assertThrows(IllegalArgumentException::class.java) { CompanionKnowledgeData.validateRows(JSONArray().put(mismatchedCoverage), false) }
+    }
     @Test fun storedDataUsesStrictUtf8AndRejectsLossyWrites() {
         val rows = JSONArray()
         CompanionKnowledgeData.add(rows, "你好 🐋", 1)

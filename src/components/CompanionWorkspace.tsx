@@ -7,12 +7,16 @@ import './CompanionWorkspace.css'
 type Panel = 'reminders' | 'knowledge' | 'memory'
 type Row = CompanionRow
 type Preview = { token: string; items: Row[]; skipped: number }
+type KnowledgeSource = 'shared_text' | 'text_file' | 'original' | 'image_analysis'
+type KnowledgeCoverage = 'not_parsed' | 'partial' | 'extracted_text' | 'model_description'
 const rows = companionRows
 const expected = (row: Row) => typeof row._review === 'string' ? row._review : ''
 const originalId = (row: Row) => typeof row.originalId === 'string' && /^[a-f0-9]{64}$/.test(row.originalId) ? row.originalId : null
 const formatMinute = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
 const parseMinute = (value: string) => { const [hour, minute] = value.split(':').map(Number); return hour * 60 + minute }
 const memoryCategory = (row: Row) => row.status === 'pending' ? '待确认' : row.source === 'shared_understanding' ? '分享内容' : row.source === 'auto_notification' || row.source === 'auto_notification_group' || row.source === 'user_notification' ? '通知整理' : row.source === 'auto_usage' ? '使用习惯' : row.source === 'auto_understanding' || row.source === 'user_understanding' ? '后台理解' : '手动与对话记忆'
+const knowledgeSourceLabel = (source: unknown) => source === 'shared_text' ? '分享文本' : source === 'text_file' ? '文档/文本' : source === 'original' ? '已保存原件' : source === 'image_analysis' ? '图片描述' : '来源未知'
+const knowledgeCoverageLabel = (coverage: unknown) => coverage === 'not_parsed' ? '尚未解析' : coverage === 'partial' ? '部分解析' : coverage === 'extracted_text' ? '已提取文字' : coverage === 'model_description' ? '模型图片描述' : '覆盖范围未知'
 const days = ['每天', '每周一', '每周二', '每周三', '每周四', '每周五', '每周六', '每周日']
 
 export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPanel?: Panel }) {
@@ -47,13 +51,15 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [undoKnowledge, setUndoKnowledge] = useState<Row | null>(null)
   const [memorySource, setMemorySource] = useState('all')
   const [memoryOrder, setMemoryOrder] = useState<'recent' | 'oldest' | 'source' | 'type'>('recent')
+  const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource | 'all'>('all')
+  const [knowledgeCoverage, setKnowledgeCoverage] = useState<KnowledgeCoverage | 'all'>('all')
   const pending = useRef(false)
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
   useEffect(() => {
     let live = true
     if (previousPanel.current !== panel) {
-      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent')
+      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setKnowledgeSource('all'); setKnowledgeCoverage('all')
       previousPanel.current = panel
     }
     setLoading(true); setLoadFailed(false)
@@ -61,7 +67,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       ? { operation: 'reminderList', query: '' }
       : panel === 'memory'
         ? { operation: 'memoryList', query: '' }
-        : { operation: 'knowledgeList', query: knowledgeQuery, offset: 0 }
+        : { operation: 'knowledgeList', query: knowledgeQuery, offset: 0, ...(knowledgeSource === 'all' ? {} : { source: knowledgeSource }), ...(knowledgeCoverage === 'all' ? {} : { coverage: knowledgeCoverage }) }
     void Promise.resolve().then(() => runtimeBridge.companionDashboard(request)).then(result => {
       const nextItems = rows(result.items); const nextRecurring = rows(result.recurring ?? []); const nextSuggestions = rows(result.suggestions ?? [])
       if (live) {
@@ -74,7 +80,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     }).catch(() => { if (live) { setLoadFailed(true); setMessage('无法读取数据，原有内容已保留。') } })
     .finally(() => { if (live) setLoading(false) })
     return () => { live = false }
-  }, [panel, revision, knowledgeQuery])
+  }, [panel, revision, knowledgeQuery, knowledgeSource, knowledgeCoverage])
   const run = async (request: CompanionRequest, success: string) => {
     if (pending.current) return null
     pending.current = true
@@ -144,7 +150,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     if (busy || loadingMoreKnowledge || panel !== 'knowledge' || knowledgeNextOffset === null) return
     setLoadingMoreKnowledge(true); setMessage('')
     try {
-      const result = await runtimeBridge.companionDashboard({ operation: 'knowledgeList', query: knowledgeQuery, offset: knowledgeNextOffset })
+      const result = await runtimeBridge.companionDashboard({ operation: 'knowledgeList', query: knowledgeQuery, offset: knowledgeNextOffset, ...(knowledgeSource === 'all' ? {} : { source: knowledgeSource }), ...(knowledgeCoverage === 'all' ? {} : { coverage: knowledgeCoverage }) })
       const next = rows(result.items)
       setItems(current => {
         const merged = new Map(current.map(row => [row.id, row])); next.forEach(row => merged.set(row.id, row)); return [...merged.values()]
@@ -218,6 +224,10 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
         <button type="button" className="button button-secondary" onClick={() => { void run({ operation: 'memorySuggestionsReset' }, '已重置忽略记录。') }}>重置已忽略候选</button>
       </details>}
       <label>搜索<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={panel === 'memory' ? '搜索已确认及待确认的记忆' : '搜索本地资料'} /></label>
+      {panel === 'knowledge' && <div className="workspace-form-row knowledge-filter-row">
+        <label>资料来源<select value={knowledgeSource} onChange={event => setKnowledgeSource(event.target.value as typeof knowledgeSource)}><option value="all">全部来源</option><option value="shared_text">分享文本</option><option value="text_file">文档/文本</option><option value="original">已保存原件</option><option value="image_analysis">图片描述</option></select></label>
+        <label>解析覆盖<select value={knowledgeCoverage} onChange={event => setKnowledgeCoverage(event.target.value as typeof knowledgeCoverage)}><option value="all">全部状态</option><option value="not_parsed">尚未解析</option><option value="partial">部分解析</option><option value="extracted_text">已提取文字</option><option value="model_description">模型图片描述</option></select></label>
+      </div>}
       {panel === 'memory' && <div className="workspace-form-row memory-filter-row">
         <label>来源筛选<select value={memorySource} onChange={event => setMemorySource(event.target.value)}><option value="all">全部来源</option>{memorySources.map(source => <option key={source} value={source}>{source}</option>)}</select></label>
         <label>排序<select value={memoryOrder} onChange={event => setMemoryOrder(event.target.value as typeof memoryOrder)}><option value="recent">最近</option><option value="oldest">最早</option><option value="source">来源</option><option value="type">类型</option></select></label>
@@ -244,7 +254,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           </details>
           {revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
-      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>本地资料 · {row.source ?? '来源未知'}</small></div><div className="workspace-card-actions">
+      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</strong><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}{typeof row.displayName === 'string' && row.displayName !== '' ? ` · ${row.text.slice(0, 120)}` : ''}</small></div><div className="workspace-card-actions">
         <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>
         <button type="button" onClick={() => { void deleteKnowledge(row) }}>删除</button>
         {originalId(row) !== null && <button type="button" className="button-danger-quiet" onClick={() => { void deleteKnowledgeOriginal(row) }}>永久删除整份原件</button>}

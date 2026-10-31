@@ -75,6 +75,24 @@ it('刷新不清空正在编辑的资料，读取失败保留原记录', async (
   expect(screen.getByText('已有资料')).toBeInTheDocument()
   expect(screen.getByLabelText('资料内容')).toHaveValue('未保存的草稿')
 })
+it('资料来源和解析范围筛选交由本地分页查询，加载更多保持相同筛选', async () => {
+  bridge.companionDashboard.mockImplementation((request: { operation: string; offset?: number }) => {
+    if (request.operation !== 'knowledgeList') return Promise.resolve({ items: [], recurring: [] })
+    return Promise.resolve(request.offset === 20
+      ? { items: [{ id: 'k2', text: '第二页内容', source: 'text_file', coverage: 'extracted_text' }], nextOffset: null }
+      : { items: [{ id: 'k1', text: '第一页内容', displayName: '报告.pdf', source: 'text_file', coverage: 'extracted_text' }], nextOffset: 20 })
+  })
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  fireEvent.change(await screen.findByLabelText('资料来源'), { target: { value: 'text_file' } })
+  fireEvent.change(screen.getByLabelText('解析覆盖'), { target: { value: 'extracted_text' } })
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeList', query: '', offset: 0, source: 'text_file', coverage: 'extracted_text' }))
+  expect(await screen.findByText('报告.pdf')).toBeInTheDocument()
+  expect(screen.getByText('文档/文本 · 已提取文字 · 第一页内容')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '加载更多资料' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeList', query: '', offset: 20, source: 'text_file', coverage: 'extracted_text' }))
+  expect(await screen.findByText('第二页内容')).toBeInTheDocument()
+})
 it('资料原件删除要求同一资料、原件和当前文本三项标识，并且不提供撤销', async () => {
   const originalId = 'a'.repeat(64)
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'

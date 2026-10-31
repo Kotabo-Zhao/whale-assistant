@@ -54,7 +54,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
      * same case-insensitive substring semantics as the legacy JSON store; callers receive one
      * extra-row-derived continuation rather than an assertion that this is the whole result set.
      */
-    fun searchPage(query: String, offset: Int, limit: Int): Pair<JSONArray, Int?> {
+    fun searchPage(query: String, offset: Int, limit: Int, source: String? = null, coverage: String? = null): Pair<JSONArray, Int?> {
         require(query.length <= 100 && offset >= 0 && limit in 1..50)
         val normalized = query.trim()
         val result = JSONArray()
@@ -63,6 +63,8 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
             while (cursor.moveToNext()) {
                 val row = JSONObject(cursor.getString(0))
                 if (normalized.isNotEmpty() && !row.getString("text").contains(normalized, ignoreCase = true)) continue
+                if (source != null && row.optString("source") != source) continue
+                if (coverage != null && row.optString("coverage", "unknown") != coverage) continue
                 if (matched++ < offset) continue
                 if (result.length() == limit) return result to (offset + result.length())
                 result.put(row)

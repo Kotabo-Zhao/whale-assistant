@@ -26,8 +26,8 @@ internal class CompanionKnowledgeStore(context: Context) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.recent(offset, limit) }
     }
     /** Paged local management query; unlike [search], this never returns the full collection. */
-    internal fun searchPage(query: String, offset: Int, limit: Int): Pair<JSONArray, Int?> = synchronized(lock) {
-        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.searchPage(query, offset, limit) }
+    internal fun searchPage(query: String, offset: Int, limit: Int, source: String? = null, coverage: String? = null): Pair<JSONArray, Int?> = synchronized(lock) {
+        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.searchPage(query, offset, limit, source, coverage) }
     }
     internal fun pageAfter(position: Long, limit: Int): List<Pair<Long, JSONObject>> = synchronized(lock) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.pageAfter(position, limit) }
@@ -209,7 +209,23 @@ internal object CompanionKnowledgeData {
             require(runCatching { UUID.fromString(id).toString() == id }.getOrDefault(false) && ids.add(id)) { "资料标识无效" }
             val text = row.getString("text")
             utf8(text)
-            require(text.isNotBlank() && text.length <= MAX_TEXT && row.getString("source") in setOf("shared_text", "text_file") && row.getLong("createdAt") > 0) { "资料内容无效" }
+            val source = row.getString("source")
+            val coverage = row.opt("coverage").takeUnless { it == null || it == JSONObject.NULL } as? String
+            require(text.isNotBlank() && text.length <= MAX_TEXT && source in setOf("shared_text", "text_file", "original", "image_analysis") && row.getLong("createdAt") > 0) { "资料内容无效" }
+            require(coverage == null || coverage in setOf("not_parsed", "partial", "extracted_text", "model_description")) { "资料解析范围无效" }
+            if (source == "original" || source == "image_analysis") {
+                val originalId = row.opt("originalId") as? String
+                require(originalId?.matches(Regex("[a-f0-9]{64}")) == true) { "原件关联无效" }
+                require(coverage != null) { "原件解析范围缺失" }
+            }
+            if (source == "original") {
+                require(row.opt("displayName") is String && row.opt("mime") is String) { "原件资料格式无效" }
+            }
+            if (source == "image_analysis") require(coverage == "model_description") { "图片描述解析范围无效" }
+            if (source == "text_file" && row.has("documentId")) {
+                val documentId = row.opt("documentId") as? String
+                require(documentId?.matches(Regex("[a-f0-9]{64}")) == true && row.opt("displayName") is String && coverage in setOf("partial", "extracted_text")) { "文档资料关联无效" }
+            }
         }
         return rows
     }

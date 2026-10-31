@@ -2,7 +2,7 @@
 export type CompanionRequest =
   | { operation: 'memoryList' | 'reminderList'; query?: string }
   | { operation: 'memoryPage'; before: number; revision: number }
-  | { operation: 'knowledgeList'; query?: string; offset?: number }
+  | { operation: 'knowledgeList'; query?: string; offset?: number; source?: 'shared_text' | 'text_file' | 'original' | 'image_analysis'; coverage?: 'not_parsed' | 'partial' | 'extracted_text' | 'model_description' }
   | { operation: 'overview' | 'memorySuggestionsReset' | 'memoryResumeAutomatic' }
   | { operation: 'memoryReview'; text: string; id?: string }
   | { operation: 'memoryAdd'; text: string; snapshot: string }

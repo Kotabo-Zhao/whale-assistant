@@ -85,8 +85,16 @@ internal class CompanionDashboard(private val context: Context) {
                     else -> throw IllegalArgumentException("资料查询参数无效")
                 }
                 require(query.length <= 100 && offset >= 0) { "资料查询参数无效" }
-                val (items, nextOffset) = knowledge.searchPage(query, offset, 20)
+                fun filter(key: String, values: Set<String>): String? {
+                    if (!request.has(key) || request.isNull(key)) return null
+                    return (request.opt(key) as? String)?.takeIf { it in values }
+                        ?: throw IllegalArgumentException("资料查询参数无效")
+                }
+                val source = filter("source", setOf("shared_text", "text_file", "original", "image_analysis"))
+                val coverage = filter("coverage", setOf("not_parsed", "partial", "extracted_text", "model_description"))
+                val (items, nextOffset) = knowledge.searchPage(query, offset, 20, source, coverage)
                 JSONObject().put("items", items).put("nextOffset", nextOffset ?: JSONObject.NULL)
+                    .put("source", source ?: JSONObject.NULL).put("coverage", coverage ?: JSONObject.NULL)
             }
             "knowledgeAdd" -> JSONObject().put("ok", knowledge.add(text("text"), "text_file"))
             "knowledgeEdit" -> success(knowledge.edit(text("id"), text("expectedText"), text("text")))
