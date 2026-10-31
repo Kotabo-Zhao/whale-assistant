@@ -458,8 +458,15 @@ class CompanionActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("事项").setItems(labels) { _, index ->
             val item = items[index]
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle(item.title)
-                .setMessage("模型识别可能有误；可在助手设置中查看、更新或安排提醒。")
-                .setNegativeButton("关闭", null).show()
+                .setMessage("模型识别可能有误。完成或取消会使关联提醒失效；完整提醒管理可在助手设置中打开。")
+                .setItems(arrayOf("标记待处理", "标记已完成", "取消事项")) { _, action ->
+                    val next = listOf("open", "done", "cancelled")[action]
+                    runMemoryIo("正在更新事项…", {
+                        val updated = UnifiedUnderstandingStore.open(this).use { it.queue.updateItem(item.id, item.state, next) }
+                        if (updated && next in setOf("done", "cancelled")) runCatching { CompanionReminder(this).removeLinked(item.id) }
+                        updated
+                    }) { result -> android.widget.Toast.makeText(this, if (result.getOrDefault(false)) "事项已更新。" else "事项已变化或更新失败，请重新查看。", android.widget.Toast.LENGTH_LONG).show() }
+                }.setNegativeButton("关闭", null).show()
         }.setNegativeButton("关闭", null).show()
     }
 
