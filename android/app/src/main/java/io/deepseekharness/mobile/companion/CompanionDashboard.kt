@@ -91,6 +91,7 @@ internal class CompanionDashboard(private val context: Context) {
             "knowledgeAdd" -> JSONObject().put("ok", knowledge.add(text("text"), "text_file"))
             "knowledgeEdit" -> success(knowledge.edit(text("id"), text("expectedText"), text("text")))
             "knowledgeDelete" -> success(knowledge.remove(text("id"), text("expectedText")))
+            "knowledgeUndoDelete" -> success(knowledge.undoRemove(text("id")))
             "reminderList" -> {
                 val store = CompanionStore(context)
                 JSONObject().put("items", reviewedRows(reminder.list())).put("recurring", reviewedRows(recurring.list()))

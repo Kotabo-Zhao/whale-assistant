@@ -43,6 +43,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [memoryNextBefore, setMemoryNextBefore] = useState<number | null>(null)
   const [memoryRevision, setMemoryRevision] = useState<number | null>(null)
   const [loadingMoreMemory, setLoadingMoreMemory] = useState(false)
+  const [undoKnowledge, setUndoKnowledge] = useState<Row | null>(null)
   const pending = useRef(false)
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
@@ -78,6 +79,16 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     try { const result = await runtimeBridge.companionDashboard(request); if (result.result === 'STALE') { setMessage('记忆已变化，请重新核对。'); return null } if (result.ok === false || result.result === 'EXISTING_PENDING' || result.result === 'EXISTING_CONFIRMED') { setMessage('相同内容已存在或等待确认，未重复保存。'); return null } setText(''); setEditing(null); setReview(null); setPreview(null); setRevision(v => v + 1); setMessage(success); return result }
     catch { setMessage('操作未完成，数据可能已变化或输入不符合要求；请刷新后重试。'); return null }
     finally { pending.current = false; setBusy(false) }
+  }
+  const deleteKnowledge = async (row: Row) => {
+    if (!window.confirm('删除这条资料？十分钟内可撤销；关联原件和已抑制的派生记忆不会因此恢复。')) return
+    const result = await run({ operation: 'knowledgeDelete', id: row.id, expected: expected(row), expectedText: row.text }, '资料已删除，可在十分钟内撤销。')
+    if (result) setUndoKnowledge(row)
+  }
+  const undoKnowledgeDelete = async () => {
+    if (undoKnowledge === null) return
+    const result = await run({ operation: 'knowledgeUndoDelete', id: undoKnowledge.id }, '资料已恢复；此前已抑制的派生记忆不会自动恢复。')
+    if (result) setUndoKnowledge(null)
   }
   const startMemoryReview = async (action: 'add' | 'edit' | 'approve', row?: Row) => {
     const value = action === 'approve' ? row?.text ?? '' : text.trim()
@@ -207,8 +218,9 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
         </article>)}</div>
       </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>本地资料 · {row.source ?? '来源未知'}</small></div><div className="workspace-card-actions">
         <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>
-        <button type="button" onClick={() => { if (window.confirm('删除这条资料？')) void run({ operation: 'knowledgeDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>
+        <button type="button" onClick={() => { void deleteKnowledge(row) }}>删除</button>
       </div></article>)}</div>{knowledgeNextOffset !== null && <button className="button button-secondary" type="button" disabled={busy || loadingMoreKnowledge} onClick={() => { void loadMoreKnowledge() }}>{loadingMoreKnowledge ? '正在加载资料…' : '加载更多资料'}</button>}</>}
+      {panel === 'knowledge' && undoKnowledge !== null && <p className="workspace-hint" role="status">资料已删除，可在十分钟内撤销。 <button className="button button-quiet" type="button" disabled={busy} onClick={() => { void undoKnowledgeDelete() }}>撤销删除</button></p>}
       {panel === 'memory' && <div className="workspace-hint"><p>删除自动通知或使用习惯记忆后，对应来源会暂停自动整理，避免下次采集立即重新生成。恢复只影响已开启的自动整理功能。</p><button type="button" className="button button-secondary" onClick={() => { if (window.confirm('恢复已删除来源的自动整理？新通知和使用统计可能再次形成记忆。')) void run({ operation: 'memoryResumeAutomatic' }, '自动整理来源已恢复。') }}>恢复已删除来源的自动整理</button></div>}
       {panel === 'memory' && items.length > 0 && <button className="button button-danger-quiet" type="button" onClick={() => { if (window.confirm('清空全部长期记忆并暂停通知和使用习惯的自动整理？此操作无法撤销。')) void run({ operation: 'memoryClear', confirmed: true }, '长期记忆已清空。') }}>清空全部长期记忆</button>}
     </>}

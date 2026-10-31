@@ -11,6 +11,7 @@ export type CompanionRequest =
   | { operation: 'memoryClear'; confirmed: true }
   | { operation: 'knowledgeAdd'; text: string }
   | { operation: 'knowledgeEdit'; id: string; expectedText: string; text: string }
+  | { operation: 'knowledgeUndoDelete'; id: string }
   | { operation: 'quietHoursSet'; start: number; end: number }
   | { operation: 'reminderAdd'; text: string; at: number }
   | { operation: 'reminderDelete' | 'recurringDelete'; id: string; expected: string }
