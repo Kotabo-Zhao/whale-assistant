@@ -69,6 +69,8 @@ const bridge = vi.hoisted(() => ({
   addTerminalExitListener: vi.fn(),
   // 首页内嵌的「会话工作区」一挂载就读一次会话列表：缺这个桩会让 effect 抛错并卸载整棵树。
   listSessions: vi.fn(),
+  getSessionWorkspace: vi.fn().mockResolvedValue({ entries: [] }),
+  updateSessionWorkspace: vi.fn(),
 }))
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))

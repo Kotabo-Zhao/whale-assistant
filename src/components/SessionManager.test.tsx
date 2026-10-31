@@ -9,8 +9,12 @@ import type { RuntimeSessionListResult } from '../platform/types'
  * （实测报 `ReferenceError: Cannot access 'listSessions' before initialization`），
  * 所以桩本身也要用 `vi.hoisted` 一起提前建好。
  */
-const { listSessions } = vi.hoisted(() => ({ listSessions: vi.fn<() => Promise<RuntimeSessionListResult>>() }))
-vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions } }))
+const { listSessions, getSessionWorkspace, updateSessionWorkspace } = vi.hoisted(() => ({
+  listSessions: vi.fn<() => Promise<RuntimeSessionListResult>>(),
+  getSessionWorkspace: vi.fn().mockResolvedValue({ entries: [] }),
+  updateSessionWorkspace: vi.fn(),
+}))
+vi.mock('../platform/native', () => ({ runtimeBridge: { listSessions, getSessionWorkspace, updateSessionWorkspace } }))
 
 import { SessionManager } from './SessionManager'
 

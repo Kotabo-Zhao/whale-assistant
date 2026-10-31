@@ -193,6 +193,8 @@ export const bridge = {
   // 会话工作区：首页一挂载就会调一次 listSessions()，缺这个桩同样会让 effect 抛错并卸载整棵树
   // （见上面 `setAppTheme` 的注释：表现成「找不到任何元素」，与真正的界面缺陷几乎无法区分）。
   listSessions: vi.fn(),
+  getSessionWorkspace: vi.fn().mockResolvedValue({ entries: [] }),
+  updateSessionWorkspace: vi.fn(),
   // 更新：可用版本列表与应用自更新同样有默认桩——界面一进相关页面就会读一次，
   // 缺桩会让 effect 抛错并卸载整棵树（同上一条注释里的坑）。
   listHarnessReleases: vi.fn(),

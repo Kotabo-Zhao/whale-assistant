@@ -160,7 +160,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
-    const inScope = sessions.filter(session => showArchived || !session.archived)
+    const inScope = sessions.filter(session => showArchived ? session.archived : !session.archived)
     if (normalized === '') return inScope
     return inScope.filter(session => `${session.title} ${session.group ?? ''}`.toLocaleLowerCase().includes(normalized))
   }, [query, sessions, showArchived])
@@ -260,7 +260,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
         </div>
         <span className="session-count">{t('{0} 个会话', sessions.filter(session => !session.archived).length)}</span>
         <button className="button button-secondary compact-button" type="button" onClick={() => setShowArchived(value => !value)}>
-          {showArchived ? '隐藏已归档' : '查看已归档'}
+          {showArchived ? '返回当前会话' : '查看已归档'}
         </button>
         {selected.size > 0 && <>
           <button className="button button-secondary compact-button" type="button" onClick={() => archiveSelected(true)}>归档选中项</button>
