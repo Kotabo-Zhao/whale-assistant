@@ -92,6 +92,12 @@ internal class CompanionDashboard(private val context: Context) {
             "knowledgeEdit" -> success(knowledge.edit(text("id"), text("expectedText"), text("text")))
             "knowledgeDelete" -> success(knowledge.remove(text("id"), text("expectedText")))
             "knowledgeUndoDelete" -> success(knowledge.undoRemove(text("id")))
+            "knowledgeRemoveOriginal" -> {
+                val removal = knowledge.removeOriginal(text("originalId"), text("id"), text("expectedText"))
+                require(removal.records > 0) { "资料已变化，请刷新后重试" }
+                JSONObject().put("ok", true).put("records", removal.records)
+                    .put("objectDeleted", removal.objectDeleted).put("undoAvailable", false)
+            }
             "reminderList" -> {
                 val store = CompanionStore(context)
                 JSONObject().put("items", reviewedRows(reminder.list())).put("recurring", reviewedRows(recurring.list()))

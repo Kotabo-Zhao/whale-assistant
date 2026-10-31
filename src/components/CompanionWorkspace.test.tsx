@@ -75,6 +75,21 @@ it('刷新不清空正在编辑的资料，读取失败保留原记录', async (
   expect(screen.getByText('已有资料')).toBeInTheDocument()
   expect(screen.getByLabelText('资料内容')).toHaveValue('未保存的草稿')
 })
+it('资料原件删除要求同一资料、原件和当前文本三项标识，并且不提供撤销', async () => {
+  const originalId = 'a'.repeat(64)
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList'
+    ? { items: [{ id: 'k1', text: '已导入资料片段', originalId }] }
+    : { ok: true, records: 3, objectDeleted: true, undoAvailable: false }))
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  const card = (await screen.findByText('已导入资料片段')).closest('article')!
+  fireEvent.click(within(card).getByRole('button', { name: '永久删除整份原件' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeRemoveOriginal', id: 'k1', originalId, expectedText: '已导入资料片段' }))
+  expect(screen.getByRole('status')).toHaveTextContent('已永久删除原件及 3 条本地资料，不能撤销。')
+  expect(screen.queryByRole('button', { name: '撤销删除' })).not.toBeInTheDocument()
+  confirm.mockRestore()
+})
 it('损坏的列表响应显示读取失败而不是空列表', async () => {
   bridge.companionDashboard.mockResolvedValue({ items: 'broken' })
   render(<CompanionWorkspace />)

@@ -9,6 +9,7 @@ type Row = CompanionRow
 type Preview = { token: string; items: Row[]; skipped: number }
 const rows = companionRows
 const expected = (row: Row) => typeof row._review === 'string' ? row._review : ''
+const originalId = (row: Row) => typeof row.originalId === 'string' && /^[a-f0-9]{64}$/.test(row.originalId) ? row.originalId : null
 const formatMinute = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
 const parseMinute = (value: string) => { const [hour, minute] = value.split(':').map(Number); return hour * 60 + minute }
 const memoryCategory = (row: Row) => row.status === 'pending' ? '待确认' : row.source === 'shared_understanding' ? '分享内容' : row.source === 'auto_notification' || row.source === 'auto_notification_group' || row.source === 'user_notification' ? '通知整理' : row.source === 'auto_usage' ? '使用习惯' : row.source === 'auto_understanding' || row.source === 'user_understanding' ? '后台理解' : '手动与对话记忆'
@@ -86,6 +87,18 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     if (!window.confirm('删除这条资料？十分钟内可撤销；关联原件和已抑制的派生记忆不会因此恢复。')) return
     const result = await run({ operation: 'knowledgeDelete', id: row.id, expected: expected(row), expectedText: row.text }, '资料已删除，可在十分钟内撤销。')
     if (result) setUndoKnowledge(row)
+  }
+  const deleteKnowledgeOriginal = async (row: Row) => {
+    const verifiedOriginalId = originalId(row)
+    if (!verifiedOriginalId) { setMessage('这条资料没有可验证的本地原件，不能执行整份删除。'); return }
+    if (!window.confirm('永久删除这份原件及其全部本地资料分段？将同时抑制关联派生记忆，不能撤销。外部副本和此前已发送给模型的内容不会被删除。')) return
+    const result = await run({ operation: 'knowledgeRemoveOriginal', id: row.id, originalId: verifiedOriginalId, expectedText: row.text }, '')
+    if (!result) return
+    setUndoKnowledge(null)
+    const records = typeof result.records === 'number' ? result.records : 0
+    setMessage(result.objectDeleted === true
+      ? `已永久删除原件及 ${records} 条本地资料，不能撤销。`
+      : `已永久删除 ${records} 条本地资料；原件对象不可用或未删除，不能撤销。`)
   }
   const undoKnowledgeDelete = async () => {
     if (undoKnowledge === null) return
@@ -234,6 +247,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>本地资料 · {row.source ?? '来源未知'}</small></div><div className="workspace-card-actions">
         <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>
         <button type="button" onClick={() => { void deleteKnowledge(row) }}>删除</button>
+        {originalId(row) !== null && <button type="button" className="button-danger-quiet" onClick={() => { void deleteKnowledgeOriginal(row) }}>永久删除整份原件</button>}
       </div></article>)}</div>{knowledgeNextOffset !== null && <button className="button button-secondary" type="button" disabled={busy || loadingMoreKnowledge} onClick={() => { void loadMoreKnowledge() }}>{loadingMoreKnowledge ? '正在加载资料…' : '加载更多资料'}</button>}</>}
       {panel === 'knowledge' && undoKnowledge !== null && <p className="workspace-hint" role="status">资料已删除，可在十分钟内撤销。 <button className="button button-quiet" type="button" disabled={busy} onClick={() => { void undoKnowledgeDelete() }}>撤销删除</button></p>}
       {panel === 'memory' && <div className="workspace-hint"><p>删除自动通知或使用习惯记忆后，对应来源会暂停自动整理，避免下次采集立即重新生成。恢复只影响已开启的自动整理功能。</p><button type="button" className="button button-secondary" onClick={() => { if (window.confirm('恢复已删除来源的自动整理？新通知和使用统计可能再次形成记忆。')) void run({ operation: 'memoryResumeAutomatic' }, '自动整理来源已恢复。') }}>恢复已删除来源的自动整理</button></div>}
