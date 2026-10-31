@@ -78,6 +78,8 @@ internal object CompanionBubbleChatPolicy {
         else -> ""
     }
 
+    fun knowledgeToolGuidance(): String = "需要查看用户保存的图片理解或文档资料时，可按需使用 mobile_knowledge_search；不知道关键词时用 mobile_knowledge_recent 查询最近资料。返回结果的 id、revision 与 location 可用于核对和引用；location 仅表示已保存文本记录，未知页、段落、工作表和表格坐标不得推断。需要完整内容时用 mobile_knowledge_read 并带回 id/revision 分段读取；需要确认后台进度时用 mobile_knowledge_status。处理完成不等于原文件已被完整解析。"
+
 }
 
 /** Uses the same authenticated local Harness and its selected model as the main conversation. */
@@ -110,7 +112,7 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
             if (memoryAllowed) append("需要回忆时可按需使用 mobile_memory_search 查询长期记忆。\n")
             else append("桌宠记忆访问已关闭，不要查询长期记忆。\n")
             if (memoryAllowed && SemanticControl(context).memoryEnabled) append("用户已启用长期记忆语义索引；表达不同时可使用 mobile_memory_hybrid_search，并区分确认事实与待核实内容。\n")
-            if (knowledgeAllowed) append("需要查看用户保存的图片理解或文档资料时，可按需使用 mobile_knowledge_search；不知道关键词时可查询最近资料。需要完整内容时用 mobile_knowledge_read 分段读取；需要确认后台进度时用 mobile_knowledge_status。处理完成不等于原文件已被完整解析。\n")
+            if (knowledgeAllowed) append(CompanionBubbleChatPolicy.knowledgeToolGuidance()).append('\n')
             else append("本地资料对话访问已关闭，不要查询本地资料。\n")
             append("用户明确要求完成、取消或安排已读取事项时，先用 mobile_task_search 取得 id 和 expectedState，再仅调用一次 mobile_task_update；发生冲突须重新读取，不猜测状态或时间。\n")
             if (knowledgeAllowed && SemanticControl(context).enabled) append("用户已启用资料语义检索；关键词未命中或表达不同时可使用 mobile_knowledge_hybrid_search，再读取原文核对；索引可能尚未完成。\n")

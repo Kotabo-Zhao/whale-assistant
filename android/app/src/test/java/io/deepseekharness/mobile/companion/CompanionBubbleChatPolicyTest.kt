@@ -62,4 +62,10 @@ class CompanionBubbleChatPolicyTest {
         assertTrue(CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("id", id).toString()).isEmpty())
         assertTrue(CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("id", id).put("revision", revision).put("text", "记忆正文").toString()).isEmpty())
     }
+    @Test fun knowledgeGuidanceUsesExplicitRecentAndRejectsInventedCoordinates() {
+        val guidance = CompanionBubbleChatPolicy.knowledgeToolGuidance()
+        assertTrue(guidance.contains("mobile_knowledge_search")); assertTrue(guidance.contains("mobile_knowledge_recent"))
+        assertTrue(guidance.contains("mobile_knowledge_read")); assertTrue(guidance.contains("id、revision 与 location"))
+        assertTrue(guidance.contains("不得推断"))
+    }
 }
