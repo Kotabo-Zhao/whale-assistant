@@ -19,6 +19,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private val handler = Handler(Looper.getMainLooper())
     private val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val historyStore = CompanionBubbleHistory(context)
+    private val anchorStore = CompanionSessionAnchorStore(context)
     private val restored = historyStore.load()
     private val history = restored?.messages?.toMutableList() ?: mutableListOf()
     private val chat = CompanionBubbleChat(context, restored)
@@ -234,7 +235,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         onState("reply")
                         history.add(CompanionBubbleChat.Message("user", message)); history.add(CompanionBubbleChat.Message("assistant", answer.text, answer.images, answer.citations))
                         while (history.size > 18) { history.removeAt(0); history.removeAt(0) }
-                        chat.snapshot(history)?.let { snapshot -> executor.execute { runCatching { historyStore.save(snapshot) } } }
+                        chat.snapshot(history)?.let { snapshot -> executor.execute {
+                            runCatching {
+                                historyStore.save(snapshot)
+                                // The anchor is intentionally lossy and is never sent back into Harness automatically.
+                                fun summary(value: String) = value.replace(Regex("\\s+"), " ").trim().take(160)
+                                anchorStore.append(snapshot.sessionId, "user", System.currentTimeMillis(), summary(message))
+                                anchorStore.append(snapshot.sessionId, "assistant", System.currentTimeMillis(), summary(answer.text))
+                            }
+                        } }
                         draft = ""
                         if (samePanel) { bubble(answer.text, false); answer.images.forEach(::imageBubble); answer.citations.forEach(::citationCard); input.text.clear() }
                         status.text = ""; status.visibility = android.view.View.GONE
