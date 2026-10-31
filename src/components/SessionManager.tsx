@@ -386,21 +386,23 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
             </button>
             {/* 只有本地占位条目能在这里移除：真实会话的删除不在这条只读通道里，
                 按钮一旦出现就等于承诺一件做不到的事。 */}
-            {session.local === true && (
-              <button className="icon-button session-delete" type="button" aria-label={t('删除会话 {0}', session.title)} title={t('删除会话')} onClick={() => removeSession(session.id)}>
-                <Trash2 size={17} />
-              </button>
-            )}
-            {session.local !== true && <>
-              <button className="icon-button session-workspace-action" type="button" aria-label={`重命名会话 ${session.title || '未命名会话'}`} title="重命名" onClick={() => renameSession(session)}><Pencil size={17} /></button>
-              <button className="icon-button session-workspace-action" type="button" aria-label={`分组会话 ${session.title || '未命名会话'}`} title="分组" onClick={() => groupSession(session)}><FolderPen size={17} /></button>
-              <button className="icon-button session-workspace-action" type="button" aria-label={`${session.pinned ? '取消置顶' : '置顶'}会话 ${session.title || '未命名会话'}`} title={session.pinned ? '取消置顶' : '置顶'} onClick={() => writeWorkspace({ id: session.id, pinned: !session.pinned })}>
-                {session.pinned ? <PinOff size={17} /> : <Pin size={17} />}
-              </button>
-              <button className="icon-button session-workspace-action" type="button" aria-label={`${session.archived ? '恢复' : '归档'}会话 ${session.title || '未命名会话'}`} title={session.archived ? '恢复' : '归档'} onClick={() => writeWorkspace({ id: session.id, archived: !session.archived })}>
-                {session.archived ? <ArchiveRestore size={17} /> : <Archive size={17} />}
-              </button>
-            </>}
+            <div className="session-card-actions">
+              {session.local === true && (
+                <button className="icon-button session-delete" type="button" aria-label={t('删除会话 {0}', session.title)} title={t('删除会话')} onClick={() => removeSession(session.id)}>
+                  <Trash2 size={17} />
+                </button>
+              )}
+              {session.local !== true && <>
+                <button className="icon-button session-workspace-action" type="button" aria-label={`重命名会话 ${session.title || '未命名会话'}`} title="重命名" onClick={() => renameSession(session)}><Pencil size={17} /></button>
+                <button className="icon-button session-workspace-action" type="button" aria-label={`分组会话 ${session.title || '未命名会话'}`} title="分组" onClick={() => groupSession(session)}><FolderPen size={17} /></button>
+                <button className="icon-button session-workspace-action" type="button" aria-label={`${session.pinned ? '取消置顶' : '置顶'}会话 ${session.title || '未命名会话'}`} title={session.pinned ? '取消置顶' : '置顶'} onClick={() => writeWorkspace({ id: session.id, pinned: !session.pinned })}>
+                  {session.pinned ? <PinOff size={17} /> : <Pin size={17} />}
+                </button>
+                <button className="icon-button session-workspace-action" type="button" aria-label={`${session.archived ? '恢复' : '归档'}会话 ${session.title || '未命名会话'}`} title={session.archived ? '恢复' : '归档'} onClick={() => writeWorkspace({ id: session.id, archived: !session.archived })}>
+                  {session.archived ? <ArchiveRestore size={17} /> : <Archive size={17} />}
+                </button>
+              </>}
+            </div>
           </article>
           ))}
         </div>)}
