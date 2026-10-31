@@ -154,6 +154,7 @@ class UnderstandingQueueTest {
             assertEquals(1L, db.count())
             assertEquals("快递到站", db.readAll().getJSONObject(0).getString("text"))
             assertEquals("auto_understanding", db.readAll().getJSONObject(0).getString("source"))
+            assertEquals("pending", db.readAll().getJSONObject(0).getString("status"))
         }
     }
 

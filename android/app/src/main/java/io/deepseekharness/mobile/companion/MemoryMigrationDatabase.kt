@@ -35,6 +35,19 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
                     db.rawQuery("SELECT id,body FROM memories", null).use { cursor -> while (cursor.moveToNext()) MemorySearchIndex.put(db, cursor.getString(0), JSONObject(cursor.getString(1))) }
                     db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES ('memory_search_version','1')")
                 }
+                var normalizedCandidates = false
+                db.rawQuery("SELECT id,body FROM memories", null).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getString(0)
+                        val row = JSONObject(cursor.getString(1))
+                        if (CompanionMemoryConfirmation.normalize(row)) {
+                            check(db.update("memories", ContentValues().apply { put("body", row.toString()) }, "id=?", arrayOf(id)) == 1)
+                            MemorySearchIndex.put(db, id, row)
+                            normalizedCandidates = true
+                        }
+                    }
+                }
+                if (normalizedCandidates && isImported()) db.execSQL("UPDATE metadata SET value = CAST(value AS INTEGER) + 1 WHERE key = 'revision'")
                 if (version == 0) db.version = 1
                 db.setTransactionSuccessful()
             } finally {

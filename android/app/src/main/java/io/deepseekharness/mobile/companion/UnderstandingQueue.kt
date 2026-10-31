@@ -238,7 +238,7 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
                 if (hash in suppressedHashes || db.rawQuery("SELECT 1 FROM memory_text_index WHERE digest=? LIMIT 1", arrayOf(hash)).use { it.moveToFirst() }) continue
                 val id = UUID.randomUUID().toString()
                 val row = org.json.JSONObject().put("id", id).put("text", text).put("source", "auto_understanding")
-                    .put("status", "confirmed").put("createdAt", System.currentTimeMillis())
+                    .put("status", "pending").put("createdAt", System.currentTimeMillis())
                     .put("evidenceSource", claim.source).put("evidenceEventId", eventId)
                 val memory = ContentValues().apply { put("position", position++); put("id", id); put("body", row.toString()) }
                 db.insertOrThrow("memories", null, memory)

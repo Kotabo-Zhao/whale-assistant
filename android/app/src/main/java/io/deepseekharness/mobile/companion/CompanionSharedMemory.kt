@@ -14,7 +14,7 @@ internal object CompanionSharedMemory {
             if (value.isBlank() || value.length > 600 || CompanionStore.sensitive(value) || suppressed(value)) continue
             if ((0 until rows.length()).any { rows.getJSONObject(it).getString("text") == value }) continue
             if (legacyLimit && rows.length() >= 100) error("长期记忆旧格式已满，请先迁移")
-            rows.put(JSONObject().put("id", UUID.randomUUID().toString()).put("text", value).put("status", "confirmed")
+            rows.put(JSONObject().put("id", UUID.randomUUID().toString()).put("text", value).put("status", "pending")
                 .put("source", "shared_understanding").put("evidenceEventId", eventId).put("createdAt", now))
             added++
         }

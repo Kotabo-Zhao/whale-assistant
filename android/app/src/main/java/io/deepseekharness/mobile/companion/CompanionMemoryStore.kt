@@ -56,19 +56,19 @@ class CompanionMemoryStore(context: Context) {
         if (!enabled) return@synchronized null
         val row = if (usesDatabase()) MemoryMigrationDatabase(UnifiedUnderstandingStore.path(app)).use { it.findById(id) }
         else loadLegacy().let { rows -> (0 until rows.length()).asSequence().map { rows.getJSONObject(it) }.firstOrNull { it.optString("id") == id } }
-        row?.takeIf { it.optString("status") != "pending" }
+        row?.takeIf(CompanionMemoryConfirmation::isConfirmed)
     }
     internal fun semanticRecords(ids: Collection<String>): Map<String, JSONObject> = synchronized(lock) {
         require(ids.size <= 110)
         if (!enabled) return@synchronized emptyMap()
         val found = mutableMapOf<String, JSONObject>()
         if (usesDatabase()) MemoryMigrationDatabase(UnifiedUnderstandingStore.path(app)).use { db ->
-            ids.forEach { id -> db.findById(id)?.takeIf { it.optString("status") != "pending" }?.let { found[id] = it } }
+            ids.forEach { id -> db.findById(id)?.takeIf(CompanionMemoryConfirmation::isConfirmed)?.let { found[id] = it } }
         } else {
             val wanted = ids.toSet(); val rows = loadLegacy()
             for (index in 0 until rows.length()) {
                 val row = rows.getJSONObject(index); val id = row.getString("id")
-                if (id in wanted && row.optString("status") != "pending") found[id] = row
+                if (id in wanted && CompanionMemoryConfirmation.isConfirmed(row)) found[id] = row
             }
         }
         found
@@ -139,7 +139,7 @@ class CompanionMemoryStore(context: Context) {
         val source = row.optString("source")
         if (source !in setOf("auto_understanding", "shared_understanding") || row.toString() != expected) return@synchronized false
         if (source == "auto_understanding") row.put("source", "user_understanding")
-        row.put("confirmedAt", System.currentTimeMillis())
+        row.put("status", "confirmed").put("confirmedAt", System.currentTimeMillis())
         write(rows)
         true
     }
@@ -366,7 +366,7 @@ class CompanionMemoryStore(context: Context) {
     private fun loadLegacy(): JSONArray {
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return JSONArray()
         try {
-            return CompanionMemoryFormat.parse(file.readFully())
+            return CompanionMemoryFormat.parse(file.readFully()).also { CompanionMemoryConfirmation.normalizeAll(it) }
         } catch (e: Exception) {
             throw RuntimeFailure("MEMORY_READ_FAILED", "无法读取记忆，原文件已保留", e)
         }
@@ -442,6 +442,30 @@ internal object CompanionMemoryFormat {
             }
         }
         return rows
+    }
+}
+
+/** Model-derived claims stay outside retrieval until the user explicitly confirms them. */
+internal object CompanionMemoryConfirmation {
+    private val modelCandidateSources = setOf("auto_understanding", "shared_understanding")
+
+    fun requiresConfirmation(row: JSONObject): Boolean =
+        row.optString("status") == "pending" ||
+            (row.optString("source") in modelCandidateSources && row.optLong("confirmedAt") <= 0L)
+
+    fun isConfirmed(row: JSONObject): Boolean = !requiresConfirmation(row)
+
+    /** Normalizes pre-existing records created before model claims used the pending status. */
+    fun normalize(row: JSONObject): Boolean {
+        if (row.optString("source") !in modelCandidateSources || row.optLong("confirmedAt") > 0L || row.optString("status") == "pending") return false
+        row.put("status", "pending")
+        return true
+    }
+
+    fun normalizeAll(rows: JSONArray): Boolean {
+        var changed = false
+        for (index in 0 until rows.length()) if (normalize(rows.getJSONObject(index))) changed = true
+        return changed
     }
 }
 
@@ -550,7 +574,7 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
                 val offset = (rawOffset as Number).toLong()
                 if (offset !in 0L..Int.MAX_VALUE.toLong() || (legacyLimit && offset > 100)) throw invalid()
                 val rows = load()
-                val confirmed = (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.optString("status") != "pending" }
+                val confirmed = (0 until rows.length()).map { rows.getJSONObject(it) }.filter(CompanionMemoryConfirmation::isConfirmed)
                 val result = CompanionMemorySearch.find(confirmed, query, offset.toInt())
                 val items = JSONArray()
                 result.items.forEach { row -> items.put(CompanionMemorySearch.publicItem(row)) }
@@ -616,7 +640,7 @@ internal object CompanionMemorySearch {
         val source = (row.opt("source") as? String)?.takeIf { it in knownSources } ?: "unknown"
         val result = JSONObject().put("id", row.getString("id")).put("text", row.getString("text"))
             .put("revision", CompanionMemoryRevision.of(row)).put("source", source)
-            .put("status", if (source == "auto_understanding" || (source == "shared_understanding" && row.optLong("confirmedAt") <= 0)) "unverified" else "confirmed")
+            .put("status", if (CompanionMemoryConfirmation.requiresConfirmation(row)) "unverified" else "confirmed")
         for (key in listOf("createdAt", "updatedAt", "confirmedAt")) {
             val value = row.opt(key)
             if (value is Number && value.toLong() > 0) result.put(key, value.toLong())

@@ -14,8 +14,9 @@ class CompanionSharedMemoryTest {
         assertEquals(1, CompanionSharedMemory.add(rows, event, claims, 1L, false) { it == "已经删除的内容" })
         assertEquals(0, CompanionSharedMemory.add(rows, event, claims, 2L, false) { it == "已经删除的内容" })
         assertEquals(event, rows.getJSONObject(0).getString("evidenceEventId"))
+        assertEquals("pending", rows.getJSONObject(0).getString("status"))
         assertEquals("unverified", CompanionMemorySearch.publicItem(rows.getJSONObject(0)).getString("status"))
-        rows.getJSONObject(0).put("confirmedAt", 10)
+        rows.getJSONObject(0).put("status", "confirmed").put("confirmedAt", 10)
         assertEquals("confirmed", CompanionMemorySearch.publicItem(rows.getJSONObject(0)).getString("status"))
         assertNull(CompanionBubbleChatPolicy.proactiveMemory(JSONArray().put(JSONObject(rows.getJSONObject(0).toString()).apply { remove("confirmedAt") })))
     }

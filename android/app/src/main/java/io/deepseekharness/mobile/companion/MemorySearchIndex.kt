@@ -27,7 +27,7 @@ internal object MemorySearchIndex {
     fun put(db: SQLiteDatabase, id: String, row: JSONObject) {
         val text = row.getString("text")
         db.delete("memory_search_terms", "memory_id=?", arrayOf(id))
-        db.insertWithOnConflict("memory_search_meta", null, ContentValues().apply { put("memory_id", id); put("searchable", if (row.optString("status") == "pending") 0 else 1) }, SQLiteDatabase.CONFLICT_REPLACE)
+        db.insertWithOnConflict("memory_search_meta", null, ContentValues().apply { put("memory_id", id); put("searchable", if (CompanionMemoryConfirmation.isConfirmed(row)) 1 else 0) }, SQLiteDatabase.CONFLICT_REPLACE)
         for (term in terms(text)) db.insertOrThrow("memory_search_terms", null, ContentValues().apply { put("term", term); put("memory_id", id) })
     }
     fun delete(db: SQLiteDatabase, id: String) { db.delete("memory_search_terms", "memory_id=?", arrayOf(id)); db.delete("memory_search_meta", "memory_id=?", arrayOf(id)) }
@@ -57,7 +57,7 @@ internal object MemorySearchIndex {
         }
         db.rawQuery(sql, args).use { cursor ->
             while (cursor.moveToNext()) {
-                val row = JSONObject(cursor.getString(0)); if (row.optString("status") == "pending") continue
+                val row = JSONObject(cursor.getString(0)); if (!CompanionMemoryConfirmation.isConfirmed(row)) continue
                 if (normalized.isNotEmpty() && !normalize(row.getString("text")).contains(normalized)) continue
                 if (matches >= offset && items.length() < 10) items.put(CompanionMemorySearch.publicItem(row))
                 matches++
@@ -69,7 +69,7 @@ internal object MemorySearchIndex {
                 val placeholders = pairs.joinToString(",") { "?" }
                 val related = mutableListOf<JSONObject>()
                 db.rawQuery("SELECT m.body, COUNT(*) AS score FROM memory_search_terms t JOIN memories m ON m.id=t.memory_id WHERE t.term IN ($placeholders) GROUP BY m.id HAVING score>=2 ORDER BY score DESC,m.position DESC LIMIT 201", pairs.toTypedArray()).use { cursor ->
-                    while (cursor.moveToNext()) { val row = JSONObject(cursor.getString(0)); if (row.optString("status") != "pending") related.add(row) }
+                    while (cursor.moveToNext()) { val row = JSONObject(cursor.getString(0)); if (CompanionMemoryConfirmation.isConfirmed(row)) related.add(row) }
                 }
                 val limited = related.size > 200
                 val found = CompanionMemorySearch.find(related.take(200).asReversed(), query, offset)
