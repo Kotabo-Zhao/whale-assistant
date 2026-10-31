@@ -147,7 +147,7 @@ interface NativeRuntimePlugin {
   sessionList(): Promise<unknown>
   sessionWorkspace(): Promise<unknown>
   companionSessionLinks(): Promise<unknown>
-  updateSessionWorkspace(options: { id: string; title?: string | null; group?: string | null; archived?: boolean }): Promise<unknown>
+  updateSessionWorkspace(options: { id: string; title?: string | null; group?: string | null; pinned?: boolean; archived?: boolean }): Promise<unknown>
   getRuntimeSessionSnapshotState(): Promise<unknown>
   createRuntimeSessionSnapshot(): Promise<unknown>
   restoreRuntimeSessionSnapshot(options: { id: string }): Promise<unknown>

@@ -104,6 +104,25 @@ describe('会话管理页', () => {
     expect(screen.queryByRole('button', { name: /删除会话/ })).not.toBeInTheDocument()
   })
 
+  it('置顶只更新本地工作区，并在时间分组前显示', async () => {
+    listSessions.mockResolvedValue({
+      status: 'ready',
+      truncated: false,
+      sessions: [
+        { id: 'session-normal', title: '普通会话', updatedAt: Date.UTC(2026, 0, 2) },
+        { id: 'session-pin', title: '置顶会话', updatedAt: Date.UTC(2025, 0, 2) },
+      ],
+    })
+    getSessionWorkspace.mockResolvedValue({ entries: [{ id: 'session-pin', pinned: true, archived: false }] })
+    updateSessionWorkspace.mockResolvedValue({ entries: [] })
+    render(<SessionManager onBack={vi.fn()} onOpenHarness={vi.fn()} />)
+
+    expect(await screen.findByText('置顶会话')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '置顶' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '取消置顶会话 置顶会话' }))
+    await waitFor(() => expect(updateSessionWorkspace).toHaveBeenCalledWith({ id: 'session-pin', pinned: false }))
+  })
+
   it('会话较多时默认折叠，搜索仍覆盖折叠内容', async () => {
     listSessions.mockResolvedValue({ status: 'ready', truncated: false, sessions:
       Array.from({ length: 8 }, (_, i) => ({ id: `session-${i}`, title: `会话 ${i}`, updatedAt: Date.UTC(2026, 0, 2) - i })) })

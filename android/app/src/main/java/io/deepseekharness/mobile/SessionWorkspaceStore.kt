@@ -8,11 +8,11 @@ import org.json.JSONObject
  * User-owned organisation metadata for Harness sessions.
  *
  * This deliberately stores neither transcript nor a copied Harness title.  A title override,
- * group and archive flag are harmless local annotations keyed by the runtime session id; the
+ * group, pin and archive flags are harmless local annotations keyed by the runtime session id; the
  * real transcript remains exclusively in the Harness session directory.
  */
 internal class SessionWorkspaceStore(context: Context) {
-    data class Entry(val id: String, val title: String?, val group: String?, val archived: Boolean)
+    data class Entry(val id: String, val title: String?, val group: String?, val pinned: Boolean, val archived: Boolean)
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val lock = lockFor(context.applicationContext)
@@ -20,17 +20,18 @@ internal class SessionWorkspaceStore(context: Context) {
     fun entries(): List<Entry> = synchronized(lock) { read().values.sortedBy { it.id } }
 
     /** Applies exactly the supplied fields. Null title/group removes that local annotation. */
-    fun update(id: String, title: String?, hasTitle: Boolean, group: String?, hasGroup: Boolean, archived: Boolean?, hasArchived: Boolean): List<Entry> = synchronized(lock) {
+    fun update(id: String, title: String?, hasTitle: Boolean, group: String?, hasGroup: Boolean, pinned: Boolean?, hasPinned: Boolean, archived: Boolean?, hasArchived: Boolean): List<Entry> = synchronized(lock) {
         require(validId(id)) { "会话标识无效" }
-        require(hasTitle || hasGroup || hasArchived) { "没有可更新的会话属性" }
+        require(hasTitle || hasGroup || hasPinned || hasArchived) { "没有可更新的会话属性" }
         val values = read().toMutableMap()
-        val old = values[id] ?: Entry(id, null, null, false)
+        val old = values[id] ?: Entry(id, null, null, false, false)
         val next = old.copy(
             title = if (hasTitle) title?.let(::validTitle) else old.title,
             group = if (hasGroup) group?.let(::validGroup) else old.group,
+            pinned = if (hasPinned) pinned ?: error("置顶状态无效") else old.pinned,
             archived = if (hasArchived) archived ?: error("归档状态无效") else old.archived,
         )
-        if (next.title == null && next.group == null && !next.archived) values.remove(id) else values[id] = next
+        if (next.title == null && next.group == null && !next.pinned && !next.archived) values.remove(id) else values[id] = next
         require(values.size <= MAX_ENTRIES) { "会话组织记录过多" }
         save(values)
         values.values.sortedBy { it.id }
@@ -75,7 +76,7 @@ internal class SessionWorkspaceStore(context: Context) {
         private fun validGroup(value: String): String { require(value.isNotBlank() && value.length <= MAX_GROUP && !controls.containsMatchIn(value)); return value }
         private fun encode(entries: Collection<Entry>): JSONObject = JSONObject().put("version", 1).put("entries", JSONArray().apply {
             entries.sortedBy { it.id }.forEach { entry -> put(JSONObject().put("id", entry.id).apply {
-                entry.title?.let { put("title", it) }; entry.group?.let { put("group", it) }; if (entry.archived) put("archived", true)
+                entry.title?.let { put("title", it) }; entry.group?.let { put("group", it) }; if (entry.pinned) put("pinned", true); if (entry.archived) put("archived", true)
             }) }
         })
         fun decode(bytes: ByteArray): List<Entry> {
@@ -87,7 +88,7 @@ internal class SessionWorkspaceStore(context: Context) {
                 val id = row.getString("id"); require(validId(id) && seen.add(id))
                 val title = row.optString("title", "").takeIf(String::isNotEmpty)?.let(::validTitle)
                 val group = row.optString("group", "").takeIf(String::isNotEmpty)?.let(::validGroup)
-                Entry(id, title, group, row.optBoolean("archived", false))
+                Entry(id, title, group, row.optBoolean("pinned", false), row.optBoolean("archived", false))
             } }
         }
     }

@@ -2390,9 +2390,11 @@ export function validateRuntimeSessionWorkspace(value: unknown): RuntimeSessionW
     }
     const title = text('title', 200)
     const group = text('group', 80)
+    const pinned = entry.pinned === undefined ? false : entry.pinned
+    if (typeof pinned !== 'boolean') throw new Error('会话置顶状态无效')
     const archived = entry.archived
     if (typeof archived !== 'boolean') throw new Error('会话归档状态无效')
-    return { id, ...(title === undefined ? {} : { title }), ...(group === undefined ? {} : { group }), archived }
+    return { id, ...(title === undefined ? {} : { title }), ...(group === undefined ? {} : { group }), pinned, archived }
   })
   return { entries }
 }

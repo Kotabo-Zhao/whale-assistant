@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Archive, ArchiveRestore, ArrowLeft, FolderPen, Loader2, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, FolderPen, Loader2, MessageCircle, Pencil, Pin, PinOff, Plus, Trash2, X } from 'lucide-react'
 import { triggerHaptic } from '../platform/haptics'
 import { t, useLanguage } from '../i18n'
 import { runtimeBridge } from '../platform/native'
@@ -19,6 +19,7 @@ interface SessionEntry {
   updatedAt?: number
   local?: true
   group?: string
+  pinned?: boolean
   archived?: boolean
 }
 
@@ -62,9 +63,10 @@ function formatUpdatedAt(millis: number): string {
   return new Date(millis).toLocaleString()
 }
 
-type SessionPeriod = '新建中' | '今天' | '最近七天' | '更早'
+type SessionPeriod = '置顶' | '新建中' | '今天' | '最近七天' | '更早'
 
 function sessionPeriod(session: SessionEntry, now = new Date()): SessionPeriod {
+  if (session.pinned) return '置顶'
   if (session.local === true || session.updatedAt === undefined) return '新建中'
   const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
   if (session.updatedAt >= midnight) return '今天'
@@ -73,7 +75,7 @@ function sessionPeriod(session: SessionEntry, now = new Date()): SessionPeriod {
 }
 
 function groupSessionsByPeriod(sessions: SessionEntry[]): Array<{ label: SessionPeriod; sessions: SessionEntry[] }> {
-  const order: SessionPeriod[] = ['新建中', '今天', '最近七天', '更早']
+  const order: SessionPeriod[] = ['置顶', '新建中', '今天', '最近七天', '更早']
   const buckets = new Map<SessionPeriod, SessionEntry[]>(order.map(period => [period, []]))
   sessions.forEach(session => buckets.get(sessionPeriod(session))?.push(session))
   return order.map(label => ({ label, sessions: buckets.get(label) ?? [] })).filter(section => section.sessions.length > 0)
@@ -183,7 +185,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
       ...localSessions,
       ...(catalog.status === 'ready' ? catalog.sessions.map(session => {
         const local = annotations.get(session.id)
-        return { ...session, title: local?.title ?? session.title, group: local?.group, archived: local?.archived === true }
+        return { ...session, title: local?.title ?? session.title, group: local?.group, pinned: local?.pinned === true, archived: local?.archived === true }
       }) : []),
     ]
   }, [catalog, localSessions, workspace])
@@ -195,10 +197,11 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
     return inScope.filter(session => `${session.title} ${session.group ?? ''}`.toLocaleLowerCase().includes(normalized))
   }, [query, sessions, showArchived])
 
-  const displayed = expanded || query.trim() !== '' ? filtered : filtered.slice(0, 5)
+  const ordered = useMemo(() => [...filtered].sort((left, right) => Number(right.pinned === true) - Number(left.pinned === true)), [filtered])
+  const displayed = expanded || query.trim() !== '' ? ordered : ordered.slice(0, 5)
   const sections = useMemo(() => groupSessionsByPeriod(displayed), [displayed])
 
-  const writeWorkspace = (update: { id: string; title?: string | null; group?: string | null; archived?: boolean }): void => {
+  const writeWorkspace = (update: { id: string; title?: string | null; group?: string | null; pinned?: boolean; archived?: boolean }): void => {
     if (disabled) return
     runtimeBridge.updateSessionWorkspace(update).then(value => {
       setWorkspace(value.entries)
@@ -350,9 +353,12 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
               </button>
             )}
             {session.local !== true && <>
-              <button className="icon-button session-delete" type="button" aria-label={`重命名会话 ${session.title || '未命名会话'}`} title="重命名" onClick={() => renameSession(session)}><Pencil size={17} /></button>
-              <button className="icon-button session-delete" type="button" aria-label={`分组会话 ${session.title || '未命名会话'}`} title="分组" onClick={() => groupSession(session)}><FolderPen size={17} /></button>
-              <button className="icon-button session-delete" type="button" aria-label={`${session.archived ? '恢复' : '归档'}会话 ${session.title || '未命名会话'}`} title={session.archived ? '恢复' : '归档'} onClick={() => writeWorkspace({ id: session.id, archived: !session.archived })}>
+              <button className="icon-button session-workspace-action" type="button" aria-label={`重命名会话 ${session.title || '未命名会话'}`} title="重命名" onClick={() => renameSession(session)}><Pencil size={17} /></button>
+              <button className="icon-button session-workspace-action" type="button" aria-label={`分组会话 ${session.title || '未命名会话'}`} title="分组" onClick={() => groupSession(session)}><FolderPen size={17} /></button>
+              <button className="icon-button session-workspace-action" type="button" aria-label={`${session.pinned ? '取消置顶' : '置顶'}会话 ${session.title || '未命名会话'}`} title={session.pinned ? '取消置顶' : '置顶'} onClick={() => writeWorkspace({ id: session.id, pinned: !session.pinned })}>
+                {session.pinned ? <PinOff size={17} /> : <Pin size={17} />}
+              </button>
+              <button className="icon-button session-workspace-action" type="button" aria-label={`${session.archived ? '恢复' : '归档'}会话 ${session.title || '未命名会话'}`} title={session.archived ? '恢复' : '归档'} onClick={() => writeWorkspace({ id: session.id, archived: !session.archived })}>
                 {session.archived ? <ArchiveRestore size={17} /> : <Archive size={17} />}
               </button>
             </>}

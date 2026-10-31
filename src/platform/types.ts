@@ -412,6 +412,7 @@ export interface RuntimeSessionWorkspaceEntry {
   id: string
   title?: string
   group?: string
+  pinned: boolean
   archived: boolean
 }
 
@@ -430,6 +431,7 @@ export interface RuntimeSessionWorkspaceUpdate {
   title?: string | null
   /** `null` removes the local group. */
   group?: string | null
+  pinned?: boolean
   archived?: boolean
 }
 

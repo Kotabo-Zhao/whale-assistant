@@ -1718,7 +1718,7 @@ class MobileRuntimePlugin : Plugin() {
         execute(call) { controller.withLifecycleLock { sessionCatalog.list() } }
     }
 
-    /** User-owned title overrides, groups and archive flags for entries returned by [sessionList]. */
+    /** User-owned title overrides, groups, pin and archive flags for entries returned by [sessionList]. */
     @PluginMethod
     fun sessionWorkspace(call: PluginCall) {
         execute(call) { sessionWorkspacePayload(sessionWorkspace.entries()) }
@@ -1747,17 +1747,19 @@ class MobileRuntimePlugin : Plugin() {
             val id = call.getString("id") ?: throw RuntimeFailure("SESSION_WORKSPACE_INVALID", "缺少会话标识")
             val hasTitle = call.data.has("title")
             val hasGroup = call.data.has("group")
+            val hasPinned = call.data.has("pinned")
             val hasArchived = call.data.has("archived")
             val title = if (hasTitle) call.data.opt("title").takeUnless { it == org.json.JSONObject.NULL }?.let { it as? String ?: throw RuntimeFailure("SESSION_WORKSPACE_INVALID", "会话名称无效") } else null
             val group = if (hasGroup) call.data.opt("group").takeUnless { it == org.json.JSONObject.NULL }?.let { it as? String ?: throw RuntimeFailure("SESSION_WORKSPACE_INVALID", "会话分组无效") } else null
+            val pinned = if (hasPinned) call.data.opt("pinned") as? Boolean ?: throw RuntimeFailure("SESSION_WORKSPACE_INVALID", "会话置顶状态无效") else null
             val archived = if (hasArchived) call.data.opt("archived") as? Boolean ?: throw RuntimeFailure("SESSION_WORKSPACE_INVALID", "归档状态无效") else null
-            sessionWorkspacePayload(sessionWorkspace.update(id, title, hasTitle, group, hasGroup, archived, hasArchived))
+            sessionWorkspacePayload(sessionWorkspace.update(id, title, hasTitle, group, hasGroup, pinned, hasPinned, archived, hasArchived))
         }
     }
 
     private fun sessionWorkspacePayload(entries: List<SessionWorkspaceStore.Entry>): JSObject = JSObject().put("entries", JSArray().apply {
         entries.forEach { entry -> put(JSObject().put("id", entry.id).apply {
-            entry.title?.let { put("title", it) }; entry.group?.let { put("group", it) }; put("archived", entry.archived)
+            entry.title?.let { put("title", it) }; entry.group?.let { put("group", it) }; put("pinned", entry.pinned); put("archived", entry.archived)
         }) }
     })
 
