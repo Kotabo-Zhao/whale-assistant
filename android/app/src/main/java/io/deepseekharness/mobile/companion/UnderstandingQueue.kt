@@ -343,6 +343,15 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
             items
         }
     }
+    /** The home summary deliberately excludes terminal rows instead of treating history as current work. */
+    fun listActionableItems(limit: Int): List<Item> {
+        require(limit in 1..20)
+        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.state IN ('candidate','open') ORDER BY i.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->
+            val items = mutableListOf<Item>()
+            while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4), cursor.getInt(5), if (cursor.isNull(6)) null else cursor.getLong(6)))
+            items
+        }
+    }
     fun updateItem(id: String, expected: String, next: String): Boolean = transaction {
         require(expected in setOf("candidate", "open", "done", "cancelled") && next in setOf("open", "done", "cancelled"))
         val values = ContentValues().apply { put("state", next) }

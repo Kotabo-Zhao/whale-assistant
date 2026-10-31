@@ -36,12 +36,16 @@ internal class CompanionDashboard(private val context: Context) {
                 val store = CompanionStore(context)
                 val records = store.read()
                 val counts = CompanionBrief.counts(records)
+                val tasks = UnifiedUnderstandingStore.open(context).use { it.queue.listActionableItems(3) }
                 JSONObject().put("generatedAt", System.currentTimeMillis())
                     .put("captureEnabled", store.notificationCapture)
                     .put("notificationCount", records.length())
                     .put("categories", JSONObject(counts))
                     .put("memoryCount", memory.listForUser().length())
                     .put("knowledgeCount", knowledge.search("").length())
+                    .put("tasks", JSONArray().apply { tasks.forEach { item -> put(JSONObject()
+                        .put("id", item.id).put("text", item.title).put("state", item.state)
+                        .put("reminderAtMs", item.reminderAtMs ?: JSONObject.NULL)) } })
                     .put("reminders", reminder.list()).put("recurring", recurring.list())
             }
 
