@@ -6,8 +6,8 @@ import android.content.Context
 internal class SemanticControl(context: Context) {
     private val app = context.applicationContext
     private val prefs = app.getSharedPreferences("semantic_search_v1", Context.MODE_PRIVATE)
-    val enabled: Boolean get() = prefs.getBoolean("enabled", false)
-    val memoryEnabled: Boolean get() = enabled && prefs.getBoolean("memory_enabled", false)
+    val enabled: Boolean get() = prefs.getBoolean("enabled", true)
+    val memoryEnabled: Boolean get() = enabled && prefs.getBoolean("memory_enabled", true)
     fun generation(): Long = prefs.getLong("generation", 0L)
     fun cursor(): Long = prefs.getLong("cursor", -1L)
     fun phase(): String = prefs.getString("phase", "knowledge").takeIf { it == "memory" } ?: "knowledge"

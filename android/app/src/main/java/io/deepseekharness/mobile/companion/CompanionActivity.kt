@@ -626,30 +626,22 @@ class CompanionActivity : AppCompatActivity() {
                 .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.knowledgeModelAccess = true; render() }.show()
         }
         val semantic = SemanticControl(this)
-        toggle("资料语义检索（OpenAI）", semantic.enabled) { enabled ->
+        toggle("本地语义检索（BGE-base-zh）", semantic.enabled) { enabled ->
             if (!enabled) runMemoryIo("正在关闭并清除语义索引…", {
                 semantic.setEnabled(false); SemanticIndexJobs.cancel(this)
             }) { result ->
                 android.widget.Toast.makeText(this, if (result.isSuccess) "语义索引已关闭。" else "关闭索引时遇到问题，请重新检查设置。", android.widget.Toast.LENGTH_LONG).show()
                 render()
             }
-            else if (!store.knowledgeModelAccess) {
-                android.widget.Toast.makeText(this, "请先允许助手对话访问本地资料。", android.widget.Toast.LENGTH_LONG).show(); render()
-            } else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("启用资料语义检索？")
-                .setMessage("建立索引会将资料解析文字分段发送到 OpenAI 的 text-embedding-3-small 服务；检索时查询文字也会发送。使用模型设置中已有的 OpenAI 密钥，可能产生费用。后台仅在非计费网络分批处理，每日最多 50 次索引请求及 50 次查询请求。可随时关闭并清除本地向量；已发送的数据无法从本机撤回。")
-                .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("启用") { _, _ ->
-                    runMemoryIo("正在启用语义索引…", {
-                        check(!io.deepseekharness.mobile.runtime.RuntimeStore(this).readModelCredential("openai").isNullOrBlank()) { "缺少 OpenAI 密钥" }
-                        semantic.setEnabled(true)
-                        try { SemanticIndexJobs.schedule(this) } catch (e: Exception) { semantic.setEnabled(false); throw e }
-                    }) { result ->
-                        android.widget.Toast.makeText(this, if (result.isSuccess) "已启用，等待后台分批建立索引。" else "无法启用，请检查 OpenAI 密钥和后台调度。", android.widget.Toast.LENGTH_LONG).show()
-                        render()
-                    }
-                }.show()
+            else runMemoryIo("正在启用本地语义索引…", {
+                semantic.setEnabled(true); SemanticIndexJobs.schedule(this)
+            }) { result ->
+                android.widget.Toast.makeText(this, if (result.isSuccess) "已启用，正在本机分批建立索引。" else "无法启用本地语义索引。", android.widget.Toast.LENGTH_LONG).show()
+                render()
+            }
         }
         if (semantic.enabled) {
-            paragraph("语义索引：${semantic.status()}；未索引的资料仍可通过文字检索。")
+            paragraph("语义索引：${semantic.status()}。BGE-base-zh-v1.5 在本机运行，不需要 OpenAI 密钥，也不会上传记忆或查询；未索引内容仍可通过文字检索。")
             button("刷新语义索引状态") { render() }
             button("继续建立语义索引") { runCatching { SemanticIndexJobs.schedule(this) }; render() }
             toggle("将长期记忆加入语义检索", semantic.memoryEnabled) { enabled ->
@@ -660,16 +652,11 @@ class CompanionActivity : AppCompatActivity() {
                 }
                 else if (!CompanionMemoryStore(this).enabled) {
                     android.widget.Toast.makeText(this, "请先允许助手使用长期记忆。", android.widget.Toast.LENGTH_LONG).show(); render()
-                } else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("将长期记忆用于语义检索？")
-                    .setMessage("启用后，可检索的长期记忆文字将分批发送给 OpenAI 建立向量；待确认记忆不会发送。记忆可能包含个人信息，并可能产生费用。关闭后本地记忆向量会清除，已发送的内容无法从本机撤回。")
-                    .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("启用") { _, _ ->
-                        runMemoryIo("正在启用记忆语义索引…", {
-                            semantic.setMemoryEnabled(true)
-                            try { SemanticIndexJobs.schedule(this) } catch (e: Exception) { semantic.setMemoryEnabled(false); throw e }
-                        }) { result ->
-                            android.widget.Toast.makeText(this, if (result.isSuccess) "已启用，等待后台处理。" else "无法启用，请检查后台调度。", android.widget.Toast.LENGTH_LONG).show(); render()
-                        }
-                    }.show()
+                } else runMemoryIo("正在启用记忆语义索引…", {
+                    semantic.setMemoryEnabled(true); SemanticIndexJobs.schedule(this)
+                }) { result ->
+                    android.widget.Toast.makeText(this, if (result.isSuccess) "已启用，正在本机处理。" else "无法启用记忆语义索引。", android.widget.Toast.LENGTH_LONG).show(); render()
+                }
             }
         }
         button("查看或搜索资料") { searchKnowledge() }

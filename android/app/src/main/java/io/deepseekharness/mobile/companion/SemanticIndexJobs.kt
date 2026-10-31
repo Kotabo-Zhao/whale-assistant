@@ -6,7 +6,6 @@ import android.app.job.JobScheduler
 import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
-import io.deepseekharness.mobile.runtime.RuntimeStore
 import java.util.Calendar
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -21,7 +20,6 @@ internal object SemanticIndexJobs {
         val app = context.applicationContext
         if (!SemanticControl(app).enabled) return
         val job = JobInfo.Builder(JOB_ID, ComponentName(app, SemanticIndexJobService::class.java))
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
             .setMinimumLatency(delayMs.coerceAtLeast(0))
             .setPersisted(true).build()
         check(app.getSystemService(JobScheduler::class.java)?.schedule(job) == JobScheduler.RESULT_SUCCESS)
@@ -33,7 +31,7 @@ internal object SemanticIndexJobs {
         val result = mutableListOf<Pair<Int, String>>()
         var start = 0
         while (start < text.length) {
-            var end = minOf(start + 1500, text.length)
+            var end = minOf(start + 480, text.length)
             if (end < text.length && Character.isHighSurrogate(text[end - 1]) && Character.isLowSurrogate(text[end])) end--
             val part = text.substring(start, end)
             if (part.isNotBlank()) result.add(start to part)
@@ -52,11 +50,9 @@ internal object SemanticIndexJobs {
     /** Returns delay until next batch, or null when caught up or disabled. */
     private fun runBatch(context: Context, stopped: AtomicBoolean): Long? {
         val control = SemanticControl(context)
-        if (!control.enabled || !CompanionStore(context).knowledgeModelAccess) return null
+        if (!control.enabled) return null
         val generation = control.generation()
-        val key = RuntimeStore(context).readModelCredential("openai")
-            ?: throw UnderstandingRequestException("credentials", "尚未配置 OpenAI 凭据")
-        val model = SemanticEmbeddings(key)
+        val model = SemanticEmbeddings(context)
         val knowledge = CompanionKnowledgeStore(context)
         val memories = CompanionMemoryStore(context)
         var position = control.cursor()
@@ -76,7 +72,7 @@ internal object SemanticIndexJobs {
                 } else if (control.enabled) 5_000L else null
             }
             for ((nextPosition, row) in page) {
-                if (stopped.get() || !control.enabled || !CompanionStore(context).knowledgeModelAccess || generation != control.generation() || sent >= 10 || scanned >= 2048) break
+                if (stopped.get() || !control.enabled || generation != control.generation() || sent >= 10 || scanned >= 2048) break
                 scanned++
                 val id = row.getString("id")
                 val text = row.getString("text")
@@ -88,14 +84,12 @@ internal object SemanticIndexJobs {
                     val fresh = SemanticIndex(context).use { it.isCurrent(indexId, revision) }
                     if (!fresh) {
                         if (phase == "memory" && (!control.memoryEnabled || !memories.enabled)) return if (control.enabled) 5_000L else null
-                        if (!control.reserve("index")) { control.setStatus("今日索引请求额度已用完"); return nextDayDelay() }
                         val chunks = split(text)
                         val vectors = model.embed(chunks.map { it.second })
                         if (stopped.get()) return null
                         var published = false
                         val publish = {
                             published = control.publish(generation) {
-                                check(CompanionStore(context).knowledgeModelAccess) { "资料授权已关闭" }
                                 if (phase == "memory") check(control.memoryEnabled && memories.enabled) { "记忆授权已关闭" }
                                 SemanticIndex(context).use { index -> index.replace(indexId, revision, chunks.mapIndexed { i, chunk -> chunk.first to vectors[i] }) }
                             }
@@ -122,9 +116,7 @@ internal object SemanticIndexJobs {
             try { delay = runBatch(service.applicationContext, stopped) }
             catch (e: Exception) {
                 SemanticControl(service).setStatus(when (e) {
-                    is UnderstandingRequestException -> if (e.code == "credentials") "请配置 OpenAI 密钥" else "向量服务暂不可用，将稍后重试"
-                    is java.io.IOException -> "网络不可用，将稍后重试"
-                    else -> "索引处理失败，将稍后重试"
+                    else -> "本地索引处理失败，将稍后重试"
                 })
                 delay = 30 * 60_000L
             } finally {

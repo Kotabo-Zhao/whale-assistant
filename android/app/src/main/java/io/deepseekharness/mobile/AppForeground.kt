@@ -21,7 +21,11 @@ internal object AppForeground {
     private val startedActivities = AtomicInteger(0)
 
     fun onActivityStarted() {
-        startedActivities.incrementAndGet()
+        if (startedActivities.incrementAndGet() == 1) {
+            // 悬浮球服务是给其他应用使用的。自己的完整界面在前台时仍把它留在最上层，
+            // 会遮住对话输入和底部导航；只在首次进入前台时通知服务收起显示。
+            OverlayBallService.updateForHostAppForeground(true)
+        }
     }
 
     /**
@@ -30,7 +34,9 @@ internal object AppForeground {
      * 通知就再也发不出来了——宁可把它夹在 0。
      */
     fun onActivityStopped() {
-        startedActivities.updateAndGet { current -> if (current <= 0) 0 else current - 1 }
+        if (startedActivities.updateAndGet { current -> if (current <= 0) 0 else current - 1 } == 0) {
+            OverlayBallService.updateForHostAppForeground(false)
+        }
     }
 
     fun isForeground(): Boolean = startedActivities.get() > 0

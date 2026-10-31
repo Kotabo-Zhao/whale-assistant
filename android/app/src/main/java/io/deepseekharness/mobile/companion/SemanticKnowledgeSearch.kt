@@ -2,7 +2,6 @@ package io.deepseekharness.mobile.companion
 
 import android.content.Context
 import io.deepseekharness.mobile.runtime.RuntimeFailure
-import io.deepseekharness.mobile.runtime.RuntimeStore
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,11 +16,9 @@ internal object SemanticKnowledgeSearch {
         val digest = CompanionMemorySuppression.digest(query)
         synchronized(cacheLock) { cached?.takeIf { it.digest == digest && it.generation == generation && now < it.until }?.let { return it.vector.copyOf() } }
         val control = SemanticControl(context)
-        if (!control.reserve("query")) throw RuntimeFailure("SEMANTIC_BUDGET_EXHAUSTED", "今日语义查询额度已用完")
-        val key = RuntimeStore(context).readModelCredential("openai") ?: throw RuntimeFailure("SEMANTIC_CREDENTIALS_MISSING", "尚未配置 OpenAI 密钥")
-        val result = SemanticEmbeddings(key).embed(listOf(query)).single()
-        if (!control.enabled || control.generation() != generation || !CompanionStore(context).knowledgeModelAccess)
-            throw RuntimeFailure("SEMANTIC_DISABLED", "资料授权或索引设置已变化")
+        val result = SemanticEmbeddings(context).embed(listOf(query)).single()
+        if (!control.enabled || control.generation() != generation)
+            throw RuntimeFailure("SEMANTIC_DISABLED", "本地语义索引设置已变化")
         synchronized(cacheLock) { cached = Cached(digest, generation, now + 60_000L, result.copyOf()) }
         return result
     }

@@ -144,6 +144,7 @@ class OverlayBallService : Service() {
      * 球再也挂不回来。状态由视图的附着回调维护，并在挂载成功时置位、摘除时清零。
      */
     private var ballAttached = false
+    private var hiddenForHostApp = false
 
     private var conversationView: View? = null
     private var conversationWebView: WebView? = null
@@ -244,6 +245,7 @@ class OverlayBallService : Service() {
             // 否则下面那条「active=true」会把失败覆盖成成功，排障时看到自相矛盾的时间线。
             return START_NOT_STICKY
         }
+        setHostAppForeground(AppForeground.isForeground())
         // 球已挂上窗口：清掉历史失败令牌，界面状态只反映「这一次」启动结果。
         lastStartFailure = null
         diagnostics.record(
@@ -854,6 +856,27 @@ class OverlayBallService : Service() {
             runCatching { windowManager.removeView(view) }
         }
         ballView = null
+    }
+
+    /**
+     * 悬浮球属于“离开应用后仍可呼出”的入口，不该压在自己的全屏界面上。保留窗口与
+     * 前台服务，只把窗口变透明并改为不接收触摸；回到其他应用时立即恢复，无需重载头像。
+     */
+    private fun setHostAppForeground(foreground: Boolean) {
+        if (hiddenForHostApp == foreground) return
+        hiddenForHostApp = foreground
+        if (foreground) {
+            removeCompanionHint()
+            detachSecondaryChoices()
+            bubbleChat.hide()
+        }
+        val view = ballView ?: return
+        if (!ballAttached) return
+        val next = WindowManager.LayoutParams().apply { copyFrom(layoutParams) }
+        next.alpha = if (foreground) 0f else 1f
+        next.flags = if (foreground) next.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        else next.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        if (runCatching { windowManager.updateViewLayout(view, next) }.isSuccess) layoutParams = next
     }
 
     /**
@@ -2155,6 +2178,14 @@ class OverlayBallService : Service() {
 
         internal fun refreshAppearance() {
             Handler(Looper.getMainLooper()).post { activeService?.refreshVisibleAppearance() }
+        }
+
+        /** Hide the system overlay while one of this app's own full-screen Activities is visible. */
+        internal fun updateForHostAppForeground(foreground: Boolean) {
+            val service = activeService ?: return
+            Handler(Looper.getMainLooper()).post {
+                if (activeService === service) service.setHostAppForeground(foreground)
+            }
         }
 
         /** A full-page logout invalidates the shared one-time session immediately. */

@@ -17,7 +17,7 @@ internal object SemanticMemorySearch {
         if (offset !in 0..99 || limit !in 1..10) throw invalid()
         val control = SemanticControl(context)
         val memory = CompanionMemoryStore(context)
-        if (!control.memoryEnabled || !memory.enabled || !CompanionStore(context).knowledgeModelAccess)
+        if (!control.memoryEnabled || !memory.enabled)
             throw RuntimeFailure("SEMANTIC_DISABLED", "长期记忆语义检索未启用")
         val generation = control.generation()
         val vector = SemanticKnowledgeSearch.queryVector(context, query, generation)
@@ -46,7 +46,7 @@ internal object SemanticMemorySearch {
             if (candidate.revision != null && candidate.revision != CompanionMemorySuppression.digest(row.getString("text"))) return@mapNotNull null
             CompanionMemorySearch.publicItem(row)
         }
-        if (!control.memoryEnabled || !memory.enabled || control.generation() != generation || !CompanionStore(context).knowledgeModelAccess)
+        if (!control.memoryEnabled || !memory.enabled || control.generation() != generation)
             throw RuntimeFailure("SEMANTIC_DISABLED", "记忆授权或索引设置已变化")
         val items = JSONArray(); valid.drop(offset).take(limit).forEach { items.put(it) }
         val next = offset + items.length()
