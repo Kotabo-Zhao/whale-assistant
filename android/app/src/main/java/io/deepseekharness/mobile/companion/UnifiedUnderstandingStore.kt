@@ -38,21 +38,26 @@ internal class UnifiedUnderstandingStore(path: File) : AutoCloseable {
 internal data class UnderstandingProviderChoice(val id: String, val displayName: String)
 
 /**
- * Background understanding sends private text, so custom endpoints must be HTTPS and use the
- * OpenAI Chat Completions contract that [DeepSeekUnderstandingModel] verifies locally.
+ * Background understanding sends private text, so custom endpoints must be HTTPS. All configured
+ * protocol variants pass through a bounded client and the same local proposal contract.
  */
 internal fun understandingProviderChoices(settings: io.deepseekharness.mobile.runtime.RuntimeSettings): List<UnderstandingProviderChoice> {
     val builtIns = listOf("deepseek", "openai", "openrouter", "groq", "xai", "mistral")
         .map { UnderstandingProviderChoice(it, it) }
     val custom = settings.customModelProviders.mapNotNull { provider ->
-        provider.takeIf { it.api == CustomProviderApi.OPENAI_COMPLETIONS && isHttpsBaseUrl(it) }
+        provider.takeIf(::isHttpsBaseUrl)
             ?.let { UnderstandingProviderChoice(it.id, it.name) }
     }
     return builtIns + custom
 }
 
 private fun isHttpsBaseUrl(provider: CustomModelProvider): Boolean =
-    runCatching { java.net.URI(provider.baseUrl).scheme == "https" }.getOrDefault(false)
+    runCatching {
+        java.net.URI(provider.baseUrl).let { uri ->
+            uri.scheme.equals("https", ignoreCase = true) && uri.userInfo == null && uri.host != null &&
+                uri.query == null && uri.fragment == null && (uri.port == -1 || uri.port in 1..65535)
+        }
+    }.getOrDefault(false)
 
 /** Both background pipelines resolve the same explicit provider and encrypted credential. */
 internal fun configuredUnderstandingModel(context: Context): UnderstandingModel {
@@ -67,12 +72,10 @@ internal fun configuredUnderstandingModel(context: Context): UnderstandingModel 
         "groq" -> "https://api.groq.com/openai/v1/chat/completions"
         "xai" -> "https://api.x.ai/v1/chat/completions"
         "mistral" -> "https://api.mistral.ai/v1/chat/completions"
-        else -> customProvider?.let {
-            if (it.api != CustomProviderApi.OPENAI_COMPLETIONS || !isHttpsBaseUrl(it)) {
-                throw UnderstandingRequestException("configuration", "后台自定义供应商必须使用 HTTPS 和 OpenAI Chat Completions 协议")
-            }
-            it.baseUrl.trimEnd('/') + "/chat/completions"
-        } ?: throw UnderstandingRequestException("configuration", "已选择的后台模型供应商已删除，请在助手设置中重新选择")
+        else -> null
+    }
+    if (endpoint == null && customProvider == null) {
+        throw UnderstandingRequestException("configuration", "已选择的后台模型供应商已删除，请在助手设置中重新选择")
     }
     val key = settings.readModelCredential(provider) ?: throw UnderstandingRequestException("credentials", "后台模型凭据不可用")
     val model = customProvider?.models?.firstOrNull()?.id
@@ -81,5 +84,13 @@ internal fun configuredUnderstandingModel(context: Context): UnderstandingModel 
             else -> runtimeSettings.defaultModels[ModelProvider.parse(provider)]
                 ?: throw UnderstandingRequestException("configuration", "请先设置后台供应商的默认模型")
         }
-    return DeepSeekUnderstandingModel(key, model, endpoint, allowCustomEndpoint = customProvider != null)
+    if (customProvider != null) {
+        if (!isHttpsBaseUrl(customProvider)) throw UnderstandingRequestException("configuration", "后台自定义供应商必须使用 HTTPS")
+        return if (customProvider.api == CustomProviderApi.OPENAI_COMPLETIONS) {
+            DeepSeekUnderstandingModel(key, model, customProvider.baseUrl.trimEnd('/') + "/chat/completions", allowCustomEndpoint = true)
+        } else {
+            CustomUnderstandingModel(key, customProvider, model)
+        }
+    }
+    return DeepSeekUnderstandingModel(key, model, requireNotNull(endpoint))
 }

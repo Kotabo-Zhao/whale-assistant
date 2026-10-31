@@ -34,11 +34,13 @@ class UnderstandingProviderChoiceTest {
         assertEquals("私有网关", choices.first { it.id == "private-gateway" }.displayName)
     }
 
-    @Test fun excludesInsecureAndIncompatibleCustomProviders() {
+    @Test fun includesEverySupportedHttpsCustomProtocolButRejectsInsecureEndpoints() {
         val http = provider(CustomProviderApi.OPENAI_COMPLETIONS, "http://gateway.example/v1")
         val responses = provider(CustomProviderApi.OPENAI_RESPONSES, "https://gateway.example/v1")
+        val anthropic = provider(CustomProviderApi.ANTHROPIC_MESSAGES, "https://gateway.example/v1")
 
         assertFalse(understandingProviderChoices(settings(listOf(http))).any { it.id == http.id })
-        assertFalse(understandingProviderChoices(settings(listOf(responses))).any { it.id == responses.id })
+        assertEquals(responses.id, understandingProviderChoices(settings(listOf(responses))).first { it.id == responses.id }.id)
+        assertEquals(anthropic.id, understandingProviderChoices(settings(listOf(anthropic))).first { it.id == anthropic.id }.id)
     }
 }
