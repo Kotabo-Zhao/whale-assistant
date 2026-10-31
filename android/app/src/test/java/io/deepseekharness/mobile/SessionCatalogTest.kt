@@ -71,6 +71,18 @@ class SessionCatalogTest {
     }
 
     @Test
+    fun preservesOnlyAValidOpaqueNextPageCursor() {
+        val cursor = "1234.c2Vzc2lvbi1h"
+        val valid = payload(entry("session-a", "标题", 1234L)).put("truncated", true).put("nextCursor", cursor)
+        val result = SessionCatalogPayload.fromProbe(true, false, valid.toString())
+        assertEquals(cursor, result.getString("nextCursor"))
+        assertEquals(setOf("status", "sessions", "truncated", "nextCursor"), result.keys().asSequence().toSet())
+
+        val malformed = payload(entry("session-a", "标题", 1234L)).put("truncated", true).put("nextCursor", "../secret")
+        assertUnavailable(SessionCatalogPayload.fromProbe(true, false, malformed.toString()), SessionCatalogPayload.FAILED)
+    }
+
+    @Test
     fun reportsControlledErrorFieldsWhenTheSourceIsUnavailable() {
         val timedOut = SessionCatalogPayload.fromProbe(false, true, "")
         assertUnavailable(timedOut, SessionCatalogPayload.TIMEOUT)

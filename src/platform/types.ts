@@ -404,7 +404,7 @@ export type RuntimeSessionListReason = 'RUNTIME_NOT_INSTALLED' | 'SESSION_CATALO
  * 列表本身仍然可用，但要如实说明「还有没列出来的」。
  */
 export type RuntimeSessionListResult =
-  | { status: 'ready'; sessions: RuntimeSessionSummary[]; truncated: boolean }
+  | { status: 'ready'; sessions: RuntimeSessionSummary[]; truncated: boolean; nextCursor?: string }
   | { status: 'unavailable'; reason: RuntimeSessionListReason }
 
 /** A local-only user annotation. It never contains a transcript or copied Harness title. */
@@ -2113,7 +2113,7 @@ export interface RuntimeBridge {
    *
    * 注意与下面的「会话快照」区分：那是**整目录备份/恢复**，这里只是列表元数据。
    */
-  listSessions: () => Promise<RuntimeSessionListResult>
+  listSessions: (options?: { cursor?: string }) => Promise<RuntimeSessionListResult>
   /** Reads local-only aliases, groups and archive flags for Harness sessions. */
   getSessionWorkspace: () => Promise<RuntimeSessionWorkspace>
   /** Reads only which Harness sessions were created by the desktop companion. */

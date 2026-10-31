@@ -2231,6 +2231,8 @@ const MAX_RUNTIME_SESSIONS = 50
 const MAX_SESSION_TITLE_CHARS = 200
 /** 更新时间上限（毫秒，2100-01-01）：明显越界的取值视为不可信。 */
 const MAX_SESSION_UPDATED_AT = 4_102_444_800_000
+/** Guest page cursor: `updatedAt.base64url(sessionId)`, opaque to the shell UI. */
+const SESSION_LIST_CURSOR_PATTERN = /^[0-9]{1,13}\.[A-Za-z0-9_-]{2,267}$/
 /** 受控的读取失败原因：多一个少一个都要在这里显式登记，界面才能给出对应说明。 */
 const SESSION_LIST_REASONS = new Set<RuntimeSessionListReason>([
   'RUNTIME_NOT_INSTALLED',
@@ -2368,7 +2370,13 @@ export function validateRuntimeSessionListResult(value: unknown): RuntimeSession
     return { id, title, updatedAt: updatedAt as number }
   })
 
-  return { status: 'ready', sessions, truncated: requiredBoolean(result.truncated, '会话列表截断标记') }
+  const truncated = requiredBoolean(result.truncated, '会话列表截断标记')
+  const nextCursor = result.nextCursor
+  if (nextCursor === undefined) return { status: 'ready', sessions, truncated }
+  if (typeof nextCursor !== 'string' || !SESSION_LIST_CURSOR_PATTERN.test(nextCursor) || !truncated || sessions.length === 0) {
+    throw new Error('会话列表翻页游标无效')
+  }
+  return { status: 'ready', sessions, truncated, nextCursor }
 }
 
 /** Local organisation data has its own strict shape, so a malformed preference cannot poison the session list. */

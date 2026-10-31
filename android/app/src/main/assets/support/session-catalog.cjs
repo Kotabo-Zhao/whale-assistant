@@ -64,12 +64,14 @@ const FALLBACK_MAX_BYTES = 40
 /** 首条用户消息只用于折叠标题，拼接前先按字符截断，避免把长正文留在内存里。 */
 const USER_MESSAGE_MAX_CHARS = 4096
 const MAX_ID_CHARS = 200
+const MAX_TIMESTAMP_MILLIS = 4_102_444_800_000
 const ZSTD_MAGIC = 0xFD2FB528
 
 /** 会话日志文件名：`session.jsonl`（旧 v0）或 `session.v<N>.jsonl`，zstd 编码再加 `.zstd`。 */
 const SESSION_FILE = /^session(?:\.v([0-9]+))?\.jsonl(?:\.zstd)?$/
 const SEGMENT_ESCAPE = /^[0-9A-Fa-f]{4}$/
 const ID_FORBIDDEN = /[\u0000-\u001F\u007F/\\]/
+const CURSOR = /^([0-9]{1,13})\.([A-Za-z0-9_-]{2,267})$/
 
 // 以下四组正则与宿主 `dsh-session-title` 的 `cleanTitleText` 同序同义（去掉终端控制序列）。
 const OSC_SEQUENCE = /\u001B\][\s\S]*?(?:\u0007|\u001B\\)/gu
@@ -152,6 +154,48 @@ function decodeSegment(name) {
   if (ID_FORBIDDEN.test(decoded)) return null
   if (decoded === '.' || decoded === '..') return null
   return decoded
+}
+
+/** 会话 id 的危险字符校验，与目录解码后的约束保持一致。 */
+function isValidSessionId(id) {
+  return typeof id === 'string' && id.length > 0 && id.length <= MAX_ID_CHARS &&
+    !ID_FORBIDDEN.test(id) && !/\s/u.test(id) && id !== '.' && id !== '..' && !id.startsWith('.')
+}
+
+/**
+ * 翻页游标是上页最后一个排序键（更新时间 + base64url id），不含路径、标题或任何正文。
+ * 它不是权限令牌，解析时仍完整校验；非法值一律拒绝，不能让宿主猜测分页位置。
+ */
+function parseCursor(raw) {
+  if (raw === undefined || raw === '') return null
+  if (typeof raw !== 'string') throw controlledError('SESSION_CATALOG_CURSOR_INVALID')
+  const match = CURSOR.exec(raw)
+  if (match === null) throw controlledError('SESSION_CATALOG_CURSOR_INVALID')
+  const updatedAt = Number.parseInt(match[1], 10)
+  if (!Number.isSafeInteger(updatedAt) || updatedAt < 0 || updatedAt > MAX_TIMESTAMP_MILLIS) {
+    throw controlledError('SESSION_CATALOG_CURSOR_INVALID')
+  }
+  let id
+  try {
+    const encoded = Buffer.from(match[2], 'base64url')
+    id = encoded.toString('utf8')
+    // Buffer 对畸形 base64url 会尽力解码；回编码相等才接受唯一、规范的表示。
+    if (encoded.toString('base64url') !== match[2]) throw new Error('non-canonical')
+  } catch {
+    throw controlledError('SESSION_CATALOG_CURSOR_INVALID')
+  }
+  if (!isValidSessionId(id)) throw controlledError('SESSION_CATALOG_CURSOR_INVALID')
+  return { updatedAt, id }
+}
+
+function makeCursor(candidate) {
+  return `${candidate.updatedAt}.${Buffer.from(candidate.id, 'utf8').toString('base64url')}`
+}
+
+/** 已按更新时间倒序、id 正序排列；cursor 后才是更旧的一页。 */
+function isAfterCursor(candidate, cursor) {
+  return candidate.updatedAt < cursor.updatedAt ||
+    (candidate.updatedAt === cursor.updatedAt && candidate.id > cursor.id)
 }
 
 /** 目录项是不是「普通子目录」：跳过软链、文件与点开头的条目（含 `.sessions-trash`）。 */
@@ -425,7 +469,7 @@ function parseEvent(line) {
 }
 
 /** 主流程：列目录 → 按最近更新排序取前 N 条 → 逐条读标题。`hooks` 仅供单测观察（见 `readTitle`）。 */
-async function buildCatalog(limit, root, hooks = null) {
+async function buildCatalog(limit, root, hooks = null, cursor = null) {
   const started = Date.now()
   const deadline = started + TIME_BUDGET_MS
   const { candidates, unreadable, missing } = collectCandidates(root)
@@ -435,9 +479,10 @@ async function buildCatalog(limit, root, hooks = null) {
     throw controlledError('SESSION_CATALOG_UNREADABLE')
   }
   candidates.sort((left, right) => (right.updatedAt - left.updatedAt) || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
-  const selected = candidates.slice(0, limit)
+  const paged = cursor === null ? candidates : candidates.filter(candidate => isAfterCursor(candidate, cursor))
+  const selected = paged.slice(0, limit)
   // 有项目目录无法读取时，返回的候选列表只是可见子集，必须显式告诉调用方存在遗漏。
-  let truncated = candidates.length > selected.length || unreadable > 0
+  let truncated = paged.length > selected.length || unreadable > 0
   const sessions = []
   for (const candidate of selected) {
     let title = ''
@@ -454,7 +499,12 @@ async function buildCatalog(limit, root, hooks = null) {
       break
     }
   }
-  return { sessions, truncated }
+  // 时间预算可能在一个完整页面之前用尽；游标必须跟随真正最后回传的会话，
+  // 这样重试下一页不会跳过尚未回给壳页的条目。
+  const nextCursor = sessions.length > 0 && paged.length > sessions.length
+    ? makeCursor(sessions[sessions.length - 1])
+    : undefined
+  return { sessions, truncated, ...(nextCursor === undefined ? {} : { nextCursor }) }
 }
 
 /** 参数解析：条数上限夹到 `[1, MAX_LIMIT]`，根目录必须是绝对路径（应用从不传它）。 */
@@ -462,11 +512,12 @@ function parseArguments(argv) {
   const rawLimit = Number.parseInt(argv[2] ?? '', 10)
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), MAX_LIMIT) : DEFAULT_LIMIT
   const rawRoot = argv[3]
-  if (rawRoot === undefined) return { limit, root: DEFAULT_ROOT }
+  const cursor = parseCursor(argv[4])
+  if (rawRoot === undefined) return { limit, root: DEFAULT_ROOT, cursor }
   if (typeof rawRoot !== 'string' || rawRoot.length === 0 || rawRoot.includes('\u0000') || !path.isAbsolute(rawRoot)) {
     throw controlledError('SESSION_CATALOG_ROOT_INVALID')
   }
-  return { limit, root: rawRoot }
+  return { limit, root: rawRoot, cursor }
 }
 
 /**
@@ -485,8 +536,8 @@ function output(payload, code) {
 }
 
 async function main(argv) {
-  const { limit, root } = parseArguments(argv)
-  const catalog = await buildCatalog(limit, root)
+  const { limit, root, cursor } = parseArguments(argv)
+  const catalog = await buildCatalog(limit, root, null, cursor)
   output(catalog, 0)
 }
 
@@ -499,4 +550,4 @@ if (require.main === module) {
   })
 }
 
-module.exports = { MAX_SCAN_BYTES, MAX_COMPRESSED_BYTES, buildCatalog, cleanTitleText, decodeSegment, fallbackSessionTitle, normalizeSessionTitle, parseArguments, truncateTitleUtf8 }
+module.exports = { MAX_SCAN_BYTES, MAX_COMPRESSED_BYTES, buildCatalog, cleanTitleText, decodeSegment, fallbackSessionTitle, makeCursor, normalizeSessionTitle, parseArguments, parseCursor, truncateTitleUtf8 }

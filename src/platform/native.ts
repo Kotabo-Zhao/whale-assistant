@@ -144,7 +144,7 @@ interface NativeRuntimePlugin {
   saveSettings(settings: RuntimeSettingsUpdate): Promise<RuntimeSettings>
   install(source?: RuntimeSource): Promise<unknown>
   /** 会话工作区的会话元数据；返回值在 TS 侧走校验（`unknown` → validate）。 */
-  sessionList(): Promise<unknown>
+  sessionList(options?: { cursor?: string }): Promise<unknown>
   sessionWorkspace(): Promise<unknown>
   companionSessionLinks(): Promise<unknown>
   updateSessionWorkspace(options: { id: string; title?: string | null; group?: string | null; pinned?: boolean; archived?: boolean }): Promise<unknown>
@@ -672,7 +672,12 @@ function createNativeBridge(): RuntimeBridge {
         .then(validateRuntimeCleanupOutcome),
     // 会话工作区：只取元数据（标识/标题/更新时间），读不到时原生侧回受控错误字段而不是空列表，
     // 这里也不把「读不到」改写成空列表——校验器只认这两种形状。
-    listSessions: () => NativeRuntime.sessionList().then(validateRuntimeSessionListResult),
+    listSessions: options => {
+      if (options?.cursor !== undefined && (typeof options.cursor !== 'string' || !/^[0-9]{1,13}\.[A-Za-z0-9_-]{2,267}$/.test(options.cursor))) {
+        return Promise.reject(new Error('会话列表翻页游标无效'))
+      }
+      return NativeRuntime.sessionList(options).then(validateRuntimeSessionListResult)
+    },
     getSessionWorkspace: () => NativeRuntime.sessionWorkspace().then(validateRuntimeSessionWorkspace),
     getCompanionSessionLinks: () => NativeRuntime.companionSessionLinks().then(validateRuntimeCompanionSessionLinks),
     updateSessionWorkspace: update => NativeRuntime.updateSessionWorkspace(update).then(validateRuntimeSessionWorkspace),

@@ -55,6 +55,12 @@ internal object SessionCatalogPayload {
     /** 标题里的控制字符：出现即丢掉整条标题（不截断、不转义，宁可显示「未命名会话」）。 */
     private val CONTROL_IN_TITLE = Regex("[\\u0000-\\u001F\\u007F]")
 
+    /**
+     * Guest script emits `updatedAt.base64url(id)`. This is only a pagination position, never a
+     * capability token: keep its bounded wire shape before passing it back into the guest.
+     */
+    private val CURSOR = Regex("^[0-9]{1,13}\\.[A-Za-z0-9_-]{2,267}$")
+
     /** 受控失败字段：仅返回桥接协议约定的状态和错误码，不带原始异常文本。 */
     fun unavailable(reason: String): JSONObject =
         JSONObject().put("status", "unavailable").put("reason", reason)
@@ -102,11 +108,19 @@ internal object SessionCatalogPayload {
         }
         // 有会话却一条都没通过校验 → 载荷与约定不符，按「读不到」处理，不能显示成「没有会话」。
         if (raw.length() > 0 && sessions.length() == 0) return null
-        return JSONObject()
+        val result = JSONObject()
             .put("status", "ready")
             .put("sessions", sessions)
             .put("truncated", payload.optBoolean("truncated", false) || raw.length() > sessions.length())
+        val nextCursor = payload.opt("nextCursor")
+        if (nextCursor != null && nextCursor != JSONObject.NULL) {
+            if (nextCursor !is String || !isCursor(nextCursor) || !result.getBoolean("truncated") || sessions.length() == 0) return null
+            result.put("nextCursor", nextCursor)
+        }
+        return result
     }
+
+    fun isCursor(value: String): Boolean = CURSOR.matches(value)
 
     private fun readIdentifier(entry: JSONObject): String? {
         // 安全校验点：元数据类型必须符合协议，不把数值、null 或对象强制转换成字符串。
@@ -170,15 +184,18 @@ class SessionCatalog(context: Context, private val store: RuntimeStore) {
      * 两种情况都走 `resolve`（不是 `reject`），壳页才能在不依赖异常通道的前提下
      * 把「读不到」与「没有会话」区分开。
      */
-    fun list(): JSObject {
+    fun list(cursor: String? = null): JSObject {
         if (store.installedManifest() == null) {
             return JSObject(SessionCatalogPayload.unavailable(SessionCatalogPayload.NOT_INSTALLED).toString())
+        }
+        if (cursor != null && !SessionCatalogPayload.isCursor(cursor)) {
+            return JSObject(SessionCatalogPayload.unavailable(SessionCatalogPayload.FAILED).toString())
         }
         return try {
             prepareScript()
             // 上限 50 条、总预算 3 秒（脚本内）＋硬超时 6 秒（这里）；有界输出，取最后一行 JSON。
             val result = ProcessProbe.run(
-                resolver.launch(listOf(NODE_BINARY, SCRIPT_PATH, MAX_SESSIONS.toString())),
+                resolver.launch(listOf(NODE_BINARY, SCRIPT_PATH, MAX_SESSIONS.toString(), DEFAULT_ROOT, cursor.orEmpty())),
                 store.currentRoot,
                 TIMEOUT_SECONDS,
                 outputLimit = OUTPUT_LIMIT,
@@ -223,6 +240,8 @@ class SessionCatalog(context: Context, private val store: RuntimeStore) {
         const val NODE_BINARY = "/opt/node/bin/node"
         const val SCRIPT_NAME = "session-catalog.cjs"
         const val SCRIPT_PATH = "/root/.dsh-mobile/$SCRIPT_NAME"
+        /** Must stay in sync with the guest's default root; explicit argv slot four carries the cursor. */
+        const val DEFAULT_ROOT = "/root/.dsh/sessions"
         const val MAX_SESSIONS = SessionCatalogPayload.MAX_SESSIONS
 
         /** 硬超时（秒）：脚本内预算 3 秒，这里留一倍余量给 proot 启动与 zstd 解压。 */

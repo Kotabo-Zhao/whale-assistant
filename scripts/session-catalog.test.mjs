@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import zlib from 'node:zlib'
 import catalog from '../android/app/src/main/assets/support/session-catalog.cjs'
 
-const { MAX_SCAN_BYTES, MAX_COMPRESSED_BYTES, buildCatalog, decodeSegment, fallbackSessionTitle, normalizeSessionTitle, parseArguments } = catalog
+const { MAX_SCAN_BYTES, MAX_COMPRESSED_BYTES, buildCatalog, decodeSegment, fallbackSessionTitle, makeCursor, normalizeSessionTitle, parseArguments, parseCursor } = catalog
 
 /** 哨兵串：它只出现在会话正文/工具输出/未使用的路径里，任何一次「正文外传」都会让它出现在输出里。 */
 const SENTINEL = 'ZZ-SESSION-BODY-SENTINEL-ZZ'
@@ -348,6 +348,31 @@ test('参数解析：条数夹取、根目录必须是绝对路径', () => {
   assert.equal(parseArguments(['node', 'script', '7', createRoot()]).limit, 7)
   for (const bad of ['relative/dir', '', 'a\u0000b']) {
     assert.throws(() => parseArguments(['node', 'script', '5', bad]), (error) => error.code === 'SESSION_CATALOG_ROOT_INVALID')
+  }
+})
+
+test('分页游标按排序键继续，且不携带标题或路径', async () => {
+  const root = createRoot()
+  addSession(root, { directory: 'session-a', updatedAt: BASE_TIME + 1000, lines: [title('最新')] })
+  addSession(root, { directory: 'session-b', updatedAt: BASE_TIME, lines: [title('较早')] })
+  addSession(root, { directory: 'session-c', updatedAt: BASE_TIME, lines: [title('同时间更早')] })
+
+  const first = await buildCatalog(2, root)
+  assert.deepEqual(first.sessions.map((session) => session.id), ['session-a', 'session-b'])
+  assert.equal(first.truncated, true)
+  assert.ok(first.nextCursor)
+  assert.equal(first.nextCursor.includes('最新'), false)
+  assert.equal(first.nextCursor.includes('/'), false)
+
+  const second = await buildCatalog(2, root, null, parseCursor(first.nextCursor))
+  assert.deepEqual(second.sessions.map((session) => session.id), ['session-c'])
+  assert.equal(second.nextCursor, undefined)
+  assert.equal(makeCursor({ id: 'session-c', updatedAt: BASE_TIME }), `${BASE_TIME}.c2Vzc2lvbi1j`)
+})
+
+test('分页游标拒绝非规范编码和危险 id', () => {
+  for (const value of ['x', '1000.c2Vzc2lvbi9i', '1000.YQ=', '1000.LmhpZGRlbg==']) {
+    assert.throws(() => parseCursor(value), (error) => error.code === 'SESSION_CATALOG_CURSOR_INVALID')
   }
 })
 

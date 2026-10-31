@@ -38,7 +38,7 @@ interface SessionManagerProps {
  */
 type SessionCatalogState =
   | { status: 'loading' }
-  | { status: 'ready'; sessions: RuntimeSessionSummary[]; truncated: boolean }
+  | { status: 'ready'; sessions: RuntimeSessionSummary[]; truncated: boolean; nextCursor?: string }
   | { status: 'unavailable'; reason: RuntimeSessionListReason }
 
 /**
@@ -112,6 +112,8 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
   const [expanded, setExpanded] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
   const [retrying, setRetrying] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false)
   const [workspace, setWorkspace] = useState<RuntimeSessionWorkspaceEntry[]>([])
   const [companionSessionIds, setCompanionSessionIds] = useState<Set<string>>(new Set())
   const [showArchived, setShowArchived] = useState(false)
@@ -133,7 +135,7 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
       .then(result => {
         if (!active) return
         setCatalog(result.status === 'ready'
-          ? { status: 'ready', sessions: [...result.sessions], truncated: result.truncated }
+          ? { status: 'ready', sessions: [...result.sessions], truncated: result.truncated, ...(result.nextCursor === undefined ? {} : { nextCursor: result.nextCursor }) }
           : { status: 'unavailable', reason: result.reason })
       })
       .catch(() => {
@@ -144,6 +146,8 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
         if (active) {
           loadingRef.current = false
           setRetrying(false)
+          setLoadingMore(false)
+          setLoadMoreFailed(false)
         }
       })
     return () => { active = false }
@@ -177,7 +181,37 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
     if (disabled || loadingRef.current) return
     loadingRef.current = true
     setRetrying(true)
+    setLoadMoreFailed(false)
     setReloadToken(current => current + 1)
+  }
+
+  /**
+   * 只在访客脚本明确交回下一页游标时才继续读。合并按 id 去重，避免用户在翻页间隙
+   * 更新某个会话导致壳页显示重复卡片；失败保留已显示的页，不把部分成功回退成空态。
+   */
+  const loadMoreSessions = (): void => {
+    if (disabled || loadingMore || catalog.status !== 'ready' || catalog.nextCursor === undefined) return
+    const cursor = catalog.nextCursor
+    setLoadingMore(true)
+    setLoadMoreFailed(false)
+    runtimeBridge.listSessions({ cursor }).then(result => {
+      if (result.status !== 'ready') throw new Error('下一页会话暂时不可读取')
+      setCatalog(current => {
+        if (current.status !== 'ready') return current
+        const merged = new Map(current.sessions.map(session => [session.id, session]))
+        result.sessions.forEach(session => { if (!merged.has(session.id)) merged.set(session.id, session) })
+        return {
+          status: 'ready',
+          sessions: [...merged.values()],
+          truncated: result.truncated,
+          ...(result.nextCursor === undefined ? {} : { nextCursor: result.nextCursor }),
+        }
+      })
+      // 用户请求更多内容时，直接展开，避免新加载的条目仍被默认五条隐藏。
+      setExpanded(true)
+    }).catch(() => {
+      setLoadMoreFailed(true)
+    }).finally(() => setLoadingMore(false))
   }
 
   const sessions = useMemo<SessionEntry[]>(() => {
@@ -378,7 +412,15 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
       )}
 
       {catalog.status === 'ready' && catalog.truncated && (
-        <p className="session-note">{t('会话较多，这里只列出最近更新的一部分。')}</p>
+        <>
+          <p className="session-note">{t(catalog.nextCursor === undefined ? '部分会话暂时无法读取，这里只显示已安全读取的项目。' : '会话较多，可继续加载较早的会话。')}</p>
+          {catalog.nextCursor !== undefined && query.trim() === '' && (
+            <button className="button button-secondary session-expand" type="button" onClick={loadMoreSessions} disabled={disabled || loadingMore}>
+              {loadingMore && <Loader2 className="spin" size={16} />}{t(loadingMore ? '正在加载会话…' : '加载更多会话')}
+            </button>
+          )}
+          {loadMoreFailed && <p className="session-note" role="status">{t('未能加载更多会话；已显示的会话不受影响，可稍后重试。')}</p>}
+        </>
       )}
 
       <p className="session-note">{t('会话正文由 Harness 运行时管理，外壳不会复制或上传。')}</p>

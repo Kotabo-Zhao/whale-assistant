@@ -1715,7 +1715,8 @@ class MobileRuntimePlugin : Plugin() {
     fun sessionList(call: PluginCall) {
         // SessionCatalog 会准备访客脚本并启动 PRoot 探测；必须与运行时启停/重置共用同一把锁，
         // 否则启动同时读列表会读到正在替换的 currentRoot 配置。
-        execute(call) { controller.withLifecycleLock { sessionCatalog.list() } }
+        val cursor = call.getString("cursor")?.takeIf { it.isNotEmpty() }
+        execute(call) { controller.withLifecycleLock { sessionCatalog.list(cursor) } }
     }
 
     /** User-owned title overrides, groups, pin and archive flags for entries returned by [sessionList]. */
