@@ -172,7 +172,7 @@ it('资料可在全高详情页中阅读并带入对话草稿', async () => {
   fireEvent.click(within(dialog).getByRole('button', { name: '关闭' }))
   expect(screen.queryByRole('dialog')).toBeNull()
 })
-it('图片资料仅在详情页主动请求本机缩略预览', async () => {
+it('图片资料打开详情页时加载本机缩略预览', async () => {
   const originalId = 'c'.repeat(64)
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => {
     if (request.operation === 'knowledgeList') return Promise.resolve({ items: [{ id: 'k-image', text: '海边照片描述', source: 'image_analysis', coverage: 'model_description', originalId }] })
@@ -183,8 +183,6 @@ it('图片资料仅在详情页主动请求本机缩略预览', async () => {
   fireEvent.click(screen.getByRole('tab', { name: '资料' }))
   fireEvent.click(await screen.findByRole('button', { name: '查看详情' }))
   const dialog = screen.getByRole('dialog')
-  expect(within(dialog).queryByRole('img')).toBeNull()
-  fireEvent.click(within(dialog).getByRole('button', { name: '显示图片预览' }))
   expect((await within(dialog).findByRole('img', { name: '图片预览：资料图片' })).getAttribute('src')).toBe('data:image/png;base64,aGVsbG8=')
   expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeImagePreview', id: 'k-image', originalId, expectedText: '海边照片描述' })
 })

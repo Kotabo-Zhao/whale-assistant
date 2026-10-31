@@ -101,6 +101,16 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
   useEffect(() => {
+    if (knowledgeDetail === null || !canPreviewKnowledgeImage(knowledgeDetail)) return
+    const id = originalId(knowledgeDetail)
+    if (id === null) return
+    let active = true
+    void runtimeBridge.companionDashboard({ operation: 'knowledgeImagePreview', id: knowledgeDetail.id, originalId: id, expectedText: knowledgeDetail.text }).then(result => {
+      if (active && typeof result.imageBase64 === 'string' && result.imageBase64 !== '') setKnowledgeImagePreview({ id: knowledgeDetail.id, source: `data:image/png;base64,${result.imageBase64}` })
+    }).catch(() => { if (active) setMessage('图片预览不可用；资料没有发送。') })
+    return () => { active = false }
+  }, [knowledgeDetail])
+  useEffect(() => {
     let live = true
     if (previousPanel.current !== panel) {
       setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setMemorySelectionMode(false); setSelectedMemoryIds(new Set()); setKnowledgeSource('all'); setKnowledgeCoverage('all'); setKnowledgeSelectionMode(false); setSelectedKnowledgeIds(new Set()); setKnowledgeProcessing(null)
