@@ -72,6 +72,18 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val panel = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
         }
+        val knowledgeAllowed = CompanionStore(context).knowledgeModelAccess
+        val accessBadge = TextView(context).apply {
+            text = if (knowledgeAllowed) "资料：已授权，可由 Agent 按需检索（与 Shizuku 独立）" else "资料：未授权，点击打开资料设置"
+            textSize = 11f; setTextColor(if (knowledgeAllowed) Color.rgb(42, 104, 83) else Color.rgb(126, 78, 44))
+            setPadding(dp(12), dp(5), dp(12), dp(5))
+            contentDescription = text
+            setOnClickListener {
+                context.startActivity(Intent(context, CompanionActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            }
+        }
+        panel.addView(accessBadge)
         val content = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = if (showAbove) Gravity.BOTTOM else Gravity.TOP }
         val scroll = ScrollView(context).apply { addView(content); isFillViewport = true }
         panel.addView(scroll, LinearLayout.LayoutParams(-1, minOf(dp(460), (metrics.heightPixels * 0.55f).toInt())))
@@ -89,7 +101,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         fun bubble(message: String, isUser: Boolean): TextView {
             val shouldFollow = isUser || atBottom()
             val view = TextView(context).apply {
-                text = message; textSize = 15f; setTextColor(Color.rgb(44, 54, 75)); tag = isUser; maxWidth = width - dp(45)
+                text = CompanionRichText.render(message); textSize = 15f; setTextColor(Color.rgb(44, 54, 75)); tag = isUser; maxWidth = width - dp(45)
+                movementMethod = android.text.method.LinkMovementMethod.getInstance()
                 styleBubble(this, isUser)
             }
             content.addView(view, LinearLayout.LayoutParams(-2, -2).apply { gravity = if (isUser) Gravity.END else Gravity.START; bottomMargin = dp(6) })
@@ -235,6 +248,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             failedMessage?.let { content.removeView(it) }; failedMessage = null
             lastError = null
             val sentBubble = bubble(message, true)
+            val streamingBubble = bubble("正在输入…", false)
             busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = false; send.isEnabled = false; input.isEnabled = false; status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
             val prior = (history + CompanionBubbleChat.Message("user", message)).takeLast(19)
@@ -250,7 +264,16 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         memoryAllowed && SemanticControl(context).memoryEnabled,
                         knowledgeAllowed && SemanticControl(context).enabled,
                     )
-                    chat.reply(prior, scope, memoryAllowed, knowledgeAllowed)
+                    chat.reply(prior, scope, memoryAllowed, knowledgeAllowed) { partial ->
+                        handler.post {
+                            if (closed || request != generation || root !== panel) return@post
+                            val follow = atBottom()
+                            streamingBubble.text = CompanionRichText.render(partial)
+                            status.text = "正在流式输出…"
+                            if (follow) scroll.fullScroll(android.view.View.FOCUS_DOWN)
+                            panel.post { positionUpdater?.invoke() }
+                        }
+                    }
                 }
                 handler.post {
                     if (closed || request != generation) return@post
@@ -272,11 +295,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                             }
                         } }
                         draft = ""
-                        if (samePanel) { bubble(answer.text, false); answer.images.forEach(::imageBubble); answer.citations.forEach(::citationCard); input.text.clear() }
+                        if (samePanel) { streamingBubble.text = CompanionRichText.render(answer.text); answer.images.forEach(::imageBubble); answer.citations.forEach(::citationCard); input.text.clear() }
                         status.text = ""; status.visibility = android.view.View.GONE
                     }.onFailure { error ->
                         onState("idle")
                         failedMessage = sentBubble
+                        if (samePanel) content.removeView(streamingBubble)
                         status.text = error.message?.takeIf { it.startsWith("本机") || it.startsWith("对话") || it.startsWith("回复") || it.startsWith("模型") }
                             ?: "发送失败，请检查本机服务和网络；输入已保留。"
                         lastError = status.text.toString()

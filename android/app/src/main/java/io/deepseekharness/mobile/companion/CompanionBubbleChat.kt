@@ -9,7 +9,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 internal object CompanionBubbleChatPolicy {
-    fun capabilityGuidance(): String = "需要访问个人记忆、资料或事项且当前授权不明确时，先调用 mobile_companion_capabilities；工具调用不需要也不得填写 callerSession，会话身份由工具运行时从当前 Agent 会话自动附带。权限被拒绝时如实说明，不把它当作空结果。"
+    fun capabilityGuidance(): String = "需要访问个人记忆、资料或事项时，先调用 mobile_companion_capabilities 核对实际权限；没有调用该工具或对应资料工具前，不得声称无法访问本地资料。工具调用不需要也不得填写 callerSession，会话身份由工具运行时从当前 Agent 会话自动附带。权限被拒绝时如实说明，不把它当作空结果。"
     fun memoryDigest(value: String): String = java.security.MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 255) }
     fun proactiveMemory(rows: JSONArray, lastDigest: String? = null): String? {
@@ -106,7 +106,7 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
     fun snapshot(messages: List<Message>): CompanionBubbleHistory.Snapshot? =
         sessionId?.let { id -> sessionScope?.let { CompanionBubbleHistory.Snapshot(id, it, messages.toList()) } }
 
-    fun reply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean): Reply {
+    fun reply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit = {}): Reply {
         require(history.isNotEmpty() && history.size <= 20 && history.last().role == "user")
         val access = runCatching { RuntimeHost.controllerOrNull()?.openHarnessAccess() }.getOrNull()
             ?: error("本机对话服务未运行，请先在应用中启动对话")
@@ -129,7 +129,7 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
             if (memoryAllowed) append(CompanionBubbleChatPolicy.memoryToolGuidance()).append('\n')
             else append("桌宠记忆访问已关闭，不要查询长期记忆。\n")
             if (memoryAllowed && SemanticControl(context).memoryEnabled) append("用户已启用长期记忆语义索引；表达不同时可使用 mobile_memory_hybrid_search，并区分确认事实与待核实内容。\n")
-            if (knowledgeAllowed) append(CompanionBubbleChatPolicy.knowledgeToolGuidance()).append('\n')
+            if (knowledgeAllowed) append("当前本地资料访问已获用户授权；用户询问已保存资料时必须先核对能力并调用资料工具，不得仅凭 Shizuku 状态或猜测回复。\n").append(CompanionBubbleChatPolicy.knowledgeToolGuidance()).append('\n')
             else append("本地资料对话访问已关闭，不要查询本地资料。\n")
             append("用户明确要求完成、取消或安排已读取事项时，先用 mobile_task_search 取得 id 和 expectedState，再仅调用一次 mobile_task_update；发生冲突须重新读取，不猜测状态或时间。\n")
             if (knowledgeAllowed && SemanticControl(context).enabled) append("用户已启用资料语义检索；关键词未命中或表达不同时可使用 mobile_knowledge_hybrid_search，再读取原文核对；索引可能尚未完成。\n")
@@ -137,7 +137,7 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
             else append("用户：").append(CompanionBubbleChatPolicy.validateMessage(history.last().text)).append('\n')
             append("请回复最后一条用户消息。")
         }
-        return client.followReplyWithImages(currentSession) {
+        return client.followReplyWithImages(currentSession, onPartial) {
             client.call("session/prompt", JSONObject().put("requestId", java.util.UUID.randomUUID().toString()).put("sessionId", currentSession).put("mode", "queue")
                 .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", prompt))))
         }
@@ -197,8 +197,8 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             return result.getJSONObject("value")
         } finally { connection.disconnect() }
     }
-    fun followReply(sessionId: String, sendPrompt: () -> Unit): String = followReplyWithImages(sessionId, sendPrompt).text
-    fun followReplyWithImages(sessionId: String, sendPrompt: () -> Unit): CompanionBubbleChat.Reply {
+    fun followReply(sessionId: String, sendPrompt: () -> Unit): String = followReplyWithImages(sessionId, {}, sendPrompt).text
+    fun followReplyWithImages(sessionId: String, onPartial: (String) -> Unit = {}, sendPrompt: () -> Unit): CompanionBubbleChat.Reply {
         val ready = java.util.concurrent.CountDownLatch(1)
         val done = java.util.concurrent.CountDownLatch(1)
         val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
@@ -206,7 +206,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
         val images = java.util.concurrent.atomic.AtomicReference<List<String>>(emptyList())
         val citations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
         val streamId = java.util.UUID.randomUUID().toString()
-        val http = okhttp3.OkHttpClient.Builder().readTimeout(610, java.util.concurrent.TimeUnit.SECONDS).build()
+        val http = streamingClient
         val basic = java.util.Base64.getEncoder().encodeToString("${access.username}:${access.password}".toByteArray(Charsets.UTF_8))
         val request = okhttp3.Request.Builder().url("ws://${base.host}:${base.port}/api/remote.mux")
             .header("Authorization", "Basic $basic").apply { authCookie.takeIf { it.isNotEmpty() }?.let { header("Cookie", it) } }.build()
@@ -234,7 +234,10 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                             val parts = (0 until content.length()).mapNotNull { j ->
                                 content.optJSONObject(j)?.takeIf { it.optString("type") == "text" }?.optString("text")
                             }.filter { it.isNotBlank() }
-                            if (event.optString("type") == "assistant/message" && parts.isNotEmpty()) answer.set(parts.joinToString("\n"))
+                            if (event.optString("type") == "assistant/message" && parts.isNotEmpty()) {
+                                val next = parts.joinToString("\n")
+                                if (answer.getAndSet(next) != next) runCatching { onPartial(next) }
+                            }
                             if (event.optString("type") == "tool/result") {
                                 val found = parts.flatMap(CompanionBubbleChatPolicy::citationsFromToolResult)
                                 if (found.isNotEmpty()) citations.set((citations.get() + found).distinctBy { "${it.id}:${it.revision}" }.take(6))
@@ -272,8 +275,16 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(parsed.text), (images.get() + parsed.images).distinct().take(6), citations.get())
         } finally {
             socket.cancel()
-            http.dispatcher.executorService.shutdown()
-            http.connectionPool.evictAll()
+        }
+    }
+
+    private companion object {
+        val streamingClient: okhttp3.OkHttpClient by lazy {
+            okhttp3.OkHttpClient.Builder()
+                .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .pingInterval(20, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
         }
     }
 

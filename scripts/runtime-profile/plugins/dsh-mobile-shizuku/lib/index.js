@@ -218,7 +218,7 @@ async function callBridge(command, param, signal, maxChars = MAX_RESULT_CHARS, a
 
 // The session comes from the tool runtime, never from model-supplied arguments.
 function companionPayload(payload, exec) {
-  const session = exec?.agent?.session?.id
+  const session = exec?.agent?.session?.id ?? exec?.session?.id ?? exec?.sessionId
   if (typeof session !== 'string' || !/^[A-Za-z0-9._-]{1,200}$/u.test(session)) throw new Error('COMPANION_SESSION_UNAVAILABLE')
   return { ...payload, callerSession: session }
 }
@@ -406,8 +406,8 @@ function accessibilityActionParam(args) {
 
 async function assertImageCapableRoute(ctx, exec) {
   const routed = exec.agent?.session.requestHeader()?.config
-  const provider = routed?.provider ?? exec.agent?.options.provider
-  const model = routed?.model ?? exec.agent?.options.model
+  const provider = routed?.provider ?? exec.agent?.options?.provider
+  const model = routed?.model ?? exec.agent?.options?.model
   if (provider === undefined || model === undefined) throw new Error('IMAGE_MODEL_REQUIRED')
   const info = await ctx.llm.resolveModelInfo(provider, model, exec.signal)
   if (!info.inputModalities?.includes('image')) throw new Error('IMAGE_MODEL_REQUIRED')

@@ -31,6 +31,13 @@ const ok = text => ({ ok: true, exitCode: 0, text, truncated: false, errorCode: 
 const virtualSession = '00000000-1111-2222-3333-444444444444'
 const memoryExec = { agent: { session: { id: virtualSession } } }
 
+test('资料工具兼容当前运行时的会话注入形态，但不接受模型参数伪造', async t => {
+  const f = fixture(t, () => ok('{"schemaVersion":1}'))
+  await f.tools.get('mobile_companion_capabilities').execute({}, { session: { id: virtualSession } })
+  assert.deepEqual(f.requests, [{ command: 'companionMemory', param: JSON.stringify({ op: 'capabilities', callerSession: virtualSession }) }])
+  await assert.rejects(f.tools.get('mobile_companion_capabilities').execute({ callerSession: virtualSession }, {}), /COMPANION_SESSION_UNAVAILABLE/)
+})
+
 test('手机提醒工具通过授权桥传递明确时间并拒绝不合法参数', async t => {
   const f = fixture(t, () => ok('{"scheduled":true,"inexact":true}'))
   await f.tools.get('mobile_reminder_list').execute({}, {})
