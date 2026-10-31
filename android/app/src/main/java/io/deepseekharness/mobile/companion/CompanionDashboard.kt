@@ -177,6 +177,7 @@ internal class CompanionDashboard(private val context: Context) {
                     data.queue.listItems(100).forEach { item -> put(JSONObject()
                         .put("id", item.id).put("text", item.title).put("state", item.state)
                         .put("sourceKind", if (item.eventId.startsWith("share:")) "shared_material" else "notification")
+                        .put("sourceRecordId", data.queue.sharedRecordId(item.eventId) ?: JSONObject.NULL)
                         .put("reminderStatus", item.reminderStatus).put("reminderAtMs", item.reminderAtMs ?: JSONObject.NULL)
                         .put("revision", CompanionTaskModel.revision(item)))
                 })

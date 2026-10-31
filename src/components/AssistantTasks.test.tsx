@@ -10,10 +10,11 @@ beforeEach(() => { vi.clearAllMocks(); bridge.companionDashboard.mockResolvedVal
 it('事项入口读取统一台账，并用读取时的状态与版本更新单项', async () => {
   const revision = 'a'.repeat(64)
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'taskList'
-    ? { items: [{ id: 'task-1', text: '核对合同', state: 'candidate', sourceKind: 'shared_material', revision }] }
+    ? { items: [{ id: 'task-1', text: '核对合同', state: 'candidate', sourceKind: 'shared_material', sourceRecordId: '123e4567-e89b-12d3-a456-426614174000', revision }] }
     : { ok: true }))
   render(<AssistantTasks />)
   expect(await screen.findByText('核对合同')).toBeInTheDocument()
+  expect(screen.getByText(/资料整理 · 已关联资料/)).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '标记待处理' }))
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'taskUpdate', id: 'task-1', expectedState: 'candidate', expectedRevision: revision, state: 'open' }))
   expect(screen.getByRole('status')).toHaveTextContent('事项已标记为待处理')
