@@ -29,6 +29,7 @@ function fixture(t, answer, extras = {}) {
 }
 const ok = text => ({ ok: true, exitCode: 0, text, truncated: false, errorCode: null })
 const virtualSession = '00000000-1111-2222-3333-444444444444'
+const memoryExec = { agent: { session: { id: virtualSession } } }
 
 test('手机提醒工具通过授权桥传递明确时间并拒绝不合法参数', async t => {
   const f = fixture(t, () => ok('{"scheduled":true,"inexact":true}'))
@@ -96,19 +97,20 @@ test('本地资料工具按关键词经过设备桥并拒绝无效查询', async
 
 test('长期记忆工具通过本机桥保存、检索和删除，并验证输入', async t => {
   const f = fixture(t, () => ok('{"items":[]}'))
-  await f.tools.get('mobile_memory_save').execute({ text: '喜欢蓝色' }, {})
-  await f.tools.get('mobile_memory_search').execute({ query: '蓝色' }, {})
-  await f.tools.get('mobile_memory_search').execute({ query: '蓝色', offset: 10 }, {})
-  await f.tools.get('mobile_memory_delete').execute({ id: virtualSession }, {})
+  await f.tools.get('mobile_memory_save').execute({ text: '喜欢蓝色' }, memoryExec)
+  await f.tools.get('mobile_memory_search').execute({ query: '蓝色' }, memoryExec)
+  await f.tools.get('mobile_memory_search').execute({ query: '蓝色', offset: 10 }, memoryExec)
+  await f.tools.get('mobile_memory_delete').execute({ id: virtualSession }, memoryExec)
   assert.deepEqual(f.requests.map(r => [r.command, JSON.parse(r.param).op]), [
     ['companionMemory', 'save'], ['companionMemory', 'search'], ['companionMemory', 'search'], ['companionMemory', 'delete'],
   ])
   assert.equal(JSON.parse(f.requests[2].param).offset, 10)
-  for (const offset of [-1, 101]) await assert.rejects(f.tools.get('mobile_memory_search').execute({ query: '蓝色', offset }, {}), /MEMORY_INPUT_INVALID/)
-  for (const offset of [1.5, '10', null]) await assert.rejects(f.tools.get('mobile_memory_search').execute({ query: '蓝色', offset }, {}))
+  for (const offset of [-1, 2147483648]) await assert.rejects(f.tools.get('mobile_memory_search').execute({ query: '蓝色', offset }, memoryExec), /MEMORY_INPUT_INVALID/)
+  for (const offset of [1.5, '10', null]) await assert.rejects(f.tools.get('mobile_memory_search').execute({ query: '蓝色', offset }, memoryExec))
   assert.equal(f.requests.length, 4)
-  await assert.rejects(f.tools.get('mobile_memory_save').execute({ text: '' }, {}), /MEMORY_INPUT_INVALID/)
-  await assert.rejects(f.tools.get('mobile_memory_delete').execute({ id: '../bad' }, {}), /MEMORY_INPUT_INVALID/)
+  assert.ok(f.requests.every(r => JSON.parse(r.param).callerSession === virtualSession))
+  await assert.rejects(f.tools.get('mobile_memory_save').execute({ text: '' }, memoryExec), /MEMORY_INPUT_INVALID/)
+  await assert.rejects(f.tools.get('mobile_memory_delete').execute({ id: '../bad' }, memoryExec), /MEMORY_INPUT_INVALID/)
 })
 
 test('统一设备能力工具只读当前快照并透传受控桥命令', async t => {
@@ -668,9 +670,9 @@ test('最近资料和分段读取携带来源与版本', async t => {
 test('纠正记忆通过设备桥携带旧值，拒绝缺失目标', async t => {
   const f = fixture(t, () => ok('{"updated":true}'))
   const tool = f.tools.get('mobile_memory_update')
-  await tool.execute({ id: virtualSession, expectedText: '旧住址', text: '新住址' }, {})
-  assert.deepEqual(JSON.parse(f.requests[0].param), { op: 'update', id: virtualSession, expectedText: '旧住址', text: '新住址' })
-  await assert.rejects(tool.execute({ id: 'bad', expectedText: '旧住址', text: '新住址' }, {}), /MEMORY_INPUT_INVALID/)
+  await tool.execute({ id: virtualSession, expectedText: '旧住址', text: '新住址' }, memoryExec)
+  assert.deepEqual(JSON.parse(f.requests[0].param), { op: 'update', callerSession: virtualSession, id: virtualSession, expectedText: '旧住址', text: '新住址' })
+  await assert.rejects(tool.execute({ id: 'bad', expectedText: '旧住址', text: '新住址' }, memoryExec), /MEMORY_INPUT_INVALID/)
 })
 
 test('文档分段检索携带文档标识与游标', async t => {
@@ -678,4 +680,31 @@ test('文档分段检索携带文档标识与游标', async t => {
   await f.tools.get('mobile_knowledge_search').execute({ query: '', documentId: 'a'.repeat(64), offset: 3 }, {})
   assert.deepEqual(JSON.parse(f.requests[0].param), { query: '', documentId: 'a'.repeat(64), offset: 3 })
   await assert.rejects(f.tools.get('mobile_knowledge_search').execute({ query: '', documentId: '../bad' }, {}), /KNOWLEDGE_INPUT_INVALID/)
+})
+
+
+test('记忆会话由运行时提供，缺失或非法身份拒绝且模型不能覆盖', async t => {
+  const f = fixture(t, () => ok('{"items":[]}'))
+  const calls = [
+    ['mobile_memory_search', { query: '' }],
+    ['mobile_memory_hybrid_search', { query: '偏好' }],
+    ['mobile_memory_save', { text: '喜欢蓝色' }],
+    ['mobile_memory_update', { id: virtualSession, expectedText: '旧值', text: '新值' }],
+    ['mobile_memory_delete', { id: virtualSession }],
+    ['mobile_companion_capabilities', {}],
+  ]
+  for (const [name, args] of calls) {
+    const tool = f.tools.get(name)
+    await assert.rejects(tool.execute({ ...args, callerSession: virtualSession }, {}), /MEMORY_SESSION_UNAVAILABLE/)
+    await assert.rejects(tool.execute(args, { agent: { session: { id: '../bad' } } }), /MEMORY_SESSION_UNAVAILABLE/)
+    await tool.execute({ ...args, callerSession: 'forged-session' }, memoryExec)
+  }
+  assert.equal(f.requests.length, calls.length)
+  assert.ok(f.requests.every(r => r.command === 'companionMemory' && JSON.parse(r.param).callerSession === virtualSession))
+})
+
+test('记忆访问被后端拒绝时保留错误，不回退到其他调用', async t => {
+  const f = fixture(t, () => ({ ok: false, exitCode: 1, text: '', truncated: false, errorCode: 'MEMORY_BUBBLE_DISABLED' }))
+  await assert.rejects(f.tools.get('mobile_memory_search').execute({ query: '' }, memoryExec), /MEMORY_BUBBLE_DISABLED/)
+  assert.equal(f.requests.length, 1)
 })

@@ -8,8 +8,6 @@ internal class SemanticControl(context: Context) {
     private val prefs = app.getSharedPreferences("semantic_search_v1", Context.MODE_PRIVATE)
     val enabled: Boolean get() = prefs.getBoolean("enabled", false)
     val memoryEnabled: Boolean get() = enabled && prefs.getBoolean("memory_enabled", false)
-    val memoryEnabled: Boolean get() = enabled && prefs.getBoolean("memory_enabled", false)
-    val memoryEnabled: Boolean get() = prefs.getBoolean("memory_enabled", false)
     fun generation(): Long = prefs.getLong("generation", 0L)
     fun cursor(): Long = prefs.getLong("cursor", -1L)
     fun phase(): String = prefs.getString("phase", "knowledge").takeIf { it == "memory" } ?: "knowledge"

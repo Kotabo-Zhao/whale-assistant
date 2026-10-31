@@ -455,7 +455,7 @@ class CompanionActivity : AppCompatActivity() {
         toggle("桌宠对话使用相关记忆", store.bubbleMemoryAccess) { enabled ->
             if (!enabled) { store.bubbleMemoryAccess = false; render() }
             else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许桌宠对话使用记忆？")
-                .setMessage("发送消息时，匹配的已确认记忆会随对话发送给 DeepSeek 模型服务；可随时关闭。")
+                .setMessage("桌宠可按需检索、保存和纠正长期记忆，检索结果会发送给当前对话所选的模型服务。关闭后，此桌宠会话的记忆工具会被拒绝；已经发送的内容不能撤回。可随时关闭。")
                 .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.bubbleMemoryAccess = true; render() }.show()
         }
         toggle("桌宠根据记忆主动搭话", store.proactiveMemoryChat) { enabled ->

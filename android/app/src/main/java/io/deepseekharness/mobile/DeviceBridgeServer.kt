@@ -336,9 +336,17 @@ class DeviceBridgeServer(
                         if (param.length > 4096) throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数过长")
                         val context = appContext ?: throw RuntimeFailure("MEMORY_UNAVAILABLE", "记忆服务不可用")
                         val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数无效") }
+                        val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
+                        if (request.optString("op") == "capabilities") {
+                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, access.capabilities(), false, null))
+                            return
+                        }
+                        access.requireMemory()
                         val result = if (request.optString("op") == "hybrid")
                             io.deepseekharness.mobile.companion.SemanticMemorySearch.execute(context, param)
                         else io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(param)
+                        // A remote embedding query can finish after the user revokes access.
+                        access.requireMemory()
                         if (io.deepseekharness.mobile.companion.CompanionMemoryHint.shouldNotify(param, result)) {
                             OverlayBallService.companionPendingMemoryHint()
                         }

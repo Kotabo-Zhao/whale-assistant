@@ -1,0 +1,46 @@
+package io.deepseekharness.mobile.companion
+
+import android.content.Context
+import io.deepseekharness.mobile.runtime.RuntimeFailure
+import org.json.JSONObject
+
+/** Model-facing access checks. Local management and background jobs use their own consent paths. */
+internal class CompanionAgentAccess(context: Context, request: JSONObject) {
+    private val app = context.applicationContext
+    private val sessionId = (request.opt("callerSession") as? String)?.takeIf { BubbleSessionRegistry.valid(it) }
+        ?: throw RuntimeFailure("MEMORY_SESSION_UNAVAILABLE", "无法确认调用会话，请更新运行环境后重试")
+    private val store = CompanionStore(app)
+    private val memory = CompanionMemoryStore(app)
+    private val bubble: Boolean get() = BubbleSessionRegistry(app).contains(sessionId)
+
+    fun requireMemory() {
+        if (!memory.enabled) throw RuntimeFailure("MEMORY_DISABLED", "用户已关闭长期记忆")
+        if (bubble && !store.bubbleMemoryAccess)
+            throw RuntimeFailure("MEMORY_BUBBLE_DISABLED", "用户已关闭此桌宠会话的记忆访问")
+    }
+
+    /** No stored content is returned, including when permission is disabled. */
+    fun capabilities(): String {
+        val bubbleSession = bubble
+        val canReadMemory = memory.enabled && (!bubbleSession || store.bubbleMemoryAccess)
+        val canReadKnowledge = store.knowledgeModelAccess
+        val semantic = SemanticControl(app)
+        return JSONObject().put("schemaVersion", 1).put("sessionId", sessionId)
+            .put("scope", if (bubbleSession) "bubble" else "conversation")
+            .put("memory", JSONObject().put("allowed", canReadMemory)
+                .put("errorCode", when {
+                    !memory.enabled -> "MEMORY_DISABLED"
+                    !canReadMemory -> "MEMORY_BUBBLE_DISABLED"
+                    else -> JSONObject.NULL
+                }).put("searchTool", "mobile_memory_search").put("updateTool", "mobile_memory_update")
+                .put("semanticAllowed", canReadMemory && canReadKnowledge && semantic.memoryEnabled))
+            .put("knowledge", JSONObject().put("allowed", canReadKnowledge)
+                .put("errorCode", if (canReadKnowledge) JSONObject.NULL else "KNOWLEDGE_MODEL_DISABLED")
+                .put("recentTool", "mobile_knowledge_search").put("recentQuery", "")
+                .put("readTool", "mobile_knowledge_read").put("imageTool", "mobile_knowledge_image")
+                .put("statusTool", "mobile_knowledge_status")
+                .put("semanticAllowed", canReadKnowledge && semantic.enabled))
+            .put("notice", "按需检索，不自动读取全部内容；未知资料关键词时查询最近资料，再用 id/revision 读取原文。权限状态可能变化，以每次工具回执为准。")
+            .toString()
+    }
+}
