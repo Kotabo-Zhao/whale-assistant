@@ -174,12 +174,22 @@ internal class CompanionDashboard(private val context: Context) {
             }
             "taskList" -> UnifiedUnderstandingStore.open(context).use { data ->
                 JSONObject().put("items", JSONArray().apply {
-                    data.queue.listItems(100).forEach { item -> put(JSONObject()
+                    data.queue.listItems(100).forEach { item ->
+                        // The ledger exposes only a stable reference and a current text revision, never the
+                        // material itself.  A later Agent read still has to pass its conversation authorization.
+                        val sourceRecordId = data.queue.sharedRecordId(item.eventId)
+                        val sourceRevision = sourceRecordId?.let { recordId ->
+                            knowledge.findById(recordId)?.optString("text")?.takeIf { it.isNotBlank() }
+                                ?.let(CompanionMemorySuppression::digest)
+                        }
+                        put(JSONObject()
                         .put("id", item.id).put("text", item.title).put("state", item.state)
                         .put("sourceKind", if (item.eventId.startsWith("share:")) "shared_material" else "notification")
-                        .put("sourceRecordId", data.queue.sharedRecordId(item.eventId) ?: JSONObject.NULL)
+                        .put("sourceRecordId", sourceRecordId ?: JSONObject.NULL)
+                        .put("sourceRevision", sourceRevision ?: JSONObject.NULL)
                         .put("reminderStatus", item.reminderStatus).put("reminderAtMs", item.reminderAtMs ?: JSONObject.NULL)
                         .put("revision", CompanionTaskModel.revision(item)))
+                    }
                 })
             }
             "taskUpdate" -> {
