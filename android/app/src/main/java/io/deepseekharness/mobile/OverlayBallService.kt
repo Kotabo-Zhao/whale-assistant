@@ -445,8 +445,9 @@ class OverlayBallService : Service() {
             getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false ||
             getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return
         val prefs = getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
-        val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date())
-        if (prefs.getString("day", null) == day) return
+        val now = java.util.Calendar.getInstance()
+        val lastKey = prefs.getString("key", null) ?: io.deepseekharness.mobile.companion.CompanionProactiveChatPolicy.migrateLegacyDailyKey(prefs.getString("day", null), now)
+        if (!io.deepseekharness.mobile.companion.CompanionProactiveChatPolicy.due(settings.proactiveMemoryFrequency, lastKey, now)) return
         val previous = prefs.getString("last", null)
         proactiveMemoryRunning = true
         calendarExecutor.execute {
@@ -459,7 +460,9 @@ class OverlayBallService : Service() {
                 if (calendarServiceDestroyed || memory == null || !CompanionStore(this).proactiveMemoryChat || bubbleChat.visible) return@post
                 val digest = io.deepseekharness.mobile.companion.CompanionBubbleChatPolicy.memoryDigest(memory)
                 val opening = "你之前提到：$memory。最近还想聊聊吗？"
-                if (showCompanionHint(opening) { bubbleChat.show(opening) }) prefs.edit().putString("day", day).putString("last", digest).apply()
+                if (showCompanionHint(opening) { bubbleChat.show(opening) }) prefs.edit()
+                    .putString("key", io.deepseekharness.mobile.companion.CompanionProactiveChatPolicy.key(CompanionStore(this).proactiveMemoryFrequency, java.util.Calendar.getInstance()))
+                    .putString("last", digest).apply()
             }
         }
     }

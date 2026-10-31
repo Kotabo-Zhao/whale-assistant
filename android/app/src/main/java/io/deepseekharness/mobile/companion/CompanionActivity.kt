@@ -554,8 +554,18 @@ class CompanionActivity : AppCompatActivity() {
         toggle("桌宠根据记忆主动搭话", store.proactiveMemoryChat) { enabled ->
             if (!enabled) { store.proactiveMemoryChat = false; render() }
             else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许桌宠主动搭话？")
-                .setMessage("解锁时可能在屏幕气泡展示一条已确认记忆，旁人或录屏可能看到。每日最多一次，遵守免打扰。提示本身不会发送给模型。")
+                .setMessage("解锁时可能在屏幕气泡展示一条已确认记忆，旁人或录屏可能看到。频率由下方设置，遵守免打扰。提示本身不会发送给模型。")
                 .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.proactiveMemoryChat = true; render() }.show()
+        }
+        button("设置主动搭话频率：${if (store.proactiveMemoryFrequency == "weekly") "每周最多一次" else "每天最多一次"}") {
+            val choices = arrayOf("每天最多一次", "每周最多一次")
+            val values = arrayOf("daily", "weekly")
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择主动搭话频率")
+                .setSingleChoiceItems(choices, values.indexOf(store.proactiveMemoryFrequency)) { dialog, index ->
+                    store.proactiveMemoryFrequency = values[index]
+                    dialog.dismiss()
+                    render()
+                }.setNegativeButton("取消", null).show()
         }
         heading("本地资料", "knowledge")
         val sharedQueueStatus = TextView(this).apply { text = "正在读取资料整理状态…"; textSize = 14f; setTextColor(muted) }
