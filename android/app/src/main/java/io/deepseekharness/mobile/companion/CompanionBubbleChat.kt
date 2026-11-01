@@ -64,7 +64,14 @@ internal object CompanionBubbleChatPolicy {
             val chunkIndex = row.optInt("chunkIndex", 0).takeIf { it >= 0 } ?: return@mapNotNull null
             val chunkCount = row.optInt("chunkCount", 1).takeIf { it in 1..10_000 && chunkIndex < it } ?: return@mapNotNull null
             CompanionBubbleChat.Citation(id, revision, display, documentId, originalId, chunkIndex, chunkCount, row.optString("parsingCoverage", "unknown").take(64))
-        }.distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" }.take(2)
+        }.distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" }
+    }
+
+    /** Search results are candidates; a source card requires an explicit reference in the answer. */
+    fun citedSources(answer: String, candidates: List<CompanionBubbleChat.Citation>): List<CompanionBubbleChat.Citation> {
+        val normalized = answer.replace("\\_", "_").replace("\\.", ".")
+        return candidates.filter { it.displayName != "本地资料" && normalized.contains(it.displayName, ignoreCase = true) }
+            .distinctBy { it.displayName.lowercase(java.util.Locale.ROOT) }.take(2)
     }
 
     /** Stored text chunks preserve retrieval order; they are not PDF page or spreadsheet coordinates. */
@@ -79,7 +86,7 @@ internal object CompanionBubbleChatPolicy {
         else -> ""
     }
 
-    fun knowledgeToolGuidance(): String = "需要查看用户保存的图片理解或文档资料时，可按需使用 mobile_knowledge_search；不知道关键词时用 mobile_knowledge_recent 查询最近资料。返回结果的 id、revision 与 location 可用于核对和引用；location 仅表示已保存文本记录，未知页、段落、工作表和表格坐标不得推断。需要完整内容时用 mobile_knowledge_read 并带回 id/revision 分段读取；需要确认后台进度时用 mobile_knowledge_status。处理完成不等于原文件已被完整解析。"
+    fun knowledgeToolGuidance(): String = "需要查看用户保存的图片理解或文档资料时，可按需使用 mobile_knowledge_search；不知道关键词时用 mobile_knowledge_recent 查询最近资料。返回结果的 id、revision 与 location 可用于核对和引用；location 仅表示已保存文本记录，未知页、段落、工作表和表格坐标不得推断。需要完整内容时用 mobile_knowledge_read 并带回 id/revision 分段读取；需要确认后台进度时用 mobile_knowledge_status。根据资料回答时，请写出实际采用资料的完整文件名，不要列出无关候选。处理完成不等于原文件已被完整解析。"
     fun memoryToolGuidance(): String = "需要回忆时可按需使用 mobile_memory_search 查询长期记忆；结果若带 sourceRecordId/sourceRevision，只是关联资料的受控引用，需在资料访问已授权时再用 mobile_knowledge_read 按该 ID/版本核对，不能把记忆当作原文。"
 
 }
@@ -230,6 +237,8 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
         val answer = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val images = java.util.concurrent.atomic.AtomicReference<List<String>>(emptyList())
         val citations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
+        val readCitations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
+        val toolNames = java.util.concurrent.ConcurrentHashMap<String, String>()
         val streamId = java.util.UUID.randomUUID().toString()
         val http = streamingClient
         val basic = java.util.Base64.getEncoder().encodeToString("${access.username}:${access.password}".toByteArray(Charsets.UTF_8))
@@ -254,6 +263,11 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                     val event = value.optJSONObject("event") ?: return
                     val data = event.optJSONObject("data") ?: return
                     when (event.optString("type")) {
+                        "tool/call" -> {
+                            val callId = data.optString("callId")
+                            val name = data.optString("name")
+                            if (callId.isNotEmpty() && name.isNotEmpty()) toolNames[callId] = name
+                        }
                         "llm/retry" -> {
                             val problem = data.optJSONObject("failure")
                             val status = problem?.optInt("status", 0) ?: 0
@@ -269,8 +283,12 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                                 if (answer.getAndSet(next) != next) runCatching { onPartial(next) }
                             }
                             if (event.optString("type") == "tool/result") {
-                                val found = parts.flatMap(CompanionBubbleChatPolicy::citationsFromToolResult)
-                                if (found.isNotEmpty()) citations.set((citations.get() + found).distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" }.take(2))
+                                val message = data.getJSONObject("message")
+                                val found = if (message.optBoolean("isError")) emptyList() else parts.flatMap(CompanionBubbleChatPolicy::citationsFromToolResult)
+                                if (found.isNotEmpty()) citations.set((citations.get() + found).distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" })
+                                if (toolNames[message.optString("toolCallId")] == "mobile_knowledge_read" && found.isNotEmpty()) {
+                                    readCitations.set((readCitations.get() + found).distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" })
+                                }
                             }
                             val refs = (0 until content.length()).mapNotNull { j ->
                                 val item = content.optJSONObject(j) ?: return@mapNotNull null
@@ -303,7 +321,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             failure.get()?.let { error(it) }
             val raw = answer.get() ?: if (images.get().isNotEmpty()) "[图片]" else error("模型没有返回文字，请检查主对话")
             val parsed = CompanionBubbleChatPolicy.parseInlineImages(raw)
-            return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(parsed.text), (images.get() + parsed.images).distinct().take(6), citations.get())
+            return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(parsed.text), (images.get() + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, readCitations.get() + citations.get()))
         } finally {
             socket.cancel()
         }

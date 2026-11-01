@@ -69,6 +69,21 @@ class CompanionBubbleChatPolicyTest {
             .put("documentId", document).put("displayName", "长文档.txt").put("chunkIndex", index).put("chunkCount", 3)) }
         assertEquals(1, CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("items", rows).toString()).size)
     }
+    @Test fun sourceCardsExcludeUnmentionedSearchCandidatesAndKeepLaterMatches() {
+        val rows = JSONArray()
+        listOf("无关甲.pdf", "无关乙.pdf", "observatory_file.txt").forEachIndexed { index, name ->
+            rows.put(JSONObject().put("id", "00000000-1111-2222-3333-44444444444$index").put("revision", "a".repeat(64))
+                .put("documentId", (index + 1).toString().repeat(64)).put("displayName", name))
+        }
+        val candidates = CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("items", rows).toString())
+        val selected = CompanionBubbleChatPolicy.citedSources("根据 observatory\\_file.txt 的记录，观测在周四。", candidates)
+        assertEquals(listOf("observatory_file.txt"), selected.map { it.displayName })
+        val read = candidates[2].copy(id = "00000000-1111-2222-3333-444444444449")
+        val duplicateName = candidates[2].copy(documentId = "f".repeat(64))
+        assertEquals(listOf(read), CompanionBubbleChatPolicy.citedSources("observatory_file.txt", listOf(read, duplicateName)))
+        assertTrue(CompanionBubbleChatPolicy.citedSources("没有提及文件名的回复", candidates).isEmpty())
+        assertTrue(CompanionBubbleChatPolicy.citedSources("本地资料", listOf(candidates[0].copy(displayName = "本地资料"))).isEmpty())
+    }
     @Test fun knowledgeGuidanceUsesExplicitRecentAndRejectsInventedCoordinates() {
         val guidance = CompanionBubbleChatPolicy.knowledgeToolGuidance()
         assertTrue(guidance.contains("mobile_knowledge_search")); assertTrue(guidance.contains("mobile_knowledge_recent"))
