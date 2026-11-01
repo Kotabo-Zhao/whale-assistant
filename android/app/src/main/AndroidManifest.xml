@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- 用户主动授权后，临时读取当日日历供本地简报显示。 -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <!-- 用于用户按应用名称选择自动化白名单，不上传或记录完整应用清单。 -->
@@ -114,6 +115,8 @@
         <!-- Shizuku Manager 以独立 UID 绑定用户服务；必须允许外部绑定，
              同时由 Shizuku 官方 API_V23 权限保护，未获 Shizuku 授权的调用方无法访问。 -->
         <activity android:name=".companion.CompanionActivity" android:exported="false" />
+        <activity android:name=".companion.PetVoiceInputActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.Dialog.Alert" />
+        <activity android:name=".companion.PetVoicePickerActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.Dialog.Alert" />
         <receiver android:name=".companion.CompanionReminderReceiver" android:exported="false" />
         <receiver android:name=".companion.CompanionRecurringReceiver" android:exported="false" />
         <receiver android:name=".companion.CompanionRecurringClockReceiver" android:exported="false">

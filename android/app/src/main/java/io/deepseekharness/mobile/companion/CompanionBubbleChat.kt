@@ -96,7 +96,7 @@ internal object CompanionBubbleChatPolicy {
 internal class CompanionBubbleChat(private val context: Context, restored: CompanionBubbleHistory.Snapshot? = null) {
     data class Citation(val id: String, val revision: String, val displayName: String, val documentId: String?, val originalId: String?, val chunkIndex: Int, val chunkCount: Int, val parsingCoverage: String)
     data class Message(val role: String, val text: String, val images: List<String> = emptyList(), val citations: List<Citation> = emptyList())
-    data class Reply(val text: String, val images: List<String>, val citations: List<Citation>)
+    data class Reply(val text: String, val images: List<String>, val citations: List<Citation>, val tools: Set<String> = emptySet())
     private var sessionId: String? = restored?.sessionId
     private var sessionAccess: HarnessAccess? = null
     private var sessionScope: String? = restored?.scope
@@ -141,7 +141,8 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         val card = CompanionPersonaStore(context).active()
         val images = mutableListOf<String>()
         val citations = mutableListOf<Citation>()
-        val result = PetDirectChat(context).reply(card, history, onPartial) { task ->
+        val result = PetDirectChat(context).reply(card, history, onPartial) delegate@ { task, knowledgeQuery ->
+            if (knowledgeQuery && !knowledgeAllowed) return@delegate "本地资料访问尚未授权，请先在桌宠资料设置中开启；尚未检索资料。"
             val sink = object : io.deepseekharness.mobile.runtime.RuntimeEventSink {
                 override fun onProgress(snapshot: io.deepseekharness.mobile.runtime.RuntimeStateSnapshot) = Unit
                 override fun onTerminalOutput(sessionId: String, dataBase64: String, suppressPublicOutput: Boolean) = Unit
@@ -156,10 +157,16 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
                 val agent = delegatedAgent ?: CompanionBubbleChat(context).also { delegatedAgent = it }
                 val original = history.last().text
                 val request = if (original.length > 1_900) original else {
-                    val suggested = task.take(1_900 - original.length)
-                    "实际用户请求：$original\n按该请求处理；以下为角色提出的查询建议，不得扩展用户要求：$suggested"
+                    val prior = history.dropLast(1).takeLast(4).joinToString("\n") { "${if (it.role == "user") "用户" else "角色"}：${it.text.take(200)}" }.take(500)
+                    val suggested = task.take((1_850 - original.length - prior.length).coerceAtLeast(0))
+                    "实际用户请求：$original\n相关前文：$prior\n按该请求处理；以下为角色提出的查询建议，不得扩展用户要求：$suggested".take(2_000)
                 }
-                val response = agent.reply(listOf(Message("user", request)), scope, memoryAllowed, knowledgeAllowed)
+                var response = agent.reply(listOf(Message("user", request)), scope, memoryAllowed, knowledgeAllowed)
+                fun searched(tools: Set<String>) = tools.any { it in setOf("mobile_knowledge_search", "mobile_knowledge_hybrid_search", "mobile_knowledge_recent", "mobile_knowledge_read") }
+                if (knowledgeQuery && !searched(response.tools)) {
+                    response = agent.reply(listOf(Message("user", "请实际调用 mobile_knowledge_hybrid_search 或 mobile_knowledge_search 检索用户的本地资料，再回答；不能调用时明确说明。用户原始问题：$original".take(2_000))), scope, memoryAllowed, knowledgeAllowed)
+                    if (!searched(response.tools)) return@delegate "本地资料检索未能执行，请检查资料权限和服务状态后重试。"
+                }
                 images.addAll(response.images); citations.addAll(response.citations)
                 response.text
             } finally { RuntimeHost.detachPluginSink(sink) }
@@ -284,6 +291,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
         val citations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
         val readCitations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
         val toolNames = java.util.concurrent.ConcurrentHashMap<String, String>()
+        val successfulTools = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
         val streamId = java.util.UUID.randomUUID().toString()
         val http = streamingClient
         val basic = java.util.Base64.getEncoder().encodeToString("${access.username}:${access.password}".toByteArray(Charsets.UTF_8))
@@ -329,6 +337,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                             }
                             if (event.optString("type") == "tool/result") {
                                 val message = data.getJSONObject("message")
+                                if (!message.optBoolean("isError")) toolNames[message.optString("toolCallId")]?.let { successfulTools.add(it) }
                                 val found = if (message.optBoolean("isError")) emptyList() else parts.flatMap(CompanionBubbleChatPolicy::citationsFromToolResult)
                                 if (found.isNotEmpty()) citations.set((citations.get() + found).distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" })
                                 if (toolNames[message.optString("toolCallId")] == "mobile_knowledge_read" && found.isNotEmpty()) {
@@ -366,7 +375,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             failure.get()?.let { error(it) }
             val raw = answer.get() ?: if (images.get().isNotEmpty()) "[图片]" else error("模型没有返回文字，请检查主对话")
             val parsed = CompanionBubbleChatPolicy.parseInlineImages(raw)
-            return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(parsed.text), (images.get() + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, readCitations.get() + citations.get()))
+            return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(parsed.text), (images.get() + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, readCitations.get() + citations.get()), successfulTools.toSet())
         } finally {
             socket.cancel()
         }

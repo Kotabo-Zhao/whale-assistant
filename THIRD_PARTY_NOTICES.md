@@ -17,6 +17,9 @@ PRoot, and Operit runtime materials.
 
 | Component | Purpose | License |
 | --- | --- | --- |
+| sherpa-onnx | Offline speech recognition and synthesis | Apache-2.0 |
+| Paraformer zh small | Optional local speech recognition model | Apache-2.0 |
+| Kokoro-82M | Optional local character voice model | Apache-2.0 |
 | Capacitor | Android application shell and native bridge | MIT |
 | React | Management UI | MIT |
 | xterm.js | Terminal emulator | MIT |

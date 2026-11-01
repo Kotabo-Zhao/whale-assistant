@@ -23,6 +23,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private val restored = historyStore.load()
     private val history = restored?.messages?.toMutableList() ?: mutableListOf()
     private val chat = CompanionBubbleChat(context, restored)
+    private val speaker by lazy { PetVoiceSpeaker(context) }
     private var root: LinearLayout? = null
     private var previewDialog: android.app.AlertDialog? = null
     private var request = 0L
@@ -250,6 +251,40 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 override fun afterTextChanged(s: android.text.Editable?) = Unit
             })
         }
+        val voiceControls = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
+        voiceControls.addView(TextView(context).apply {
+            text = "🎙 语音输入"; textSize = 12f; setPadding(dp(10), dp(5), dp(10), dp(5))
+            setOnClickListener {
+                if (!busy) runCatching {
+                    PetVoiceInput.start(context) { value ->
+                        draft = listOf(draft.trim(), value.trim()).filter(String::isNotEmpty).joinToString(" ").take(2000)
+                        if (root === panel) { input.setText(draft); input.setSelection(input.text.length) }
+                        else if (root != null) { hide(); show() }
+                    }
+                }.onFailure { android.widget.Toast.makeText(context, "无法打开本地语音输入。", android.widget.Toast.LENGTH_SHORT).show() }
+            }
+        })
+        voiceControls.addView(TextView(context).apply {
+            fun refresh() { text = if (CompanionStore(context).petSpeechEnabled) "🔊 朗读：开" else "🔇 朗读：关" }
+            textSize = 12f; setPadding(dp(10), dp(5), dp(10), dp(5)); refresh()
+            setOnClickListener {
+                val settings = CompanionStore(context); settings.petSpeechEnabled = !settings.petSpeechEnabled
+                if (!settings.petSpeechEnabled) speaker.stop()
+                else if (settings.petVoiceName(CompanionPersonaStore(context).active().optString("id", "default")) == null) {
+                    runCatching { context.startActivity(Intent(context, PetVoicePickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }
+                refresh()
+            }
+        })
+        voiceControls.addView(TextView(context).apply {
+            text = "选音色"; textSize = 12f; setPadding(dp(10), dp(5), dp(10), dp(5))
+            setOnClickListener {
+                speaker.stop()
+                runCatching { context.startActivity(Intent(context, PetVoicePickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    .onFailure { android.widget.Toast.makeText(context, "无法打开音色选择。", android.widget.Toast.LENGTH_SHORT).show() }
+            }
+        })
+        panel.addView(voiceControls)
         val send = TextView(context).apply { text = "发送"; textSize = 16f; setPadding(dp(10), dp(12), dp(10), dp(12)) }
         val footer = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), 0, dp(4), 0); background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(24).toFloat() } }
         val continueButton = TextView(context).apply {
@@ -291,6 +326,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         send.setOnClickListener {
             val message = runCatching { CompanionBubbleChatPolicy.validateMessage(input.text.toString()) }.getOrNull() ?: return@setOnClickListener
             if (busy) return@setOnClickListener
+            speaker.stop()
             failedMessage?.let { content.removeView(it) }; failedMessage = null
             lastError = null
             val sentBubble = bubble(message, true)
@@ -345,6 +381,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     busy = false; send.isEnabled = true; input.isEnabled = true
                     result.onSuccess { answer ->
                         onState("reply")
+                        if (CompanionStore(context).petSpeechEnabled) speaker.speak(answer.text)
                         history.add(CompanionBubbleChat.Message("user", message)); history.add(CompanionBubbleChat.Message("assistant", answer.text, answer.images, answer.citations))
                         while (history.size > 18) { history.removeAt(0); history.removeAt(0) }
                         chat.snapshot(history)?.let { snapshot -> executor.execute {
@@ -438,5 +475,5 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     }
     fun followPet() { positionUpdater?.invoke() }
     fun hide() { previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { closed = true; request++; busy = false; hide(); executor.shutdownNow() }
+    fun destroy() { closed = true; request++; busy = false; hide(); speaker.close(); executor.shutdownNow() }
 }
