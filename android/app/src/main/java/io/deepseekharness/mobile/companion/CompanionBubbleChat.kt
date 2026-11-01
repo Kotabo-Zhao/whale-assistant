@@ -93,6 +93,16 @@ internal object CompanionBubbleChatPolicy {
 
 }
 
+/** Preserves each visible assistant message from a turn in arrival order. */
+internal class BubbleReplyCollector {
+    private val messages = linkedMapOf<String, String>()
+    fun put(id: String, parts: List<String>): String {
+        val text = parts.joinToString("\n")
+        if (text.isNotBlank()) messages[id] = text
+        return messages.values.joinToString("\n\n")
+    }
+}
+
 /** Uses the same authenticated local Harness and its selected model as the main conversation. */
 internal class CompanionBubbleChat(private val context: Context, restored: CompanionBubbleHistory.Snapshot? = null) {
     data class Citation(val id: String, val revision: String, val displayName: String, val documentId: String?, val originalId: String?, val chunkIndex: Int, val chunkCount: Int, val parsingCoverage: String)
@@ -164,12 +174,7 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
                     val suggested = task.take((1_850 - original.length - prior.length).coerceAtLeast(0))
                     "实际用户请求：$original\n相关前文：$prior\n按该请求处理；以下为角色提出的查询建议，不得扩展用户要求：$suggested".take(2_000)
                 }
-                var response = agent.reply(listOf(Message("user", request)), scope, memoryAllowed, knowledgeAllowed, onPartial)
-                fun searched(tools: Set<String>) = tools.any { it in setOf("mobile_knowledge_search", "mobile_knowledge_hybrid_search", "mobile_knowledge_recent", "mobile_knowledge_read") }
-                if (knowledgeQuery && !searched(response.tools)) {
-                    response = agent.reply(listOf(Message("user", "请实际调用 mobile_knowledge_hybrid_search 或 mobile_knowledge_search 检索用户的本地资料，再回答；不能调用时明确说明。用户原始问题：$original".take(2_000))), scope, memoryAllowed, knowledgeAllowed, onPartial)
-                    if (!searched(response.tools)) return@delegate "本地资料检索未能执行，请检查资料权限和服务状态后重试。"
-                }
+                val response = agent.reply(listOf(Message("user", request)), scope, memoryAllowed, knowledgeAllowed, onPartial)
                 images.addAll(response.images); citations.addAll(response.citations)
                 response.text
             } finally { RuntimeHost.detachPluginSink(sink) }
@@ -302,6 +307,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
         val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val lastModelFailure = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val answer = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val replies = BubbleReplyCollector()
         val images = java.util.concurrent.atomic.AtomicReference<List<String>>(emptyList())
         val citations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
         val readCitations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
@@ -354,9 +360,11 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                             val content = data.optJSONObject("message")?.optJSONArray("content") ?: return
                             val parts = (0 until content.length()).mapNotNull { j ->
                                 content.optJSONObject(j)?.takeIf { it.optString("type") == "text" }?.optString("text")
-                            }.filter { it.isNotBlank() }
+                            }
                             if (event.optString("type") == "assistant/message" && parts.isNotEmpty()) {
-                                val next = parts.joinToString("\n")
+                                val message = data.getJSONObject("message")
+                                val id = message.optString("id").ifBlank { "seq:${event.optLong("seq", -1)}" }
+                                val next = replies.put(id, parts)
                                 if (answer.getAndSet(next) != next) runCatching { onPartial(next) }
                             }
                             if (event.optString("type") == "tool/result") {
