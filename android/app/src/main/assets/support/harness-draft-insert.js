@@ -15,4 +15,4 @@
   selection.removeAllRanges();
   selection.addRange(range);
   return document.execCommand('insertText', false, text) ? 'inserted' : 'unavailable';
-})(/*__VOICE_INPUT__*/null, /*__VOICE_PAGE__*/null)
+})(/*__DRAFT_INPUT__*/null, /*__DRAFT_PAGE__*/null)

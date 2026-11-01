@@ -1944,7 +1944,6 @@ export interface RuntimeBridge {
   openCompanionSettings: () => Promise<void>
   getCompanionQuickSettings: () => Promise<CompanionQuickSettings>
   setCompanionQuickSetting: (field: keyof CompanionQuickSettings, value: boolean) => Promise<CompanionQuickSettings>
-  runHarnessAssistantTool: (tool: 'voice' | 'speak') => Promise<void>
   insertTaskDraft: (text: string) => Promise<void>
   /**
    * 外置投递区状态：用户可见路径、访客挂载点、可用性与 inbox 计数。

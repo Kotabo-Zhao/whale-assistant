@@ -325,30 +325,6 @@ class CompanionActivity : AppCompatActivity() {
         }
     }
 
-    private val voiceInput = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode != RESULT_OK) return@registerForActivityResult
-        val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
-        if (text.isBlank()) { paragraph("没有识别到语音，请重试或输入文字。"); return@registerForActivityResult }
-        val edit = android.widget.EditText(this).apply { setText(text) }
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("识别结果")
-            .setMessage("请核对结果；可填入当前对话草稿，不会自动发送。语音识别服务可能联网。")
-            .setView(edit).setNegativeButton("取消", null)
-            .setNeutralButton("复制") { _, _ -> copyVoice(edit.text.toString()) }
-            .setPositiveButton("填入对话") { _, _ ->
-                val value = edit.text.toString()
-                if (!io.deepseekharness.mobile.MainHarnessSurface.stageCompanionVoice(value)) {
-                    offerVoiceCopy(value)
-                } else {
-                    val opened = runCatching {
-                        startActivity(Intent(this, io.deepseekharness.mobile.MainActivity::class.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-                        finish()
-                    }.isSuccess
-                    if (!opened) { io.deepseekharness.mobile.MainHarnessSurface.cancelCompanionVoice(); offerVoiceCopy(value) }
-                }
-            }.show()
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
@@ -379,9 +355,6 @@ class CompanionActivity : AppCompatActivity() {
         if (citationId != null || citationRevision != null) {
             intent?.removeExtra(OPEN_KNOWLEDGE_ID); intent?.removeExtra(OPEN_KNOWLEDGE_REVISION)
             openCitationKnowledge(citationId.orEmpty(), citationRevision.orEmpty())
-        } else if (intent?.getBooleanExtra("open_voice_input", false) == true) {
-            intent?.removeExtra("open_voice_input")
-            startVoiceInput()
         } else if (intent?.getBooleanExtra("open_recurring_reminders", false) == true) {
             intent?.removeExtra("open_recurring_reminders")
             showRecurringReminders()
@@ -488,10 +461,7 @@ class CompanionActivity : AppCompatActivity() {
             android.widget.Toast.makeText(this, if (applied) "动态效果已更新。" else "已保存，下次显示悬浮形象时生效。", android.widget.Toast.LENGTH_SHORT).show()
         }
         paragraph("开启后，悬浮鲸鱼娘保持静止可见状态，不播放眨眼、摆动或点击缩放；系统“移除动画”设置同样会停止这些动态效果。")
-        heading("语音对话", "voice")
         paragraph("通知和使用数据默认在本机处理；单独开启对话访问后，相关内容可能发送给当前模型服务。系统和应用可能限制读取。")
-        button("语音输入任务") { startVoiceInput() }
-        paragraph("使用手机提供的语音识别服务；核对后可填入已打开的对话草稿，不自动发送；服务可能联网。")
         val memory = CompanionMemoryStore(this)
         heading("长期记忆", "memory")
         toggle("允许助手使用长期记忆", memory.enabled) { memory.enabled = it }
@@ -1087,22 +1057,6 @@ class CompanionActivity : AppCompatActivity() {
             }.setNegativeButton("关闭", null).show()
     }
 
-    private fun copyVoice(text: String) {
-        getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("语音输入", text))
-    }
-    private fun offerVoiceCopy(text: String) {
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("无法填入对话")
-            .setMessage("当前没有可用的对话输入框；可以复制结果后自行粘贴。")
-            .setNegativeButton("取消", null).setPositiveButton("复制") { _, _ -> copyVoice(text) }.show()
-    }
-
-    private fun startVoiceInput() {
-        val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "请说出要交给助手的任务")
-        runCatching { voiceInput.launch(intent) }.onFailure { paragraph("系统没有可用的语音识别服务，请使用文字输入。") }
-    }
-
     private fun recordsOrNull(): org.json.JSONArray? = runCatching { store.read() }.getOrElse {
         paragraph("通知记录无法读取，原数据已保留；新通知暂不写入。")
         null
@@ -1464,7 +1418,7 @@ class CompanionActivity : AppCompatActivity() {
                         finish()
                     }.isSuccess
                     dialog.dismiss()
-                    if (!opened) { io.deepseekharness.mobile.MainHarnessSurface.cancelCompanionVoice(); offerKnowledgeCopy(value) }
+                    if (!opened) { io.deepseekharness.mobile.MainHarnessSurface.cancelCompanionDraft(); offerKnowledgeCopy(value) }
                 }
             }
         }
@@ -2325,7 +2279,7 @@ class CompanionActivity : AppCompatActivity() {
         content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
     }
     private fun sectionNavigation(): android.widget.HorizontalScrollView {
-        val items = listOf("status" to "状态", "voice" to "语音", "memory" to "记忆", "knowledge" to "资料", "notifications" to "通知", "reminders" to "提醒", "apps" to "常用", "brief" to "日历与简报")
+        val items = listOf("status" to "状态", "memory" to "记忆", "knowledge" to "资料", "notifications" to "通知", "reminders" to "提醒", "apps" to "常用", "brief" to "日历与简报")
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(14), dp(8), dp(14), dp(8)) }
         for ((id, label) in items) {
             val item = Button(this).apply {

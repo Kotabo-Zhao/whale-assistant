@@ -1288,7 +1288,7 @@ function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onL
         </button>
       </div>
 
-      <details className="assistant-settings-entry" onToggle={event => { if (event.currentTarget.open) setAssistantOpened(true) }}><summary><strong>鲸鱼娘与个人助手</strong><small>语音、自动记忆、通知、提醒及资料管理</small></summary>{assistantOpened && <CompanionSettingsButton disabled={busy !== null} />}</details>
+      <details className="assistant-settings-entry" onToggle={event => { if (event.currentTarget.open) setAssistantOpened(true) }}><summary><strong>鲸鱼娘与个人助手</strong><small>自动记忆、通知、提醒及资料管理</small></summary>{assistantOpened && <CompanionSettingsButton disabled={busy !== null} />}</details>
       <LanguageSettings />
 
       {/* 搜索框固定在入口列表上方：入口一多，用户第一反应是找框，而不是往下翻。

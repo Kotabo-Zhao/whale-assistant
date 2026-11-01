@@ -23,7 +23,6 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private val restored = historyStore.load()
     private val history = restored?.messages?.toMutableList() ?: mutableListOf()
     private val chat = CompanionBubbleChat(context, restored)
-    private val speaker by lazy { PetVoiceSpeaker(context) }
     private var root: LinearLayout? = null
     private var previewDialog: android.app.AlertDialog? = null
     private var request = 0L
@@ -243,7 +242,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             bubble(parsed.text, user).also { view -> renderCompleted(view, parsed.text, user) }; (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (!user) CompanionBubbleChatPolicy.citedSources(parsed.text, it.citations).forEach(::citationCard)
         }
         val input = EditText(context).apply {
-            hint = "说点什么…"; textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
+            hint = "回答问题或继续聊天…"; textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
             setText(draft); setSelection(text.length)
             addTextChangedListener(object : android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -251,48 +250,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 override fun afterTextChanged(s: android.text.Editable?) = Unit
             })
         }
-        val voiceControls = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
-        voiceControls.addView(TextView(context).apply {
-            text = "🎙 语音输入"; textSize = 12f; setPadding(dp(10), dp(5), dp(10), dp(5))
-            setOnClickListener {
-                if (!busy) runCatching {
-                    PetVoiceInput.start(context) { value ->
-                        draft = listOf(draft.trim(), value.trim()).filter(String::isNotEmpty).joinToString(" ").take(2000)
-                        if (root === panel) { input.setText(draft); input.setSelection(input.text.length) }
-                        else if (root != null) { hide(); show() }
-                    }
-                }.onFailure { android.widget.Toast.makeText(context, "无法打开本地语音输入。", android.widget.Toast.LENGTH_SHORT).show() }
-            }
-        })
-        voiceControls.addView(TextView(context).apply {
-            fun refresh() { text = if (CompanionStore(context).petSpeechEnabled) "🔊 朗读：开" else "🔇 朗读：关" }
-            textSize = 12f; setPadding(dp(10), dp(5), dp(10), dp(5)); refresh()
-            setOnClickListener {
-                val settings = CompanionStore(context); settings.petSpeechEnabled = !settings.petSpeechEnabled
-                if (!settings.petSpeechEnabled) speaker.stop()
-                else if (settings.petVoiceName(CompanionPersonaStore(context).active().optString("id", "default")) == null) {
-                    runCatching { context.startActivity(Intent(context, PetVoicePickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                }
-                refresh()
-            }
-        })
-        voiceControls.addView(TextView(context).apply {
-            text = "选音色"; textSize = 12f; setPadding(dp(10), dp(5), dp(10), dp(5))
-            setOnClickListener {
-                speaker.stop()
-                runCatching { context.startActivity(Intent(context, PetVoicePickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                    .onFailure { android.widget.Toast.makeText(context, "无法打开音色选择。", android.widget.Toast.LENGTH_SHORT).show() }
-            }
-        })
-        panel.addView(voiceControls)
         val send = TextView(context).apply { text = "发送"; textSize = 16f; setPadding(dp(10), dp(12), dp(10), dp(12)) }
         val footer = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), 0, dp(4), 0); background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(24).toFloat() } }
+        var waitingInMain = false
         val continueButton = TextView(context).apply {
             text = "主对话"; textSize = 13f; setPadding(dp(4), dp(12), dp(4), dp(12))
             contentDescription = "在主对话继续桌宠会话"
             isEnabled = !busy && chat.handoffSessionId() != null
             setOnClickListener {
-                if (!busy) chat.handoffSessionId()?.let { id -> hide(); openSession(id) }
+                if (!busy || waitingInMain) chat.handoffSessionId()?.let { id -> hide(); openSession(id) }
             }
         }
         val newTopic = TextView(context).apply {
@@ -326,14 +292,24 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         send.setOnClickListener {
             val message = runCatching { CompanionBubbleChatPolicy.validateMessage(input.text.toString()) }.getOrNull() ?: return@setOnClickListener
             if (busy) return@setOnClickListener
-            speaker.stop()
             failedMessage?.let { content.removeView(it) }; failedMessage = null
             lastError = null
             val sentBubble = bubble(message, true)
             renderCompleted(sentBubble, message, true)
             val streamingBubble = bubble("正在输入…", false)
+            waitingInMain = false
             busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = false; send.isEnabled = false; input.isEnabled = false; status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
+            chat.onInteractionNeeded = { question -> handler.post {
+                if (!closed && request == generation && root === panel) {
+                    waitingInMain = true
+                    streamingBubble.text = CompanionRichText.render(question)
+                    status.text = "需要你回答，请点“主对话”继续。"
+                    status.visibility = android.view.View.VISIBLE
+                    continueButton.isEnabled = chat.handoffSessionId() != null
+                    panel.post { positionUpdater?.invoke() }
+                }
+            } }
             val prior = (history + CompanionBubbleChat.Message("user", message)).takeLast(19)
             val latestPartial = java.util.concurrent.atomic.AtomicReference<String?>(null)
             val partialScheduled = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -341,7 +317,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             var renderedPartial = false
             fun renderPartial() {
                 val partial = latestPartial.getAndSet(null)
-                if (partial != null && !closed && request == generation && root === panel && acceptingPartials.get()) {
+                if (partial != null && !waitingInMain && !closed && request == generation && root === panel && acceptingPartials.get()) {
                     val follow = atBottom()
                     streamingBubble.text = CompanionRichText.render(partial)
                     status.text = "正在流式输出…"
@@ -381,7 +357,6 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     busy = false; send.isEnabled = true; input.isEnabled = true
                     result.onSuccess { answer ->
                         onState("reply")
-                        if (CompanionStore(context).petSpeechEnabled) speaker.speak(answer.text)
                         history.add(CompanionBubbleChat.Message("user", message)); history.add(CompanionBubbleChat.Message("assistant", answer.text, answer.images, answer.citations))
                         while (history.size > 18) { history.removeAt(0); history.removeAt(0) }
                         chat.snapshot(history)?.let { snapshot -> executor.execute {
@@ -475,5 +450,5 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     }
     fun followPet() { positionUpdater?.invoke() }
     fun hide() { previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { closed = true; request++; busy = false; hide(); speaker.close(); executor.shutdownNow() }
+    fun destroy() { closed = true; request++; busy = false; hide(); executor.shutdownNow() }
 }

@@ -171,7 +171,6 @@ class OverlayBallSecondaryPolicyTest {
         assertEquals(
             listOf(
                 OverlayBallSecondaryPolicy.Choice.CONVERSATION,
-                OverlayBallSecondaryPolicy.Choice.VOICE_INPUT,
                 OverlayBallSecondaryPolicy.Choice.VIRTUAL_SCREEN,
                 OverlayBallSecondaryPolicy.Choice.RETURN_TO_APP,
                 OverlayBallSecondaryPolicy.Choice.HIDE_BALL,

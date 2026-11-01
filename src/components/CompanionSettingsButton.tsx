@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Mic, Volume2, SlidersHorizontal } from 'lucide-react'
+import { SlidersHorizontal } from 'lucide-react'
 import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
 import type { CompanionQuickSettings } from '../platform/types'
@@ -38,21 +38,10 @@ export function CompanionSettingsButton({ disabled }: { disabled: boolean }) {
     catch { setMessage('保存助手设置失败，请重试') }
     finally { setWorking(false) }
   }
-  const tool = async (action: 'voice' | 'speak') => {
-    setWorking(true); setMessage('')
-    try { await runtimeBridge.runHarnessAssistantTool(action) }
-    catch { setMessage('请先打开对话标签并等待页面就绪，再使用语音功能') }
-    finally { setWorking(false) }
-  }
   return <section className="companion-settings" aria-labelledby="companion-settings-title">
     <div className="companion-settings-intro"><span className="companion-settings-icon"><SlidersHorizontal size={20} /></span>
-      <div><h3 id="companion-settings-title">{t('鲸鱼娘与语音')}</h3><p>{t('桌面提醒、长期记忆与对话语音，集中在这里管理。')}</p></div>
+      <div><h3 id="companion-settings-title">{t('鲸鱼娘与个人助手')}</h3><p>{t('桌面提醒与长期记忆，集中在这里管理。')}</p></div>
     </div>
-    <div className="companion-voice-actions">
-      <button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => { void tool('voice') }}><Mic size={18} />{t('语音输入')}</button>
-      <button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => { void tool('speak') }}><Volume2 size={18} />{t('朗读当前回复')}</button>
-    </div>
-    <p className="plugin-hint">{t('语音输入使用系统识别服务，核对后填入草稿，不会自动发送；朗读前会先展示内容。')}</p>
     <p className="plugin-hint">{t('先按需打开下面的功能；关闭时已有数据不会自动删除。部分功能还需要系统权限，可在桌面设置中检查。')}</p>
     {['记忆与资料', '通知与提醒'].map((group, index) => <details key={group} className="companion-settings-group"><summary><strong>{t(group)}</strong><small>{t(index === 0 ? '管理助手能记住和使用的信息' : '选择哪些提醒可以出现')}</small></summary>
     {options.slice(index === 0 ? 0 : 5, index === 0 ? 5 : undefined).map(option => <label className="toggle-row" key={option.key}>

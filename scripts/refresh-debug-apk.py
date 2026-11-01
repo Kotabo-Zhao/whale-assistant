@@ -12,8 +12,8 @@ import sys
 import zipfile
 from pathlib import Path
 
-if len(sys.argv) not in (8, 10): raise SystemExit('expected base mapping build dist plugin voice output [runtime manifest]')
-base, mapping_file, build, dist, plugin, voice_read, output = map(Path, sys.argv[1:8])
+if len(sys.argv) not in (8, 10): raise SystemExit('expected base mapping build dist plugin draft output [runtime manifest]')
+base, mapping_file, build, dist, plugin, draft_insert, output = map(Path, sys.argv[1:8])
 runtime_pair = tuple(map(Path, sys.argv[8:10]))
 BASE_SHA = '3ae33e6c63efe7da890d3ac52bd8e356e8b30528298f24be72f6e02190c08c01'
 with base.open('rb') as stream:
@@ -32,8 +32,8 @@ actual_dex = {p.resolve() for p in (build / 'intermediates/dex/debug').rglob('cl
 if actual_dex != set(replacements.values()) or len(actual_dex) != len(replacements): raise SystemExit('DEX set changed')
 if not plugin.is_file() or plugin.is_symlink(): raise SystemExit('plugin asset missing')
 replacements['assets/support/plugin-manager.cjs'] = plugin
-if not voice_read.is_file() or voice_read.is_symlink(): raise SystemExit('voice asset missing')
-replacements['assets/support/harness-voice-read.js'] = voice_read
+if not draft_insert.is_file() or draft_insert.is_symlink(): raise SystemExit('draft asset missing')
+replacements['assets/support/harness-draft-insert.js'] = draft_insert
 if runtime_pair:
     bundle, runtime_manifest = runtime_pair
     if not bundle.is_file() or bundle.is_symlink() or not runtime_manifest.is_file() or runtime_manifest.is_symlink(): raise SystemExit('runtime files missing')
@@ -63,19 +63,19 @@ try:
         if len(old_names) != len(set(old_names)): raise ValueError('duplicate base entry')
         old_dex = {n for n in old_names if n.startswith('classes') and n.endswith('.dex')}
         if old_dex != set(manifest['dex']): raise ValueError('base DEX entries changed')
-        if not {'assets/public/index.html', 'assets/support/plugin-manager.cjs', 'assets/support/harness-voice-read.js'} <= set(old_names): raise ValueError('base assets missing')
+        if not {'assets/public/index.html', 'assets/support/plugin-manager.cjs'} <= set(old_names): raise ValueError('base assets missing')
         if runtime_pair and (not {'assets/runtime/rootfs.bundle', 'assets/runtime/runtime-manifest.json'} <= set(old_names) or old.getinfo('assets/runtime/rootfs.bundle').compress_type != zipfile.ZIP_STORED): raise ValueError('base runtime missing or compressed')
         with output.open('xb') as destination:
             created = True
             with zipfile.ZipFile(destination, 'w', allowZip64=True) as new:
                 for item in old.infolist():
                     name = item.filename
-                    if signature(name) or name.startswith('assets/public/assets/'): continue
+                    if signature(name) or name.startswith('assets/public/assets/') or name in ('assets/support/harness-voice-read.js', 'assets/support/harness-voice-insert.js'): continue
                     source = replacements.get(name)
                     with (source.open('rb') if source else old.open(item)) as src, new.open(item, 'w') as dst:
                         shutil.copyfileobj(src, dst, 1024 * 1024)
                 for name, source in sorted(replacements.items()):
-                    if not name.startswith('assets/public/assets/'): continue
+                    if not name.startswith('assets/public/assets/') and name != 'assets/support/harness-draft-insert.js': continue
                     info = zipfile.ZipInfo(name)
                     info.compress_type = zipfile.ZIP_DEFLATED
                     info.external_attr = 0o100644 << 16

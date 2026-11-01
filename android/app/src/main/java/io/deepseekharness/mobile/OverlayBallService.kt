@@ -1743,8 +1743,6 @@ class OverlayBallService : Service() {
         val labelRes = when (choice) {
             OverlayBallSecondaryPolicy.Choice.CONVERSATION ->
                 R.string.overlay_ball_secondary_conversation_description
-            OverlayBallSecondaryPolicy.Choice.VOICE_INPUT ->
-                R.string.overlay_ball_secondary_voice_description
             OverlayBallSecondaryPolicy.Choice.VIRTUAL_SCREEN ->
                 R.string.overlay_ball_secondary_virtual_screen_description
             OverlayBallSecondaryPolicy.Choice.RETURN_TO_APP ->
@@ -1783,7 +1781,6 @@ class OverlayBallService : Service() {
         val visual = dp(OverlayBallSecondaryPolicy.VISUAL_SIZE_DP)
         text = when (choice) {
             OverlayBallSecondaryPolicy.Choice.CONVERSATION -> SECONDARY_GLYPH_CONVERSATION
-            OverlayBallSecondaryPolicy.Choice.VOICE_INPUT -> SECONDARY_GLYPH_VOICE
             OverlayBallSecondaryPolicy.Choice.VIRTUAL_SCREEN -> SECONDARY_GLYPH_SCREEN
             OverlayBallSecondaryPolicy.Choice.RETURN_TO_APP -> SECONDARY_GLYPH_RETURN
             OverlayBallSecondaryPolicy.Choice.HIDE_BALL -> SECONDARY_GLYPH_HIDE
@@ -1821,11 +1818,6 @@ class OverlayBallService : Service() {
     private fun onSecondaryChoice(choice: OverlayBallSecondaryPolicy.Choice) {
         when (choice) {
             OverlayBallSecondaryPolicy.Choice.CONVERSATION -> toggleConversation()
-            OverlayBallSecondaryPolicy.Choice.VOICE_INPUT -> {
-                val intent = Intent(this, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
-                    .putExtra("open_voice_input", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                runCatching { startActivity(intent) }.onFailure { toastCurrentThread(overlayString(R.string.overlay_ball_secondary_voice_unavailable)) }
-            }
             OverlayBallSecondaryPolicy.Choice.VIRTUAL_SCREEN -> openVirtualScreen()
             OverlayBallSecondaryPolicy.Choice.RETURN_TO_APP -> returnToApp()
             OverlayBallSecondaryPolicy.Choice.HIDE_BALL -> hideBall()
@@ -2211,7 +2203,6 @@ class OverlayBallService : Service() {
          * 每个按钮同时带 `contentDescription`，因此即便字体缺字（只有豆腐块）也不会失去含义。
          */
         private const val SECONDARY_GLYPH_CONVERSATION = "\u2630" // ☰ 打开 Harness 对话
-        private const val SECONDARY_GLYPH_VOICE = "\u266A"        // ♪ 语音输入
         private const val SECONDARY_GLYPH_SCREEN = "\u25A3"       // ▣ 打开目标应用副屏
         private const val SECONDARY_GLYPH_RETURN = "\u2302"      // ⌂
         private const val SECONDARY_GLYPH_HIDE = "\u2715"        // ✕

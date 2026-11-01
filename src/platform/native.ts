@@ -243,7 +243,6 @@ interface NativeRuntimePlugin {
   openCompanionSettings(): Promise<void>
   getCompanionQuickSettings(): Promise<CompanionQuickSettings>
   setCompanionQuickSetting(options: { field: keyof CompanionQuickSettings; value: boolean }): Promise<CompanionQuickSettings>
-  runHarnessAssistantTool(options: { tool: 'voice' | 'speak' }): Promise<void>
   insertTaskDraft(options: { text: string }): Promise<void>
   mailboxState(): Promise<unknown>
   mailboxDirectory(options: { root: MailboxRoot; subdirectory?: string }): Promise<unknown>
@@ -587,7 +586,6 @@ function createNativeBridge(): RuntimeBridge {
     openCompanionSettings: () => NativeRuntime.openCompanionSettings(),
     getCompanionQuickSettings: () => NativeRuntime.getCompanionQuickSettings(),
     setCompanionQuickSetting: (field, value) => NativeRuntime.setCompanionQuickSetting({ field, value }),
-    runHarnessAssistantTool: tool => NativeRuntime.runHarnessAssistantTool({ tool }),
     insertTaskDraft: text => NativeRuntime.insertTaskDraft({ text }),
     getMailboxState: () => NativeRuntime.mailboxState().then(validateMailboxState),
     getMailboxDirectory: (root, subdirectory) => NativeRuntime

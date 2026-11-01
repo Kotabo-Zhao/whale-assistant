@@ -12,7 +12,7 @@ SCRIPTS = Path(__file__).resolve().parent
 
 
 class RefreshTests(unittest.TestCase):
-    def test_voice_and_other_replacements_are_verified(self):
+    def test_draft_and_other_replacements_are_verified(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             base = root / 'base.apk'
@@ -47,7 +47,8 @@ class RefreshTests(unittest.TestCase):
             verify = [sys.executable, str(SCRIPTS / 'verify-refreshed-debug-apk.py'), str(base), str(mapping), str(build), str(plugin), str(voice), str(apk)]
             subprocess.run(verify, check=True, capture_output=True)
             with zipfile.ZipFile(apk) as actual:
-                self.assertEqual(actual.read('assets/support/harness-voice-read.js'), b'new voice')
+                self.assertEqual(actual.read('assets/support/harness-draft-insert.js'), b'new voice')
+                self.assertNotIn('assets/support/harness-voice-read.js', actual.namelist())
                 self.assertEqual(actual.read('assets/runtime.bundle'), b'untouched runtime')
                 self.assertEqual(actual.read('assets/public/assets/new.js'), b'new frontend')
                 self.assertNotIn('assets/public/assets/old.js', actual.namelist())

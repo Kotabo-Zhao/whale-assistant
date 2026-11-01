@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { JSDOM } from 'jsdom'
 
-const template = await readFile(new URL('../android/app/src/main/assets/support/harness-voice-insert.js', import.meta.url), 'utf8')
-const marker = '/*__VOICE_INPUT__*/null'
-const pageMarker = '/*__VOICE_PAGE__*/null'
+const template = await readFile(new URL('../android/app/src/main/assets/support/harness-draft-insert.js', import.meta.url), 'utf8')
+const marker = '/*__DRAFT_INPUT__*/null'
+const pageMarker = '/*__DRAFT_PAGE__*/null'
 
 function page(html, text, commandResult = true, expectedPage = 'http://127.0.0.1:3080/') {
   const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://127.0.0.1:3080/' })
@@ -19,8 +19,8 @@ function page(html, text, commandResult = true, expectedPage = 'http://127.0.0.1
   return { result, calls, dom }
 }
 
-test('语音只插入唯一可见的会话编辑器，不执行输入内容或自动发送', () => {
-  const input = '开会提醒 ");window.pwned=true;// /*__VOICE_PAGE__*/null'
+test('分享文字只插入唯一可见的会话编辑器，不执行输入内容或自动发送', () => {
+  const input = '开会提醒 ");window.pwned=true;// /*__DRAFT_PAGE__*/null'
   const { result, calls, dom } = page('<div data-composer-input="true" contenteditable="true">原草稿</div>', input)
   assert.equal(result, 'inserted')
   assert.deepEqual(calls, [['insertText', false, input]])

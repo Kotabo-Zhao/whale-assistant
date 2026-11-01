@@ -103,7 +103,6 @@ class MainActivity : BridgeActivity() {
     }
 
     override fun onStop() {
-        harnessSurface.pauseAudio()
         AppForeground.onActivityStopped()
         super.onStop()
     }
@@ -153,7 +152,6 @@ class MainActivity : BridgeActivity() {
         )
     }
 
-    internal fun runHarnessAssistantTool(tool: String): Boolean = harnessSurface.runAssistantTool(tool)
 
     internal fun discardHarnessSurface() { harnessSurface.discard() }
 

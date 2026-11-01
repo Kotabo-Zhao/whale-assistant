@@ -4120,18 +4120,6 @@ class MobileRuntimePlugin : Plugin() {
     }
 
     @PluginMethod
-    fun runHarnessAssistantTool(call: PluginCall) {
-        val tool = call.getString("tool")
-        if (tool != "voice" && tool != "speak") { call.reject("无效的语音操作", "HARNESS_TOOL_INVALID"); return }
-        val host = activity as? MainActivity ?: run { call.reject("请先打开对话", "HARNESS_TOOL_UNAVAILABLE"); return }
-        host.runOnUiThread {
-            if (destroying.get()) { rejectRuntimeClosed(call); return@runOnUiThread }
-            if (host.runHarnessAssistantTool(tool)) call.resolve()
-            else call.reject("请先打开对话标签并等待就绪", "HARNESS_TOOL_UNAVAILABLE")
-        }
-    }
-
-    @PluginMethod
     fun openCompanionSettings(call: PluginCall) {
         execute(call) {
             context.startActivity(Intent(context, io.deepseekharness.mobile.companion.CompanionActivity::class.java)

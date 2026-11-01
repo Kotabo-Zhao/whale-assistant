@@ -52,22 +52,6 @@
 
         <Button
             style="@style/WhaleToolButton"
-            android:id="@+id/harness_voice"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:text="@string/harness_voice" />
-
-        <Button
-            style="@style/WhaleToolButton"
-            android:id="@+id/harness_speak"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:text="@string/harness_speak" />
-
-        <Button
-            style="@style/WhaleToolButton"
             android:id="@+id/harness_companion"
             android:layout_width="0dp"
             android:layout_height="48dp"

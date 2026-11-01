@@ -9,12 +9,6 @@ class CompanionStore(context: Context) {
     private val app = context.applicationContext
     private val prefs = context.applicationContext.getSharedPreferences("companion_private_v1", Context.MODE_PRIVATE)
 
-    var petSpeechEnabled: Boolean
-        get() = prefs.getBoolean("pet_speech_enabled", false)
-        set(value) { prefs.edit().putBoolean("pet_speech_enabled", value).apply() }
-    fun petVoiceName(cardId: String): String? = prefs.getString("pet_voice_$cardId", null)
-    fun setPetVoiceName(cardId: String, name: String) { prefs.edit().putString("pet_voice_$cardId", name).apply() }
-
     var bubbleMemoryAccess: Boolean
         get() = prefs.getBoolean("bubble_memory_access", false)
         set(value) { prefs.edit().putBoolean("bubble_memory_access", value).apply() }

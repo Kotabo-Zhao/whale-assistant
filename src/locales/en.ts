@@ -1,5 +1,7 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "鲸鱼娘与个人助手": "Whale companion and assistant",
+  "桌面提醒与长期记忆，集中在这里管理。": "Manage desktop reminders and long-term memory here.",
   "鲸鱼娘人格": "Companion character",
   "角色卡、性格、情境与示例对话": "Character cards, personality, scenario and dialogue examples",
   "未能加载更多会话；已显示的会话不受影响，可稍后重试。": "Could not load more sessions. Displayed sessions are unchanged; try again later.",
@@ -17,11 +19,6 @@ export const english: Readonly<Record<string, string>> = {
   "你好，我是你的手机助手": "Hello, I am your phone assistant",
   "从这里开始对话、管理任务与探索插件。": "Start conversations, manage tasks and explore plugins here.",
   "你的工作台": "Your workspace",
-  "鲸鱼娘与语音": "Whale assistant and voice",
-  "桌面提醒、长期记忆与对话语音，集中在这里管理。": "Manage desktop reminders, memory and voice here.",
-  "语音输入": "Voice input",
-  "朗读当前回复": "Read current reply",
-  "语音输入使用系统识别服务，核对后填入草稿，不会自动发送；朗读前会先展示内容。": "Voice input uses system recognition and creates a draft; reading shows the text first.",
   "先按需打开下面的功能；关闭时已有数据不会自动删除。部分功能还需要系统权限，可在桌面设置中检查。": "Enable features as needed. Disabling does not delete saved data. Some features need system permissions.",
   "管理提醒、资料与记忆": "Manage reminders, knowledge and memory",
   "查看、编辑以及导入导出本地内容": "View, edit, import and export local content",

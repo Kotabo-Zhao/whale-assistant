@@ -58,7 +58,6 @@ def legalAssetSources = [
     'legal/licenses/xterm-LICENSE.txt'           : new File(appSourceRoot, 'node_modules/@xterm/xterm/LICENSE'),
     'legal/licenses/xterm-addon-fit-LICENSE.txt' : new File(appSourceRoot, 'node_modules/@xterm/addon-fit/LICENSE'),
     'legal/licenses/bge-base-zh-v1.5-MIT.txt'    : new File(appSourceRoot, 'legal/licenses/bge-base-zh-v1.5-MIT.txt'),
-    'legal/licenses/sherpa-onnx-Apache-2.0.txt' : new File(appSourceRoot, 'legal/licenses/sherpa-onnx-Apache-2.0.txt'),
     'legal/licenses/lucide-react-LICENSE.txt'    : new File(appSourceRoot, 'node_modules/lucide-react/LICENSE'),
     'legal/licenses/katex-LICENSE.txt'           : new File(appSourceRoot, 'node_modules/katex/LICENSE'),
     'legal/licenses/markdown-it-LICENSE.txt'     : new File(appSourceRoot, 'node_modules/markdown-it/LICENSE'),
@@ -105,36 +104,6 @@ def bgeModelSha256 = 'b665f3bba56c3119bc76ba131ebcc544d720a7408cb11581bdf354aaa0
 def bgeVocabUrl = 'https://huggingface.co/Xenova/bge-base-zh-v1.5/resolve/main/vocab.txt'
 def bgeVocabSha256 = '45bbac6b341c319adc98a532532882e91a9cefc0329aa57bac9ae761c27b291c'
 def generatedBgeAssetsDirectory = layout.buildDirectory.dir('generated/assets/bgeBaseZh')
-def sherpaJniDirectory = layout.buildDirectory.dir('generated/jni/sherpa')
-def prepareSherpaJni = tasks.register('prepareSherpaJni') {
-    def archive = layout.buildDirectory.file('downloads/sherpa-onnx-v2.0.1-android-static.tar.bz2')
-    outputs.dir(sherpaJniDirectory)
-    doLast {
-        def file = archive.get().asFile
-        def hash = 'fe1c9ceffd86770218a1d4bba6b410d6f726b2b8dda6a5488499b05250b53aea'
-        def digest = { File f -> java.security.MessageDigest.getInstance('SHA-256').digest(f.bytes).encodeHex().toString() }
-        if (!file.isFile() || digest(file) != hash) {
-            file.parentFile.mkdirs()
-            def temp = new File(file.parentFile, file.name + '.part')
-            try {
-                def proxyValue = System.getenv('HTTPS_PROXY') ?: System.getenv('HTTP_PROXY')
-                def proxy = proxyValue ? new java.net.Proxy(java.net.Proxy.Type.HTTP, new java.net.InetSocketAddress(new URI(proxyValue).host, new URI(proxyValue).port)) : java.net.Proxy.NO_PROXY
-                def connection = new URL('https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-android-static-link-onnxruntime.tar.bz2').openConnection(proxy)
-                connection.connectTimeout = 30_000; connection.readTimeout = 120_000
-                connection.inputStream.withCloseable { input -> temp.withOutputStream { output -> output << input } }
-                if (digest(temp) != hash) throw new GradleException('sherpa-onnx archive digest mismatch')
-                java.nio.file.Files.move(temp.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-            } finally { if (temp.exists()) temp.delete() }
-        }
-        copy {
-            from tarTree(resources.bzip2(file))
-            include '**/arm64-v8a/libsherpa-onnx-jni.so'
-            eachFile { it.path = 'arm64-v8a/libsherpa-onnx-jni.so' }
-            includeEmptyDirs = false
-            into sherpaJniDirectory
-        }
-    }
-}
 def generatedRichChatAssets = layout.buildDirectory.dir('generated/assets/richChat')
 def generateRichChatAssets = tasks.register('generateRichChatAssets', Sync) {
     into(generatedRichChatAssets.map { it.dir('rich-chat') })
@@ -220,7 +189,6 @@ android {
 
     sourceSets {
         main {
-            jniLibs.srcDir(sherpaJniDirectory)
             assets.srcDir(generatedLegalAssetsDirectory)
             assets.srcDir(generatedBgeAssetsDirectory)
             assets.srcDir(generatedRichChatAssets)
@@ -292,7 +260,6 @@ tasks.named('preBuild').configure {
     dependsOn(generateLegalAssets)
     dependsOn(downloadBgeBaseAssets)
     dependsOn(generateRichChatAssets)
-    dependsOn(prepareSherpaJni)
 }
 
 tasks.configureEach { task ->
