@@ -102,7 +102,9 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
     private var sessionScope: String? = restored?.scope
     private var clientAccess: HarnessAccess? = null
     private var client: HarnessBubbleClient? = null
-    fun startNewTopic() { sessionId = null; sessionAccess = null; sessionScope = null }
+    private var delegatedAgent: CompanionBubbleChat? = null
+    private var continuedMainSession = false
+    fun startNewTopic() { sessionId = null; sessionAccess = null; sessionScope = null; delegatedAgent = null; continuedMainSession = false }
 
     /** Warms loopback authentication while the chat is opening, before the user presses send. */
     fun prewarm() {
@@ -126,19 +128,46 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         this.sessionId = sessionId
         sessionAccess = null
         sessionScope = null
+        continuedMainSession = true
     }
     fun snapshot(messages: List<Message>): CompanionBubbleHistory.Snapshot? =
         sessionId?.let { id -> sessionScope?.let { CompanionBubbleHistory.Snapshot(id, it, messages.toList()) } }
 
-    fun canHandoff(): Boolean = sessionId?.startsWith("session-") == true
+    fun handoffSessionId(): String? = delegatedAgent?.handoffSessionId() ?: sessionId?.takeIf { it.startsWith("session-") }
 
-    fun directReply(history: List<Message>, onPartial: (String) -> Unit): Reply {
+    fun fusedReply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit): Reply {
+        if (continuedMainSession || io.deepseekharness.mobile.runtime.RuntimeStore(context).readModelCredential("deepseek").isNullOrBlank())
+            return reply(history, scope, memoryAllowed, knowledgeAllowed, onPartial)
         val card = CompanionPersonaStore(context).active()
-        val result = PetDirectChat(context).reply(card, history, onPartial)
+        val images = mutableListOf<String>()
+        val citations = mutableListOf<Citation>()
+        val result = PetDirectChat(context).reply(card, history, onPartial) { task ->
+            val sink = object : io.deepseekharness.mobile.runtime.RuntimeEventSink {
+                override fun onProgress(snapshot: io.deepseekharness.mobile.runtime.RuntimeStateSnapshot) = Unit
+                override fun onTerminalOutput(sessionId: String, dataBase64: String, suppressPublicOutput: Boolean) = Unit
+                override fun onTerminalExit(sessionId: String, exitCode: Int) = Unit
+            }
+            val controller = RuntimeHost.acquire(context, sink)
+            try {
+                if (runCatching { controller.openHarnessAccess() }.isFailure) {
+                    runCatching { RuntimeHost.ensureDeviceBridge(controller) }
+                    RuntimeHost.startHarness(controller)
+                }
+                val agent = delegatedAgent ?: CompanionBubbleChat(context).also { delegatedAgent = it }
+                val original = history.last().text
+                val request = if (original.length > 1_900) original else {
+                    val suggested = task.take(1_900 - original.length)
+                    "实际用户请求：$original\n按该请求处理；以下为角色提出的查询建议，不得扩展用户要求：$suggested"
+                }
+                val response = agent.reply(listOf(Message("user", request)), scope, memoryAllowed, knowledgeAllowed)
+                images.addAll(response.images); citations.addAll(response.citations)
+                response.text
+            } finally { RuntimeHost.detachPluginSink(sink) }
+        }
         if (sessionId?.startsWith("pet-direct-") != true) sessionId = "pet-direct-${java.util.UUID.randomUUID()}"
         sessionScope = CompanionBubbleChatPolicy.memoryDigest("pet-direct")
         sessionAccess = null
-        return Reply(result, emptyList(), emptyList())
+        return Reply(result, images.distinct().take(6), CompanionBubbleChatPolicy.citedSources(result, citations))
     }
 
     fun reply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit = {}): Reply {
