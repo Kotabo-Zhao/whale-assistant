@@ -74,6 +74,10 @@ object RuntimeDns {
             .mapNotNull { it.hostAddress }
             .filter { safeAddress.matches(it) }
             .distinct()
+            // Some mobile networks advertise IPv6 DNS even when that route is
+            // unreachable. Try the network's IPv4 servers first so a single
+            // stalled IPv6 lookup does not exceed clients' short DNS deadlines.
+            .sortedBy { if (':' in it) 1 else 0 }
             .take(MAX_DNS_SERVERS)
             .toList()
             .ifEmpty { fallbackAddresses }

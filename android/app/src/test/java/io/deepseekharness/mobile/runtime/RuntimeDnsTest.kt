@@ -24,6 +24,22 @@ class RuntimeDnsTest {
     }
 
     @Test
+    fun prefersNetworkIpv4BeforeIpv6WithoutDroppingIpv6() {
+        val config = RuntimeDns.formatConfig(
+            listOf(
+                InetAddress.getByName("2606:4700:4700::1111"),
+                InetAddress.getByName("192.0.2.53"),
+                InetAddress.getByName("192.0.2.54"),
+            ),
+        )
+        assertEquals(
+            "nameserver 192.0.2.53\nnameserver 192.0.2.54\n" +
+                "nameserver 2606:4700:4700:0:0:0:0:1111\noptions timeout:2 attempts:3\n",
+            config,
+        )
+    }
+
+    @Test
     fun excludesLoopbackAndFallsBackToPublicResolvers() {
         val config = RuntimeDns.formatConfig(
             listOf(InetAddress.getByName("127.0.0.1"), InetAddress.getByName("::1")),
