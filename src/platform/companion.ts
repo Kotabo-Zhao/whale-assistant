@@ -2,7 +2,7 @@
 export type CompanionRequest =
   | { operation: 'personaList' }
   | { operation: 'personaActivate' | 'personaDelete'; id: string }
-  | { operation: 'personaSave'; card: { id: string; name: string; description: string; personality: string; scenario: string; examples: string; greeting: string } }
+  | { operation: 'personaSave'; card: { id: string; name: string; description: string; personality: string; scenario: string; examples: string; greeting: string; systemPrompt: string; postHistory: string; worldBook: string } }
   | { operation: 'memoryList' | 'reminderList' | 'taskList'; query?: string; offset?: number }
   | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; state: 'open' | 'done' | 'cancelled' }
   | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; reminderAtMs: number }

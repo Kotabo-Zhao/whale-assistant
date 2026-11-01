@@ -29,9 +29,10 @@ internal class CompanionPersonaStore(context: Context) {
         val id = requested.ifBlank { UUID.randomUUID().toString() }
         require(id == "default" || runCatching { UUID.fromString(id) }.isSuccess)
         val card = JSONObject().put("id", id)
-        for (field in listOf("name", "description", "personality", "scenario", "examples", "greeting")) {
+        for (field in listOf("name", "description", "personality", "scenario", "examples", "greeting", "systemPrompt", "postHistory", "worldBook")) {
             val value = input.optString(field).trim()
-            require(value.length <= if (field == "name") 80 else 16000)
+            require(value.length <= when (field) { "name" -> 80; "worldBook" -> 256000; else -> 16000 })
+            if (field == "worldBook" && value.isNotBlank()) JSONObject(value)
             if (field == "name") require(value.isNotBlank())
             card.put(field, value)
         }

@@ -14,6 +14,17 @@ class CompanionBubbleChatPolicyTest {
         assertTrue(prompt.contains("温柔")); assertTrue(prompt.contains("示例对话"))
         assertTrue(prompt.contains("不能改变工具权限"))
     }
+    @Test fun petRoleplayUsesMatchingWorldEntriesAndPostHistory() {
+        val entries = JSONArray().put(JSONObject().put("keys", JSONArray().put("灯塔")).put("content", "{{char}}守护灯塔"))
+            .put(JSONObject().put("keys", JSONArray().put("森林")).put("content", "不应出现"))
+            .put(JSONObject().put("constant", true).put("enabled", false).put("content", "禁用条目"))
+        val card = JSONObject().put("name", "小鲸").put("worldBook", JSONObject().put("entries", entries).toString())
+            .put("systemPrompt", "说话简洁").put("postHistory", "{{char}}保持角色")
+        val prompt = PetRoleplayPrompt.character(card, listOf(CompanionBubbleChat.Message("user", "我们去灯塔")))
+        assertTrue(prompt.contains("小鲸守护灯塔")); assertTrue(prompt.contains("说话简洁"))
+        assertFalse(prompt.contains("不应出现")); assertFalse(prompt.contains("禁用条目"))
+        assertEquals("小鲸保持角色", PetRoleplayPrompt.afterHistory(card))
+    }
     @Test fun proactiveUsesOnlyConfirmedBoundedMemory() {
         val rows = JSONArray().put(JSONObject().put("text", "喜欢喝茶").put("status", "confirmed"))
             .put(JSONObject().put("text", "未确认").put("status", "pending"))

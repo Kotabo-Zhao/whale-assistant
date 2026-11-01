@@ -29,5 +29,7 @@ export async function downloadCommunityCard(card: CommunityCard): Promise<Record
     name: definition.name ?? result.node?.name, description: definition.description,
     personality: definition.personality || definition.tavern_personality, scenario: definition.scenario,
     first_mes: definition.first_message, mes_example: definition.example_dialogs,
+    system_prompt: definition.system_prompt, post_history_instructions: definition.post_history_instructions,
+    character_book: definition.embedded_lorebook,
   } }
 }

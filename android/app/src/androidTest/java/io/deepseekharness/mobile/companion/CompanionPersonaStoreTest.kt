@@ -22,10 +22,12 @@ class CompanionPersonaStoreTest {
         try {
             val store = CompanionPersonaStore(context)
             assertEquals("鲸鱼娘", store.active().getString("name"))
-            val card = store.save(JSONObject().put("name", "验收角色").put("personality", "简短回答"))
+            val card = store.save(JSONObject().put("name", "验收角色").put("personality", "简短回答").put("systemPrompt", "扮演伙伴").put("worldBook", """{"entries":[]}"""))
             val id = card.getString("id")
             store.activate(id)
             assertEquals("简短回答", CompanionPersonaStore(context).active().getString("personality"))
+            assertEquals("扮演伙伴", CompanionPersonaStore(context).active().getString("systemPrompt"))
+            assertEquals("""{"entries":[]}""", CompanionPersonaStore(context).active().getString("worldBook"))
             store.delete(id)
             assertEquals("鲸鱼娘", CompanionPersonaStore(context).active().getString("name"))
         } finally { base.deleteSharedPreferences(prefName) }
