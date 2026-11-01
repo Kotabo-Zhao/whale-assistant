@@ -41,6 +41,10 @@ internal class CompanionDashboard(private val context: Context) {
             return success(completed)
         }
         return when (op) {
+            "personaList" -> CompanionPersonaStore(context).list()
+            "personaSave" -> JSONObject().put("ok", true).put("card", CompanionPersonaStore(context).save(request.getJSONObject("card")))
+            "personaActivate" -> { CompanionPersonaStore(context).activate(text("id")); JSONObject().put("ok", true) }
+            "personaDelete" -> { CompanionPersonaStore(context).delete(text("id")); JSONObject().put("ok", true) }
             "overview" -> {
                 val store = CompanionStore(context)
                 val records = store.read()

@@ -1,5 +1,8 @@
 /** 助手管理请求的共享契约；原生仍校验所有字段与数据版本。 */
 export type CompanionRequest =
+  | { operation: 'personaList' }
+  | { operation: 'personaActivate' | 'personaDelete'; id: string }
+  | { operation: 'personaSave'; card: { id: string; name: string; description: string; personality: string; scenario: string; examples: string; greeting: string } }
   | { operation: 'memoryList' | 'reminderList' | 'taskList'; query?: string; offset?: number }
   | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; state: 'open' | 'done' | 'cancelled' }
   | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; reminderAtMs: number }

@@ -64,13 +64,14 @@ export function BottomNavigation({ activeView, onNavigate }: AppSidebarProps) {
     { view: 'harness', label: '对话', icon: <MessageSquare size={20} />, active: activeView === 'harness' || activeView === 'conversation' || activeView === 'sessions' },
     { view: 'assistant-memory', label: '记忆', icon: <Brain size={20} />, active: activeView === 'assistant-memory' },
     { view: 'assistant-tasks', label: '事项', icon: <ListTodo size={20} />, active: activeView === 'assistant-tasks' },
+    { view: 'plugins', label: '插件', icon: <Blocks size={20} />, active: activeView === 'plugins' },
     { view: 'settings', label: '我的', icon: <Settings2 size={20} />, active: primaryDestination(activeView) === 'settings' },
   ]
   return (
     <nav className="bottom-navigation" aria-label={t('底部导航')}>
       {items.map(item => (
         <button key={item.view} type="button" className={`bottom-navigation-item ${item.active ? 'is-active' : ''}`}
-          aria-label={t(item.label)} title={t(item.label)} aria-current={item.active ? 'page' : undefined} onClick={() => onNavigate(item.view)}>
+          aria-label={t(item.view === 'plugins' ? '插件管理' : item.label)} title={t(item.view === 'plugins' ? '插件管理' : item.label)} aria-current={item.active ? 'page' : undefined} onClick={() => onNavigate(item.view)}>
           {item.icon}
           <span>{t(item.label)}</span>
         </button>

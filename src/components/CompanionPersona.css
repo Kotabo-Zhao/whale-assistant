@@ -1,0 +1,44 @@
+.persona-page { box-sizing: border-box; max-width: 960px; margin: auto; padding: 16px; color: var(--ink); }
+.persona-page header { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.persona-page h2 { margin: 0 0 6px; }
+.persona-page p { color: var(--muted); line-height: 1.6; }
+.persona-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 18px 0; }
+.persona-page button { min-height: 44px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.persona-cards button { display: grid; gap: 5px; text-align: left; }
+.persona-cards button.is-selected { border-color: var(--blue); background: var(--blue-soft); }
+.persona-cards small { color: var(--muted); }
+.persona-editor, .persona-transfer { border: 1px solid var(--line); border-radius: 16px; padding: 16px; background: var(--surface); }
+.persona-editor label { display: grid; gap: 6px; margin: 12px 0; font-weight: 600; }
+.persona-page input, .persona-page textarea { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-sunken); color: var(--ink); font: inherit; }
+.persona-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.persona-transfer { margin-top: 12px; }
+.persona-transfer summary { cursor: pointer; }
+.persona-transfer label { display: grid; gap: 8px; margin: 12px 0; }
+.persona-catalog { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; max-height: 55vh; overflow: auto; }
+.persona-catalog article { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.persona-catalog p { overflow-wrap: anywhere; }
+.persona-hero { padding: 20px; border: 1px solid var(--line); border-radius: 20px; background: linear-gradient(135deg, var(--blue-soft), var(--surface)); }
+.persona-hero button { flex: 0 0 auto; white-space: nowrap; }
+.persona-eyebrow { color: var(--blue); font-size: .7rem; font-weight: 700; letter-spacing: .14em; }
+.persona-hero h2 { margin-top: 6px; }
+.persona-hero p { margin-bottom: 0; }
+.persona-tabs, .persona-source { display: flex; gap: 6px; padding: 5px; margin: 16px 0; border-radius: 14px; background: var(--surface-muted); }
+.persona-tabs button, .persona-source button { flex: 1; border: 0; background: transparent; }
+.persona-tabs button[aria-pressed=true], .persona-source button[aria-pressed=true] { color: var(--blue); background: var(--surface); font-weight: 700; box-shadow: var(--shadow-segment); }
+.persona-notice { padding: 10px 14px; border-radius: 12px; background: var(--blue-soft); }
+.persona-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.persona-section-heading h3, .persona-section-heading p { margin: 4px 0; }
+.persona-section-heading button { flex: 0 0 auto; }
+.persona-cards button { min-height: 120px; align-content: start; background: var(--surface); }
+.persona-avatar { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 14px; color: var(--blue); background: var(--blue-soft); font-weight: 700; }
+.persona-discover { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.persona-discover > p { font-size: .86rem; }
+.persona-search { display: flex; gap: 8px; margin: 14px 0; }
+.persona-search input { flex: 1; min-width: 0; }
+.persona-search-label { display: grid; gap: 8px; margin: 14px 0; }
+.persona-catalog { max-height: none; margin: 16px 0; }
+.persona-catalog article { display: flex; flex-direction: column; gap: 8px; background: var(--surface-sunken); }
+.persona-catalog article strong, .persona-catalog article small { overflow-wrap: anywhere; }
+.persona-catalog article small { color: var(--muted); }
+.persona-catalog article p { flex: 1; margin: 0; font-size: .85rem; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 480px) { .persona-page { padding: 12px; } .persona-hero { padding: 16px; } .persona-tabs button { padding: 8px 4px; } .persona-catalog { grid-template-columns: 1fr 1fr; } }

@@ -3,6 +3,7 @@ export type AppView =
   | 'harness'
   | 'assistant-memory'
   | 'assistant-tasks'
+  | 'assistant-persona'
   | 'sessions'
   | 'settings'
   | 'settings-models'

@@ -235,7 +235,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             content.addView(view, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.START; bottomMargin = dp(6) })
             if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
         }
-        if (history.isEmpty()) bubble(opening ?: "嗨，想聊什么？", false)
+        if (history.isEmpty()) bubble(opening ?: CompanionPersonaStore(context).active().optString("greeting").ifBlank { "嗨，想聊什么？" }, false)
         else history.takeLast(8).forEach {
             val parsed = if (it.role == "assistant") CompanionBubbleChatPolicy.parseInlineImages(it.text) else CompanionBubbleChatPolicy.InlineImages(it.text, emptyList())
             val user = it.role == "user"

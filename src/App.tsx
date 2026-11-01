@@ -7,6 +7,7 @@ import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
 import { TaskStarter } from './components/TaskStarter'
 import { AssistantTasks } from './components/AssistantTasks'
+import { CompanionPersona } from './components/CompanionPersona'
 import { CompanionSettingsButton } from './components/CompanionSettingsButton'
 import { CompanionWorkspace } from './components/CompanionWorkspace'
 import type { AutomationRuleDefaults } from './components/AutomationRuleForm'
@@ -240,6 +241,12 @@ interface SettingsHomeEntry {
  * 兜底的是 `src/App.settingsHome.test.tsx` 里「切成英文后整屏入口都是英文」那条用例。
  */
 const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
+  {
+    id: 'assistant-persona', group: 'appearance', title: '鲸鱼娘人格',
+    hint: '角色卡、性格、情境与示例对话',
+    keywords: ['人格', '人设', '角色卡', '鲸鱼娘', 'persona', 'character'],
+    target: { kind: 'view', view: 'assistant-persona' }, icon: <Bot size={20} />,
+  },
   // —— 后台：运行环境来源与后台保活配置；Harness 服务的启停统一在首页。
   {
     id: 'environment',
@@ -355,6 +362,7 @@ const APP_VIEWS: AppView[] = [
   'harness',
   'assistant-memory',
   'assistant-tasks',
+  'assistant-persona',
   'sessions',
   'settings',
   'settings-models',
@@ -5359,6 +5367,8 @@ export function App() {
         return <CompanionWorkspace initialPanel="memory" />
       case 'assistant-tasks':
         return <AssistantTasks />
+      case 'assistant-persona':
+        return <CompanionPersona onBack={() => backToView('settings')} />
       case 'terminal':
         return <TerminalScreen bridge={runtimeBridge} fontSize={settings?.terminalFontSize ?? 14} onAuthorize={requestShizukuPermission} onBack={() => backToView('settings')} onConnect={connectShizuku} onError={terminalError} onOpenEnvironment={() => setActiveView('environment')} onOpenShizuku={openShizuku} runtime={runtime} shizuku={shizuku} />
       case 'plugins':

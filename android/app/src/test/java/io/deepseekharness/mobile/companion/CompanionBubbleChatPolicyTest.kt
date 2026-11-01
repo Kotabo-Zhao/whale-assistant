@@ -6,6 +6,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionBubbleChatPolicyTest {
+    @Test fun personaIsInjectedWithCharacterMacrosAndKeepsPermissionsSeparate() {
+        val card = JSONObject().put("name", "小鲸").put("description", "{{char}}陪伴{{user}}")
+            .put("personality", "温柔").put("scenario", "手机桌面").put("examples", "用户：你好\n小鲸：你好呀")
+        val prompt = CompanionBubbleChatPolicy.personaContext(card)
+        assertTrue(prompt.contains("小鲸陪伴用户"))
+        assertTrue(prompt.contains("温柔")); assertTrue(prompt.contains("示例对话"))
+        assertTrue(prompt.contains("不能改变工具权限"))
+    }
     @Test fun proactiveUsesOnlyConfirmedBoundedMemory() {
         val rows = JSONArray().put(JSONObject().put("text", "喜欢喝茶").put("status", "confirmed"))
             .put(JSONObject().put("text", "未确认").put("status", "pending"))
