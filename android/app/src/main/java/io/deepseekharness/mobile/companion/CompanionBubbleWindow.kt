@@ -169,8 +169,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         fun citationCard(citation: CompanionBubbleChat.Citation) {
             val shouldFollow = atBottom()
-            val coverage = CompanionBubbleChatPolicy.citationCoverageLabel(citation)
-            val segment = CompanionBubbleChatPolicy.citationSegmentLabel(citation)
+            // One compact card per source document; segment and parsing metadata remain available
+            // after opening the card, rather than crowding every reply.
+            val coverage = ""
+            val segment = ""
             val view = TextView(context).apply {
                 text = "资料来源 · ${citation.displayName}$segment$coverage"
                 textSize = 12f; setTextColor(Color.rgb(48, 91, 125)); maxWidth = width - dp(45)
@@ -193,7 +195,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         if (history.isEmpty()) bubble(opening ?: "嗨，想聊什么？", false)
         else history.takeLast(8).forEach {
             val parsed = if (it.role == "assistant") CompanionBubbleChatPolicy.parseInlineImages(it.text) else CompanionBubbleChatPolicy.InlineImages(it.text, emptyList())
-            bubble(parsed.text, it.role == "user"); (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (it.role == "assistant") it.citations.forEach(::citationCard)
+            bubble(parsed.text, it.role == "user"); (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (it.role == "assistant") it.citations.take(2).forEach(::citationCard)
         }
         val input = EditText(context).apply {
             hint = "说点什么…"; textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
@@ -311,7 +313,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                             }
                         } }
                         draft = ""
-                        if (samePanel) { streamingBubble.text = CompanionRichText.render(answer.text); answer.images.forEach(::imageBubble); answer.citations.forEach(::citationCard); input.text.clear() }
+                        if (samePanel) { streamingBubble.text = CompanionRichText.render(answer.text); answer.images.forEach(::imageBubble); answer.citations.take(2).forEach(::citationCard); input.text.clear() }
                         status.text = ""; status.visibility = android.view.View.GONE
                     }.onFailure { error ->
                         onState("idle")

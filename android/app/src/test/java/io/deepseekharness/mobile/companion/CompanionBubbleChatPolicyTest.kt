@@ -62,6 +62,13 @@ class CompanionBubbleChatPolicyTest {
         assertTrue(CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("id", id).toString()).isEmpty())
         assertTrue(CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("id", id).put("revision", revision).put("text", "记忆正文").toString()).isEmpty())
     }
+    @Test fun sourceCardsCollapseMultipleChunksFromOneDocument() {
+        val document = "c".repeat(64)
+        val rows = JSONArray()
+        repeat(3) { index -> rows.put(JSONObject().put("id", "00000000-1111-2222-3333-44444444444$index").put("revision", "a".repeat(64))
+            .put("documentId", document).put("displayName", "长文档.txt").put("chunkIndex", index).put("chunkCount", 3)) }
+        assertEquals(1, CompanionBubbleChatPolicy.citationsFromToolResult(JSONObject().put("items", rows).toString()).size)
+    }
     @Test fun knowledgeGuidanceUsesExplicitRecentAndRejectsInventedCoordinates() {
         val guidance = CompanionBubbleChatPolicy.knowledgeToolGuidance()
         assertTrue(guidance.contains("mobile_knowledge_search")); assertTrue(guidance.contains("mobile_knowledge_recent"))

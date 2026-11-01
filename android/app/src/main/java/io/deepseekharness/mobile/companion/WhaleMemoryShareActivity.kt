@@ -41,21 +41,27 @@ class WhaleMemoryShareActivity : Activity() {
                             else WhaleDocumentImport.import(app, uri, type)
                         }.getOrElse { "保存失败" }
                     }
-                    return@runCatching results.firstOrNull { "失败" in it || "未完成" in it || "需要" in it } ?: "已保存"
+                    return@runCatching results.firstOrNull { "失败" in it || "未完成" in it || "未保存" in it || "需要" in it }
+                        ?: if (results.size == 1) results.single() else "已处理 ${results.size} 个文件"
                 }
                 val text = WhaleSharedText.accept(Intent.ACTION_SEND, "text/plain", sharedText)
                 requireNotNull(text)
-                CompanionKnowledgeStore(app).add(text, "shared_text")
-                check(SharedMemoryJobs.enqueue(app, text))
-                SharedMemoryJobs.schedule(app, 0)
-                "已保存"
+                val added = CompanionKnowledgeStore(app).add(text, "shared_text")
+                if (!added) return@runCatching "资料库已有相同内容"
+                // Long material is searchable in the local knowledge base but is not pushed as
+                // one enormous background memory-extraction prompt.
+                if (text.length <= CompanionKnowledgeData.MAX_RECORD_TEXT) {
+                    check(SharedMemoryJobs.enqueue(app, text))
+                    SharedMemoryJobs.schedule(app, 0)
+                }
+                "文本已添加到资料库"
             }
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) {
-                    // Successful saves are silent; report failures and incomplete analysis.
-                    val notice = result.fold({ message -> message.takeIf { "失败" in it || "未完成" in it || "需要" in it } },
-                        { "保存失败，请检查鲸鱼资料库" })
-                    if (notice != null) Toast.makeText(this, notice, Toast.LENGTH_LONG).show()
+                    // A share target is transient, so an explicit completion message is the only
+                    // dependable on-screen acknowledgement after a file reaches the knowledge base.
+                    val notice = result.fold({ it }, { "保存失败，请检查鲸鱼资料库" })
+                    Toast.makeText(this, notice, Toast.LENGTH_LONG).show()
                     finish()
                 }
             }
@@ -71,7 +77,7 @@ class WhaleMemoryShareActivity : Activity() {
 internal object WhaleSharedText {
     fun accept(action: String?, type: String?, value: CharSequence?): String? {
         if (action != Intent.ACTION_SEND || type != "text/plain" || value == null ||
-            value.isBlank() || value.length > CompanionKnowledgeData.MAX_TEXT || '\u0000' in value) return null
+            value.isBlank() || value.length > CompanionKnowledgeData.MAX_DOCUMENT_TEXT || '\u0000' in value) return null
         return value.toString()
     }
 
@@ -83,7 +89,7 @@ internal object WhaleSharedText {
             val n = input.read(buffer)
             if (n < 0) break
             if (n == 0) continue
-            require(bytes.size() + n <= CompanionKnowledgeData.MAX_TEXT * 4) { "file too large" }
+            require(bytes.size() + n <= CompanionKnowledgeTextFile.MAX_FILE_BYTES) { "file too large" }
             bytes.write(buffer, 0, n)
         }
         val text = Charsets.UTF_8.newDecoder()

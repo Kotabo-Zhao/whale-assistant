@@ -88,7 +88,7 @@ internal object WhaleImageImport {
             }
         }.getOrNull()
         val knowledge = CompanionKnowledgeStore(app)
-        val saved = analysis?.takeIf { it.isNotBlank() && it.length <= CompanionKnowledgeData.MAX_TEXT && '\u0000' !in it }
+        val saved = analysis?.takeIf { it.isNotBlank() && it.length <= CompanionKnowledgeData.MAX_RECORD_TEXT && '\u0000' !in it }
             ?.let { runCatching { knowledge.registerImageAnalysis(originalId, it) }.getOrNull() }
         val delivered = runCatching { inbox.deliver() }.getOrDefault(false)
         val where = if (delivered) "图片已保存到收件箱" else "图片已暂存，运行环境就绪后可用"

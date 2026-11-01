@@ -14,7 +14,7 @@ import android.text.style.URLSpan
 
 /** Small offline renderer for the chat formats the model is asked to use. */
 internal object CompanionRichText {
-    private val inline = Regex("""(\*\*[^\n*]+\*\*|__[^\n_]+__|~~[^\n~]+~~|`[^`\n]+`|\$[^$\n]+\$|\\\([^\n]+?\\\)|\[[^\]\n]+\]\(https?://[^\s)]+\))""")
+    private val inline = Regex("""(\*\*[^\n*]+\*\*|__[^\n_]+__|~~[^\n~]+~~|`[^`\n]+`|\$[^$\n]+\$|\\\([^\n]+?\\\)|\[[^\]\n]+\]\(https?://[^\s)]+\)|(?<!\*)\*[^*\n]+\*(?!\*)|(?<!_)_[^_\n]+_(?!_))""")
     private val latexSymbols = mapOf(
         "\\alpha" to "α", "\\beta" to "β", "\\gamma" to "γ", "\\delta" to "δ", "\\epsilon" to "ε",
         "\\theta" to "θ", "\\lambda" to "λ", "\\mu" to "μ", "\\pi" to "π", "\\sigma" to "σ",
@@ -24,22 +24,20 @@ internal object CompanionRichText {
         "\\neq" to "≠", "\\infty" to "∞", "\\sum" to "∑", "\\int" to "∫",
     )
 
+    private data class Block(val text: String, val fenced: Boolean = false, val math: Boolean = false)
+
     /** Pure visible-text projection for local tests and accessibility labels. */
     fun visibleText(source: String): String {
-        var fenced = false
-        return source.replace("\r\n", "\n").replace('\r', '\n').split('\n').mapNotNull { raw ->
-            if (raw.trim().startsWith("```")) {
-                fenced = !fenced
-                null
-            } else if (fenced) raw
+        return blocks(source).mapNotNull { block ->
+            if (block.fenced) block.text
+            else if (block.math) latex(block.text)
             else {
+                val raw = block.text
                 val heading = Regex("^(#{1,6})\\s+(.+)$").matchEntire(raw)
-                val blockMath = raw.trim().takeIf { it.startsWith("$$") && it.endsWith("$$") && it.length > 4 }
                 when {
                     heading != null -> inlineText(heading.groupValues[2])
-                    blockMath != null -> latex(blockMath.removePrefix("$$").removeSuffix("$$"))
                     raw.trimStart().startsWith("> ") -> "│ ${inlineText(raw.trimStart().removePrefix("> "))}"
-                    else -> Regex("^\\s*[-*+]\\s+(.+)$").matchEntire(raw)?.let { "• ${inlineText(it.groupValues[1])}" } ?: inlineText(raw)
+                    else -> listPrefix(raw)?.let { "${it.first}${inlineText(it.second)}" } ?: inlineText(raw)
                 }
             }
         }.joinToString("\n")
@@ -47,31 +45,26 @@ internal object CompanionRichText {
 
     fun render(source: String): Spanned {
         val result = SpannableStringBuilder()
-        var fenced = false
-        source.replace("\r\n", "\n").replace('\r', '\n').split('\n').forEachIndexed { index, raw ->
-            if (raw.trim().startsWith("```")) {
-                fenced = !fenced
-                if (index > 0) result.append('\n')
-                return@forEachIndexed
-            }
+        blocks(source).forEachIndexed { index, block ->
             if (index > 0) result.append('\n')
             val start = result.length
-            if (fenced) {
-                result.append(raw)
+            if (block.fenced) {
+                result.append(block.text)
                 code(result, start, result.length)
                 return@forEachIndexed
             }
+            if (block.math) {
+                result.append(latex(block.text))
+                math(result, start, result.length)
+                return@forEachIndexed
+            }
+            val raw = block.text
             val heading = Regex("^(#{1,6})\\s+(.+)$").matchEntire(raw)
-            val blockMath = raw.trim().takeIf { it.startsWith("$$") && it.endsWith("$$") && it.length > 4 }
             when {
                 heading != null -> {
                     appendInline(result, heading.groupValues[2])
                     result.setSpan(StyleSpan(Typeface.BOLD), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     result.setSpan(RelativeSizeSpan((1.45f - (heading.groupValues[1].length - 1) * .09f).coerceAtLeast(1.0f)), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                }
-                blockMath != null -> {
-                    result.append(latex(blockMath.removePrefix("$$").removeSuffix("$$")))
-                    math(result, start, result.length)
                 }
                 raw.trimStart().startsWith("> ") -> {
                     result.append("│ ")
@@ -79,11 +72,8 @@ internal object CompanionRichText {
                     result.setSpan(ForegroundColorSpan(Color.rgb(74, 99, 125)), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
                 else -> {
-                    val bullet = Regex("^\\s*[-*+]\\s+(.+)$").matchEntire(raw)
-                    if (bullet != null) {
-                        result.append("• ")
-                        appendInline(result, bullet.groupValues[1])
-                    } else appendInline(result, raw)
+                    val prefix = listPrefix(raw)
+                    if (prefix != null) { result.append(prefix.first); appendInline(result, prefix.second) } else appendInline(result, raw)
                 }
             }
         }
@@ -104,6 +94,10 @@ internal object CompanionRichText {
                 token.startsWith("~~") -> {
                     result.append(token.substring(2, token.length - 2))
                     result.setSpan(StrikethroughSpan(), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                token.startsWith('*') || token.startsWith('_') -> {
+                    result.append(token.substring(1, token.length - 1))
+                    result.setSpan(StyleSpan(Typeface.ITALIC), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
                 token.startsWith('`') -> {
                     result.append(token.substring(1, token.length - 1))
@@ -134,6 +128,7 @@ internal object CompanionRichText {
         val token = match.value
         when {
             token.startsWith("**") || token.startsWith("__") || token.startsWith("~~") -> token.substring(2, token.length - 2)
+            token.startsWith('*') || token.startsWith('_') -> token.substring(1, token.length - 1)
             token.startsWith('`') -> token.substring(1, token.length - 1)
             token.startsWith('$') -> latex(token.substring(1, token.length - 1))
             token.startsWith("\\(") -> latex(token.substring(2, token.length - 2))
@@ -149,7 +144,53 @@ internal object CompanionRichText {
             rendered = Regex("\\\\sqrt\\{([^{}]+)}").replace(rendered) { "√${it.groupValues[1]}" }
         }
         latexSymbols.forEach { (latex, glyph) -> rendered = rendered.replace(latex, glyph) }
-        return rendered.replace("\\left", "").replace("\\right", "").replace("\\,", " ").replace("\\ ", " ")
+        rendered = Regex("\\\\(?:text|mathrm|mathbf|mathit|operatorname)\\{([^{}]*)}").replace(rendered) { it.groupValues[1] }
+        rendered = Regex("\\^\\{([^{}]+)}").replace(rendered) { superscript(it.groupValues[1]) }
+        rendered = Regex("_\\{([^{}]+)}").replace(rendered) { subscript(it.groupValues[1]) }
+        rendered = Regex("\\^([A-Za-z0-9+=()\\-])").replace(rendered) { superscript(it.groupValues[1]) }
+        rendered = Regex("_([A-Za-z0-9+=()\\-])").replace(rendered) { subscript(it.groupValues[1]) }
+        return rendered.replace("\\left", "").replace("\\right", "").replace("\\displaystyle", "")
+            .replace("\\quad", "  ").replace("\\,", " ").replace("\\ ", " ").replace("\\\\", "\n")
+    }
+
+    private fun superscript(value: String): String {
+        val plain = "0123456789+-=()abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        val raised = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        return value.map { char -> plain.indexOf(char).takeIf { it >= 0 }?.let(raised::get) ?: char }.joinToString("")
+    }
+    private fun subscript(value: String): String = value.map { "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎".getOrNull("0123456789+-=()".indexOf(it)) ?: it }.joinToString("")
+
+    private fun listPrefix(raw: String): Pair<String, String>? {
+        Regex("^\\s*[-*+]\\s+(.+)$").matchEntire(raw)?.let { return "• " to it.groupValues[1] }
+        Regex("^\\s*(\\d+[.)])\\s+(.+)$").matchEntire(raw)?.let { return "${it.groupValues[1]} " to it.groupValues[2] }
+        return null
+    }
+
+    /** Groups multi-line $$...$$ and \\[...\\] math before ordinary Markdown line rendering. */
+    private fun blocks(source: String): List<Block> {
+        val output = mutableListOf<Block>(); var fenced = false; var mathEnd: String? = null; val math = StringBuilder()
+        fun closeMath() { output.add(Block(math.toString().trim(), math = true)); math.setLength(0); mathEnd = null }
+        for (raw in source.replace("\r\n", "\n").replace('\r', '\n').split('\n')) {
+            if (mathEnd != null) {
+                val end = requireNotNull(mathEnd)
+                val at = raw.indexOf(end)
+                if (at >= 0) { math.append(raw.substring(0, at)); closeMath(); val tail = raw.substring(at + end.length); if (tail.isNotBlank()) output.add(Block(tail)) }
+                else { if (math.isNotEmpty()) math.append('\n'); math.append(raw) }
+                continue
+            }
+            if (raw.trim().startsWith("```")) { fenced = !fenced; continue }
+            if (fenced) { output.add(Block(raw, fenced = true)); continue }
+            val trimmed = raw.trim()
+            val marker = when { trimmed.startsWith("$$") -> "$$"; trimmed.startsWith("\\[") -> "\\]"; else -> null }
+            if (marker != null) {
+                val body = trimmed.removePrefix(if (marker == "$$") "$$" else "\\[")
+                val end = body.indexOf(marker)
+                if (end >= 0) output.add(Block(body.substring(0, end).trim(), math = true))
+                else { math.append(body); mathEnd = marker }
+            } else output.add(Block(raw))
+        }
+        if (mathEnd != null) output.add(Block(math.toString().trim(), math = true))
+        return output
     }
 
     private fun code(text: SpannableStringBuilder, start: Int, end: Int) {

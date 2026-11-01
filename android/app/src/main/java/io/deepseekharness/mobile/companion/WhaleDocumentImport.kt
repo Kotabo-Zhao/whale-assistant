@@ -73,7 +73,7 @@ internal object WhaleDocumentImport {
                     "第 ${index + 1} 页：\n" + DeepSeekVisionModel(key).analyze(jpeg)
                 }
                 val heading = if (scan.second > descriptions.size) "扫描 PDF：仅分析前 ${descriptions.size} / ${scan.second} 页\n" else "扫描 PDF 分析：\n"
-                val contents = (heading + descriptions.joinToString("\n\n")).take(CompanionKnowledgeData.MAX_TEXT)
+                val contents = (heading + descriptions.joinToString("\n\n")).take(CompanionKnowledgeData.MAX_RECORD_TEXT)
                 val analysis = knowledge.registerImageAnalysis(originalId, contents)
                 val stableId = "share:$originalId"
                 SharedMemoryJobs.enqueueWithoutSchedule(app, analysis.getString("id"), analysis.getString("text"), stableId)

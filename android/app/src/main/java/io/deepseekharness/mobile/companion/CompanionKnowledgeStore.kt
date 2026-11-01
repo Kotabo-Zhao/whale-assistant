@@ -51,8 +51,21 @@ internal class CompanionKnowledgeStore(context: Context) {
         additions.length()
     }
     fun add(text: String, source: String = "shared_text"): Boolean = synchronized(lock) {
+        require(text.isNotBlank() && text.length <= CompanionKnowledgeData.MAX_DOCUMENT_TEXT && '\u0000' !in text) { "文字为空、包含无效字符或超过资料长度上限" }
         semanticChange()
-        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.appendUniqueText(text, source, System.currentTimeMillis()) }.also { if (it) scheduleSemantic() }
+        val saved = UnifiedKnowledgeDatabase(app, ::loadLegacy).use { db ->
+            if (text.length <= CompanionKnowledgeData.MAX_RECORD_TEXT) {
+                db.appendUniqueText(text, source, System.currentTimeMillis())
+            } else {
+                // Long shared text is stored as ordinary document chunks.  This keeps retrieval
+                // and the on-device embedding job bounded without silently dropping content.
+                val documentId = CompanionMemorySuppression.digest(text)
+                val name = if (source == "text_file") "导入文本" else "分享文本"
+                db.appendDocument(documentId, KnowledgeChunks.split(text), name, "extracted_text", requireOriginal = false).length() > 0
+            }
+        }
+        if (saved) scheduleSemantic()
+        saved
     }
     internal fun addDocument(text: String, documentId: String, name: String = "", requireOriginal: Boolean = false): JSONArray = synchronized(lock) {
         require(documentId.matches(Regex("[a-f0-9]{64}")))
@@ -74,7 +87,7 @@ internal class CompanionKnowledgeStore(context: Context) {
     }
     internal fun registerImageAnalysis(originalId: String, text: String): JSONObject = synchronized(lock) {
         require(originalId.matches(Regex("[a-f0-9]{64}")))
-        require(text.isNotBlank() && text.length <= CompanionKnowledgeData.MAX_TEXT && '\u0000' !in text)
+        require(text.isNotBlank() && text.length <= CompanionKnowledgeData.MAX_RECORD_TEXT && '\u0000' !in text)
         val id = java.util.UUID.nameUUIDFromBytes("image-analysis:$originalId".toByteArray(Charsets.UTF_8)).toString()
         val row = JSONObject().put("id", id).put("source", "image_analysis").put("text", text)
             .put("createdAt", System.currentTimeMillis()).put("originalId", originalId).put("coverage", "model_description")
@@ -98,7 +111,7 @@ internal class CompanionKnowledgeStore(context: Context) {
     }
     private fun safeDisplayName(value: String): String = value.replace(Regex("[\\p{Cc}\\p{Cf}]"), " ").trim().take(200)
     fun edit(id: String, expectedText: String, newText: String): Boolean = synchronized(lock) {
-        require(newText.isNotBlank() && newText.length <= CompanionKnowledgeData.MAX_TEXT && '\u0000' !in newText) { "文字为空、包含无效字符或超过 8000 字" }
+        require(newText.isNotBlank() && newText.length <= CompanionKnowledgeData.MAX_RECORD_TEXT && '\u0000' !in newText) { "文字为空、包含无效字符或超过 8000 字" }
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use { db ->
             val row = db.findById(id) ?: return@synchronized false
             if (row.getString("text") != expectedText) return@synchronized false
@@ -138,7 +151,7 @@ internal class CompanionKnowledgeStore(context: Context) {
             val row = entries.optJSONObject(index) ?: throw IllegalArgumentException("批量删除参数无效")
             val id = row.opt("id") as? String ?: throw IllegalArgumentException("批量删除参数无效")
             val text = row.opt("expectedText") as? String ?: throw IllegalArgumentException("批量删除参数无效")
-            require(id.matches(Regex("[a-f0-9-]{36}")) && text.length <= CompanionKnowledgeData.MAX_TEXT) { "批量删除参数无效" }
+            require(id.matches(Regex("[a-f0-9-]{36}")) && text.length <= CompanionKnowledgeData.MAX_RECORD_TEXT) { "批量删除参数无效" }
             id to text
         }
         val removed = UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.trashRecords(reviewed, System.currentTimeMillis()) } ?: return@synchronized null
@@ -202,7 +215,10 @@ internal class CompanionKnowledgeStore(context: Context) {
 /** Bounded operations also used when loading; corrupt data must not be overwritten. */
 internal object CompanionKnowledgeData {
     const val MAX_BYTES = 512_000
-    const val MAX_TEXT = 8_000
+    /** One database record stays small for fast paging and semantic indexing. */
+    const val MAX_RECORD_TEXT = 8_000
+    /** User-added text is split into records at [MAX_RECORD_TEXT]. */
+    const val MAX_DOCUMENT_TEXT = 2_000_000
     const val MAX_ITEMS = 100
     fun utf8(value: String): ByteArray {
         val encoder = Charsets.UTF_8.newEncoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
@@ -235,7 +251,7 @@ internal object CompanionKnowledgeData {
             utf8(text)
             val source = row.getString("source")
             val coverage = row.opt("coverage").takeUnless { it == null || it == JSONObject.NULL } as? String
-            require(text.isNotBlank() && text.length <= MAX_TEXT && source in setOf("shared_text", "text_file", "original", "image_analysis") && row.getLong("createdAt") > 0) { "资料内容无效" }
+            require(text.isNotBlank() && text.length <= MAX_RECORD_TEXT && source in setOf("shared_text", "text_file", "original", "image_analysis") && row.getLong("createdAt") > 0) { "资料内容无效" }
             require(coverage == null || coverage in setOf("not_parsed", "partial", "extracted_text", "model_description")) { "资料解析范围无效" }
             if (source == "original" || source == "image_analysis") {
                 val originalId = row.opt("originalId") as? String
@@ -255,7 +271,7 @@ internal object CompanionKnowledgeData {
     }
     fun add(rows: JSONArray, text: String, now: Long, source: String = "shared_text", legacyLimit: Boolean = true): Boolean {
         require(source in setOf("shared_text", "text_file")) { "资料来源无效" }
-        require(text.isNotBlank() && text.length <= MAX_TEXT && now > 0) { "文字为空或超过 8000 字" }
+        require(text.isNotBlank() && text.length <= MAX_RECORD_TEXT && now > 0) { "文字为空或超过 8000 字" }
         for (i in 0 until rows.length()) if (rows.getJSONObject(i).getString("text") == text) return false
         if (legacyLimit) require(rows.length() < MAX_ITEMS) { "资料已满，请先删除部分资料" }
         rows.put(JSONObject().put("id", UUID.randomUUID().toString()).put("text", text).put("source", source).put("createdAt", now))
@@ -272,7 +288,7 @@ internal object CompanionKnowledgeData {
     }
     /** Return a copy; reject stale edits and duplicate text without mutating the input. */
     fun edit(rows: JSONArray, id: String, expectedText: String, newText: String): JSONArray? {
-        require(newText.isNotBlank() && newText.length <= MAX_TEXT && '\u0000' !in newText) { "文字为空、包含无效字符或超过 8000 字" }
+        require(newText.isNotBlank() && newText.length <= MAX_RECORD_TEXT && '\u0000' !in newText) { "文字为空、包含无效字符或超过 8000 字" }
         val index = (0 until rows.length()).firstOrNull { rows.getJSONObject(it).getString("id") == id } ?: return null
         if (rows.getJSONObject(index).getString("text") != expectedText) return null
         require((0 until rows.length()).none { it != index && rows.getJSONObject(it).getString("text") == newText }) { "已有相同资料" }
@@ -331,13 +347,13 @@ internal object CompanionKnowledgeBackup {
 
 /** Strictly decode a user-selected text file; no truncation or silent charset replacement. */
 internal object CompanionKnowledgeTextFile {
-    const val MAX_FILE_BYTES = 32_000
+    const val MAX_FILE_BYTES = 8_000_000
     fun decode(bytes: ByteArray): String {
         require(bytes.size <= MAX_FILE_BYTES) { "文件超过大小上限" }
         val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
             .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
         val text = decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString().removePrefix("\uFEFF")
-        require(text.isNotBlank() && text.length <= CompanionKnowledgeData.MAX_TEXT && '\u0000' !in text) { "文件为空、过长或不是文本" }
+        require(text.isNotBlank() && text.length <= CompanionKnowledgeData.MAX_DOCUMENT_TEXT && '\u0000' !in text) { "文件为空、过长或不是文本" }
         return text
     }
 }

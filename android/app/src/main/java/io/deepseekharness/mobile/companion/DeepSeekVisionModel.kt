@@ -40,7 +40,7 @@ internal class DeepSeekVisionModel(
             }
             val content = JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString())
                 .getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-            require(content.isNotBlank() && content.length <= CompanionKnowledgeData.MAX_TEXT && '\u0000' !in content)
+            require(content.isNotBlank() && content.length <= CompanionKnowledgeData.MAX_RECORD_TEXT && '\u0000' !in content)
             return content
         } finally { connection.disconnect() }
     }

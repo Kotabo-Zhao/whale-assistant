@@ -9,7 +9,11 @@ class CompanionRichTextTest {
     }
 
     @Test fun rendersInlineAndBlockLatexAsReadableMath() {
-        assertEquals("能量 E = mc^2\na⁄b + √x × π", CompanionRichText.visibleText("能量 \$E = mc^2\$\n\$\$\\frac{a}{b} + \\sqrt{x} \\times \\pi\$\$"))
+        assertEquals("能量 E = mc²\na⁄b + √x × π", CompanionRichText.visibleText("能量 \$E = mc^2\$\n\$\$\\frac{a}{b} + \\sqrt{x} \\times \\pi\$\$"))
+    }
+
+    @Test fun rendersMultilineBracketLatexAndCommonMarkdown() {
+        assertEquals("斜体 和 1. 有序\nx² + y₁ = α", CompanionRichText.visibleText("*斜体* 和 1. 有序\n\\[\nx^{2} + y_{1} = \\alpha\n\\]"))
     }
 
     @Test fun onlySafeHttpLinksBecomeClickable() {

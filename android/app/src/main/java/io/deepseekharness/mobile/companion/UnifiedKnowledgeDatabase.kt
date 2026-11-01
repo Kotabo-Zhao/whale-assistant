@@ -168,7 +168,8 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
                 val item = JSONObject().put("id", id).put("text", chunk).put("source", "text_file")
                     .put("createdAt", System.currentTimeMillis()).put("documentId", documentId)
                     .put("chunkIndex", index).put("chunkCount", chunks.size)
-                    .put("displayName", displayName).put("coverage", coverage).put("originalId", documentId)
+                    .put("displayName", displayName).put("coverage", coverage)
+                    .apply { if (requireOriginal) put("originalId", documentId) }
                 CompanionKnowledgeData.validateRows(JSONArray().put(item), false)
                 db.insertOrThrow("knowledge_records", null, ContentValues().apply {
                     put("id", id); put("position", position++); put("body", item.toString())

@@ -85,7 +85,9 @@ internal object SemanticIndexJobs {
                     if (!fresh) {
                         if (phase == "memory" && (!control.memoryEnabled || !memories.enabled)) return if (control.enabled) 5_000L else null
                         val chunks = split(text)
-                        val vectors = model.embed(chunks.map { it.second })
+                        // A full 8,000-character record can yield 17 segments, while each
+                        // inference call accepts at most 16. Preserve order across batches.
+                        val vectors = chunks.chunked(16).flatMap { batch -> model.embed(batch.map { it.second }) }
                         if (stopped.get()) return null
                         var published = false
                         val publish = {
@@ -115,9 +117,9 @@ internal object SemanticIndexJobs {
             var delay: Long? = null
             try { delay = runBatch(service.applicationContext, stopped) }
             catch (e: Exception) {
-                SemanticControl(service).setStatus(when (e) {
-                    else -> "本地索引处理失败，将稍后重试"
-                })
+                android.util.Log.w("dsh-semantic", "local semantic indexing failed", e)
+                // 异常类型足够用于定位本机运行时问题，不写入资料内容、查询或异常 message。
+                SemanticControl(service).setStatus("本地索引失败（${e.javaClass.simpleName}），将稍后重试")
                 delay = 30 * 60_000L
             } finally {
                 running.set(false)

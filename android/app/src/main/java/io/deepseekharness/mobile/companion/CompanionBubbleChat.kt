@@ -64,7 +64,7 @@ internal object CompanionBubbleChatPolicy {
             val chunkIndex = row.optInt("chunkIndex", 0).takeIf { it >= 0 } ?: return@mapNotNull null
             val chunkCount = row.optInt("chunkCount", 1).takeIf { it in 1..10_000 && chunkIndex < it } ?: return@mapNotNull null
             CompanionBubbleChat.Citation(id, revision, display, documentId, originalId, chunkIndex, chunkCount, row.optString("parsingCoverage", "unknown").take(64))
-        }.distinctBy { "${it.id}:${it.revision}" }.take(6)
+        }.distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" }.take(2)
     }
 
     /** Stored text chunks preserve retrieval order; they are not PDF page or spreadsheet coordinates. */
@@ -264,7 +264,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                             }
                             if (event.optString("type") == "tool/result") {
                                 val found = parts.flatMap(CompanionBubbleChatPolicy::citationsFromToolResult)
-                                if (found.isNotEmpty()) citations.set((citations.get() + found).distinctBy { "${it.id}:${it.revision}" }.take(6))
+                                if (found.isNotEmpty()) citations.set((citations.get() + found).distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" }.take(2))
                             }
                             val refs = (0 until content.length()).mapNotNull { j ->
                                 val item = content.optJSONObject(j) ?: return@mapNotNull null

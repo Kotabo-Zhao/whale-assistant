@@ -303,14 +303,15 @@ class CompanionActivity : AppCompatActivity() {
             CompanionKnowledgeTextFile.decode(bytes)
         }) { result ->
             result.onSuccess { text ->
+                val preview = if (text.length <= 12_000) text else text.take(6_000) + "\n\n……（共 ${text.length} 字，保存时会完整分段保留）"
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("核对要导入的文本")
-                    .setMessage("以下完整内容将保存到本地资料库。对话访问开启时，匹配内容可能发送给模型服务。\n\n$text")
+                    .setMessage("以下内容将保存到本地资料库。对话访问开启时，匹配内容可能发送给模型服务。\n\n$preview")
                     .setNegativeButton("取消", null).setPositiveButton("保存资料") { _, _ ->
                         runMemoryIo("正在保存资料…", { CompanionKnowledgeStore(this).add(text, "text_file") }) { outcome ->
                             android.widget.Toast.makeText(this, outcome.fold({ if (it) "文本已保存。" else "资料库中已有相同内容。" }, { "保存失败，请检查资料库容量。" }), android.widget.Toast.LENGTH_LONG).show()
                         }
                     }.show()
-            }.onFailure { android.widget.Toast.makeText(this, "无法读取文本：请选取不超过 8000 字的 UTF-8 文本文件。", android.widget.Toast.LENGTH_LONG).show() }
+            }.onFailure { android.widget.Toast.makeText(this, "无法读取文本：请选取不超过 200 万字、8 MB 的 UTF-8 文本文件。", android.widget.Toast.LENGTH_LONG).show() }
         }
     }
 
@@ -662,7 +663,7 @@ class CompanionActivity : AppCompatActivity() {
         button("查看或搜索资料") { searchKnowledge() }
         button("撤销最近删除的资料") { showRecentKnowledgeTrash() }
         button("导入文本文件") { if (!memoryBusy) knowledgeTextFile.launch(arrayOf("text/plain", "application/octet-stream")) else paragraph("文件操作正在进行，请稍候。") }
-        paragraph("文本文件须为 UTF-8，最多 8000 字；导入前显示完整内容供确认。")
+        paragraph("文本文件须为 UTF-8，最多 200 万字或 8 MB；长文本会完整分段保存，确认页只显示预览。")
         button("导出资料备份") { if (!memoryBusy) knowledgeExport.launch("whale-knowledge.json") else paragraph("文件操作正在进行，请稍候。") }
         button("导入资料备份") { if (!memoryBusy) knowledgeImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("文件操作正在进行，请稍候。") }
         paragraph("资料备份为未加密 JSON，包含完整文字；云盘可能同步。导入前可核对，确认后合并，不覆盖已有资料。")
@@ -1411,7 +1412,7 @@ class CompanionActivity : AppCompatActivity() {
         dialog.setOnShowListener {
             dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val value = input.text.toString()
-                if (value.isBlank() || value.length > CompanionKnowledgeData.MAX_TEXT || '\u0000' in value) {
+                if (value.isBlank() || value.length > CompanionKnowledgeData.MAX_RECORD_TEXT || '\u0000' in value) {
                     input.error = "请填写不超过 8000 字的有效文字。"
                     return@setOnClickListener
                 }

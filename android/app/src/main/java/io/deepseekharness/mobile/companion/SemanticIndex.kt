@@ -22,7 +22,8 @@ internal class SemanticIndex(context: Context) : AutoCloseable {
 
     fun replace(id: String, revision: String, segments: List<Pair<Int, FloatArray>>) {
         require(id.matches(Regex("(?:memory:)?[a-f0-9-]{36}")) && revision.matches(Regex("[a-f0-9]{64}")))
-        require(segments.isNotEmpty() && segments.size <= 16 && segments.map { it.first }.toSet().size == segments.size)
+        // 资料上限为 8000 字，按 480 字安全切片时恰好可能产生 17 块。
+        require(segments.isNotEmpty() && segments.size <= 17 && segments.map { it.first }.toSet().size == segments.size)
         db.beginTransaction()
         try {
             db.delete("vectors", "record_id=?", arrayOf(id))
