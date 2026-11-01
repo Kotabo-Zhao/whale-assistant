@@ -14,7 +14,7 @@ import android.text.style.URLSpan
 
 /** Small offline renderer for the chat formats the model is asked to use. */
 internal object CompanionRichText {
-    private val inline = Regex("""(\*\*[^\n*]+\*\*|__[^\n_]+__|~~[^\n~]+~~|`[^`\n]+`|\$[^$\n]+\$|\\\([^\n]+?\\\)|\[[^\]\n]+\]\(https?://[^\s)]+\)|(?<!\*)\*[^*\n]+\*(?!\*)|(?<!_)_[^_\n]+_(?!_))""")
+    private val inline = Regex("""(\*\*[^\n*]+\*\*|(?<![\p{L}\p{N}_])__[^\n_]+__(?![\p{L}\p{N}_])|~~[^\n~]+~~|`[^`\n]+`|\$[^$\n]+\$|\\\([^\n]+?\\\)|\[[^\]\n]+\]\(https?://[^\s)]+\)|(?<!\*)\*[^*\n]+\*(?!\*)|(?<![\p{L}\p{N}_])_[^_\n]+_(?![\p{L}\p{N}_]))""")
     private val latexSymbols = mapOf(
         "\\alpha" to "α", "\\beta" to "β", "\\gamma" to "γ", "\\delta" to "δ", "\\epsilon" to "ε",
         "\\theta" to "θ", "\\lambda" to "λ", "\\mu" to "μ", "\\pi" to "π", "\\sigma" to "σ",

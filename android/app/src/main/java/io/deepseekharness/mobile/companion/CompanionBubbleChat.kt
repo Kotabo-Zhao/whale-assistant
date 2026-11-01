@@ -226,6 +226,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
         val ready = java.util.concurrent.CountDownLatch(1)
         val done = java.util.concurrent.CountDownLatch(1)
         val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val lastModelFailure = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val answer = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val images = java.util.concurrent.atomic.AtomicReference<List<String>>(emptyList())
         val citations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
@@ -253,6 +254,11 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                     val event = value.optJSONObject("event") ?: return
                     val data = event.optJSONObject("data") ?: return
                     when (event.optString("type")) {
+                        "llm/retry" -> {
+                            val problem = data.optJSONObject("failure")
+                            val status = problem?.optInt("status", 0) ?: 0
+                            if (status in 500..599) lastModelFailure.set("模型服务暂时不可用（HTTP $status），请稍后重试")
+                        }
                         "assistant/message", "tool/result" -> {
                             val content = data.optJSONObject("message")?.optJSONArray("content") ?: return
                             val parts = (0 until content.length()).mapNotNull { j ->
@@ -275,7 +281,8 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                             if (refs.isNotEmpty()) images.set((images.get() + refs).distinct().take(6))
                         }
                         "turn/end" -> {
-                            if (data.optJSONObject("reason")?.optString("kind") != "completed") failure.set("对话未完成，请检查主对话中的模型状态")
+                            if (data.optJSONObject("reason")?.optString("kind") != "completed")
+                                failure.set(lastModelFailure.get() ?: "对话未完成，请检查主对话中的模型状态")
                             done.countDown()
                         }
                     }

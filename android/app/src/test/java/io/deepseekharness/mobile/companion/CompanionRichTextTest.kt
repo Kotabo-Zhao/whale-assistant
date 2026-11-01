@@ -19,4 +19,8 @@ class CompanionRichTextTest {
     @Test fun onlySafeHttpLinksBecomeClickable() {
         assertEquals("看 文档 与 [文本](file:///private)", CompanionRichText.visibleText("看 [文档](https://example.com/docs) 与 [文本](file:///private)"))
     }
+
+    @Test fun keepsUnderscoresInToolNamesWhileRenderingItalic() {
+        assertEquals("使用 mobile_knowledge_hybrid_search 和 斜体", CompanionRichText.visibleText("使用 mobile_knowledge_hybrid_search 和 _斜体_"))
+    }
 }
