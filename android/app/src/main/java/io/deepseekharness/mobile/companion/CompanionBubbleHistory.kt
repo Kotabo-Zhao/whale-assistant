@@ -65,13 +65,14 @@ internal class CompanionBubbleHistory(context: Context) {
                         .put("chunkIndex", citation.chunkIndex).put("chunkCount", citation.chunkCount).put("parsingCoverage", citation.parsingCoverage)
                         .apply { citation.documentId?.let { put("documentId", it) }; citation.originalId?.let { put("originalId", it) } })
                 }
-                rows.put(JSONObject().put("role", message.role).put("text", CompanionBubbleChatPolicy.validateMessage(message.text)).put("images", JSONArray(message.images)).put("citations", citations))
+                val text = if (message.role == "user") CompanionBubbleChatPolicy.validateMessage(message.text) else message.text.also { require(it.isNotBlank() && it.length <= 100_000) }
+                rows.put(JSONObject().put("role", message.role).put("text", text).put("images", JSONArray(message.images)).put("citations", citations))
             }
             return JSONObject().put("version", 2).put("sessionId", snapshot.sessionId).put("scope", snapshot.scope).put("messages", rows)
-                .toString().toByteArray(Charsets.UTF_8).also { require(it.size <= 150_000) }
+                .toString().toByteArray(Charsets.UTF_8).also { require(it.size <= 2_000_000) }
         }
         fun decode(bytes: ByteArray): Snapshot {
-            require(bytes.size <= 150_000)
+            require(bytes.size <= 2_000_000)
             val root = JSONObject(Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes)).toString())
             require(root.getInt("version") in 1..2)
             val rows = root.getJSONArray("messages")

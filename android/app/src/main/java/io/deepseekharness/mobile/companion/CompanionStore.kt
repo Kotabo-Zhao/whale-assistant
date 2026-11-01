@@ -9,6 +9,10 @@ class CompanionStore(context: Context) {
     private val app = context.applicationContext
     private val prefs = context.applicationContext.getSharedPreferences("companion_private_v1", Context.MODE_PRIVATE)
 
+    var bubblePermissionPreset: String
+        get() = prefs.getString("bubble_permission_preset", "default")?.takeIf { it in setOf("default", "read-only", "workspace-write", "danger-full-access") } ?: "default"
+        set(value) { require(value in setOf("default", "read-only", "workspace-write", "danger-full-access")); prefs.edit().putString("bubble_permission_preset", value).apply() }
+
     var bubbleMemoryAccess: Boolean
         get() = prefs.getBoolean("bubble_memory_access", false)
         set(value) { prefs.edit().putBoolean("bubble_memory_access", value).apply() }

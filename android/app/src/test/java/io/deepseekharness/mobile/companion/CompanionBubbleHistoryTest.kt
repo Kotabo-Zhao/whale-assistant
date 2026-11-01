@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionBubbleHistoryTest {
+    @org.junit.Test fun preservesLongAssistantReplies() {
+        val text = "长回复".repeat(2_000)
+        val snapshot = CompanionBubbleHistory.Snapshot("session-1", "a".repeat(64), listOf(
+            CompanionBubbleChat.Message("user", "请详细回答"), CompanionBubbleChat.Message("assistant", text)))
+        org.junit.Assert.assertEquals(text, CompanionBubbleHistory.decode(CompanionBubbleHistory.encode(snapshot)).messages.last().text)
+    }
     @Test fun roundTripAndRejectMalformedSnapshot() {
         val snapshot = CompanionBubbleHistory.Snapshot("session-1", "a".repeat(64), listOf(
             CompanionBubbleChat.Message("user", "你好"), CompanionBubbleChat.Message("assistant", "欢迎回来")))

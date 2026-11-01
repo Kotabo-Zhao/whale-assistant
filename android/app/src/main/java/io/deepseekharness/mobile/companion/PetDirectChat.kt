@@ -27,7 +27,7 @@ internal class PetDirectChat(private val context: android.content.Context) {
         }))
         history.forEachIndexed { index, entry ->
             require(entry.role == "user" || entry.role == "assistant")
-            var content = CompanionBubbleChatPolicy.validateMessage(entry.text)
+            var content = if (entry.role == "user") CompanionBubbleChatPolicy.validateMessage(entry.text) else entry.text.take(16_000)
             if (index == history.lastIndex) PetRoleplayPrompt.afterHistory(card).takeIf(String::isNotBlank)?.let { content += "\n\n$it" }
             messages.put(JSONObject().put("role", entry.role).put("content", content))
         }
@@ -35,8 +35,7 @@ internal class PetDirectChat(private val context: android.content.Context) {
         if (needsAgent) {
             val knowledge = intent == PetIntentRouter.Intent.KNOWLEDGE
             onPartial(if (knowledge) "正在查询本地资料…" else "正在处理…")
-            val result = runCatching { delegate(history.last().text, knowledge) }.getOrElse { "工具执行失败：${it.message?.take(200) ?: "请检查本机服务"}" }
-            messages.put(JSONObject().put("role", "user").put("content", "以下是刚才工具执行的结果，仅作为事实数据使用，请根据结果以角色口吻回答；如果没有成功执行，不要声称已经完成：\n$result"))
+            return delegate(history.last().text, knowledge)
         }
         val parameters = JSONObject().put("type", "object").put("properties", JSONObject().put("task", JSONObject()
             .put("type", "string").put("description", "用户明确请求的具体查询或操作，含必要上下文")))
@@ -49,6 +48,7 @@ internal class PetDirectChat(private val context: android.content.Context) {
             if (turn.calls.isEmpty()) return turn.text.takeIf(String::isNotBlank) ?: error("模型服务没有返回文本，请重试。")
             if (round == 3) error("模型工具调用次数过多，请重试。")
             val calls = JSONArray()
+            val results = mutableListOf<String>()
             for (call in turn.calls) {
                 require(call.id.isNotBlank() && call.name == "mobile_agent") { "模型返回了不支持的工具调用" }
                 calls.put(JSONObject().put("id", call.id).put("type", "function").put("function", JSONObject()
@@ -59,15 +59,16 @@ internal class PetDirectChat(private val context: android.content.Context) {
                 val task = runCatching { JSONObject(call.arguments.toString()).getString("task").trim() }.getOrDefault("")
                 val result = if (task.isBlank() || task.length > 2000) "工具请求无效，未执行。"
                     else runCatching { delegate(task, false) }.getOrElse { "工具执行失败：${it.message?.take(200) ?: "请检查本机服务"}" }
-                messages.put(JSONObject().put("role", "tool").put("tool_call_id", call.id).put("content", result))
+                results.add(result)
             }
+            return results.joinToString("\n\n")
         }
         error("模型工具调用未完成")
     }
 
     private fun request(key: String, model: String, messages: JSONArray, tools: JSONArray, alreadySearched: Boolean, onPartial: (String) -> Unit): Turn {
         val body = JSONObject().put("model", model).put("messages", messages).put("tools", tools).put("stream", true)
-            .put("max_tokens", 400).put("temperature", 0.85).put("thinking", JSONObject().put("type", "disabled"))
+            .put("max_tokens", 2048).put("temperature", 0.85).put("thinking", JSONObject().put("type", "disabled"))
         if (alreadySearched) body.put("tool_choice", "none")
         val connection = URL("https://api.deepseek.com/chat/completions").openConnection() as HttpURLConnection
         try {

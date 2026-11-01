@@ -452,6 +452,19 @@ class CompanionActivity : AppCompatActivity() {
         hero()
         readinessCard()
         heading("桌面形象")
+        val permissionNames = linkedMapOf("default" to "跟随主应用默认", "read-only" to "仅查看", "workspace-write" to "工作区内修改", "danger-full-access" to "完全权限")
+        button("桌宠会话权限 · ${permissionNames[store.bubblePermissionPreset]}") {
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("桌宠会话权限")
+                .setItems(permissionNames.values.toTypedArray()) { _, index ->
+                    val selected = permissionNames.keys.elementAt(index)
+                    fun savePermission() { store.bubblePermissionPreset = selected; render() }
+                    if (selected == "danger-full-access") androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("启用完全权限？").setMessage("桌宠会话将关闭 Harness 文件系统沙箱和命令审批。Android 系统权限仍单独控制。此设置会在下一次桌宠任务时应用。")
+                        .setNegativeButton("取消", null).setPositiveButton("启用") { _, _ -> savePermission() }.show()
+                    else savePermission()
+                }.setNegativeButton("取消", null).show()
+        }
+        paragraph("用于桌宠发起的助手会话；需要单次审批时桌宠会提示打开主对话。系统权限仍需单独授权。")
         val avatarSize = io.deepseekharness.mobile.overlay.OverlayBallPreferences.from(this).readSizeDp()
         button("鲸鱼娘大小 · ${when (avatarSize) { 64 -> "小"; 112 -> "大"; else -> "中" }}") { chooseAvatarSize() }
         paragraph("可选择悬浮形象大小；悬浮窗权限和系统后台限制仍会影响显示。")

@@ -32,10 +32,10 @@ internal object CompanionBubbleChatPolicy {
     fun compressedContext(messages: List<CompanionBubbleChat.Message>): String {
         require(messages.size <= 20)
         val older = messages.dropLast(6).takeLast(12).joinToString("\n") { message ->
-            "${if (message.role == "user") "用户" else "助手"}（早前摘录）：${validateMessage(message.text).take(160)}"
+            "${if (message.role == "user") "用户" else "助手"}（早前摘录）：${message.text.trim().take(160)}"
         }
         val recent = messages.takeLast(6).joinToString("\n") { message ->
-            "${if (message.role == "user") "用户" else "助手"}：${validateMessage(message.text).take(600)}"
+            "${if (message.role == "user") "用户" else "助手"}：${message.text.trim().take(600)}"
         }
         return listOf(older, recent).filter { it.isNotBlank() }.joinToString("\n").take(8_000)
     }
@@ -164,10 +164,10 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
                     val suggested = task.take((1_850 - original.length - prior.length).coerceAtLeast(0))
                     "实际用户请求：$original\n相关前文：$prior\n按该请求处理；以下为角色提出的查询建议，不得扩展用户要求：$suggested".take(2_000)
                 }
-                var response = agent.reply(listOf(Message("user", request)), scope, memoryAllowed, knowledgeAllowed)
+                var response = agent.reply(listOf(Message("user", request)), scope, memoryAllowed, knowledgeAllowed, onPartial)
                 fun searched(tools: Set<String>) = tools.any { it in setOf("mobile_knowledge_search", "mobile_knowledge_hybrid_search", "mobile_knowledge_recent", "mobile_knowledge_read") }
                 if (knowledgeQuery && !searched(response.tools)) {
-                    response = agent.reply(listOf(Message("user", "请实际调用 mobile_knowledge_hybrid_search 或 mobile_knowledge_search 检索用户的本地资料，再回答；不能调用时明确说明。用户原始问题：$original".take(2_000))), scope, memoryAllowed, knowledgeAllowed)
+                    response = agent.reply(listOf(Message("user", "请实际调用 mobile_knowledge_hybrid_search 或 mobile_knowledge_search 检索用户的本地资料，再回答；不能调用时明确说明。用户原始问题：$original".take(2_000))), scope, memoryAllowed, knowledgeAllowed, onPartial)
                     if (!searched(response.tools)) return@delegate "本地资料检索未能执行，请检查资料权限和服务状态后重试。"
                 }
                 images.addAll(response.images); citations.addAll(response.citations)
@@ -188,14 +188,20 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         // An explicitly handed-off session has no pet-local scope yet.  Reuse it once, then
         // bind it to the current capability scope; a later capability change creates a new
         // session just like a normal pet conversation.
-        val existing = sessionId?.takeIf { it.startsWith("session-") && (sessionAccess == null || sessionAccess == access) && (sessionScope == null || sessionScope == scope) }
+        val preset = CompanionStore(context).bubblePermissionPreset
+        val effectiveScope = if (continuedMainSession) scope else CompanionBubbleChatPolicy.memoryDigest("$scope|permission=$preset")
+        val existing = sessionId?.takeIf { it.startsWith("session-") && (sessionAccess == null || sessionAccess == access) && (sessionScope == null || sessionScope == effectiveScope) }
         val currentSession = existing ?: client.call("session/create", JSONObject()).getString("sessionId").also {
             sessionId = it
             sessionAccess = access
         }
         sessionAccess = access
-        sessionScope = scope
+        sessionScope = effectiveScope
         // Register before any model prompt can invoke the memory bridge.
+        if (existing == null && !continuedMainSession && preset != "default") {
+            try { client.command(currentSession, "/permission $preset") }
+            catch (e: Exception) { sessionId = null; sessionScope = null; throw e }
+        }
         BubbleSessionRegistry(context).record(currentSession)
         val personaCard = CompanionPersonaStore(context).active()
         val persona = PetRoleplayPrompt.character(personaCard, history)
@@ -261,8 +267,13 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
         }
         return cookies.joinToString("; ")
     }
-    fun call(method: String, payload: JSONObject): JSONObject {
-        require(method in setOf("session/create", "session/prompt"))
+    fun call(method: String, payload: JSONObject): JSONObject = rpc(method, JSONObject().put("request", payload))
+    fun command(sessionId: String, line: String) {
+        val value = rpc("commands/execute", JSONObject().put("agentId", sessionId).put("line", line).put("submittedAttachments", JSONArray()))
+        check(value.optJSONObject("result")?.optString("kind") == "success") { "桌宠会话权限设置未生效，请检查主对话的权限预设" }
+    }
+    private fun rpc(method: String, args: JSONObject): JSONObject {
+        require(method in setOf("session/create", "session/prompt", "commands/execute"))
         val connection = URL("http", base.host, base.port, "/api/$method").openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"; connection.doOutput = true; connection.instanceFollowRedirects = false
@@ -271,7 +282,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             val basic = java.util.Base64.getEncoder().encodeToString("${access.username}:${access.password}".toByteArray(Charsets.UTF_8))
             connection.setRequestProperty("Authorization", "Basic $basic")
             authCookie.takeIf { it.isNotEmpty() }?.let { connection.setRequestProperty("Cookie", it) }
-            val body = JSONObject().put("type", "client-request").put("rpcId", java.util.UUID.randomUUID().toString()).put("method", method).put("payload", JSONObject().put("args", JSONObject().put("request", payload)))
+            val body = JSONObject().put("type", "client-request").put("rpcId", java.util.UUID.randomUUID().toString()).put("method", method).put("payload", JSONObject().put("args", args))
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             check(connection.responseCode in 200..299) { "本机对话服务连接失败，请检查服务状态" }
             val bytes = connection.inputStream.use { input ->
@@ -320,6 +331,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                     val event = value.optJSONObject("event") ?: return
                     val data = event.optJSONObject("data") ?: return
                     when (event.optString("type")) {
+                        "approval/asked" -> runCatching { onQuestion("助手正在请求操作权限，请到主对话查看并决定是否允许。") }
                         "tool/call" -> {
                             val callId = data.optString("callId")
                             val name = data.optString("name")
@@ -387,7 +399,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             failure.get()?.let { error(it) }
             val raw = answer.get() ?: if (images.get().isNotEmpty()) "[图片]" else error("模型没有返回文字，请检查主对话")
             val parsed = CompanionBubbleChatPolicy.parseInlineImages(raw)
-            return CompanionBubbleChat.Reply(CompanionBubbleChatPolicy.validateMessage(parsed.text), (images.get() + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, readCitations.get() + citations.get()), successfulTools.toSet())
+            return CompanionBubbleChat.Reply(parsed.text, (images.get() + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, readCitations.get() + citations.get()), successfulTools.toSet())
         } finally {
             socket.cancel()
         }
