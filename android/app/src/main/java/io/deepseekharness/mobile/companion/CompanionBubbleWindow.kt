@@ -50,6 +50,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 if (closed || request != generation) return@post
                 busy = false
                 result.onSuccess {
+                    CompanionStore(context).petRoleplayDirect = false
                     history.clear(); draft = ""; lastError = null
                     show("已接续主对话会话；主对话正文不会复制到桌宠。现在可以继续发送消息。")
                 }.onFailure {
@@ -73,15 +74,19 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val panel = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
         }
-        val knowledgeAllowed = CompanionStore(context).knowledgeModelAccess
+        val settingsStore = CompanionStore(context)
+        val directMode = settingsStore.petRoleplayDirect
+        val knowledgeAllowed = settingsStore.knowledgeModelAccess
         val accessBadge = TextView(context).apply {
-            text = if (knowledgeAllowed) "资料：已授权，可由 Agent 按需检索（与 Shizuku 独立）" else "资料：未授权，点击打开资料设置"
+            text = if (directMode) "DeepSeek 角色直连 · 不调用资料和工具 · 点击切换" else "Agent 模式 · ${if (knowledgeAllowed) "资料已授权" else "资料未授权"} · 点击切换"
             textSize = 11f; setTextColor(if (knowledgeAllowed) Color.rgb(42, 104, 83) else Color.rgb(126, 78, 44))
             setPadding(dp(12), dp(5), dp(12), dp(5))
             contentDescription = text
             setOnClickListener {
-                context.startActivity(Intent(context, CompanionActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                if (!busy) {
+                    settingsStore.petRoleplayDirect = !directMode
+                    hide(); show()
+                }
             }
         }
         panel.addView(accessBadge)
@@ -255,9 +260,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val continueButton = TextView(context).apply {
             text = "主对话"; textSize = 13f; setPadding(dp(4), dp(12), dp(4), dp(12))
             contentDescription = "在主对话继续桌宠会话"
-            isEnabled = !busy && chat.snapshot(history) != null
+            isEnabled = !busy && !directMode && chat.canHandoff()
             setOnClickListener {
-                if (!busy) chat.snapshot(history)?.sessionId?.let { id -> hide(); openSession(id) }
+                if (!busy && !directMode && chat.canHandoff()) chat.snapshot(history)?.sessionId?.let { id -> hide(); openSession(id) }
             }
         }
         val newTopic = TextView(context).apply {
@@ -330,12 +335,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         memoryAllowed && SemanticControl(context).memoryEnabled,
                         knowledgeAllowed && SemanticControl(context).enabled,
                     )
-                    chat.reply(prior, scope, memoryAllowed, knowledgeAllowed) { partial ->
+                    val onPartial: (String) -> Unit = { partial ->
                         if (acceptingPartials.get()) {
                             latestPartial.set(partial)
                             if (partialScheduled.compareAndSet(false, true)) handler.post { renderPartial() }
                         }
                     }
+                    if (directMode) chat.directReply(prior, onPartial) else chat.reply(prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
                 }
                 handler.post {
                     if (closed || request != generation) return@post
@@ -369,7 +375,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         lastError = status.text.toString()
                         status.visibility = android.view.View.VISIBLE
                     }
-                    if (samePanel) { continueButton.isEnabled = chat.snapshot(history) != null; newTopic.isEnabled = history.isNotEmpty() || lastError != null }
+                    if (samePanel) { continueButton.isEnabled = !directMode && chat.canHandoff(); newTopic.isEnabled = history.isNotEmpty() || lastError != null }
                     if (!samePanel && root != null) { hide(); show() }
                     panel.post { positionUpdater?.invoke() }
                 }

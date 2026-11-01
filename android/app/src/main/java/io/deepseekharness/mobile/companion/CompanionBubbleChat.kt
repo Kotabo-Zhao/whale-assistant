@@ -130,6 +130,17 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
     fun snapshot(messages: List<Message>): CompanionBubbleHistory.Snapshot? =
         sessionId?.let { id -> sessionScope?.let { CompanionBubbleHistory.Snapshot(id, it, messages.toList()) } }
 
+    fun canHandoff(): Boolean = sessionId?.startsWith("session-") == true
+
+    fun directReply(history: List<Message>, onPartial: (String) -> Unit): Reply {
+        val card = CompanionPersonaStore(context).active()
+        val result = PetDirectChat(context).reply(card, history, onPartial)
+        if (sessionId?.startsWith("pet-direct-") != true) sessionId = "pet-direct-${java.util.UUID.randomUUID()}"
+        sessionScope = CompanionBubbleChatPolicy.memoryDigest("pet-direct")
+        sessionAccess = null
+        return Reply(result, emptyList(), emptyList())
+    }
+
     fun reply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit = {}): Reply {
         require(history.isNotEmpty() && history.size <= 20 && history.last().role == "user")
         val access = runCatching { RuntimeHost.controllerOrNull()?.openHarnessAccess() }.getOrNull()
@@ -138,7 +149,7 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         // An explicitly handed-off session has no pet-local scope yet.  Reuse it once, then
         // bind it to the current capability scope; a later capability change creates a new
         // session just like a normal pet conversation.
-        val existing = sessionId?.takeIf { (sessionAccess == null || sessionAccess == access) && (sessionScope == null || sessionScope == scope) }
+        val existing = sessionId?.takeIf { it.startsWith("session-") && (sessionAccess == null || sessionAccess == access) && (sessionScope == null || sessionScope == scope) }
         val currentSession = existing ?: client.call("session/create", JSONObject()).getString("sessionId").also {
             sessionId = it
             sessionAccess = access
