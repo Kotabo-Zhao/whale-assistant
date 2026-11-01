@@ -335,9 +335,9 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
     fun sharedRecordId(eventId: String): String? = db.rawQuery(
         "SELECT record_id FROM knowledge_source_events WHERE event_id=? LIMIT 1", arrayOf(eventId)
     ).use { c -> if (c.moveToFirst()) c.getString(0) else null }
-    fun listItems(limit: Int): List<Item> {
-        require(limit in 1..100)
-        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id ORDER BY i.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->
+    fun listItems(limit: Int, offset: Int = 0): List<Item> {
+        require(limit in 1..100 && offset >= 0)
+        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id ORDER BY i.rowid DESC LIMIT ? OFFSET ?", arrayOf(limit.toString(), offset.toString())).use { cursor ->
             val items = mutableListOf<Item>()
             while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4), cursor.getInt(5), if (cursor.isNull(6)) null else cursor.getLong(6)))
             items
@@ -358,6 +358,13 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
         val updated = db.update("understanding_items", values, "id=? AND state=?", arrayOf(id, expected)) == 1
         if (updated && next in setOf("done", "cancelled")) db.execSQL("UPDATE understanding_item_reminders SET enabled=0 WHERE item_id=?", arrayOf(id))
         updated
+    }
+    fun deleteItem(id: String, expectedState: String, expectedRevision: String): Boolean = transaction {
+        val current = item(id) ?: return@transaction false
+        if (current.state != expectedState || CompanionTaskModel.revision(current) != expectedRevision) return@transaction false
+        db.delete("understanding_item_evidence", "item_id=?", arrayOf(id))
+        db.delete("understanding_item_reminders", "item_id=?", arrayOf(id))
+        db.delete("understanding_items", "id=? AND state=?", arrayOf(id, expectedState)) == 1
     }
     fun setItemReminder(id: String, expected: String, dueAt: Long, now: Long): Boolean = transaction {
         require(expected in setOf("candidate", "open") && CompanionReminderPolicy.isFuture(dueAt, now))

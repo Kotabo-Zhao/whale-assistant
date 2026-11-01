@@ -1,4 +1,4 @@
-.assistant-tasks { display: grid; gap: 14px; max-width: 920px; margin: 0 auto; }
+.assistant-tasks { display: grid; gap: 14px; box-sizing: border-box; width: 100%; max-width: 920px; margin: 0 auto; padding: 12px; }
 .assistant-tasks > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .assistant-tasks h2 { margin: 3px 0; font-size: 1.35rem; }
 .assistant-tasks header p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.6; }
@@ -6,10 +6,13 @@
 .assistant-task-filters button, .assistant-task-actions button { display: inline-flex; align-items: center; min-height: 40px; gap: 5px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius-inner); color: var(--card-ink, var(--ink)); background: var(--surface); cursor: pointer; }
 .assistant-task-filters button[aria-selected="true"] { color: var(--accent, var(--blue)); border-color: var(--accent, var(--blue)); background: var(--blue-soft); }
 .assistant-task-list { display: grid; gap: 10px; }
-.assistant-task-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-card); background: color-mix(in srgb, var(--card-color, var(--surface)) var(--card-opacity, 100%), transparent); }
+.assistant-task-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px; border: 1px solid var(--line); border-left: 4px solid var(--accent, var(--blue)); border-radius: var(--radius-card); background: var(--surface); box-shadow: 0 4px 16px rgba(20, 35, 60, .07); }
 .assistant-task-card > div:first-child { display: grid; min-width: 0; gap: 5px; }
 .assistant-task-card strong, .assistant-task-card small { overflow-wrap: anywhere; }
 .assistant-task-card small { color: var(--card-muted, var(--muted)); }
+.assistant-task-evidence { margin-top: 4px; color: var(--card-muted, var(--muted)); font-size: .82rem; }
+.assistant-task-evidence summary { cursor: pointer; color: var(--accent, var(--blue)); }
+.assistant-task-evidence p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .assistant-task-reminder { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; width: 100%; }
 .assistant-task-reminder label { display: grid; gap: 4px; font-size: .82rem; color: var(--card-muted, var(--muted)); }
 .assistant-task-reminder input, .assistant-task-reminder button { min-height: 40px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface); color: var(--card-ink, var(--ink)); padding: 7px 10px; }

@@ -56,6 +56,9 @@ internal class DeepSeekUnderstandingModel(
         val payload = JSONObject().put("model", model).put("messages", messages).put("temperature", 0)
             .put("max_tokens", 1200).put("response_format", JSONObject().put("type", "json_object"))
         val target = java.net.URI(endpoint)
+        // DeepSeek defaults to thinking mode, which can consume this small extraction
+        // budget before producing JSON. Classification needs the final answer instead.
+        if (target.host == "api.deepseek.com") payload.put("thinking", JSONObject().put("type", "disabled"))
         val builtInHosts = setOf("api.deepseek.com", "api.openai.com", "openrouter.ai", "api.groq.com", "api.x.ai", "api.mistral.ai")
         require(target.scheme == "https" && target.userInfo == null && target.host != null &&
             (allowCustomEndpoint || target.host in builtInHosts))

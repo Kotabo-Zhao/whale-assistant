@@ -97,6 +97,23 @@ class UnderstandingQueueTest {
         }
     }
 
+    @Test fun deletingAnItemChecksRevisionAndRemovesItsReminder() {
+        UnderstandingQueue(file).use { q ->
+            q.setSourceEnabled("app", true)
+            q.ingest("app", "event-delete", "请明天取快递")
+            val claim = q.claim(1)!!
+            assertTrue(q.commitResult(claim, "event-delete", """{"version":1,"claims":[],"items":[{"title":"取快递","evidence_ids":["event-delete"]}]}"""))
+            val item = q.listItems(10).single()
+            assertFalse(q.deleteItem(item.id, item.state, "0".repeat(64)))
+            assertNotNull(q.item(item.id))
+            assertTrue(q.setItemReminder(item.id, item.state, 100_000L, 1L))
+            val updated = q.item(item.id)!!
+            assertTrue(q.deleteItem(updated.id, updated.state, CompanionTaskModel.revision(updated)))
+            assertNull(q.item(item.id))
+            assertTrue(q.desiredItemReminders().isEmpty())
+        }
+    }
+
     @Test fun stagedMigrationCanExportRollbackWithoutChangingLegacy() {
         val original = org.json.JSONObject().put("version", 1).put("items", org.json.JSONArray().put(
             org.json.JSONObject().put("id", UUID.randomUUID().toString()).put("text", "旧记忆").put("source", "user_edit")

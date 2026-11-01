@@ -184,8 +184,10 @@ internal class CompanionDashboard(private val context: Context) {
                     .put("notificationStatus", CompanionReminderHealth.read(context).name)
             }
             "taskList" -> UnifiedUnderstandingStore.open(context).use { data ->
+                val offset = request.optInt("offset", 0).also { require(it >= 0) }
+                val page = data.queue.listItems(100, offset)
                 JSONObject().put("items", JSONArray().apply {
-                    data.queue.listItems(100).forEach { item ->
+                    page.forEach { item ->
                         // The ledger exposes only a stable reference and a current text revision, never the
                         // material itself.  A later Agent read still has to pass its conversation authorization.
                         val sourceRecordId = data.queue.sharedRecordId(item.eventId)
@@ -196,12 +198,22 @@ internal class CompanionDashboard(private val context: Context) {
                         put(JSONObject()
                         .put("id", item.id).put("text", item.title).put("state", item.state)
                         .put("sourceKind", if (item.eventId.startsWith("share:")) "shared_material" else "notification")
+                        .put("sourcePreview", data.queue.sourceEvent(item.eventId)?.second?.take(500) ?: "")
                         .put("sourceRecordId", sourceRecordId ?: JSONObject.NULL)
                         .put("sourceRevision", sourceRevision ?: JSONObject.NULL)
                         .put("reminderStatus", item.reminderStatus).put("reminderAtMs", item.reminderAtMs ?: JSONObject.NULL)
                         .put("revision", CompanionTaskModel.revision(item)))
                     }
-                })
+                }).put("nextOffset", if (page.size == 100) offset + page.size else JSONObject.NULL)
+            }
+            "taskDelete" -> {
+                val id = text("id")
+                val state = text("expectedState")
+                val revision = text("expectedRevision")
+                val deleted = UnifiedUnderstandingStore.open(context).use { it.queue.deleteItem(id, state, revision) }
+                require(deleted) { "事项已变化，请刷新后重试" }
+                runCatching { CompanionReminder(context).removeLinked(id) }
+                success(true)
             }
             "taskUpdate" -> {
                 val id = text("id")
@@ -233,7 +245,7 @@ internal class CompanionDashboard(private val context: Context) {
                     if (reminderAtMs != null) runCatching { UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(changed.id, reminderAtMs, changed.reminderRevision) } }
                     throw IllegalStateException("事项已更新，但关联提醒未能安排；已撤销本次提醒状态", e)
                 }
-                success(true)
+                success(true).put("revision", CompanionTaskModel.revision(changed))
             }
             "quietHoursSet" -> {
                 val start = request.getInt("start"); val end = request.getInt("end")

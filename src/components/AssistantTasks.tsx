@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, CircleDot, RefreshCw, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleDot, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { runtimeBridge } from '../platform/native'
 import { companionRows, type CompanionRequest, type CompanionRow } from '../platform/companion'
 import './AssistantTasks.css'
@@ -31,6 +31,7 @@ export function AssistantTasks() {
   const [revisionToken, setRevisionToken] = useState(0)
   const [reminderFor, setReminderFor] = useState<string | null>(null)
   const [reminderAt, setReminderAt] = useState(() => localDateTime())
+  const [nextOffset, setNextOffset] = useState<number | null>(null)
 
   useEffect(() => {
     let active = true
@@ -38,7 +39,7 @@ export function AssistantTasks() {
     const readDashboard = (runtimeBridge as { companionDashboard?: (request: { operation: 'taskList'; query: string }) => Promise<Record<string, unknown>> }).companionDashboard
     if (!readDashboard) { setMessage('无法读取事项；不会把读取失败显示成没有事项。'); setLoading(false); return () => { active = false } }
     Promise.resolve(readDashboard({ operation: 'taskList', query: '' })).then(result => {
-      if (active) setItems(companionRows(result.items))
+      if (active) { setItems(companionRows(result.items)); setNextOffset(typeof result.nextOffset === 'number' ? result.nextOffset : null) }
     }).catch(() => {
       if (active) setMessage('无法读取事项；不会把读取失败显示成没有事项。')
     }).finally(() => { if (active) setLoading(false) })
@@ -67,7 +68,7 @@ export function AssistantTasks() {
     const request: CompanionRequest = { operation: 'taskUpdate', id: row.id, expectedState, expectedRevision, state }
     runtimeBridge.companionDashboard(request).then(result => {
       if (result.ok !== true) throw new Error('not updated')
-      setItems(current => current.map(item => item.id === row.id ? { ...item, state } : item))
+      setItems(current => current.map(item => item.id === row.id ? { ...item, state, revision: result.revision ?? item.revision } : item))
       setMessage(state === 'open' ? '事项已标记为待处理。' : state === 'done' ? '事项已标记为完成；关联提醒已失效。' : '事项已取消；关联提醒已失效。')
     }).catch(() => setMessage('事项已变化或更新失败，请刷新后重试。'))
       .finally(() => setBusyId(null))
@@ -83,11 +84,30 @@ export function AssistantTasks() {
     const request: CompanionRequest = { operation: 'taskUpdate', id: row.id, expectedState, expectedRevision, reminderAtMs }
     runtimeBridge.companionDashboard(request).then(result => {
       if (result.ok !== true) throw new Error('not scheduled')
-      setItems(current => current.map(item => item.id === row.id ? { ...item, state: 'open', reminderAtMs } : item))
+      setItems(current => current.map(item => item.id === row.id ? { ...item, state: 'open', reminderAtMs, revision: result.revision ?? item.revision } : item))
       setReminderFor(null)
       setMessage('事项已标记为待处理，并已交给系统安排提醒；系统省电可能延迟投递。')
     }).catch(() => setMessage('事项已变化或提醒无法安排；本次提醒状态已撤销，请刷新后重试。'))
       .finally(() => setBusyId(null))
+  }
+
+  const remove = (row: CompanionRow): void => {
+    const expectedRevision = revision(row)
+    if (!validState(row.state) || expectedRevision === null || busyId !== null) { setMessage('事项信息已变化，请刷新后再操作。'); return }
+    if (!window.confirm('删除这条事项及关联提醒？')) return
+    setBusyId(row.id); setMessage('')
+    runtimeBridge.companionDashboard({ operation: 'taskDelete', id: row.id, expectedState: row.state, expectedRevision }).then(result => {
+      if (result.ok !== true) throw new Error('not deleted')
+      setItems(current => current.filter(item => item.id !== row.id)); setNextOffset(value => value === null ? null : Math.max(0, value - 1)); setMessage('事项已删除。')
+    }).catch(() => setMessage('事项已变化或删除失败，请刷新后重试。')).finally(() => setBusyId(null))
+  }
+  const loadMore = (): void => {
+    if (nextOffset === null || loading || busyId !== null) return
+    setLoading(true)
+    runtimeBridge.companionDashboard({ operation: 'taskList', query: '', offset: nextOffset }).then(result => {
+      setItems(current => [...current, ...companionRows(result.items).filter(row => !current.some(item => item.id === row.id))])
+      setNextOffset(typeof result.nextOffset === 'number' ? result.nextOffset : null)
+    }).catch(() => setMessage('无法加载更多事项，请稍后重试。')).finally(() => setLoading(false))
   }
 
   return <section className="assistant-tasks" aria-labelledby="assistant-tasks-title">
@@ -97,9 +117,10 @@ export function AssistantTasks() {
     {loading && <p role="status">正在读取事项…</p>}
     {message && <p role="status">{message}</p>}
     {!loading && !message.startsWith('无法读取') && visible.length === 0 && <p>当前筛选下没有事项。</p>}
-    <div className="assistant-task-list">{visible.map(row => <article key={row.id} className="assistant-task-card"><div><strong>{row.text}</strong><small>{label(row.state)} · {row.sourceKind === 'shared_material' ? '资料整理' : '通知整理'}{sourceReference(row) !== null ? ' · 已关联资料' : ''}{typeof row.reminderAtMs === 'number' ? ` · 提醒 ${new Date(row.reminderAtMs).toLocaleString()}` : ''}</small></div>
-      <div className="assistant-task-actions">{sourceReference(row) !== null && <button type="button" disabled={busyId !== null} onClick={() => askSource(row)}>用关联资料提问</button>}{row.state === 'candidate' && <button type="button" disabled={busyId !== null} onClick={() => update(row, 'open')}><CircleDot size={16} />标记待处理</button>}{row.state === 'open' && <button type="button" disabled={busyId !== null} onClick={() => update(row, 'done')}><CheckCircle2 size={16} />完成</button>}{(row.state === 'candidate' || row.state === 'open') && <button type="button" disabled={busyId !== null} onClick={() => { setReminderFor(row.id); setReminderAt(localDateTime()) }}>安排提醒</button>}{(row.state === 'candidate' || row.state === 'open') && <button type="button" disabled={busyId !== null} onClick={() => update(row, 'cancelled')}><XCircle size={16} />取消</button>}</div>
+    <div className="assistant-task-list">{visible.map(row => <article key={row.id} className="assistant-task-card"><div><strong>{row.text}</strong><small>{label(row.state)} · {row.sourceKind === 'shared_material' ? '资料整理' : '通知整理'}{sourceReference(row) !== null ? ' · 已关联资料' : ''}{typeof row.reminderAtMs === 'number' ? ` · 提醒 ${new Date(row.reminderAtMs).toLocaleString()}` : ''}</small>{typeof row.sourcePreview === 'string' && row.sourcePreview && <details className="assistant-task-evidence"><summary>查看识别依据</summary><p>{row.sourcePreview}</p></details>}</div>
+      <div className="assistant-task-actions">{sourceReference(row) !== null && <button type="button" disabled={busyId !== null} onClick={() => askSource(row)}>用关联资料提问</button>}{row.state === 'candidate' && <button type="button" disabled={busyId !== null} onClick={() => update(row, 'open')}><CircleDot size={16} />标记待处理</button>}{row.state === 'open' && <button type="button" disabled={busyId !== null} onClick={() => update(row, 'done')}><CheckCircle2 size={16} />完成</button>}{(row.state === 'candidate' || row.state === 'open') && <button type="button" disabled={busyId !== null} onClick={() => { setReminderFor(row.id); setReminderAt(localDateTime()) }}>安排提醒</button>}{(row.state === 'candidate' || row.state === 'open') && <button type="button" disabled={busyId !== null} onClick={() => update(row, 'cancelled')}><XCircle size={16} />取消</button>}<button type="button" disabled={busyId !== null} onClick={() => remove(row)} aria-label={`删除事项：${row.text}`}><Trash2 size={16} />删除</button></div>
       {reminderFor === row.id && <form className="assistant-task-reminder" onSubmit={event => { event.preventDefault(); schedule(row) }}><label>提醒时间<input type="datetime-local" required value={reminderAt} onChange={event => setReminderAt(event.target.value)} /></label><button type="submit" disabled={busyId !== null}>确认安排</button><button type="button" disabled={busyId !== null} onClick={() => setReminderFor(null)}>返回</button></form>}
     </article>)}</div>
+    {nextOffset !== null && <button type="button" className="button button-secondary" disabled={loading || busyId !== null} onClick={loadMore}>加载更多事项</button>}
   </section>
 }

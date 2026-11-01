@@ -36,6 +36,20 @@ it('事项读取失败不伪装成空清单', async () => {
   expect(screen.queryByText('当前筛选下没有事项。')).not.toBeInTheDocument()
 })
 
+it('事项卡片展示依据并按当前版本删除', async () => {
+  const revision = 'd'.repeat(64)
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'taskList'
+    ? { items: [{ id: 'task-delete', text: '取快递', state: 'candidate', sourceKind: 'notification', sourcePreview: '包裹已到站，请取件', revision }] }
+    : { ok: true }))
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<AssistantTasks />)
+  expect(await screen.findByText('包裹已到站，请取件')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '删除事项：取快递' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'taskDelete', id: 'task-delete', expectedState: 'candidate', expectedRevision: revision }))
+  await waitFor(() => expect(screen.queryByText('取快递')).not.toBeInTheDocument())
+  confirm.mockRestore()
+})
+
 it('安排提醒要求用户提交未来时间并沿用读取时的版本', async () => {
   const revision = 'b'.repeat(64)
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'taskList'
