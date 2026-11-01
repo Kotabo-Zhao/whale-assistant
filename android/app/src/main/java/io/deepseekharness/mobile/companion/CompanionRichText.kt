@@ -14,6 +14,8 @@ import android.text.style.URLSpan
 
 /** Small offline renderer for the chat formats the model is asked to use. */
 internal object CompanionRichText {
+    private val richSyntax = Regex("(?m)^\\s*(?:#{1,6}\\s|>\\s|[-*+]\\s|\\d+[.)]\\s|```|\\|)|\\*\\*|__|~~|`|\\[.+?\\]\\(")
+    fun requiresRichRenderer(text: String): Boolean = '$' in text || "\\(" in text || "\\[" in text || richSyntax.containsMatchIn(text)
     private val inline = Regex("""(\*\*[^\n*]+\*\*|(?<![\p{L}\p{N}_])__[^\n_]+__(?![\p{L}\p{N}_])|~~[^\n~]+~~|`[^`\n]+`|\$[^$\n]+\$|\\\([^\n]+?\\\)|\[[^\]\n]+\]\(https?://[^\s)]+\)|(?<!\*)\*[^*\n]+\*(?!\*)|(?<![\p{L}\p{N}_])_[^_\n]+_(?![\p{L}\p{N}_]))""")
     private val latexSymbols = mapOf(
         "\\alpha" to "α", "\\beta" to "β", "\\gamma" to "γ", "\\delta" to "δ", "\\epsilon" to "ε",
@@ -140,13 +142,13 @@ internal object CompanionRichText {
     private fun latex(value: String): String {
         var rendered = value.trim()
         repeat(3) {
-            rendered = Regex("\\\\frac\\{([^{}]+)}\\{([^{}]+)}").replace(rendered) { "${it.groupValues[1]}⁄${it.groupValues[2]}" }
-            rendered = Regex("\\\\sqrt\\{([^{}]+)}").replace(rendered) { "√${it.groupValues[1]}" }
+            rendered = Regex("\\\\frac\\{([^{}]+)\\}\\{([^{}]+)\\}").replace(rendered) { "${it.groupValues[1]}⁄${it.groupValues[2]}" }
+            rendered = Regex("\\\\sqrt\\{([^{}]+)\\}").replace(rendered) { "√${it.groupValues[1]}" }
         }
         latexSymbols.forEach { (latex, glyph) -> rendered = rendered.replace(latex, glyph) }
-        rendered = Regex("\\\\(?:text|mathrm|mathbf|mathit|operatorname)\\{([^{}]*)}").replace(rendered) { it.groupValues[1] }
-        rendered = Regex("\\^\\{([^{}]+)}").replace(rendered) { superscript(it.groupValues[1]) }
-        rendered = Regex("_\\{([^{}]+)}").replace(rendered) { subscript(it.groupValues[1]) }
+        rendered = Regex("\\\\(?:text|mathrm|mathbf|mathit|operatorname)\\{([^{}]*)\\}").replace(rendered) { it.groupValues[1] }
+        rendered = Regex("\\^\\{([^{}]+)\\}").replace(rendered) { superscript(it.groupValues[1]) }
+        rendered = Regex("_\\{([^{}]+)\\}").replace(rendered) { subscript(it.groupValues[1]) }
         rendered = Regex("\\^([A-Za-z0-9+=()\\-])").replace(rendered) { superscript(it.groupValues[1]) }
         rendered = Regex("_([A-Za-z0-9+=()\\-])").replace(rendered) { subscript(it.groupValues[1]) }
         return rendered.replace("\\left", "").replace("\\right", "").replace("\\displaystyle", "")

@@ -106,3 +106,10 @@ libraries). `git` is GPL-2.0; the unabridged GPL-2.0 text already shipped as
 obligation is discharged under the same terms stated for the other GPL-2.0
 artifacts above and in `docs/RELEASE_CHECKLIST.md`. Stating the upstream URL and
 package version alone is not a corresponding-source offer.
+
+## Offline companion Markdown and math
+
+The floating companion uses markdown-it 14.1.0, markdown-it-texmath 1.0.0,
+and KaTeX 0.16.22 for offline Markdown and mathematical typesetting. These
+projects are distributed under the MIT license; their license texts are included
+in `assets/legal/licenses/` in the APK.

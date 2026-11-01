@@ -31,6 +31,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var draft = ""
     private var lastError: String? = null
     private var positionUpdater: (() -> Unit)? = null
+    private val richViews = mutableListOf<android.webkit.WebView>()
     val visible: Boolean get() = root != null
 
     fun toggle() { if (visible) hide() else show() }
@@ -87,7 +88,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val content = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = if (showAbove) Gravity.BOTTOM else Gravity.TOP }
         val scroll = ScrollView(context).apply { addView(content); isFillViewport = true }
         panel.addView(scroll, LinearLayout.LayoutParams(-1, minOf(dp(460), (metrics.heightPixels * 0.55f).toInt())))
-        fun styleBubble(view: TextView, isUser: Boolean) {
+        fun styleBubble(view: android.view.View, isUser: Boolean) {
             view.setPadding(dp(13), dp(9), dp(13), dp(9))
             view.background = GradientDrawable().apply {
                 setColor(if (isUser) Color.rgb(205, 235, 255) else Color.rgb(255, 248, 252))
@@ -108,6 +109,48 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             content.addView(view, LinearLayout.LayoutParams(-2, -2).apply { gravity = if (isUser) Gravity.END else Gravity.START; bottomMargin = dp(6) })
             if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
             return view
+        }
+        fun renderCompleted(view: TextView, message: String, isUser: Boolean) {
+            // Ordinary short bubbles remain lightweight native text. Formulae and tables need
+            // a proper offline renderer; streaming continues in the native TextView until done.
+            if (!CompanionRichText.requiresRichRenderer(message)) return
+            val web = android.webkit.WebView(context).apply {
+                setBackgroundColor(Color.TRANSPARENT)
+                isVerticalScrollBarEnabled = false; isHorizontalScrollBarEnabled = false
+                settings.javaScriptEnabled = true
+                settings.blockNetworkLoads = true
+                settings.allowContentAccess = false
+                settings.allowFileAccess = true
+                settings.allowFileAccessFromFileURLs = false
+                settings.allowUniversalAccessFromFileURLs = false
+                styleBubble(this, isUser)
+                webViewClient = object : android.webkit.WebViewClient() {
+                    override fun shouldOverrideUrlLoading(v: android.webkit.WebView, request: android.webkit.WebResourceRequest): Boolean {
+                        if (request.isForMainFrame && request.url.scheme in setOf("http", "https")) {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, request.url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                        }
+                        return true
+                    }
+                    override fun onPageFinished(v: android.webkit.WebView, url: String) {
+                        val quoted = org.json.JSONObject.quote(message).replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+                        v.evaluateJavascript("renderMessage($quoted)") { value ->
+                            val height = value.toIntOrNull() ?: return@evaluateJavascript
+                            if (root !== panel || height <= 0) return@evaluateJavascript
+                            v.layoutParams = v.layoutParams.apply { this.height = dp(height + 22) }
+                            view.visibility = android.view.View.GONE
+                            v.visibility = android.view.View.VISIBLE
+                            if (atBottom()) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
+                            panel.post { positionUpdater?.invoke() }
+                        }
+                    }
+                }
+                visibility = android.view.View.INVISIBLE
+            }
+            richViews.add(web)
+            content.addView(web, content.indexOfChild(view) + 1, LinearLayout.LayoutParams(width - dp(45), dp(1)).apply {
+                gravity = if (isUser) Gravity.END else Gravity.START; bottomMargin = dp(6)
+            })
+            web.post { if (root === panel) web.loadUrl("file:///android_asset/rich-chat/index.html") }
         }
         fun imageBubble(id: String) {
             if (!id.matches(Regex("sha256:[a-f0-9]{64}"))) return
@@ -195,7 +238,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         if (history.isEmpty()) bubble(opening ?: "嗨，想聊什么？", false)
         else history.takeLast(8).forEach {
             val parsed = if (it.role == "assistant") CompanionBubbleChatPolicy.parseInlineImages(it.text) else CompanionBubbleChatPolicy.InlineImages(it.text, emptyList())
-            bubble(parsed.text, it.role == "user"); (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (it.role == "assistant") it.citations.take(2).forEach(::citationCard)
+            val user = it.role == "user"
+            bubble(parsed.text, user).also { view -> renderCompleted(view, parsed.text, user) }; (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (!user) it.citations.take(2).forEach(::citationCard)
         }
         val input = EditText(context).apply {
             hint = "说点什么…"; textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
@@ -250,6 +294,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             failedMessage?.let { content.removeView(it) }; failedMessage = null
             lastError = null
             val sentBubble = bubble(message, true)
+            renderCompleted(sentBubble, message, true)
             val streamingBubble = bubble("正在输入…", false)
             busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = false; send.isEnabled = false; input.isEnabled = false; status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
@@ -313,7 +358,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                             }
                         } }
                         draft = ""
-                        if (samePanel) { streamingBubble.text = CompanionRichText.render(answer.text); answer.images.forEach(::imageBubble); answer.citations.take(2).forEach(::citationCard); input.text.clear() }
+                        if (samePanel) { streamingBubble.text = CompanionRichText.render(answer.text); renderCompleted(streamingBubble, answer.text, false); answer.images.forEach(::imageBubble); answer.citations.take(2).forEach(::citationCard); input.text.clear() }
                         status.text = ""; status.visibility = android.view.View.GONE
                     }.onFailure { error ->
                         onState("idle")
@@ -391,6 +436,6 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
     }
     fun followPet() { positionUpdater?.invoke() }
-    fun hide() { previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null }
+    fun hide() { previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
     fun destroy() { closed = true; request++; busy = false; hide(); executor.shutdownNow() }
 }

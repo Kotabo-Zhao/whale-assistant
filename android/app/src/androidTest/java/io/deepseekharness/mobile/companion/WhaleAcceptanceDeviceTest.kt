@@ -14,6 +14,35 @@ import java.io.File
 /** Real share activity and on-device index; uses a named, synthetic user-visible fixture. */
 @RunWith(AndroidJUnit4::class)
 class WhaleAcceptanceDeviceTest {
+    @Test fun offlineRichRendererTypesetsFractionsAndMarkdown() {
+        // Android ICU rejects some regex syntax accepted by desktop JVM; exercise the
+        // native streaming/fallback path before the finished answer enters the WebView.
+        assertTrue(CompanionRichText.render("\$\$\\frac{1}{2}+x^{2}\$\$").toString().contains("1⁄2"))
+        assertTrue(CompanionRichText.requiresRichRenderer("# 标题\n**重点**"))
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val ready = java.util.concurrent.CountDownLatch(1)
+        val output = java.util.concurrent.atomic.AtomicReference<String>()
+        lateinit var view: android.webkit.WebView
+        instrumentation.runOnMainSync {
+            view = android.webkit.WebView(instrumentation.targetContext).apply {
+                settings.javaScriptEnabled = true; settings.blockNetworkLoads = true
+                webViewClient = object : android.webkit.WebViewClient() {
+                    override fun onPageFinished(v: android.webkit.WebView, url: String) {
+                        val sample = org.json.JSONObject.quote("# 标题\n\n**重点**\n\n\\[\\frac{a}{b}+x^2\\]")
+                        v.evaluateJavascript("renderMessage($sample); JSON.stringify({fraction:!!document.querySelector('.frac-line'),bold:!!document.querySelector('strong'),heading:!!document.querySelector('h1')})") {
+                            output.set(it); ready.countDown()
+                        }
+                    }
+                }
+                loadUrl("file:///android_asset/rich-chat/index.html")
+            }
+        }
+        assertTrue("offline renderer did not respond", ready.await(30, java.util.concurrent.TimeUnit.SECONDS))
+        val result = output.get().replace("\\\"", "\"")
+        assertTrue("fraction not typeset: $result", result.contains("\"fraction\":true"))
+        assertTrue("Markdown not rendered: $result", result.contains("\"bold\":true") && result.contains("\"heading\":true"))
+        instrumentation.runOnMainSync { view.destroy() }
+    }
     @Test fun sharedFileShowsResultAndCanBeRetrievedSemantically() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

@@ -59,6 +59,9 @@ def legalAssetSources = [
     'legal/licenses/xterm-addon-fit-LICENSE.txt' : new File(appSourceRoot, 'node_modules/@xterm/addon-fit/LICENSE'),
     'legal/licenses/bge-base-zh-v1.5-MIT.txt'    : new File(appSourceRoot, 'legal/licenses/bge-base-zh-v1.5-MIT.txt'),
     'legal/licenses/lucide-react-LICENSE.txt'    : new File(appSourceRoot, 'node_modules/lucide-react/LICENSE'),
+    'legal/licenses/katex-LICENSE.txt'           : new File(appSourceRoot, 'node_modules/katex/LICENSE'),
+    'legal/licenses/markdown-it-LICENSE.txt'     : new File(appSourceRoot, 'node_modules/markdown-it/LICENSE'),
+    'legal/licenses/markdown-it-texmath-LICENSE.txt': new File(appSourceRoot, 'node_modules/markdown-it-texmath/license.txt'),
     'legal/licenses/proot-GPL-2.0.txt'            : new File(appSourceRoot, 'legal/licenses/proot-GPL-2.0.txt'),
     'legal/licenses/operit2-AGPL-3.0.txt'         : new File(appSourceRoot, 'legal/licenses/operit2-AGPL-3.0.txt'),
     'legal/licenses/operit-terminal-core-LGPL-3.0.txt': new File(appSourceRoot, 'legal/licenses/operit-terminal-core-LGPL-3.0.txt'),
@@ -101,6 +104,15 @@ def bgeModelSha256 = 'b665f3bba56c3119bc76ba131ebcc544d720a7408cb11581bdf354aaa0
 def bgeVocabUrl = 'https://huggingface.co/Xenova/bge-base-zh-v1.5/resolve/main/vocab.txt'
 def bgeVocabSha256 = '45bbac6b341c319adc98a532532882e91a9cefc0329aa57bac9ae761c27b291c'
 def generatedBgeAssetsDirectory = layout.buildDirectory.dir('generated/assets/bgeBaseZh')
+def generatedRichChatAssets = layout.buildDirectory.dir('generated/assets/richChat')
+def generateRichChatAssets = tasks.register('generateRichChatAssets', Sync) {
+    into(generatedRichChatAssets.map { it.dir('rich-chat') })
+    from(new File(appSourceRoot, 'node_modules/katex/dist')) {
+        include 'katex.min.js', 'katex.min.css', 'fonts/*.woff2'
+    }
+    from(new File(appSourceRoot, 'node_modules/markdown-it/dist/markdown-it.min.js'))
+    from(new File(appSourceRoot, 'node_modules/markdown-it-texmath/texmath.js'))
+}
 def downloadBgeBaseAssets = tasks.register('downloadBgeBaseAssets') {
     def outputDirectory = generatedBgeAssetsDirectory
     outputs.dir(outputDirectory)
@@ -179,6 +191,7 @@ android {
         main {
             assets.srcDir(generatedLegalAssetsDirectory)
             assets.srcDir(generatedBgeAssetsDirectory)
+            assets.srcDir(generatedRichChatAssets)
         }
     }
 
@@ -246,6 +259,7 @@ kotlin {
 tasks.named('preBuild').configure {
     dependsOn(generateLegalAssets)
     dependsOn(downloadBgeBaseAssets)
+    dependsOn(generateRichChatAssets)
 }
 
 tasks.configureEach { task ->
