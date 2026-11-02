@@ -1,9 +1,12 @@
 /** 助手管理请求的共享契约；原生仍校验所有字段与数据版本。 */
 export type CompanionRequest =
+  | { operation: 'workerList' | 'screenWatchStatus' | 'screenWatchStop' }
+  | { operation: 'screenWatchSet'; enabled: boolean }
+  | { operation: 'workerControl'; id: string; action: 'cancel' | 'resume' | 'reply' | 'add'; task: string }
   | { operation: 'personaList' }
   | { operation: 'personaActivate' | 'personaDelete'; id: string }
   | { operation: 'personaSave'; card: { id: string; name: string; description: string; personality: string; scenario: string; examples: string; greeting: string; systemPrompt: string; postHistory: string; worldBook: string } }
-  | { operation: 'memoryList' | 'reminderList' | 'taskList'; query?: string; offset?: number }
+  | { operation: 'memoryList' | 'reminderList' | 'taskList' | 'executionList'; query?: string; offset?: number }
   | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; state: 'open' | 'done' | 'cancelled' }
   | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; reminderAtMs: number }
   | { operation: 'taskDelete'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string }

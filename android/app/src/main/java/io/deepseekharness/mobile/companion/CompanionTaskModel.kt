@@ -62,13 +62,14 @@ internal object CompanionTaskModel {
         if (reminder != null && expected !in setOf("candidate", "open")) throw invalid()
         return Update(id, expected, expectedRevision, next, reminder)
     }
-    fun revision(item: UnderstandingQueue.Item): String = CompanionMemorySuppression.digest(listOf(item.id, item.title, item.state, item.eventId, item.reminderStatus, item.reminderRevision, item.reminderAtMs).joinToString("\u0000"))
+    fun revision(item: UnderstandingQueue.Item): String = CompanionMemorySuppression.digest(listOf(item.id, item.title, item.state, item.eventId, item.reminderStatus, item.reminderRevision, item.reminderAtMs, item.assessment).joinToString("\u0000"))
     private fun sourceKindOf(item: UnderstandingQueue.Item): String = if (item.eventId.startsWith("share:")) "shared_material" else "notification"
     private fun public(item: UnderstandingQueue.Item, recordId: String? = null): JSONObject = JSONObject()
         .put("schemaVersion", 1).put("id", item.id).put("title", item.title).put("state", item.state)
         .put("revision", revision(item))
         .put("sourceEventId", item.eventId).put("sourceRecordId", recordId ?: JSONObject.NULL)
         .put("sourceKind", sourceKindOf(item))
+        .put("assessment", item.assessment?.let { JSONObject(it) } ?: JSONObject.NULL)
         .put("reminderState", when (item.reminderStatus) { 1 -> "scheduled"; 2 -> "needs_review"; else -> "none" }).put("reminderRevision", if (item.reminderStatus == 0) JSONObject.NULL else item.reminderRevision)
         .put("reminderAtMs", item.reminderAtMs ?: JSONObject.NULL)
     fun updated(item: UnderstandingQueue.Item, recordId: String? = null): String = public(item, recordId)

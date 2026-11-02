@@ -224,7 +224,7 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
     fun commitResult(claim: Claim, eventId: String, result: String, autoMemory: Boolean = false, suppressedHashes: Set<String> = emptySet()): Boolean = transaction {
         val event = eventFor(claim) ?: return@transaction false
         if (event.first != eventId) return@transaction false
-        UnderstandingModelContract.validate(result, eventId)
+        UnderstandingModelContract.validate(result, eventId, event.second)
         val values = ContentValues().apply { put("job_id", claim.id); put("event_id", eventId); put("body", result) }
         db.insertOrThrow("understanding_results", null, values)
         if (autoMemory) {
@@ -248,10 +248,10 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
             }
             if (added) db.execSQL("UPDATE metadata SET value = CAST(value AS INTEGER) + 1 WHERE key = 'revision'")
         }
-        val items = org.json.JSONObject(result).optJSONArray("items") ?: org.json.JSONArray()
-        for (i in 0 until items.length()) {
-            val title = items.getJSONObject(i).getString("title").trim()
-            if (items.length() == 1 && mergeThreadItem(claim, eventId, title, event.second)) continue
+        val items = UnderstandingModelContract.actionableItems(org.json.JSONObject(result))
+        for (proposal in items) {
+            val title = proposal.getString("title").trim()
+            if (items.size == 1 && mergeThreadItem(claim, eventId, title, event.second)) continue
             val itemId = UUID.randomUUID().toString()
             val item = ContentValues().apply {
                 put("id", itemId); put("job_id", claim.id); put("event_id", eventId)
@@ -328,27 +328,37 @@ internal class UnderstandingQueue(path: File) : AutoCloseable {
         db.delete("understanding_events", "id IN ($placeholders)", args)
         items
     }
-    data class Item(val id: String, val title: String, val state: String, val eventId: String, val reminderStatus: Int = 0, val reminderRevision: Int = 0, val reminderAtMs: Long? = null)
+    private fun assessment(result: String?, title: String): String? {
+        val root = result?.let { org.json.JSONObject(it) } ?: return null
+        if (root.optInt("version") != 2) return null
+        val items = root.optJSONArray("items") ?: return null
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            if (item.optString("title").trim() == title) return item.toString()
+        }
+        return null
+    }
+    data class Item(val id: String, val title: String, val state: String, val eventId: String, val reminderStatus: Int = 0, val reminderRevision: Int = 0, val reminderAtMs: Long? = null, val assessment: String? = null)
     fun item(id: String): Item? = db.rawQuery(
-        "SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.id=?", arrayOf(id)
-    ).use { c -> if (c.moveToFirst()) Item(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getInt(5), if (c.isNull(6)) null else c.getLong(6)) else null }
+        "SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at,(SELECT body FROM understanding_results WHERE job_id=i.job_id) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.id=?", arrayOf(id)
+    ).use { c -> if (c.moveToFirst()) Item(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getInt(5), if (c.isNull(6)) null else c.getLong(6), assessment(c.getString(7), c.getString(1))) else null }
     fun sharedRecordId(eventId: String): String? = db.rawQuery(
         "SELECT record_id FROM knowledge_source_events WHERE event_id=? LIMIT 1", arrayOf(eventId)
     ).use { c -> if (c.moveToFirst()) c.getString(0) else null }
     fun listItems(limit: Int, offset: Int = 0): List<Item> {
         require(limit in 1..100 && offset >= 0)
-        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id ORDER BY i.rowid DESC LIMIT ? OFFSET ?", arrayOf(limit.toString(), offset.toString())).use { cursor ->
+        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at,(SELECT body FROM understanding_results WHERE job_id=i.job_id) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id ORDER BY i.rowid DESC LIMIT ? OFFSET ?", arrayOf(limit.toString(), offset.toString())).use { cursor ->
             val items = mutableListOf<Item>()
-            while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4), cursor.getInt(5), if (cursor.isNull(6)) null else cursor.getLong(6)))
+            while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4), cursor.getInt(5), if (cursor.isNull(6)) null else cursor.getLong(6), assessment(cursor.getString(7), cursor.getString(1))))
             items
         }
     }
     /** The home summary deliberately excludes terminal rows instead of treating history as current work. */
     fun listActionableItems(limit: Int): List<Item> {
         require(limit in 1..20)
-        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.state IN ('candidate','open') ORDER BY i.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->
+        return db.rawQuery("SELECT i.id,i.title,i.state,i.event_id,COALESCE(r.enabled,0),COALESCE(r.revision,0),r.due_at,(SELECT body FROM understanding_results WHERE job_id=i.job_id) FROM understanding_items i LEFT JOIN understanding_item_reminders r ON r.item_id=i.id WHERE i.state IN ('candidate','open') ORDER BY i.rowid DESC LIMIT ?", arrayOf(limit.toString())).use { cursor ->
             val items = mutableListOf<Item>()
-            while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4), cursor.getInt(5), if (cursor.isNull(6)) null else cursor.getLong(6)))
+            while (cursor.moveToNext()) items.add(Item(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getInt(4), cursor.getInt(5), if (cursor.isNull(6)) null else cursor.getLong(6), assessment(cursor.getString(7), cursor.getString(1))))
             items
         }
     }

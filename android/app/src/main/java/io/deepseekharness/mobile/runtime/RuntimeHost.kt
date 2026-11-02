@@ -82,6 +82,7 @@ object RuntimeHost {
         }
 
         override fun onTerminalOutput(sessionId: String, dataBase64: String, suppressPublicOutput: Boolean) {
+            deviceCommandsOrNull()?.onOutput(sessionId, dataBase64)
             dispatch { sink -> sink.onTerminalOutput(sessionId, dataBase64, suppressPublicOutput) }
         }
 

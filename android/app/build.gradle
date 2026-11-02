@@ -48,6 +48,8 @@ def teamSigning = loadTeamSigning()
 
 def appSourceRoot = rootProject.projectDir.parentFile.canonicalFile
 def legalAssetSources = [
+    'legal/licenses/dsh-see-now-LICENSE.txt' : new File(appSourceRoot, 'scripts/runtime-profile/plugins/dsh-mobile-shizuku/lib/see-now-core/LICENSE'),
+    'legal/licenses/dsh-see-now-NOTICE.txt' : new File(appSourceRoot, 'scripts/runtime-profile/plugins/dsh-mobile-shizuku/lib/see-now-core/NOTICE'),
     'legal/LICENSE'                             : new File(appSourceRoot, 'LICENSE'),
     'legal/THIRD_PARTY_NOTICES.md'              : new File(appSourceRoot, 'THIRD_PARTY_NOTICES.md'),
     'legal/licenses/react-LICENSE.txt'           : new File(appSourceRoot, 'node_modules/react/LICENSE'),

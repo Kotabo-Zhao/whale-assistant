@@ -230,6 +230,40 @@ class DeviceBridgeServer(
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
                         return
                     }
+                    if (commandName in setOf("workerRecord", "workerRecordChunk", "workerUi", "superagentSettings", "superagentActors", "screenWatch", "screenWatchFrame")) {
+                        val context = appContext ?: throw RuntimeFailure("DEVICE_BRIDGE_UNAVAILABLE", "服务不可用")
+                        val request = JSONObject(param)
+                        val value = when (commandName) {
+                            "workerRecord" -> { io.deepseekharness.mobile.companion.WorkerDashboardStore(context).put(request); "{}" }
+                            "workerRecordChunk" -> { io.deepseekharness.mobile.companion.WorkerDashboardStore(context).putChunk(request); "{}" }
+                            "superagentSettings" -> io.deepseekharness.mobile.companion.SuperagentSettings(context).runtime().toString()
+                            "superagentActors" -> { io.deepseekharness.mobile.companion.SuperagentSettings(context).setUnapproved(request); "{}" }
+                            "workerUi" -> {
+                                val store = io.deepseekharness.mobile.companion.WorkerDashboardStore(context)
+                                if (request.has("ack")) store.acknowledge(request.getString("ack"))
+                                store.pending().toString()
+                            }
+                            "screenWatch" -> {
+                                val watch = io.deepseekharness.mobile.companion.ScreenWatchAccess(context)
+                                when (request.getString("action")) {
+                                    "start" -> watch.start(request.getString("session"))
+                                    "stop" -> { if (watch.status().getBoolean("active")) watch.requireOwner(request.getString("session")); watch.stop() }
+                                    "status" -> Unit
+                                    else -> throw IllegalArgumentException("unknown action")
+                                }
+                                watch.status().toString()
+                            }
+                            else -> {
+                                val watch = io.deepseekharness.mobile.companion.ScreenWatchAccess(context)
+                                val session = request.getString("session"); watch.requireOwner(session)
+                                val screenshot = runOneShot(DeviceCommand.SCREENSHOT, "")
+                                if (!screenshot.ok || screenshot.truncated) throw RuntimeFailure(screenshot.errorCode ?: "SCREENSHOT_FAILED", "截图失败")
+                                watch.frame(session, screenshot.text)
+                            }
+                        }
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, value, false, null))
+                        return
+                    }
                     if (commandName == "companionNotifications") {
                         if (param.length > 1024) throw RuntimeFailure("NOTIFICATIONS_INPUT_INVALID", "通知查询参数过长")
                         val context = appContext ?: throw RuntimeFailure("NOTIFICATIONS_UNAVAILABLE", "通知服务不可用")

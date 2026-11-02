@@ -183,6 +183,7 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
     private fun persistSharedTasks(job: SharedMemoryJobs.Job, text: String, result: String) {
         val source = "shared_material"
         val eventBody = text.substringAfter("\n\n文档提取内容：\n", text)
+        UnderstandingModelContract.validate(result, job.event, eventBody)
         val inputHash = java.security.MessageDigest.getInstance("SHA-256")
             .digest(CompanionKnowledgeData.utf8("${job.event.length}:${job.event}$eventBody"))
             .joinToString("") { "%02x".format(it.toInt() and 255) }
@@ -201,9 +202,8 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
                 c.moveToFirst() && c.getString(0) == job.event && c.getString(1) == result
             }) { "shared result conflict" }
         }
-        val items = JSONObject(result).optJSONArray("items") ?: JSONArray()
-        for (i in 0 until items.length()) {
-            val title = items.getJSONObject(i).getString("title").trim()
+        for (proposal in UnderstandingModelContract.actionableItems(JSONObject(result))) {
+            val title = proposal.getString("title").trim()
             val id = java.util.UUID.nameUUIDFromBytes("$jobId:$title".toByteArray(Charsets.UTF_8)).toString()
             val item = ContentValues().apply { put("id", id); put("job_id", jobId); put("event_id", job.event); put("title", title); put("state", "candidate") }
             if (db.insertWithOnConflict("understanding_items", null, item, SQLiteDatabase.CONFLICT_IGNORE) != -1L)

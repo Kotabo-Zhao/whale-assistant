@@ -13,8 +13,7 @@
     "./cordis.patch.yml": "./cordis.patch.yml"
   },
   "files": [
-    "lib/index.js",
-    "lib/turn-signal.js",
+    "lib",
     "cordis.patch.yml",
     "package.json"
   ],

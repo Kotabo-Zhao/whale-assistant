@@ -41,6 +41,8 @@ object RuntimePreservePolicy {
         "attachments",
         // 用户技能（dsh-skill-filesystem/lib/index.js:172）。
         "skills",
+        // Worker 输入、派工、跨渠道工单和投递游标是用户数据，必须随会话一同保留。
+        "mobile-workers",
     )
 
     /**

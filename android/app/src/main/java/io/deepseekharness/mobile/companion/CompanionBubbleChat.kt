@@ -10,7 +10,7 @@ import java.net.URL
 
 internal object CompanionBubbleChatPolicy {
     fun personaContext(card: JSONObject): String = PetRoleplayPrompt.character(card, emptyList())
-    fun clarificationGuidance(): String = "桌宠对话需要用户补充信息或做选择时，将具体问题直接写在回复中并结束本轮，等待用户在桌宠中回复；不要调用 ask_user_question，不要猜测用户答案或将提问视为已获许可。收到用户回答后根据前文继续原任务。"
+    fun clarificationGuidance(): String = "需要用户补充信息或做选择时可以调用 ask_user_question，桌宠支持原会话内回答；不要猜测用户答案或将提问视为已获许可。普通聊天中的问句可自然写在回复中。"
     fun capabilityGuidance(): String = "需要访问个人记忆、资料或事项时，先调用 mobile_companion_capabilities 核对实际权限；没有调用该工具或对应资料工具前，不得声称无法访问本地资料。工具调用不需要也不得填写 callerSession，会话身份由工具运行时从当前 Agent 会话自动附带。权限被拒绝时如实说明，不把它当作空结果。"
     fun memoryDigest(value: String): String = java.security.MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 255) }
@@ -113,10 +113,17 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
     private var sessionScope: String? = restored?.scope
     private var clientAccess: HarnessAccess? = null
     private var client: HarnessBubbleClient? = null
-    private var delegatedAgent: CompanionBubbleChat? = null
-    private var continuedMainSession = false
+    private var pending: JSONObject? = restored?.pending?.let(::JSONObject)
+    val pendingUser: String? get() = pending?.optString("user")?.takeIf { it.isNotBlank() }
+    private var continuedMainSession = restored?.continuedMain ?: false
     var onInteractionNeeded: (String) -> Unit = {}
-    fun startNewTopic() { sessionId = null; sessionAccess = null; sessionScope = null; delegatedAgent = null; continuedMainSession = false }
+    var onQuestion: (JSONObject) -> Unit = {}
+    fun answerQuestion(callId: String, answers: JSONArray) {
+        val access = RuntimeHost.controllerOrNull()?.openHarnessAccess() ?: error("本机对话服务未运行")
+        clientFor(access).answerQuestion(requireNotNull(sessionId), callId, answers)
+        pending?.let { PetExecutionStore(context).update(it.getString("requestId"), requireNotNull(sessionId), it.getString("user"), "running") }
+    }
+    fun startNewTopic() { sessionId = null; sessionAccess = null; sessionScope = null; pending = null; continuedMainSession = false }
 
     /** Warms loopback authentication while the chat is opening, before the user presses send. */
     fun prewarm() {
@@ -140,21 +147,17 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         this.sessionId = sessionId
         sessionAccess = null
         sessionScope = null
+        pending = null
         continuedMainSession = true
+        CompanionBubbleHistory(context).save(CompanionBubbleHistory.Snapshot(sessionId, CompanionBubbleChatPolicy.memoryDigest("handoff"), emptyList(), continuedMain = true))
     }
     fun snapshot(messages: List<Message>): CompanionBubbleHistory.Snapshot? =
-        sessionId?.let { id -> sessionScope?.let { CompanionBubbleHistory.Snapshot(id, it, messages.toList()) } }
+        sessionId?.let { id -> sessionScope?.let { CompanionBubbleHistory.Snapshot(id, it, messages.toList(), pending?.toString(), continuedMainSession) } }
 
-    fun handoffSessionId(): String? = delegatedAgent?.handoffSessionId() ?: sessionId?.takeIf { it.startsWith("session-") }
+    fun handoffSessionId(): String? = sessionId?.takeIf { it.startsWith("session-") }
 
     fun fusedReply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit): Reply {
-        if (continuedMainSession || io.deepseekharness.mobile.runtime.RuntimeStore(context).readModelCredential("deepseek").isNullOrBlank())
-            return reply(history, scope, memoryAllowed, knowledgeAllowed, onPartial)
-        val card = CompanionPersonaStore(context).active()
-        val images = mutableListOf<String>()
-        val citations = mutableListOf<Citation>()
-        val result = PetDirectChat(context).reply(card, history, onPartial) delegate@ { task, knowledgeQuery ->
-            if (knowledgeQuery && !knowledgeAllowed) return@delegate "本地资料访问尚未授权，请先在桌宠资料设置中开启；尚未检索资料。"
+        fun harness(): Reply {
             val sink = object : io.deepseekharness.mobile.runtime.RuntimeEventSink {
                 override fun onProgress(snapshot: io.deepseekharness.mobile.runtime.RuntimeStateSnapshot) = Unit
                 override fun onTerminalOutput(sessionId: String, dataBase64: String, suppressPublicOutput: Boolean) = Unit
@@ -163,26 +166,23 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
             val controller = RuntimeHost.acquire(context, sink)
             try {
                 if (runCatching { controller.openHarnessAccess() }.isFailure) {
-                    runCatching { RuntimeHost.ensureDeviceBridge(controller) }
+                    RuntimeHost.ensureDeviceBridge(controller)
                     RuntimeHost.startHarness(controller)
                 }
-                val agent = delegatedAgent ?: CompanionBubbleChat(context).also { delegatedAgent = it }
-                agent.onInteractionNeeded = onInteractionNeeded
-                val original = history.last().text
-                val request = if (original.length > 1_900) original else {
-                    val prior = history.dropLast(1).takeLast(4).joinToString("\n") { "${if (it.role == "user") "用户" else "角色"}：${it.text.take(200)}" }.take(500)
-                    val suggested = task.take((1_850 - original.length - prior.length).coerceAtLeast(0))
-                    "实际用户请求：$original\n相关前文：$prior\n按该请求处理；以下为角色提出的查询建议，不得扩展用户要求：$suggested".take(2_000)
-                }
-                val response = agent.reply(listOf(Message("user", request)), scope, memoryAllowed, knowledgeAllowed, onPartial)
-                images.addAll(response.images); citations.addAll(response.citations)
-                response.text
+                return reply(history, scope, memoryAllowed, knowledgeAllowed, onPartial)
             } finally { RuntimeHost.detachPluginSink(sink) }
         }
+        // Once tools enter the conversation, keep the role and subsequent answers in that same Session.
+        if (handoffSessionId() != null || io.deepseekharness.mobile.runtime.RuntimeStore(context).readModelCredential("deepseek").isNullOrBlank()) return harness()
+        var delegated: Reply? = null
+        val result = PetDirectChat(context).reply(CompanionPersonaStore(context).active(), history, onPartial) { _, knowledgeQuery ->
+            if (knowledgeQuery && !knowledgeAllowed) "本地资料访问尚未授权，请先在桌宠资料设置中开启；尚未检索资料。"
+            else harness().also { delegated = it }.text
+        }
+        delegated?.let { return it }
         if (sessionId?.startsWith("pet-direct-") != true) sessionId = "pet-direct-${java.util.UUID.randomUUID()}"
         sessionScope = CompanionBubbleChatPolicy.memoryDigest("pet-direct")
-        sessionAccess = null
-        return Reply(result, images.distinct().take(6), CompanionBubbleChatPolicy.citedSources(result, citations))
+        return Reply(result, emptyList(), emptyList())
     }
 
     fun reply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit = {}): Reply {
@@ -195,7 +195,8 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         // session just like a normal pet conversation.
         val preset = CompanionStore(context).bubblePermissionPreset
         val effectiveScope = if (continuedMainSession) scope else CompanionBubbleChatPolicy.memoryDigest("$scope|permission=$preset")
-        val existing = sessionId?.takeIf { it.startsWith("session-") && (sessionAccess == null || sessionAccess == access) && (sessionScope == null || sessionScope == effectiveScope) }
+        val existing = sessionId?.takeIf { it.startsWith("session-") && (continuedMainSession || sessionScope == null || sessionScope == effectiveScope) }
+        check(pending == null || existing != null) { "对话权限已变更，请到主对话处理原任务后再开启新话题。" }
         val currentSession = existing ?: client.call("session/create", JSONObject()).getString("sessionId").also {
             sessionId = it
             sessionAccess = access
@@ -223,19 +224,39 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
             else append("本地资料对话访问已关闭，不要查询本地资料。\n")
             append("事项修改先 mobile_task_search 取得 id 和 expectedState，冲突时重新读取。\n")
             if (knowledgeAllowed && SemanticControl(context).enabled) append("可用 mobile_knowledge_hybrid_search，再读取原文核对。\n")
-            append(CompanionBubbleChatPolicy.compressedContext(history)).append('\n')
-            append("请回复最后一条用户消息。\n").append(postHistory)
+            append(CompanionBubbleChatPolicy.compressedContext(history.dropLast(1))).append('\n')
+            append("用户当前请求：").append(CompanionBubbleChatPolicy.validateMessage(history.last().text)).append('\n').append(postHistory)
         } else "$persona\n${CompanionBubbleChatPolicy.clarificationGuidance()}\n用户：${CompanionBubbleChatPolicy.validateMessage(history.last().text)}\n$postHistory\n请回复。"
-        return client.followReplyWithImages(currentSession, onPartial, onInteractionNeeded) {
-            client.call("session/prompt", JSONObject().put("requestId", java.util.UUID.randomUUID().toString()).put("sessionId", currentSession).put("mode", "queue")
-                .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", prompt))))
+        check(pending == null || pendingUser == history.last().text) { "对话还有待恢复的请求，请先恢复原请求或开启新话题。" }
+        val submission = pending ?: JSONObject().put("requestId", java.util.UUID.randomUUID().toString())
+            .put("user", history.last().text).put("prompt", prompt).also { pending = it }
+        // Persist before sending, including on the very first turn. A retry uses the same Host-deduplicated request ID.
+        val store = CompanionBubbleHistory(context)
+        snapshot(history.dropLast(1).takeLast(18))?.let(store::save)
+        val executions = PetExecutionStore(context)
+        fun state(value: String) = executions.update(submission.getString("requestId"), currentSession, submission.getString("user"), value)
+        state("running")
+        val answer = try { client.followReplyWithImages(currentSession, submission.getString("requestId"),
+            { text -> onPartial(text) },
+            { notice -> onInteractionNeeded(notice) },
+            { question -> state("waiting"); onQuestion(question) }, onExecutionState = ::state) {
+            client.call("session/prompt", JSONObject().put("requestId", submission.getString("requestId")).put("sessionId", currentSession).put("mode", "queue")
+                .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", submission.getString("prompt")))))
         }
+        } catch (error: Exception) { state(if (error is BubbleTurnFailed) "failed" else "interrupted"); throw error }
+        state("completed")
+        pending = null
+        snapshot((history + Message("assistant", answer.text, answer.images, answer.citations)).takeLast(18))?.let(store::save)
+        return answer
 
     }
 }
 
+internal class BubbleTurnFailed : IllegalStateException("对话未完成，可到主对话查看原因；不会自动重复执行。")
+
 /** Only ever sends the runtime's temporary Basic credentials to its loopback origin. */
 internal class HarnessBubbleClient(private val access: HarnessAccess) {
+    private val foregroundQuestions = java.util.concurrent.ConcurrentHashMap<String, JSONObject>()
     private val base = java.net.URI(access.url).also {
         require(it.scheme == "http" && it.host == "127.0.0.1" && it.port in 1..65535 && it.userInfo == null)
     }
@@ -278,7 +299,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
         check(value.optJSONObject("result")?.optString("kind") == "success") { "桌宠会话权限设置未生效，请检查主对话的权限预设" }
     }
     private fun rpc(method: String, args: JSONObject): JSONObject {
-        require(method in setOf("session/create", "session/prompt", "commands/execute"))
+        require(method in setOf("session/create", "session/prompt", "session/page", "commands/execute", "userQuestions/answer", "\$events/result"))
         val connection = URL("http", base.host, base.port, "/api/$method").openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"; connection.doOutput = true; connection.instanceFollowRedirects = false
@@ -297,120 +318,149 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             }
             val result = JSONObject(String(bytes, Charsets.UTF_8)).getJSONObject("result")
             if (!result.optBoolean("ok")) error("对话请求失败，请检查主对话中的模型和登录状态")
-            return result.getJSONObject("value")
+            return result.optJSONObject("value") ?: JSONObject().put("accepted", result.opt("value") ?: true)
         } finally { connection.disconnect() }
     }
-    fun followReply(sessionId: String, sendPrompt: () -> Unit): String = followReplyWithImages(sessionId, {}, {}, sendPrompt).text
-    fun followReplyWithImages(sessionId: String, onPartial: (String) -> Unit = {}, onQuestion: (String) -> Unit = {}, sendPrompt: () -> Unit): CompanionBubbleChat.Reply {
-        val ready = java.util.concurrent.CountDownLatch(1)
-        val done = java.util.concurrent.CountDownLatch(1)
-        val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
-        val lastModelFailure = java.util.concurrent.atomic.AtomicReference<String?>(null)
-        val answer = java.util.concurrent.atomic.AtomicReference<String?>(null)
-        val replies = BubbleReplyCollector()
-        val images = java.util.concurrent.atomic.AtomicReference<List<String>>(emptyList())
-        val citations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
-        val readCitations = java.util.concurrent.atomic.AtomicReference<List<CompanionBubbleChat.Citation>>(emptyList())
-        val toolNames = java.util.concurrent.ConcurrentHashMap<String, String>()
-        val successfulTools = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-        val streamId = java.util.UUID.randomUUID().toString()
-        val http = streamingClient
-        val basic = java.util.Base64.getEncoder().encodeToString("${access.username}:${access.password}".toByteArray(Charsets.UTF_8))
-        val request = okhttp3.Request.Builder().url("ws://${base.host}:${base.port}/api/remote.mux")
-            .header("Authorization", "Basic $basic").apply { authCookie.takeIf { it.isNotEmpty() }?.let { header("Cookie", it) } }.build()
-        val socket = http.newWebSocket(request, object : okhttp3.WebSocketListener() {
-            override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
-                val request = JSONObject().put("address", JSONObject().put("kind", "session").put("sessionId", sessionId))
-                webSocket.send(JSONObject().put("type", "open").put("streamId", streamId).put("endpoint", "session/follow")
-                    .put("payload", JSONObject().put("args", JSONObject().put("request", request))).toString())
+    fun answerQuestion(sessionId: String, callId: String, answers: JSONArray) {
+        foregroundQuestions[callId]?.let { delivery ->
+            rpc("\$events/result", JSONObject(delivery.toString()).put("outcome", JSONObject().put("kind", "result").put("value", JSONObject().put("answers", answers))))
+            foregroundQuestions.remove(callId, delivery)
+            return
+        }
+        val result = rpc("userQuestions/answer", JSONObject().put("agentId", sessionId).put("callId", callId)
+            .put("answer", JSONObject().put("answers", answers)))
+        check(result.optBoolean("accepted")) { "问题已结束，请刷新会话后继续。" }
+    }
+
+    fun followReplyWithImages(sessionId: String, requestId: String, onPartial: (String) -> Unit = {},
+        onQuestion: (String) -> Unit = {}, onStructuredQuestion: (JSONObject) -> Unit = {}, onExecutionState: (String) -> Unit = {}, sendPrompt: () -> Unit): CompanionBubbleChat.Reply {
+        val address = JSONObject().put("kind", "session").put("sessionId", sessionId)
+        var latestError = "本机对话连接失败，请检查服务状态"
+        // Reconnect by reloading the Host's authoritative window, never by appending an unknown suffix.
+        repeat(3) { reconnect ->
+            val fold = BubbleSessionStream(requestId)
+            val ready = java.util.concurrent.CountDownLatch(2)
+            val done = java.util.concurrent.CountDownLatch(1)
+            val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
+            var published = ""
+            var shownQuestion: String? = null
+            val streamId = java.util.UUID.randomUUID().toString()
+            val eventsId = "$streamId-events"
+            var eventClient: String? = null
+            fun publish() {
+                val text = fold.text()
+                if (published != text) { published = text; onPartial(text) }
+                fold.question?.takeIf { it.optString("state") == "continued" }?.let { question ->
+                    if (shownQuestion != question.toString()) { shownQuestion = question.toString(); onStructuredQuestion(question) }
+                }
+                if (fold.finished != null) done.countDown()
             }
-            override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
-                try {
-                    require(text.length <= 2_000_000)
-                    val frame = JSONObject(text)
-                    if (frame.optString("streamId") != streamId) return
-                    if (frame.optString("type") == "error" || frame.optString("type") == "end") {
-                        failure.set("本机对话连接中断，请检查服务状态"); ready.countDown(); done.countDown(); return
-                    }
-                    val value = frame.optJSONObject("value") ?: return
-                    if (value.optString("type") == "snapshot") { ready.countDown(); return }
-                    val event = value.optJSONObject("event") ?: return
-                    val data = event.optJSONObject("data") ?: return
-                    when (event.optString("type")) {
-                        "approval/asked" -> runCatching { onQuestion("助手正在请求操作权限，请到主对话查看并决定是否允许。") }
-                        "tool/call" -> {
-                            val callId = data.optString("callId")
-                            val name = data.optString("name")
-                            if (callId.isNotEmpty() && name.isNotEmpty()) toolNames[callId] = name
-                            if (name == "ask_user_question") {
-                                val args = runCatching { JSONObject(data.optString("arguments")) }.getOrNull()
-                                val questions = args?.optJSONArray("questions")
-                                val text = if (questions == null) "需要你回答一个问题。" else (0 until minOf(questions.length(), 3))
-                                    .mapNotNull { questions.optJSONObject(it)?.optString("question")?.takeIf(String::isNotBlank) }
-                                    .joinToString("\n").ifBlank { "需要你回答一个问题。" }
-                                runCatching { onQuestion(text.take(2000)) }
-                            }
-                        }
-                        "llm/retry" -> {
-                            val problem = data.optJSONObject("failure")
-                            val status = problem?.optInt("status", 0) ?: 0
-                            if (status in 500..599) lastModelFailure.set("模型服务暂时不可用（HTTP $status），请稍后重试")
-                        }
-                        "assistant/message", "tool/result" -> {
-                            val content = data.optJSONObject("message")?.optJSONArray("content") ?: return
-                            val parts = (0 until content.length()).mapNotNull { j ->
-                                content.optJSONObject(j)?.takeIf { it.optString("type") == "text" }?.optString("text")
-                            }
-                            if (event.optString("type") == "assistant/message" && parts.isNotEmpty()) {
-                                val message = data.getJSONObject("message")
-                                val id = message.optString("id").ifBlank { "seq:${event.optLong("seq", -1)}" }
-                                val next = replies.put(id, parts)
-                                if (answer.getAndSet(next) != next) runCatching { onPartial(next) }
-                            }
-                            if (event.optString("type") == "tool/result") {
-                                val message = data.getJSONObject("message")
-                                if (!message.optBoolean("isError")) toolNames[message.optString("toolCallId")]?.let { successfulTools.add(it) }
-                                val found = if (message.optBoolean("isError")) emptyList() else parts.flatMap(CompanionBubbleChatPolicy::citationsFromToolResult)
-                                if (found.isNotEmpty()) citations.set((citations.get() + found).distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" })
-                                if (toolNames[message.optString("toolCallId")] == "mobile_knowledge_read" && found.isNotEmpty()) {
-                                    readCitations.set((readCitations.get() + found).distinctBy { it.documentId ?: it.originalId ?: "${it.id}:${it.revision}" })
+            val basic = java.util.Base64.getEncoder().encodeToString("${access.username}:${access.password}".toByteArray(Charsets.UTF_8))
+            val request = okhttp3.Request.Builder().url("ws://${base.host}:${base.port}/api/remote.mux")
+                .header("Authorization", "Basic $basic").apply { authCookie.takeIf { it.isNotEmpty() }?.let { header("Cookie", it) } }.build()
+            val socket = streamingClient.newWebSocket(request, object : okhttp3.WebSocketListener() {
+                override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
+                    webSocket.send(JSONObject().put("type", "open").put("streamId", eventsId).put("endpoint", "\$events")
+                        .put("payload", JSONObject().put("args", JSONObject())).toString())
+                    webSocket.send(JSONObject().put("type", "open").put("streamId", streamId).put("endpoint", "session/follow")
+                        .put("payload", JSONObject().put("args", JSONObject().put("request", JSONObject().put("address", address)
+                            .put("assistantStream", true).put("maxMessages", 100)))).toString())
+                }
+                override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+                    try {
+                        val frame = JSONObject(text)
+                        if (frame.optString("streamId") == eventsId) {
+                            val value = frame.optJSONObject("value") ?: return
+                            when (value.optString("type")) {
+                                "ready" -> { eventClient = value.getString("clientId"); ready.countDown() }
+                                "cancel" -> foregroundQuestions.entries.removeIf { it.value.optString("eventId") == value.optString("eventId") }
+                                "waterfall" -> {
+                                    val delivery = JSONObject().put("clientId", eventClient).put("eventId", value.getString("eventId"))
+                                    if (value.optString("agentId") == sessionId && value.optString("event") == "user-questions/request") {
+                                        val question = value.getJSONObject("request")
+                                        val callId = question.optJSONObject("wait")?.optString("callId") ?: value.getString("eventId")
+                                        foregroundQuestions[callId] = delivery
+                                        onStructuredQuestion(JSONObject(question.toString()).put("callId", callId))
+                                    } else rpc("\$events/result", delivery.put("outcome", JSONObject().put("kind", "next")))
                                 }
                             }
-                            val refs = (0 until content.length()).mapNotNull { j ->
-                                val item = content.optJSONObject(j) ?: return@mapNotNull null
-                                if (item.optString("type") != "image") return@mapNotNull null
-                                val id = item.optJSONObject("attachment")?.optString("attachmentId").orEmpty()
-                                id.takeIf { it.matches(Regex("sha256:[a-f0-9]{64}")) }
-                            }.distinct().take(6)
-                            if (refs.isNotEmpty()) images.set((images.get() + refs).distinct().take(6))
+                            return
                         }
-                        "turn/end" -> {
-                            if (data.optJSONObject("reason")?.optString("kind") != "completed")
-                                failure.set(lastModelFailure.get() ?: "对话未完成，请检查主对话中的模型状态")
-                            done.countDown()
+                        if (frame.optString("streamId") != streamId) return
+                        if (frame.optString("type") in setOf("error", "end")) error("本机对话连接中断")
+                        val value = frame.optJSONObject("value") ?: return
+                        synchronized(fold) {
+                            when (value.optString("type")) {
+                                "snapshot" -> {
+                                    fold.snapshot(value)
+                                    var records = value.getJSONArray("records").objects()
+                                    var more = value.optBoolean("hasMore")
+                                    while (!fold.received && more && records.isNotEmpty()) {
+                                        val page = call("session/page", JSONObject().put("address", address).put("throughSeq", value.getLong("cursor"))
+                                            .put("beforeSeq", records.first().getJSONObject("event").getLong("seq")).put("maxMessages", 100))
+                                        val older = page.getJSONArray("records").objects()
+                                        if (older.isEmpty()) break
+                                        records = older + records
+                                        value.put("records", JSONArray(records)); fold.snapshot(value)
+                                        more = page.optBoolean("hasMore")
+                                    }
+                                    publish(); ready.countDown()
+                                }
+                                "assistant-stream" -> { check(fold.frame(value.getJSONObject("frame"))) { "本机流式连接需要同步" }; publish() }
+                                "event" -> {
+                                    val event = value.getJSONObject("event")
+                                    fold.event(event)
+                                    if (event.optString("type") == "approval/asked") { onExecutionState("permission"); onQuestion("助手正在请求操作权限，请到主对话查看并决定是否允许。") }
+                                    publish()
+                                }
+                            }
                         }
+                    } catch (error: Exception) { failure.set(error.message ?: "本机对话同步失败"); ready.countDown(); done.countDown() }
+                }
+                override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
+                    if (done.count > 0) { failure.set("本机对话连接失败，请检查服务状态"); ready.countDown(); done.countDown() }
+                }
+                override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
+                    if (done.count > 0) { failure.set("本机对话连接已关闭"); ready.countDown(); done.countDown() }
+                }
+            })
+            try {
+                check(ready.await(15, java.util.concurrent.TimeUnit.SECONDS)) { "本机对话连接超时" }
+                failure.get()?.let { error(it) }
+                // Host deduplicates the ID against both the inbox and Session history.
+                if (synchronized(fold) { fold.finished == null }) sendPrompt()
+                check(done.await(600, java.util.concurrent.TimeUnit.SECONDS)) { "回复仍在后台处理，可重新打开桌宠恢复或到主对话查看。" }
+                failure.get()?.let { error(it) }
+                return synchronized(fold) {
+                    if (fold.finished != "completed") throw BubbleTurnFailed()
+                    val calls = mutableMapOf<String, String>()
+                    val tools = mutableSetOf<String>()
+                    val citations = mutableListOf<CompanionBubbleChat.Citation>()
+                    val images = mutableListOf<String>()
+                    for (event in fold.records) {
+                        val data = event.optJSONObject("data") ?: continue
+                        if (data.optInt("turn", -1) != fold.turn) continue
+                        if (event.optString("type") == "tool/call") calls[data.optString("callId")] = data.optString("name")
+                        if (event.optString("type") !in setOf("assistant/message", "tool/result")) continue
+                        val message = data.optJSONObject("message") ?: continue
+                        val parts = message.optJSONArray("content")?.objects().orEmpty()
+                        if (event.optString("type") == "tool/result" && !message.optBoolean("isError")) {
+                            calls[message.optString("toolCallId")]?.let(tools::add)
+                            parts.filter { it.optString("type") == "text" }.forEach { citations.addAll(CompanionBubbleChatPolicy.citationsFromToolResult(it.optString("text"))) }
+                        }
+                        parts.filter { it.optString("type") == "image" }.mapNotNull { it.optJSONObject("attachment")?.optString("attachmentId") }
+                            .filter { it.matches(Regex("sha256:[a-f0-9]{64}")) }.forEach(images::add)
                     }
-                } catch (_: Exception) { failure.set("本机对话数据无效"); ready.countDown(); done.countDown() }
-            }
-            override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
-                failure.set("本机对话连接失败，请检查服务状态"); ready.countDown(); done.countDown()
-            }
-            override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
-                if (done.count > 0) { failure.set("本机对话连接已关闭"); ready.countDown(); done.countDown() }
-            }
-        })
-        try {
-            check(ready.await(15, java.util.concurrent.TimeUnit.SECONDS)) { "本机对话连接超时" }
-            failure.get()?.let { error(it) }
-            sendPrompt()
-            check(done.await(600, java.util.concurrent.TimeUnit.SECONDS)) { "回复超时，请检查主对话中的模型状态" }
-            failure.get()?.let { error(it) }
-            val raw = answer.get() ?: if (images.get().isNotEmpty()) "[图片]" else error("模型没有返回文字，请检查主对话")
-            val parsed = CompanionBubbleChatPolicy.parseInlineImages(raw)
-            return CompanionBubbleChat.Reply(parsed.text, (images.get() + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, readCitations.get() + citations.get()), successfulTools.toSet())
-        } finally {
-            socket.cancel()
+                    val parsed = CompanionBubbleChatPolicy.parseInlineImages(fold.text().ifBlank { if (images.isNotEmpty()) "[图片]" else "本轮已结束，没有文字回复。" })
+                    CompanionBubbleChat.Reply(parsed.text, (images + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, citations), tools)
+                }
+            } catch (error: Exception) {
+                latestError = error.message ?: latestError
+                if (synchronized(fold) { fold.finished != null } || error is InterruptedException || latestError.startsWith("回复仍在后台")) throw error
+                if (reconnect < 2) onQuestion("连接中断，正在恢复原会话…")
+            } finally { foregroundQuestions.clear(); socket.cancel() }
         }
+        error(latestError)
     }
 
     private companion object {

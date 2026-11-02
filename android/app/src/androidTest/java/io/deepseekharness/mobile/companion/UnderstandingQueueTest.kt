@@ -229,4 +229,24 @@ class UnderstandingQueueTest {
             assertFalse(q.itemReminderCurrent(item.id, shifted, paused.reminderRevision))
         }
     }
+
+    @Test fun taskAssessmentFiltersOtherOwnersAndSurvivesReopen() {
+        UnderstandingQueue(file).use { q ->
+            q.setSourceEnabled("app", true)
+            q.ingest("app", "assessment", "请你提交材料；小王负责复核；已完成登记。")
+            val claim = q.claim(1)!!
+            val items = org.json.JSONArray()
+            for ((owner, status, title) in listOf(Triple("user", "required", "提交材料"), Triple("other", "required", "小王负责复核"), Triple("user", "completed", "已完成登记"))) {
+                items.put(org.json.JSONObject().put("title", title).put("owner", owner).put("status", status).put("action", title)
+                    .put("reason", "原文归属判断").put("evidence_quote", title).put("evidence_ids", org.json.JSONArray().put("assessment")))
+            }
+            assertTrue(q.commitResult(claim, "assessment", org.json.JSONObject().put("version", 2).put("claims", org.json.JSONArray()).put("items", items).toString()))
+        }
+        UnderstandingQueue(file).use { q ->
+            val item = q.listItems(10).single()
+            assertEquals("提交材料", item.title)
+            assertEquals("user", org.json.JSONObject(item.assessment!!).getString("owner"))
+            assertEquals(item.assessment, q.item(item.id)!!.assessment)
+        }
+    }
 }

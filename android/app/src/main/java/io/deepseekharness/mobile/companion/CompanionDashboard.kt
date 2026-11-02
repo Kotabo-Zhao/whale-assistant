@@ -58,6 +58,7 @@ internal class CompanionDashboard(private val context: Context) {
                     .put("knowledgeCount", knowledge.search("").length())
                     .put("tasks", JSONArray().apply { tasks.forEach { item -> put(JSONObject()
                         .put("id", item.id).put("text", item.title).put("state", item.state)
+                        .put("assessment", item.assessment?.let { JSONObject(it) } ?: JSONObject.NULL)
                         .put("reminderAtMs", item.reminderAtMs ?: JSONObject.NULL)) } })
                     .put("reminders", reminder.list()).put("recurring", recurring.list())
             }
@@ -187,6 +188,14 @@ internal class CompanionDashboard(private val context: Context) {
                     .put("quietStart", store.quietHoursStart).put("quietEnd", store.quietHoursEnd)
                     .put("notificationStatus", CompanionReminderHealth.read(context).name)
             }
+            "superagentSettings" -> SuperagentSettings(context).status()
+            "superagentSettingsSave" -> SuperagentSettings(context).save(request)
+            "workerList" -> WorkerDashboardStore(context).list()
+            "workerControl" -> WorkerDashboardStore(context).command(request)
+            "screenWatchStatus" -> ScreenWatchAccess(context).status()
+            "screenWatchSet" -> { ScreenWatchAccess(context).enabled(request.getBoolean("enabled")); ScreenWatchAccess(context).status() }
+            "screenWatchStop" -> { ScreenWatchAccess(context).stop(); ScreenWatchAccess(context).status() }
+            "executionList" -> PetExecutionStore(context).page(request.optInt("offset", 0))
             "taskList" -> UnifiedUnderstandingStore.open(context).use { data ->
                 val offset = request.optInt("offset", 0).also { require(it >= 0) }
                 val page = data.queue.listItems(100, offset)
@@ -201,6 +210,7 @@ internal class CompanionDashboard(private val context: Context) {
                         }
                         put(JSONObject()
                         .put("id", item.id).put("text", item.title).put("state", item.state)
+                        .put("assessment", item.assessment?.let { JSONObject(it) } ?: JSONObject.NULL)
                         .put("sourceKind", if (item.eventId.startsWith("share:")) "shared_material" else "notification")
                         .put("sourcePreview", data.queue.sourceEvent(item.eventId)?.second?.take(500) ?: "")
                         .put("sourceRecordId", sourceRecordId ?: JSONObject.NULL)

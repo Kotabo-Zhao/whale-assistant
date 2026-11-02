@@ -2748,7 +2748,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             )}
             {(!shizuku.installed || !shizuku.running) && (
               <button className="button button-secondary" type="button" onClick={onOpenShizuku} disabled={busy !== null}>
-                <ExternalLink size={18} />{t("打开 Shizuku")}</button>
+                <ExternalLink size={18} />{t(shizuku.installed ? "打开 Shizuku" : "安装内置 Shizuku")}</button>
             )}
             {shizuku.installed && shizuku.running && shizuku.permission === 'granted' && !shizuku.connected && (
               <button className="button button-secondary" type="button" onClick={onConnect} disabled={busy !== null}>
@@ -2761,6 +2761,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
           <p className="settings-note">
             {t("Shizuku 提供设备命令和文件操作能力，权限取决于其启动模式。未安装、未授权或断开时，设备工具不可用，不影响 Ubuntu 终端与 Harness。")}
           </p>
+          {!shizuku.installed && <p className="settings-note">{t("已内置官方安装包，无需下载。安装后仍需通过无线调试、电脑 ADB 或 Root 启动 Shizuku。允许安装未知应用后，请返回再次点击安装。")}</p>}
           {shizuku.installed && !shizuku.running && <p className="settings-note">{t('无线调试配对完成后，还需在 Shizuku 应用中点击「启动」；如果启动失败，可关闭再开启无线调试后重试。')}</p>}
         </section>
         </>
@@ -5366,7 +5367,7 @@ export function App() {
       case 'assistant-memory':
         return <CompanionWorkspace initialPanel="memory" />
       case 'assistant-tasks':
-        return <AssistantTasks />
+        return <AssistantTasks onOpenSession={launchHarness} />
       case 'assistant-persona':
         return <CompanionPersona onBack={() => backToView('settings')} />
       case 'terminal':

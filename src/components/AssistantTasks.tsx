@@ -3,6 +3,8 @@ import { CheckCircle2, CircleDot, RefreshCw, Trash2, XCircle } from 'lucide-reac
 import { runtimeBridge } from '../platform/native'
 import { companionRows, type CompanionRequest, type CompanionRow } from '../platform/companion'
 import './AssistantTasks.css'
+import { AssistantWorkers } from './AssistantWorkers'
+import { AssistantExecutions } from './AssistantExecutions'
 
 type TaskState = 'candidate' | 'open' | 'done' | 'cancelled'
 const states: Array<{ id: TaskState | 'all'; label: string }> = [
@@ -22,7 +24,7 @@ const localDateTime = (at = Date.now() + 60 * 60 * 1000): string => {
 }
 
 /** User-facing task ledger backed by the same rows the Agent reads; it never fabricates tasks. */
-export function AssistantTasks() {
+export function AssistantTasks({ onOpenSession }: { onOpenSession?: (id: string) => void }) {
   const [items, setItems] = useState<CompanionRow[]>([])
   const [filter, setFilter] = useState<TaskState | 'all'>('all')
   const [loading, setLoading] = useState(true)
@@ -113,14 +115,29 @@ export function AssistantTasks() {
   return <section className="assistant-tasks" aria-labelledby="assistant-tasks-title">
     <header><div><span className="workspace-kicker">YOUR ASSISTANT</span><h2 id="assistant-tasks-title">事项</h2><p>来自通知或资料整理的待办候选。标题和来源可能不准确，请先核对再完成、取消或设置提醒。</p></div>
       <button className="icon-button" type="button" aria-label="刷新事项" disabled={loading || busyId !== null} onClick={() => setRevisionToken(value => value + 1)}><RefreshCw size={18} /></button></header>
+    {onOpenSession && <AssistantWorkers onOpenSession={onOpenSession} />}
+    {onOpenSession && <AssistantExecutions onOpenSession={onOpenSession} />}
+    <h3>我的待办</h3>
     <div className="assistant-task-filters" role="tablist" aria-label="事项状态筛选">{states.map(state => <button key={state.id} type="button" role="tab" aria-selected={filter === state.id} onClick={() => setFilter(state.id)}>{state.label}</button>)}</div>
     {loading && <p role="status">正在读取事项…</p>}
     {message && <p role="status">{message}</p>}
     {!loading && !message.startsWith('无法读取') && visible.length === 0 && <p>当前筛选下没有事项。</p>}
-    <div className="assistant-task-list">{visible.map(row => <article key={row.id} className="assistant-task-card"><div><strong>{row.text}</strong><small>{label(row.state)} · {row.sourceKind === 'shared_material' ? '资料整理' : '通知整理'}{sourceReference(row) !== null ? ' · 已关联资料' : ''}{typeof row.reminderAtMs === 'number' ? ` · 提醒 ${new Date(row.reminderAtMs).toLocaleString()}` : ''}</small>{typeof row.sourcePreview === 'string' && row.sourcePreview && <details className="assistant-task-evidence"><summary>查看识别依据</summary><p>{row.sourcePreview}</p></details>}</div>
+    <div className="assistant-task-list">{visible.map(row => <article key={row.id} className="assistant-task-card"><div><strong>{row.text}</strong><small>{label(row.state)} · {row.sourceKind === 'shared_material' ? '资料整理' : '通知整理'}{sourceReference(row) !== null ? ' · 已关联资料' : ''}{typeof row.reminderAtMs === 'number' ? ` · 提醒 ${new Date(row.reminderAtMs).toLocaleString()}` : ''}</small>{taskAssessment(row)}{typeof row.sourcePreview === 'string' && row.sourcePreview && <details className="assistant-task-evidence"><summary>查看识别依据</summary><p>{row.sourcePreview}</p></details>}</div>
       <div className="assistant-task-actions">{sourceReference(row) !== null && <button type="button" disabled={busyId !== null} onClick={() => askSource(row)}>用关联资料提问</button>}{row.state === 'candidate' && <button type="button" disabled={busyId !== null} onClick={() => update(row, 'open')}><CircleDot size={16} />标记待处理</button>}{row.state === 'open' && <button type="button" disabled={busyId !== null} onClick={() => update(row, 'done')}><CheckCircle2 size={16} />完成</button>}{(row.state === 'candidate' || row.state === 'open') && <button type="button" disabled={busyId !== null} onClick={() => { setReminderFor(row.id); setReminderAt(localDateTime()) }}>安排提醒</button>}{(row.state === 'candidate' || row.state === 'open') && <button type="button" disabled={busyId !== null} onClick={() => update(row, 'cancelled')}><XCircle size={16} />取消</button>}<button type="button" disabled={busyId !== null} onClick={() => remove(row)} aria-label={`删除事项：${row.text}`}><Trash2 size={16} />删除</button></div>
       {reminderFor === row.id && <form className="assistant-task-reminder" onSubmit={event => { event.preventDefault(); schedule(row) }}><label>提醒时间<input type="datetime-local" required value={reminderAt} onChange={event => setReminderAt(event.target.value)} /></label><button type="submit" disabled={busyId !== null}>确认安排</button><button type="button" disabled={busyId !== null} onClick={() => setReminderFor(null)}>返回</button></form>}
     </article>)}</div>
     {nextOffset !== null && <button type="button" className="button button-secondary" disabled={loading || busyId !== null} onClick={loadMore}>加载更多事项</button>}
   </section>
+}
+
+function taskAssessment(row: CompanionRow) {
+  const value = row.assessment
+  if (!value || typeof value !== 'object') return <small>历史候选 · 责任人尚未核实</small>
+  const assessment = value as Record<string, unknown>
+  return <div className="assistant-task-evidence">
+    <p>责任人：{assessment.owner === 'user' ? '我（模型判断，待核实）' : '待核实'}</p>
+    {typeof assessment.action === 'string' && <p>需要行动：{assessment.action}</p>}
+    {typeof assessment.evidence_quote === 'string' && <blockquote>{assessment.evidence_quote}</blockquote>}
+    {typeof assessment.reason === 'string' && <details><summary>为什么识别为待办</summary><p>{assessment.reason}</p></details>}
+  </div>
 }

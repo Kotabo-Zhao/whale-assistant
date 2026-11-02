@@ -8,7 +8,7 @@ import java.io.File
 
 /** A bounded private copy of recent messages for restoring the pet after service restart. */
 internal class CompanionBubbleHistory(context: Context) {
-    data class Snapshot(val sessionId: String, val scope: String, val messages: List<CompanionBubbleChat.Message>)
+    data class Snapshot(val sessionId: String, val scope: String, val messages: List<CompanionBubbleChat.Message>, val pending: String? = null, val continuedMain: Boolean = false)
     private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "companion-bubble-history-v1.json"))
     private var writable = true
 
@@ -23,10 +23,11 @@ internal class CompanionBubbleHistory(context: Context) {
         try { output = file.startWrite(); output.write(bytes); file.finishWrite(output) }
         catch (e: Exception) { if (output != null) file.failWrite(output); throw e }
     }
-    @Synchronized fun exportArchive(): ByteArray? = load()?.let(::encode)
+    @Synchronized fun exportArchive(): ByteArray? = load()?.copy(pending = null)?.let(::encode)
     /** Never overwrites a current local conversation during restore. */
     @Synchronized fun restoreArchive(bytes: ByteArray): Boolean {
-        val snapshot = decode(bytes)
+        // Imported history is an archive, not permission to submit unfinished work on another installation.
+        val snapshot = decode(bytes).copy(pending = null)
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) { save(snapshot); return true }
         val archive = AtomicFile(File(file.baseFile.parentFile, "companion-bubble-history-import-${java.util.UUID.randomUUID()}.json"))
         var output: java.io.FileOutputStream? = null
@@ -48,9 +49,14 @@ internal class CompanionBubbleHistory(context: Context) {
     }
     companion object {
         fun encode(snapshot: Snapshot): ByteArray {
+            snapshot.pending?.let { value ->
+                val request = JSONObject(value)
+                require(request.getString("requestId").isNotBlank() && request.getString("prompt").isNotBlank())
+                CompanionBubbleChatPolicy.validateMessage(request.getString("user"))
+            }
             require(snapshot.sessionId.isNotBlank() && snapshot.sessionId.length <= 256)
             require(snapshot.scope.matches(Regex("[0-9a-f]{64}")))
-            require(snapshot.messages.size in 2..18 && snapshot.messages.size % 2 == 0)
+            require(snapshot.messages.size in 0..18 && snapshot.messages.size % 2 == 0)
             val rows = JSONArray()
             snapshot.messages.forEachIndexed { index, message ->
                 require(message.role == if (index % 2 == 0) "user" else "assistant")
@@ -68,13 +74,14 @@ internal class CompanionBubbleHistory(context: Context) {
                 val text = if (message.role == "user") CompanionBubbleChatPolicy.validateMessage(message.text) else message.text.also { require(it.isNotBlank() && it.length <= 100_000) }
                 rows.put(JSONObject().put("role", message.role).put("text", text).put("images", JSONArray(message.images)).put("citations", citations))
             }
-            return JSONObject().put("version", 2).put("sessionId", snapshot.sessionId).put("scope", snapshot.scope).put("messages", rows)
+            return JSONObject().put("version", 3).put("sessionId", snapshot.sessionId).put("scope", snapshot.scope).put("messages", rows)
+                .put("pending", snapshot.pending).put("continuedMain", snapshot.continuedMain)
                 .toString().toByteArray(Charsets.UTF_8).also { require(it.size <= 2_000_000) }
         }
         fun decode(bytes: ByteArray): Snapshot {
             require(bytes.size <= 2_000_000)
             val root = JSONObject(Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes)).toString())
-            require(root.getInt("version") in 1..2)
+            require(root.getInt("version") in 1..3)
             val rows = root.getJSONArray("messages")
             val snapshot = Snapshot(root.getString("sessionId"), root.getString("scope"), (0 until rows.length()).map {
                 rows.getJSONObject(it).let { row ->
@@ -83,7 +90,7 @@ internal class CompanionBubbleHistory(context: Context) {
                     } } ?: emptyList()
                     CompanionBubbleChat.Message(row.getString("role"), row.getString("text"), row.optJSONArray("images")?.let { images -> (0 until images.length()).map { images.getString(it) } } ?: emptyList(), citations)
                 }
-            })
+            }, root.optString("pending").takeIf { it.isNotBlank() && it != "null" }, root.optBoolean("continuedMain"))
             encode(snapshot)
             return snapshot
         }

@@ -81,34 +81,43 @@ class HarnessBubbleClientTest {
                 val key = header.lines().first { it.startsWith("Sec-WebSocket-Key:", true) }.substringAfter(':').trim()
                 val accept = Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1").digest((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").toByteArray()))
                 output.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: $accept\r\n\r\n".toByteArray()); output.flush()
+                fun readOpen(): JSONObject {
                 val first = input.read(); val second = input.read(); check(first and 15 == 1)
                 var size = second and 127
                 if (size == 126) size = (input.read() shl 8) or input.read()
                 val mask = ByteArray(4); java.io.DataInputStream(input).readFully(mask)
                 val bytes = ByteArray(size); java.io.DataInputStream(input).readFully(bytes)
-                val open = JSONObject(String(ByteArray(size) { i -> (bytes[i].toInt() xor mask[i % 4].toInt()).toByte() }))
+                return JSONObject(String(ByteArray(size) { i -> (bytes[i].toInt() xor mask[i % 4].toInt()).toByte() }))
+                }
+                val eventsOpen = readOpen()
+                assertEquals("\$events", eventsOpen.getString("endpoint"))
+                val open = readOpen()
                 assertEquals("session/follow", open.getString("endpoint"))
                 assertEquals("one", open.getJSONObject("payload").getJSONObject("args").getJSONObject("request").getJSONObject("address").getString("sessionId"))
                 val id = open.getString("streamId")
-                fun send(value: JSONObject) {
-                    val data = JSONObject().put("type", "item").put("streamId", id).put("value", value).toString().toByteArray()
+                fun send(value: JSONObject, stream: String = id) {
+                    val data = JSONObject().put("type", "item").put("streamId", stream).put("value", value).toString().toByteArray()
                     output.write(0x81); if (data.size < 126) output.write(data.size) else { output.write(126); output.write(data.size shr 8); output.write(data.size and 255) }; output.write(data); output.flush()
                 }
-                send(JSONObject().put("type", "snapshot"))
+                send(JSONObject().put("type", "ready").put("clientId", "client"), eventsOpen.getString("streamId"))
+                assertTrue(open.getJSONObject("payload").getJSONObject("args").getJSONObject("request").getBoolean("assistantStream"))
+                send(JSONObject().put("type", "snapshot").put("records", org.json.JSONArray()).put("cursor", -1).put("hasMore", false))
+                send(JSONObject().put("type", "event").put("event", JSONObject().put("seq", 0).put("type", "turn/start").put("data", JSONObject().put("turn", 1))))
+                send(JSONObject().put("type", "event").put("event", JSONObject().put("seq", 1).put("type", "user/message").put("data", JSONObject().put("source", JSONObject().put("kind", "user").put("rpcId", "request")))))
                 Thread.sleep(100)
                 val text = JSONObject().put("type", "text").put("text", "你好呀")
                 val picture = JSONObject().put("type", "image").put("attachment", JSONObject().put("attachmentId", "sha256:" + "a".repeat(64)))
-                val event = JSONObject().put("type", "assistant/message").put("data", JSONObject().put("message", JSONObject().put("content", org.json.JSONArray().put(text).put(picture))))
+                val event = JSONObject().put("seq", 2).put("type", "assistant/message").put("data", JSONObject().put("turn", 1).put("step", 1).put("message", JSONObject().put("content", org.json.JSONArray().put(text).put(picture))))
                 send(JSONObject().put("type", "event").put("event", event))
                 val toolImage = JSONObject().put("type", "image").put("attachment", JSONObject().put("attachmentId", "sha256:" + "b".repeat(64)))
-                val toolEvent = JSONObject().put("type", "tool/result").put("data", JSONObject().put("message", JSONObject().put("content", org.json.JSONArray().put(toolImage))))
+                val toolEvent = JSONObject().put("seq", 3).put("type", "tool/result").put("data", JSONObject().put("turn", 1).put("message", JSONObject().put("content", org.json.JSONArray().put(toolImage))))
                 send(JSONObject().put("type", "event").put("event", toolEvent))
-                send(JSONObject().put("type", "event").put("event", JSONObject().put("type", "turn/end").put("data", JSONObject().put("reason", JSONObject().put("kind", "completed")))))
+                send(JSONObject().put("type", "event").put("event", JSONObject().put("seq", 4).put("type", "turn/end").put("data", JSONObject().put("turn", 1).put("reason", JSONObject().put("kind", "completed")))))
             }
         }
         try {
             val client = HarnessBubbleClient(HarnessAccess("http://127.0.0.1:${server.localPort}/", "u", "p"))
-            val reply = client.followReplyWithImages("one") {}
+            val reply = client.followReplyWithImages("one", "request") {}
             assertEquals("你好呀", reply.text)
             assertEquals(listOf("sha256:" + "a".repeat(64), "sha256:" + "b".repeat(64)), reply.images)
             work.get(10, TimeUnit.SECONDS)

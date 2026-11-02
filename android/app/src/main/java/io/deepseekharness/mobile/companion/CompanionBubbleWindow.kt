@@ -25,10 +25,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private val chat = CompanionBubbleChat(context, restored)
     private var root: LinearLayout? = null
     private var previewDialog: android.app.AlertDialog? = null
+    private var questionDialog: android.app.AlertDialog? = null
+    private var pendingQuestion: org.json.JSONObject? = null
+    private var liveText = ""
+    private var renderLive: ((String) -> Unit)? = null
     private var request = 0L
     private var busy = false
     private var closed = false
-    private var draft = ""
+    private var draft = chat.pendingUser.orEmpty()
     private var lastError: String? = null
     private var positionUpdater: (() -> Unit)? = null
     private val richViews = mutableListOf<android.webkit.WebView>()
@@ -241,6 +245,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val user = it.role == "user"
             bubble(parsed.text, user).also { view -> renderCompleted(view, parsed.text, user) }; (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (!user) CompanionBubbleChatPolicy.citedSources(parsed.text, it.citations).forEach(::citationCard)
         }
+        if (busy) {
+            chat.pendingUser?.let { bubble(it, true) }
+            val live = bubble(liveText.ifBlank { "正在恢复回复…" }, false)
+            renderLive = { text -> live.text = CompanionRichText.render(text); panel.post { positionUpdater?.invoke() } }
+        }
         val input = EditText(context).apply {
             hint = "回答问题或继续聊天…"; textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
             setText(draft); setSelection(text.length)
@@ -258,7 +267,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             contentDescription = "在主对话继续桌宠会话"
             isEnabled = !busy && chat.handoffSessionId() != null
             setOnClickListener {
-                if (!busy || waitingInMain) chat.handoffSessionId()?.let { id -> hide(); openSession(id) }
+                if (!busy || waitingInMain || pendingQuestion != null) chat.handoffSessionId()?.let { id -> hide(); openSession(id) }
             }
         }
         val newTopic = TextView(context).apply {
@@ -284,6 +293,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f)); footer.addView(send); footer.addView(continueButton); footer.addView(newTopic); footer.addView(TextView(context).apply { text = "×"; textSize = 22f; setPadding(dp(4), dp(5), dp(6), dp(5)); setOnClickListener { hide() } }); panel.addView(footer)
         val status = TextView(context).apply { text = ""; textSize = 12f; setTextColor(Color.rgb(80, 45, 45)); background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(10).toFloat() } }
         panel.addView(status)
+        val answerQuestion = TextView(context).apply {
+            text = "回答助手的问题"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); setTextColor(Color.rgb(35, 91, 140))
+            visibility = if (pendingQuestion != null) android.view.View.VISIBLE else android.view.View.GONE
+            setOnClickListener { showQuestion() }
+        }
+        panel.addView(answerQuestion)
         // Message bubbles always precede the input, regardless of the pet's screen position.
         status.text = if (busy) "正在回复…" else lastError.orEmpty()
         status.visibility = if (busy || lastError != null) android.view.View.VISIBLE else android.view.View.GONE
@@ -297,6 +312,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val sentBubble = bubble(message, true)
             renderCompleted(sentBubble, message, true)
             val streamingBubble = bubble("正在输入…", false)
+            liveText = ""
+            renderLive = { text -> streamingBubble.text = CompanionRichText.render(text); panel.post { positionUpdater?.invoke() } }
             waitingInMain = false
             busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = false; send.isEnabled = false; input.isEnabled = false; status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
@@ -310,6 +327,18 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     panel.post { positionUpdater?.invoke() }
                 }
             } }
+            chat.onQuestion = { question -> handler.post {
+                if (!closed && request == generation) {
+                    pendingQuestion = question
+                    if (root === panel) {
+                        waitingInMain = false
+                        answerQuestion.visibility = android.view.View.VISIBLE
+                        status.text = "需要你回答；回答后会继续原任务。"
+                        continueButton.isEnabled = true
+                        showQuestion()
+                    } else if (root != null) { hide(); show() }
+                }
+            } }
             val prior = (history + CompanionBubbleChat.Message("user", message)).takeLast(19)
             val latestPartial = java.util.concurrent.atomic.AtomicReference<String?>(null)
             val partialScheduled = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -317,12 +346,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             var renderedPartial = false
             fun renderPartial() {
                 val partial = latestPartial.getAndSet(null)
-                if (partial != null && !waitingInMain && !closed && request == generation && root === panel && acceptingPartials.get()) {
-                    val follow = atBottom()
-                    streamingBubble.text = CompanionRichText.render(partial)
-                    status.text = "正在流式输出…"
-                    if (follow) scroll.fullScroll(android.view.View.FOCUS_DOWN)
-                    panel.post { positionUpdater?.invoke() }
+                if (partial != null && !closed && request == generation && acceptingPartials.get()) {
+                    liveText = partial
+                    renderLive?.invoke(partial)
+                    if (root === panel) {
+                        if (pendingQuestion == null) status.text = "正在流式输出…"
+                        if (atBottom()) scroll.fullScroll(android.view.View.FOCUS_DOWN)
+                    }
                     renderedPartial = true
                 }
                 partialScheduled.set(false)
@@ -356,6 +386,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     val samePanel = root === panel
                     busy = false; send.isEnabled = true; input.isEnabled = true
                     result.onSuccess { answer ->
+                        pendingQuestion = null; questionDialog?.dismiss(); questionDialog = null; answerQuestion.visibility = android.view.View.GONE
                         onState("reply")
                         history.add(CompanionBubbleChat.Message("user", message)); history.add(CompanionBubbleChat.Message("assistant", answer.text, answer.images, answer.citations))
                         while (history.size > 18) { history.removeAt(0); history.removeAt(0) }
@@ -446,9 +477,57 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         if (runCatching { wm.addView(panel, params) }.isSuccess) {
             root = panel; positionUpdater = updatePosition
             executor.execute { chat.prewarm() }
+            if (!busy && chat.pendingUser != null) handler.post { if (root === panel && !busy) send.performClick() }
         }
     }
+    /** Reply to the original tool call, without another chat prompt. */
+    private fun showQuestion() {
+        val question = pendingQuestion ?: return
+        if (questionDialog != null) return
+        val form = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 12) }
+        val readAnswers = question.optJSONArray("questions")?.objects().orEmpty().map { row ->
+            form.addView(TextView(context).apply { text = row.optString("question"); textSize = 16f })
+            row.optString("detail").takeIf { it.isNotBlank() }?.let { detail -> form.addView(TextView(context).apply { text = CompanionRichText.render(detail) }) }
+            val options = row.optJSONArray("options")?.objects().orEmpty()
+            val choices = options.map { option -> android.widget.CheckBox(context).apply {
+                text = option.getString("label") + option.optString("description").takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty()
+                form.addView(this)
+            } }
+            if (!row.optBoolean("multiSelect")) choices.forEach { choice -> choice.setOnCheckedChangeListener { _, checked -> if (checked) choices.filter { it !== choice }.forEach { it.isChecked = false } } }
+            val custom = EditText(context).apply { hint = "也可以直接输入回答"; maxLines = 5 }
+            form.addView(custom)
+            val read: () -> org.json.JSONObject = {
+                org.json.JSONObject().put("id", row.getString("id"))
+                    .put("selected", org.json.JSONArray(options.indices.filter { choices[it].isChecked }.map { options[it].getString("label") }))
+                    .apply { custom.text.toString().trim().takeIf { it.isNotEmpty() }?.let { put("custom", it) } }
+            }
+            read
+        }
+        val scroll = ScrollView(context).apply { addView(form) }
+        questionDialog = android.app.AlertDialog.Builder(context).setTitle("助手需要你的回答").setView(scroll)
+            .setNegativeButton("稍后回答", null).setPositiveButton("提交回答", null).create().apply {
+                window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+                setOnDismissListener { questionDialog = null }
+                show()
+                getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val answers = readAnswers.map { it() }
+                    if (answers.any { it.getJSONArray("selected").length() == 0 && it.optString("custom").isBlank() }) {
+                        android.widget.Toast.makeText(context, "请回答每个问题", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                        // The conversation executor is waiting for this answer.
+                        Thread({
+                            val result = runCatching { chat.answerQuestion(question.getString("callId"), org.json.JSONArray(answers)) }
+                            handler.post {
+                                result.onSuccess { if (pendingQuestion?.optString("callId") == question.optString("callId")) pendingQuestion = null; dismiss() }
+                                    .onFailure { getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true; android.widget.Toast.makeText(context, it.message ?: "回答提交失败，请重试", android.widget.Toast.LENGTH_LONG).show() }
+                            }
+                        }, "pet-question-answer").start()
+                    }
+                }
+            }
+    }
     fun followPet() { positionUpdater?.invoke() }
-    fun hide() { previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
+    fun hide() { renderLive = null; questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
     fun destroy() { closed = true; request++; busy = false; hide(); executor.shutdownNow() }
 }

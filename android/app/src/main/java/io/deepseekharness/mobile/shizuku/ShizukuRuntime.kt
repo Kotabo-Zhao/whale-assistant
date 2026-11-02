@@ -367,25 +367,7 @@ class ShizukuRuntime(
      * 因此这里统一指向仓库地址，由用户按官方说明安装。
      */
     fun openManager() {
-        val launch = appContext.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
-        if (launch != null) {
-            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try {
-                appContext.startActivity(launch)
-                return
-            } catch (_: Exception) {
-                // 部分 ROM 会拒绝直接拉起（或安装包不完整）：落回下面的官方页面，
-                // 让用户仍有可操作的下一步，而不是只看到一句失败。
-            }
-        }
-        try {
-            appContext.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(SHIZUKU_REPOSITORY_URL))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        } catch (fallbackError: Exception) {
-            throw RuntimeFailure("SHIZUKU_OPEN_FAILED", "无法打开 Shizuku", fallbackError)
-        }
+        BundledShizuku.open(appContext)
     }
 
     fun connect(): ShizukuState {
@@ -868,7 +850,6 @@ class ShizukuRuntime(
          * 它**不在应用商店分发**，因此未安装时的引导一律指向这个 GitHub 仓库，
          * 不再尝试 `market://` 或 `play.google.com`（那些兜底点了只会落空）。
          */
-        private const val SHIZUKU_REPOSITORY_URL = "https://github.com/RikkaApps/Shizuku"
         private const val PERMISSION_REQUEST_CODE = 7319
         private const val PERMISSION_TIMEOUT_SECONDS = 60L
         private const val BINDER_TIMEOUT_SECONDS = 8L

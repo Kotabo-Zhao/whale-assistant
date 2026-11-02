@@ -967,7 +967,10 @@ class CompanionActivity : AppCompatActivity() {
                 .onFailure { paragraph("无法打开通知设置，请手动前往系统设置。") }
         }
         button("打开电池优化设置") { openSettings(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) }
-        button("打开 Shizuku") { openNotificationSource("moe.shizuku.privileged.api") }
+        button("安装 / 打开 Shizuku") {
+            Thread { runCatching { io.deepseekharness.mobile.shizuku.BundledShizuku.open(this) }
+                .onFailure { runOnUiThread { paragraph("无法打开安装器：${it.message}") } } }.start()
+        }
         paragraph("状态是当前取样，不保证后台常驻、提醒准时或任务执行成功。")
     }
 

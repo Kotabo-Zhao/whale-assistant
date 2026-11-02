@@ -295,7 +295,7 @@ internal object SharedMemoryJobs {
             check(memory.enabled) { "memory disabled" }
             val model = modelOverride ?: configuredUnderstandingModel(app)
             val requestId = UUID.randomUUID().toString()
-            val raw = model.analyze(requestId, text)
+            val raw = model.analyze(requestId, text.substringAfter("\n\n文档提取内容：\n", text))
             val boundResult = bindResultToEvent(raw, requestId, job.event)
             val result = JSONObject(boundResult)
             if (stopped.get()) return true
@@ -305,7 +305,7 @@ internal object SharedMemoryJobs {
             }
             if (persisted && !stopped.get()) {
                 clearFailure(app, job)
-                if ((result.optJSONArray("items")?.length() ?: 0) > 0) OverlayBallService.companionTaskHint()
+                if (UnderstandingModelContract.actionableItems(result).isNotEmpty()) OverlayBallService.companionTaskHint()
             }
         } catch (e: Exception) {
             if (!stopped.get()) defer(app, job, e)

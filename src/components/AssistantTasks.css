@@ -17,3 +17,5 @@
 .assistant-task-reminder label { display: grid; gap: 4px; font-size: .82rem; color: var(--card-muted, var(--muted)); }
 .assistant-task-reminder input, .assistant-task-reminder button { min-height: 40px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface); color: var(--card-ink, var(--ink)); padding: 7px 10px; }
 @media (max-width: 520px) { .assistant-task-card { align-items: stretch; flex-direction: column; } .assistant-task-actions button { min-height: 44px; } }
+
+.assistant-task-evidence blockquote { margin: 6px 0; padding: 8px 12px; border-left: 3px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }

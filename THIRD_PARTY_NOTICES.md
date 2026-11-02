@@ -113,3 +113,16 @@ The floating companion uses markdown-it 14.1.0, markdown-it-texmath 1.0.0,
 and KaTeX 0.16.22 for offline Markdown and mathematical typesetting. These
 projects are distributed under the MIT license; their license texts are included
 in `assets/legal/licenses/` in the APK.
+
+## dsh-see-now 核心
+
+来源：https://github.com/SAOS-3624/dsh-see-now ，提交 af33bbc750e267267a9cb2c35640c81f8ca1f2be。
+`screen-watch.js` 为 Android 适配；`scripts/runtime-profile/plugins/dsh-mobile-shizuku/lib/see-now-core` 中的上游文件未修改，单独适用 PolyForm Noncommercial 1.0.0，不纳入本项目 MIT 许可。LICENSE、NOTICE 随源码和 APK 运行环境一并分发；商业使用遵循上游授权要求。
+
+## Bundled Shizuku
+
+Official unmodified Shizuku v13.6.0.r1086.2650830c APK (Apache-2.0), copyright RikkaApps and contributors. APK, license and provenance are included in assets/bundled-apps. Source and releases: https://github.com/RikkaApps/Shizuku/tree/v13.6.0 . Android installation confirmation and Shizuku startup/authorization remain required.
+
+## DeepSeek dsh-superagent domain engine
+
+The domain engine is derived from `src/core` of https://github.com/deepseek-ai/dsh-superagent-prototype at commit `6337fc823ce20251c8de8085948165c81aaa701e`, copyright 2026 DeepSeek Harness Team, licensed under MIT. Original TypeScript and the license are in `scripts/vendor/dsh-superagent`; the license is also bundled alongside the generated engine in the Android runtime.

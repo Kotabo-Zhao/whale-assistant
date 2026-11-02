@@ -24,6 +24,7 @@ class RuntimePreservePolicyTest {
         assertTrue(RuntimePreservePolicy.shouldPreserve(".credentials.yaml"))
         assertTrue(RuntimePreservePolicy.shouldPreserve("attachments"))
         assertTrue(RuntimePreservePolicy.shouldPreserve("skills"))
+        assertTrue(RuntimePreservePolicy.shouldPreserve("mobile-workers"))
         // 用户安装的插件不在 $DSH_HOME 下，但同样必须保留。
         assertTrue(RuntimePreservePolicy.shouldPreserve("plugin-manager"))
         assertTrue(RuntimePreservePolicy.shouldPreserve("workspace"))
@@ -81,6 +82,7 @@ class RuntimePreservePolicyTest {
         assertEquals("root/.dsh/.credentials.yaml", RuntimePreservePolicy.guestRelativePath(".credentials.yaml"))
         assertEquals("root/.dsh/attachments", RuntimePreservePolicy.guestRelativePath("attachments"))
         assertEquals("root/.dsh/skills", RuntimePreservePolicy.guestRelativePath("skills"))
+        assertEquals("root/.dsh/mobile-workers", RuntimePreservePolicy.guestRelativePath("mobile-workers"))
         // 用户安装的插件不在 $DSH_HOME 下：必须落到显式声明的完整相对路径。
         assertEquals(
             "root/.dsh-mobile/plugin-manager",
@@ -107,6 +109,7 @@ class RuntimePreservePolicyTest {
                 ".credentials.yaml",
                 "attachments",
                 "skills",
+                "mobile-workers",
                 "plugin-manager",
                 "workspace",
             ),

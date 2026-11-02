@@ -13,4 +13,5 @@
 /app/src/main/jniLibs/**/*.so
 /gradle/wrapper/gradle-wrapper.jar
 *.apk
+!/app/src/main/assets/bundled-apps/shizuku.apk
 *.aab

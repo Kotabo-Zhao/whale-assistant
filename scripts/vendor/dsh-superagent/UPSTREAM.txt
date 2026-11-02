@@ -1,0 +1,5 @@
+Upstream: https://github.com/deepseek-ai/dsh-superagent-prototype
+Commit: 6337fc823ce20251c8de8085948165c81aaa701e
+Files: src/core/*.ts, unchanged
+License: MIT; see LICENSE in this directory.
+Generated runtime bundle: scripts/runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-core.js

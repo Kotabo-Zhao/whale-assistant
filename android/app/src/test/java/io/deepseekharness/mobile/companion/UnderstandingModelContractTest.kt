@@ -16,7 +16,7 @@ class UnderstandingModelContractTest {
         }
     }
     @Test fun rejectsBadVersionAndOversizedText() {
-        assertThrows(Exception::class.java) { UnderstandingModelContract.validate("""{"version":2,"claims":[]}""", "x") }
+        assertThrows(Exception::class.java) { UnderstandingModelContract.validate("""{"version":99,"claims":[]}""", "x") }
         val text = "甲".repeat(601)
         assertThrows(Exception::class.java) { UnderstandingModelContract.validate("""{"version":1,"claims":[{"text":"$text","evidence_ids":["x"]}]}""", "x") }
     }
@@ -30,5 +30,22 @@ class UnderstandingModelContractTest {
         val root = JSONObject(bound)
         assertTrue(root.getJSONArray("claims").getJSONObject(0).getJSONArray("evidence_ids").getString(0).startsWith("share:"))
         assertTrue(root.getJSONArray("items").getJSONObject(0).getJSONArray("evidence_ids").getString(0).startsWith("share:"))
+    }
+
+    @Test fun rejectsInventedTaskQuoteAndMissingOwnership() {
+        val raw = """{"version":2,"claims":[],"items":[{"title":"提交材料","owner":"user","status":"required","action":"提交材料","reason":"明确要求本人","evidence_quote":"请你提交材料","evidence_ids":["e"]}]}"""
+        UnderstandingModelContract.validate(raw, "e", "通知：请你提交材料")
+        assertThrows(Exception::class.java) { UnderstandingModelContract.validate(raw, "e", "小王已经提交材料") }
+        assertThrows(Exception::class.java) { UnderstandingModelContract.validate(raw.replace("user", ""), "e") }
+    }
+
+    @Test fun onlyOwnRequiredActionsBecomeCandidates() {
+        val items = org.json.JSONArray()
+        for (owner in listOf("user", "other", "unknown")) for (status in listOf("required", "completed", "informational"))
+            items.put(JSONObject().put("owner", owner).put("status", status))
+        val accepted = UnderstandingModelContract.actionableItems(JSONObject().put("version", 2).put("items", items))
+        org.junit.Assert.assertEquals(1, accepted.size)
+        org.junit.Assert.assertEquals("user", accepted.single().getString("owner"))
+        org.junit.Assert.assertEquals("required", accepted.single().getString("status"))
     }
 }

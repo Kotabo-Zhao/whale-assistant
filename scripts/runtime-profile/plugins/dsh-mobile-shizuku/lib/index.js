@@ -1,8 +1,10 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { installWorkers, workerOwner } from './workers.js'
+import { installScreenWatch } from './screen-watch.js'
 import { installTurnSignal } from './turn-signal.js'
 
 export const name = 'mobile-shizuku'
-export const inject = ['tools', 'systemPrompt', 'attachments', 'llm']
+export const inject = ['tools', 'systemPrompt', 'attachments', 'llm', 'sessionController', 'sessionPersistence', 'permissionPresets']
 
 const PORT_PATTERN = /^[0-9]+$/u
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/u
@@ -220,7 +222,7 @@ async function callBridge(command, param, signal, maxChars = MAX_RESULT_CHARS, a
 function companionPayload(payload, exec) {
   const session = exec?.agent?.session?.id ?? exec?.session?.id ?? exec?.sessionId
   if (typeof session !== 'string' || !/^[A-Za-z0-9._-]{1,200}$/u.test(session)) throw new Error('COMPANION_SESSION_UNAVAILABLE')
-  return { ...payload, callerSession: session }
+  return { ...payload, callerSession: workerOwner(session) }
 }
 
 function companionBridge(command, payload, exec) {
@@ -676,6 +678,8 @@ function virtualAction(args) {
 }
 
 export function apply(ctx) {
+  installWorkers(ctx, { defineTool, bridge: callBridge })
+  installScreenWatch(ctx, { defineTool, bridge: callBridge, assertImageCapableRoute })
   ctx.systemPrompt.section({ name: 'tool:mobile-shizuku', order: 1800, text: PROMPT })
 
   ctx.tools.register(defineTool({

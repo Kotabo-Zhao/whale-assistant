@@ -2153,7 +2153,7 @@ class MobileRuntimePlugin : Plugin() {
     }
 
     /**
-     * 打开 Shizuku（拉起管理界面，未安装时指向官方仓库）。
+     * 打开 Shizuku（拉起管理界面，未安装时安装内置官方 APK）。
      *
      * 同样不能在 JS 桥线程上同步执行：它要拿 [io.deepseekharness.mobile.runtime.MobileRuntimeController]
      * 的生命周期锁，只要有一次状态读取还挂在卡住的 Shizuku 服务端上，等待就会传导到 WebView 线程。
@@ -4487,10 +4487,8 @@ class MobileRuntimePlugin : Plugin() {
                 sessionId,
                 dataBase64,
                 suppressPublicOutput,
-                onDeviceCommandOutput = { id, data ->
-                    // 热路径：没有执行器时不要顺手创建（未授权设备 Shell 时永远用不到）。
-                    RuntimeHost.deviceCommandsOrNull()?.onOutput(id, data)
-                },
+                // The process-level RuntimeHost already routed command output once.
+                onDeviceCommandOutput = { _, _ -> },
                 onPublicOutput = { id, data ->
                     if (!destroying.get()) {
                         notifyListeners(
