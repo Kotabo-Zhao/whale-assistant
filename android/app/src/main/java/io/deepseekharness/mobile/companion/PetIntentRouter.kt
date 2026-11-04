@@ -9,7 +9,7 @@ import java.net.URL
 internal object PetIntentRouter {
     enum class Intent { CHAT, KNOWLEDGE, AGENT, BACKGROUND_READ, BACKGROUND_CREATE }
 
-    data class Decision(val intent: Intent, val reference: String = "", val needs: String = "none", val label: String = "") {
+    data class Decision(val intent: Intent, val reference: String = "", val needs: String = "none", val label: String = "", val independent: Boolean = false) {
         fun title(user: String): String = label.ifBlank { user.trim().replace(Regex("\\s+"), " ").take(42) }
 
         fun workerTask(user: String): String {
@@ -38,10 +38,10 @@ internal object PetIntentRouter {
         if (needs !in setOf("none","library","memory","both") || reference == null || reference.length > 360)
             return Decision(Intent.AGENT)
         val label = (row.opt("title") as? String).orEmpty().trim().replace(Regex("\\s+"), " ").take(60)
-        return Decision(intent, reference.trim(), requireNotNull(needs), label)
+        return Decision(intent, reference.trim(), requireNotNull(needs), label, row.opt("independent") == true)
     }
 
-    fun classify(key: String, model: String, history: List<CompanionBubbleChat.Message>): Decision {
+    fun classify(key: String, model: String, history: List<CompanionBubbleChat.Message>, whileWaiting: Boolean = false): Decision {
         val context = JSONArray().apply { history.takeLast(6).forEach { put(JSONObject().put("role", it.role).put("text", it.text)) } }
         val system = """
             判断最后一条用户消息实际希望发生什么，前文仅用于解决指代。输出 JSON，intent 取下列值。
@@ -56,7 +56,11 @@ internal object PetIntentRouter {
             “刚才那项怎么样”“改成按时间排”等续接已有任务时选 agent，不要另建任务。含修改或发送等外部副作用不能选 background_read。
             两种 background 另给 needs：none / library（本地资料）/ memory（个人长期记忆）/ both。
             title 是便于用户核对的简短工单名，用户指定名称时沿用原名。reference 只填前文明确提到且本句缺失的指代，最多 160 字；无需补充时为空字符串。不添加权限、推测的需求或额外目标。
-        """.trimIndent()
+        """.trimIndent() + if (whileWaiting) "\n" + """
+            前面的用户消息尚未回答。额外给出布尔值 independent。判断时把最后一条消息单独拿出来：
+            如果其文本本身给出了完整的新目标，且无需等待此前任何回答即可开始，才允许后台分类及 independent=true。后台只会收到这一条原文。
+            追加、更正、依赖前文的指代或要求等待，输出 independent=false，由原会话按顺序处理。
+        """.trimIndent() else ""
         val body = JSONObject().put("model", model).put("thinking", JSONObject().put("type", "disabled"))
             .put("temperature", 0).put("max_tokens", 320).put("response_format", JSONObject().put("type", "json_object"))
             .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system))

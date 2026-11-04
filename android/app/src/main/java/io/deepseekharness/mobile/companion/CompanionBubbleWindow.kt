@@ -32,9 +32,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var renderLive: ((String) -> Unit)? = null
     private var request = 0L
     private var busy = false
-    private val followups = ArrayDeque<String>()
+    private class Followup(val text: String, var deciding: Boolean = false, var receipt: String? = null)
+    private val followups = ArrayDeque<Followup>()
+    private val intake = java.util.concurrent.ThreadPoolExecutor(0, 1, 30, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue())
     private var sendNext: (() -> Unit)? = null
-    private var closed = false
+    private var renderFollowups: (() -> Unit)? = null
+    @Volatile private var closed = false
     private var draft = chat.pendingUser.orEmpty()
     private var lastError: String? = null
     private var inFlightUser: String? = null
@@ -71,12 +74,52 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     fun composeTask() { if (!closed) workerPanel.compose() }
     fun openTaskInbox() { if (!closed) workerPanel.open() }
     fun refreshWorkerStatus() { workerPanel.refreshStatus() }
+
+    /** Classify independently from the foreground transcript and its pending request. */
+    private fun classifyFollowup(item: Followup, messages: List<CompanionBubbleChat.Message>) {
+        item.deciding = true
+        intake.execute {
+            var receipt: String? = null
+            runCatching {
+                if (closed) return@runCatching
+                val runtime = io.deepseekharness.mobile.runtime.RuntimeStore(context)
+                val key = runtime.readModelCredential("deepseek")?.takeIf { it.isNotBlank() } ?: return@runCatching
+                val model = runtime.settings().defaultModels[io.deepseekharness.mobile.runtime.ModelProvider.DEEPSEEK] ?: "deepseek-flash"
+                val decision = PetIntentRouter.classify(key, model, messages, whileWaiting = true)
+
+                val mode = when (decision.intent) {
+                    PetIntentRouter.Intent.BACKGROUND_READ -> "read"
+                    PetIntentRouter.Intent.BACKGROUND_CREATE -> "create"
+                    else -> return@runCatching
+                }
+                if (closed || !decision.independent || chat.handoffSessionId() != null) return@runCatching
+                val prefs = CompanionStore(context)
+                val denial = chat.deniedBackground(mode, decision.needs,
+                    prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled, prefs.knowledgeModelAccess)
+                if (denial != null) { receipt = denial; return@runCatching }
+                val title = decision.title(item.text)
+                val id = java.util.UUID.randomUUID().toString()
+                // An uncertain acknowledgement must not send the same instruction to a second router.
+                receipt = "「$title」的接取状态尚未确认，请在后台任务中核对。"
+                if (dispatchTask(item.text, mode, id, title).getString("commandId") == id)
+                    receipt = "「$title」已交给后台处理，进度可在后台任务中查看。"
+            }.onFailure { android.util.Log.d("whale-intake", "intake unavailable: ${it.javaClass.simpleName}") }
+            handler.post {
+                if (!closed) {
+                    item.receipt = receipt
+                    item.deciding = false
+                    renderFollowups?.invoke()
+                    sendNext?.invoke()
+                }
+            }
+        }
+    }
     /**
      * Start the pet UI on a main-workspace session selected by the user.  Its local bubble
      * history is archived before switching; the main Harness transcript is never read here.
      */
     fun resumeSession(sessionId: String): Boolean {
-        if (closed || busy || !BubbleSessionRegistry.valid(sessionId)) return false
+        if (closed || busy || followups.isNotEmpty() || !BubbleSessionRegistry.valid(sessionId)) return false
         busy = true
         val generation = ++request
         deliveryWatcher?.stop(); deliveryWatcher = null
@@ -405,7 +448,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             contentDescription = "开始新话题并保留之前的聊天记录"
             isEnabled = !busy && (history.isNotEmpty() || lastError != null)
             setOnClickListener {
-                if (busy || (history.isEmpty() && lastError == null)) return@setOnClickListener
+                if (busy || followups.isNotEmpty() || (history.isEmpty() && lastError == null)) return@setOnClickListener
                 busy = true; send.isEnabled = false; input.isEnabled = false; isEnabled = false; continueButton.isEnabled = false
                 val generation = ++request
                 executor.execute {
@@ -435,6 +478,22 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         panel.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(10), 0, dp(10), dp(9)) })
         val status = TextView(context).apply { text = ""; textSize = 12f; setTextColor(foreground); background = bar() }
         panel.addView(status)
+        val progress = ui.text("", 12f, secondary).apply {
+            setPadding(dp(12), dp(4), dp(12), dp(5))
+            accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        panel.addView(progress)
+        renderFollowups = {
+            val text = followups.lastOrNull { it.receipt != null }?.receipt ?: when {
+                followups.any { it.deciding } -> "正在判断新消息是否需要后台处理…"
+                followups.isNotEmpty() -> "会话中还有 ${followups.size} 条消息等待处理"
+                else -> ""
+            }
+            progress.text = text
+            progress.visibility = if (text.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+            panel.post { positionUpdater?.invoke() }
+        }
+        renderFollowups?.invoke()
         val answerQuestion = TextView(context).apply {
             text = "回答助手的问题"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); setTextColor(accent); background = bar()
             visibility = if (pendingQuestion != null) android.view.View.VISIBLE else android.view.View.GONE
@@ -446,17 +505,18 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         status.visibility = if (busy || lastError != null) android.view.View.VISIBLE else android.view.View.GONE
         fun sendLabel() {
             send.text = if (busy && inFlightUser != null) {
-                if (followups.isEmpty()) "排队发送" else "已排 ${followups.size}"
+                if (followups.isEmpty()) "继续发送" else "已排 ${followups.size}"
             } else ui.string(R.string.pet_ui_send)
         }
         sendLabel()
         if (busy) { status.text = "正在回复…"; input.isEnabled = inFlightUser != null }
         var failedMessage: TextView? = null
         var retryText: String? = null
-        var queuedText: String? = null
+        var queued: Followup? = null
         sendNext = {
-            if (!busy && !closed && failedUser == null && followups.isNotEmpty()) {
-                queuedText = followups.removeFirst()
+            if (!busy && !closed && failedUser == null && followups.firstOrNull()?.deciding == false) {
+                queued = followups.removeFirst()
+                renderFollowups?.invoke()
                 send.performClick()
             }
         }
@@ -464,18 +524,27 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (!busy) (chat.pendingUser ?: failedUser)?.let { retryText = it; send.performClick() }
         }
         send.setOnClickListener {
-            if (busy) {
-                if (inFlightUser == null) return@setOnClickListener
+            if (busy || (queued == null && retryText == null && failedUser == null && followups.isNotEmpty())) {
+                if (busy && inFlightUser == null) return@setOnClickListener
                 val next = runCatching { CompanionBubbleChatPolicy.validateMessage(input.text.toString()) }.getOrNull() ?: return@setOnClickListener
                 if (followups.size >= 12) { android.widget.Toast.makeText(context, "已有 12 条消息等待发送", android.widget.Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-                followups.addLast(next)
+                val item = Followup(next)
+                val pendingTurn = inFlightUser
+                if (pendingTurn != null && chat.handoffSessionId() == null) {
+                    val outstanding = (listOf(pendingTurn) + followups.map { it.text } + next).takeLast(6)
+                    classifyFollowup(item, outstanding.map { CompanionBubbleChat.Message("user", it) })
+                }
+                followups.addLast(item)
+                renderFollowups?.invoke()
                 input.text.clear()
                 sendLabel()
+                sendNext?.invoke()
                 return@setOnClickListener
             }
-            val fromQueue = queuedText != null
-            val message = runCatching { CompanionBubbleChatPolicy.validateMessage(queuedText ?: retryText ?: input.text.toString()) }.getOrNull() ?: return@setOnClickListener
-            queuedText = null
+            val item = queued
+            val fromQueue = item != null
+            val message = runCatching { CompanionBubbleChatPolicy.validateMessage(item?.text ?: retryText ?: input.text.toString()) }.getOrNull() ?: return@setOnClickListener
+            queued = null
             retryText = null
             if (chat.pendingUser?.let { it != message } == true) {
                 status.text = "上一条消息需要恢复，点此重试。"; status.visibility = android.view.View.VISIBLE
@@ -554,7 +623,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                             if (partialScheduled.compareAndSet(false, true)) handler.post { renderPartial() }
                         }
                     }
-                    chat.fusedReply(prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
+                    item?.receipt?.let { CompanionBubbleChat.Reply(it, emptyList(), emptyList()) }
+                        ?: chat.fusedReply(prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
                 }
                 handler.post {
                     if (closed || request != generation) return@post
@@ -600,7 +670,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     if (!samePanel && root != null) { hide(); show() }
                     sendLabel()
                     if (result.isSuccess) sendNext?.invoke()
-                    if (root == null && !busy) sendNext = null
+                    if (root == null && !busy && followups.isEmpty()) sendNext = null
                     panel.post { positionUpdater?.invoke() }
                 }
             }
@@ -811,6 +881,6 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     }
 
     fun followPet() { positionUpdater?.invoke() }
-    fun hide() { if (!busy) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { closed = true; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); executor.shutdownNow() }
+    fun hide() { renderFollowups = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
+    fun destroy() { closed = true; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
 }

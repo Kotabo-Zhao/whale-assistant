@@ -154,6 +154,55 @@ class WhaleConversationalTaskTest {
         }
     }
 
+    @Test fun independentReportIsAcceptedDuringAnotherReply() {
+        val token = UUID.randomUUID().toString().take(8)
+        val tmp = File(app.cacheDir, "pet-independent-$token").apply { mkdirs() }
+        val transcript = CompanionBubbleHistory(storage(tmp))
+        val desk = WorkerDashboardStore(app)
+        val first = "请直接用中文给我讲一篇完整的长童话，主角是小鲸鱼和海猫，分十五段写，每段都写出场景、对白和细节。"
+        val next = "另一件独立的事：明早交接要用「蓝港差异报告 $token」。甲表写周四交付九箱，乙表写周五交付六箱，整理成一份列出差异和待确认事项的交接报告。"
+        lateinit var window: CompanionBubbleWindow
+        fun work() = desk.list().getJSONArray("items").let { rows -> (0 until rows.length()).map(rows::getJSONObject)
+            .filter { it.optString("title").contains(token) || it.optString("scope").contains(token) } }
+        try {
+            inst.runOnMainSync {
+                window = CompanionBubbleWindow(app, app.getSystemService(WindowManager::class.java), autoOpenOnDelivery=false, historyStore=transcript) { intArrayOf(52,260,128,128) }
+                window.show()
+                val panel = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible=true }.get(window) as View
+                val input = views(panel).filterIsInstance<EditText>().single()
+                val send = views(panel).filterIsInstance<TextView>().single { it.text == "发送" }
+                input.setText(first); send.performClick()
+                input.setText(next); send.performClick()
+                input.setText("还没发的第三句")
+            }
+            await("首轮回复期间未见独立工单",120_000) {
+                val accepted = work().isNotEmpty() || desk.pending().let { commands -> (0 until commands.length()).any { commands.getJSONObject(it).optString("task").contains(token) } }
+                var outstanding = false
+                inst.runOnMainSync { outstanding = CompanionBubbleWindow::class.java.getDeclaredField("inFlightUser").apply { isAccessible=true }.get(window) == first }
+                check(outstanding || accepted) { "首轮回复已结束，独立工单尚未接取" }
+                accepted && outstanding
+            }
+            await("首轮仍在处理时没有显示后台接取状态", 8000) {
+                var seen = false
+                inst.runOnMainSync {
+                    val panel = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible=true }.get(window) as View
+                    seen = views(panel).filterIsInstance<TextView>().any { it.isShown && it.text.contains(token) && it.text.contains("已交给后台处理") } &&
+                        views(panel).filterIsInstance<EditText>().single().text.toString() == "还没发的第三句"
+                }
+                seen
+            }
+            await("独立交办回执未按对话顺序保存",180_000) {
+                val messages = transcript.load()?.messages.orEmpty()
+                messages.size == 4 && messages[2].text == next && messages[3].text.contains("已交给后台处理")
+            }
+            await("后台报告没有完成",180_000) { work().singleOrNull()?.optString("state") == "completed" }
+            inst.sendStatus(0, Bundle().apply { putString("overlap", "worker accepted while first reply outstanding; one report completed") })
+        } finally {
+            inst.runOnMainSync { window.destroy() }
+            check(tmp.parentFile == app.cacheDir); tmp.walkBottomUp().forEach { it.delete() }
+        }
+    }
+
     @Test fun ordinaryPetMessagesChooseWorkWithoutTheManualComposer() {
         val token = UUID.randomUUID().toString().take(8)
         val tmp = File(app.cacheDir,"pet-conversation-"+token).apply { mkdirs() }

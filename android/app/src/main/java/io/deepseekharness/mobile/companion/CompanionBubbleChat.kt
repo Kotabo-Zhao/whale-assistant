@@ -121,7 +121,7 @@ internal class CompanionBubbleChat(
     data class Citation(val id: String, val revision: String, val displayName: String, val documentId: String?, val originalId: String?, val chunkIndex: Int, val chunkCount: Int, val parsingCoverage: String)
     data class Message(val role: String, val text: String, val images: List<String> = emptyList(), val citations: List<Citation> = emptyList())
     data class Reply(val text: String, val images: List<String>, val citations: List<Citation>, val tools: Set<String> = emptySet(), val turn: Int? = null)
-    private var sessionId: String? = restored?.sessionId
+    @Volatile private var sessionId: String? = restored?.sessionId
     private var sessionAccess: HarnessAccess? = null
     private var sessionScope: String? = restored?.scope
     private var clientAccess: HarnessAccess? = null
@@ -221,7 +221,7 @@ internal class CompanionBubbleChat(
         sessionScope = CompanionBubbleChatPolicy.memoryDigest("pet-direct")
     }
 
-    private fun deniedBackground(mode: String, needs: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean): String? = when {
+    internal fun deniedBackground(mode: String, needs: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean): String? = when {
         needs in setOf("library","both") && !knowledgeAllowed -> "这项工作需要访问本地资料。请先在资料设置中开启对话访问。"
         needs in setOf("memory","both") && !memoryAllowed -> "这项工作需要访问长期记忆。请先开启桌宠的记忆访问。"
         mode == "create" && CompanionStore(context).bubblePermissionPreset == "read-only" -> "桌宠会话当前设为仅查看。要生成工具草稿，需要先调整桌宠会话权限。"

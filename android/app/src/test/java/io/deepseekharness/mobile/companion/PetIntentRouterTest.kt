@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PetIntentRouterTest {
+    @Test fun immediateHandoffRequiresAnExplicitBooleanAndACompletePlan() {
+        fun decision(extra: String) = PetIntentRouter.parse("""{"intent":"background_read","needs":"none","reference":""$extra}""")
+        assertFalse(decision("").independent)
+        assertFalse(decision(",\"independent\":\"true\"").independent)
+        assertTrue(decision(""","independent":true""").independent)
+        assertFalse(PetIntentRouter.parse("""{"intent":"agent","independent":true}""").independent)
+    }
+
     @Test fun acceptsOnlyKnownModelIntents() {
         assertEquals(PetIntentRouter.Intent.CHAT, PetIntentRouter.parse("{\"intent\":\"chat\"}").intent)
         assertEquals(PetIntentRouter.Intent.KNOWLEDGE, PetIntentRouter.parse("{\"intent\":\"knowledge\"}").intent)
