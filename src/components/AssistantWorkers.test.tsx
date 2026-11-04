@@ -13,6 +13,35 @@ it('resumes the saved permission request without resubmitting its task text', as
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({operation:'workerPermission',id:'held-id',action:'resume'}))
   expect(await screen.findByText('已提交原任务')).toBeInTheDocument()
 })
+it('suspends visible settings reads without overwriting the draft when the task tab returns', async () => {
+  vi.useFakeTimers()
+  const interval = vi.spyOn(window, 'setInterval')
+  let reads = 0
+  bridge.addWorkerDashboardListener.mockResolvedValue({remove:vi.fn()})
+  bridge.companionDashboard.mockImplementation(({operation}: {operation:string}) => {
+    if (operation === 'superagentSettings') {
+      reads++
+      return Promise.resolve({config:{github:{repo:'team/project'}}})
+    }
+    return Promise.resolve(operation === 'workerPage' ? {items:[],total:0} : {})
+  })
+  const app = render(<AssistantWorkers onOpenSession={vi.fn()} />)
+  try {
+    const details = app.container.querySelector('details.worker-secondary-settings')!
+    await act(async () => { details.setAttribute('open',''); details.dispatchEvent(new Event('toggle')); await Promise.resolve() })
+    expect(reads).toBe(1)
+    const input = screen.getByLabelText('仓库（owner/name）')
+    fireEvent.change(input,{target:{value:'draft/project'}})
+    app.rerender(<AssistantWorkers onOpenSession={vi.fn()} visible={false} />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(60000) })
+    expect(reads).toBe(1)
+    app.rerender(<AssistantWorkers onOpenSession={vi.fn()} />)
+    await act(async () => {})
+    expect(reads).toBe(2)
+    expect(input).toHaveValue('draft/project')
+    expect(interval.mock.calls.some(([,delay]) => delay === 5000 || delay === 15000)).toBe(false)
+  } finally { app.unmount(); interval.mockRestore(); bridge.addWorkerDashboardListener.mockReset(); vi.useRealTimers() }
+})
 it('answers only the selected worker and leaves screen capture opt-in', async () => {
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerPage'
     ? { items: [{ id: 'task-one', text: '验收任务', state: 'waiting', question: '请选择颜色', sessionId: 'session-one', inputs: [{ id: 'i1', revision: 1, kind: 'request', text: '选择颜色', delivery: 'delivered', readAt: 1 }], reports: [{ revision: 1, summary: '请选择颜色' }] }] }

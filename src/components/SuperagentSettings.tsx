@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { runtimeBridge } from '../platform/native'
+import { pollWhileVisible } from '../pollWhileVisible'
 
 type Source = { enabled?: boolean; repo?: string; botLogin?: string; chats?: string[]; botOpenId?: string; allowedActors?: string[] }
 type Config = { github?: Source; feishu?: Source; proactive?: { mode?: 'off' | 'observe' | 'auto'; rules?: Array<{ id: string; text: string }> } }
 const list = (text: string): string[] => text.split(/[\n,，]/).map(value => value.trim()).filter(Boolean)
 
 /** Explicit source scope and credentials; existing passwords are never returned to this view. */
-export function SuperagentSettings() {
+export function SuperagentSettings({ visible = true }: { visible?: boolean }) {
+  const initialized = useRef(false)
   const [config, setConfig] = useState<Config>({})
   const [credentials, setCredentials] = useState<Record<string, string>>({})
   const [configured, setConfigured] = useState<Record<string, boolean>>({})
@@ -17,21 +19,26 @@ export function SuperagentSettings() {
   const [feishuActors, setFeishuActors] = useState('')
   const [chatIds, setChatIds] = useState('')
   const [ruleText, setRuleText] = useState('')
-  useEffect(() => { void runtimeBridge.companionDashboard({ operation: 'superagentSettings' }).then(value => {
-    const saved = (value.config || {}) as Config
-    setDiagnostics((value.diagnostics || {}) as Record<string, unknown>)
-    setUnapproved(Array.isArray(value.unapproved) ? value.unapproved as Array<{ source: 'github' | 'feishu'; actorId: string }> : [])
-    setConfig(saved); setGithubActors((saved.github?.allowedActors || []).join(',')); setFeishuActors((saved.feishu?.allowedActors || []).join(',')); setChatIds((saved.feishu?.chats || []).join(',')); setRuleText((saved.proactive?.rules || []).map(rule => rule.text).join('\n')); setConfigured((value.credentials || {}) as Record<string, boolean>)
-  }).catch(() => setMessage('未能读取渠道设置。')) }, [])
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      void runtimeBridge.companionDashboard({ operation: 'superagentSettings' }).then(value => {
+    if (!visible) return
+    return pollWhileVisible(5000, async current => {
+      try {
+        const value = await runtimeBridge.companionDashboard({ operation: 'superagentSettings' })
+        if (!current()) return
         setDiagnostics((value.diagnostics || {}) as Record<string, unknown>)
-        if (Array.isArray(value.unapproved)) setUnapproved(value.unapproved as Array<{ source: 'github' | 'feishu'; actorId: string }>)
-      }).catch(() => {})
-    }, 5000)
-    return () => window.clearInterval(timer)
-  }, [])
+        setUnapproved(Array.isArray(value.unapproved) ? value.unapproved as Array<{ source: 'github' | 'feishu'; actorId: string }> : [])
+        if (initialized.current) return
+        const saved = (value.config || {}) as Config
+        setConfig(saved)
+        setGithubActors((saved.github?.allowedActors || []).join(','))
+        setFeishuActors((saved.feishu?.allowedActors || []).join(','))
+        setChatIds((saved.feishu?.chats || []).join(','))
+        setRuleText((saved.proactive?.rules || []).map(rule => rule.text).join('\n'))
+        setConfigured((value.credentials || {}) as Record<string, boolean>)
+        initialized.current = true
+      } catch { if (current() && !initialized.current) setMessage('未能读取渠道设置。') }
+    })
+  }, [visible])
   const change = (source: 'github' | 'feishu', update: Partial<Source>) => setConfig(old => ({ ...old, [source]: { ...old[source], ...update } }))
   const save = async () => {
     try {

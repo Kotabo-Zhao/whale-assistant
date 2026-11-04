@@ -123,6 +123,69 @@ class WhaleWorkerListPerfTest {
         } finally { root.deleteRecursively() }
     }
 
+    @Test fun collapsedTaskSectionDoesNotPollChannelSettings() {
+        val baseline = InstrumentationRegistry.getArguments().getString("baseline") == "true"
+        val main = inst.startActivitySync(android.content.Intent(inst.targetContext,io.deepseekharness.mobile.MainActivity::class.java)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as io.deepseekharness.mobile.MainActivity
+        fun js(script: String): String {
+            val latch = java.util.concurrent.CountDownLatch(1); var value = ""
+            inst.runOnMainSync { main.bridge.webView.evaluateJavascript(script) { value = it; latch.countDown() } }
+            check(latch.await(5,java.util.concurrent.TimeUnit.SECONDS)); return value
+        }
+        fun until(message: String, condition: () -> Boolean) {
+            val end = SystemClock.elapsedRealtime() + 12000
+            while (!condition()) { check(SystemClock.elapsedRealtime() < end) { message }; Thread.sleep(100) }
+        }
+        val nav = "Array.from(document.querySelectorAll('.task-destinations button'))"
+        try {
+            until("事项入口未就绪") {
+                inst.runOnMainSync { main.findViewById<android.view.View>(io.deepseekharness.mobile.R.id.harness_manage)?.takeIf { it.isShown }?.performClick() }
+                js("!!document.querySelector('button[aria-label=事项]')") == "true"
+            }
+            js("""const cap=window.Capacitor; window.whalePollOriginal=cap.nativePromise; window.whalePollReads=0;
+                cap.nativePromise=function(plugin,method,options){
+                    if(plugin==='MobileRuntime' && method==='companionDashboard' && options?.request?.operation==='superagentSettings') window.whalePollReads++;
+                    return window.whalePollOriginal.apply(this,arguments);
+                }; document.querySelector('button[aria-label=事项]').click()""")
+            until("后台任务设置未就绪") { js("!!document.querySelector('.worker-secondary-settings summary')") == "true" }
+            js("document.querySelector('.worker-secondary-settings summary').click()")
+            until("未读取展开的渠道设置") { js("window.whalePollReads > 0") == "true" }
+            js("$nav.find(b=>b.textContent==='我的待办').click()")
+            until("没有离开后台任务页") { js("$nav.find(b=>b.textContent==='我的待办').getAttribute('aria-pressed')") == "\"true\"" }
+            val start = js("window.whalePollReads").toInt()
+            Thread.sleep(16_000)
+            val hiddenReads = js("window.whalePollReads").toInt() - start
+            inst.sendStatus(0,Bundle().apply { putInt("hiddenSectionChannelReads",hiddenReads); putInt("sampleMs",16000) })
+            if (baseline) assertTrue("旧版本应复现后台读取", hiddenReads > 0) else assertEquals(0,hiddenReads)
+            js("$nav.find(b=>b.textContent==='后台任务').click()")
+            until("返回后渠道诊断没有刷新") { js("window.whalePollReads").toInt() > start + hiddenReads }
+            if (!baseline) {
+                js("""window.whaleWentHidden=false; window.whaleHiddenReads=0;
+                    const observe=window.Capacitor.nativePromise;
+                    window.Capacitor.nativePromise=function(plugin,method,options){
+                        if(document.hidden && plugin==='MobileRuntime' && method==='companionDashboard' &&
+                            ['superagentSettings','screenWatchStatus'].includes(options?.request?.operation)) window.whaleHiddenReads++;
+                        return observe.apply(this,arguments);
+                    };
+                    document.addEventListener('visibilitychange',()=>{if(document.hidden) window.whaleWentHidden=true})""")
+                val beforeHome = js("window.whalePollReads").toInt()
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_HOME")).use { it.readBytes() }
+                Thread.sleep(16_000)
+                inst.targetContext.startActivity(android.content.Intent(inst.targetContext,io.deepseekharness.mobile.MainActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                until("应用返回时未恢复已展开的渠道设置") {
+                    js("window.whaleWentHidden===true && !document.hidden && window.whalePollReads>$beforeHome") == "true"
+                }
+                val sleepingReads = js("window.whaleHiddenReads").toInt()
+                inst.sendStatus(0,Bundle().apply { putInt("backgroundChannelAndScreenReads",sleepingReads); putInt("backgroundSampleMs",16000) })
+                assertEquals(0,sleepingReads)
+            }
+        } finally {
+            js("if(window.whalePollOriginal) window.Capacitor.nativePromise=window.whalePollOriginal")
+            inst.runOnMainSync { main.finish() }
+        }
+    }
+
     @Test fun installedTaskPageFiltersPagesAndReadsOneActualTimeline() {
         val args = InstrumentationRegistry.getArguments()
         val known = requireNotNull(args.getString("authorWorker"))
