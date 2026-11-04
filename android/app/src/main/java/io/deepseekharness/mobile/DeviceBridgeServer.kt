@@ -10,6 +10,7 @@ import io.deepseekharness.mobile.accessibility.DeepSeekAccessibilityService
 import io.deepseekharness.mobile.accessibility.AccessibilityAutomationStore
 import io.deepseekharness.mobile.capability.DeviceCapabilityFacts
 import io.deepseekharness.mobile.capability.DeviceCapabilityPolicy
+import io.deepseekharness.mobile.companion.CompanionTaskModel
 import io.deepseekharness.mobile.virtualscreen.VirtualScreenService
 import io.deepseekharness.mobile.virtualscreen.VirtualScreenShellPolicy
 import io.deepseekharness.mobile.runtime.TaskNotification
@@ -386,6 +387,7 @@ class DeviceBridgeServer(
                             }) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
                             val result = checkNotNull(status).put("id", id).put("revision", hash).put("retryScheduled", retryScheduled).put("memoryEnabled", memoryEnabled)
                                 .put("notice", "队列状态不代表模型已完整理解原文件；错误代码仅表示上次已记录的失败分类。")
+                            access.requireKnowledge()
                             respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
                             return
                         }
@@ -439,6 +441,11 @@ class DeviceBridgeServer(
                             }, { eventId -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.sharedRecordId(eventId) } })
                             result.put("tasks", JSONObject(tasks))
                         }
+                        // A later category can finish after access to an earlier one was revoked.
+                        if ("memory" in kinds) access.requireMemory()
+                        val hasSharedTasks = result.optJSONObject("tasks")?.let(CompanionTaskModel::includesSharedMaterial) == true
+                        if ("knowledge" in kinds || hasSharedTasks) access.requireKnowledge()
+                        if ("tasks" in kinds) access.requireTasks()
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
                         return
                     }
@@ -521,6 +528,7 @@ class DeviceBridgeServer(
                             )
                         }
                         access.requireTasks()
+                        if (tasks.includesSharedMaterial(JSONObject(result))) access.requireKnowledge()
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return
                     }

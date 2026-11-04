@@ -6,6 +6,11 @@ import org.json.JSONObject
 
 /** Bounded task search. Titles and provenance are untrusted data. */
 internal object CompanionTaskModel {
+    fun includesSharedMaterial(response: JSONObject): Boolean {
+        if (response.optString("sourceKind") == "shared_material") return true
+        val items = response.optJSONArray("items") ?: return false
+        return (0 until items.length()).any { items.getJSONObject(it).optString("sourceKind") == "shared_material" }
+    }
     data class Update(val id: String, val expectedState: String, val expectedRevision: String?, val nextState: String?, val reminderAtMs: Long?)
     fun execute(enabled: Boolean, param: String, load: (Int) -> List<UnderstandingQueue.Item>, sharedRecordId: (String) -> String? = { null }): String {
         if (!enabled) throw RuntimeFailure("TASK_MODEL_DISABLED", "请先在助手设置中允许对话访问通知事项")
