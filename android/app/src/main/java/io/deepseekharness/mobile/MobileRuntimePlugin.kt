@@ -4221,16 +4221,15 @@ class MobileRuntimePlugin : Plugin() {
             val intent = Intent(
                 android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 android.net.Uri.parse("package:${context.packageName}"),
-            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
             try {
-                context.startActivity(intent)
+                activity.startActivity(intent)
             } catch (_: Throwable) {
                 // 部分 ROM 没有该设置页：退回应用详情页，至少让用户能进系统设置。
                 try {
-                    context.startActivity(
+                    activity.startActivity(
                         Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                            .setData(android.net.Uri.parse("package:${context.packageName}"))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            .setData(android.net.Uri.parse("package:${context.packageName}")),
                     )
                 } catch (fallbackError: Throwable) {
                     throw RuntimeFailure(

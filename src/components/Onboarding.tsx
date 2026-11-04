@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { t } from '../i18n'
-import { ArrowLeft, ArrowRight, Blocks, Check, KeyRound, Loader2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Blocks, BookOpen, Check, KeyRound, Loader2, MessageCircle, Sparkles, X } from 'lucide-react'
 import type { RuntimeSettings, RuntimeSettingsUpdate, RuntimeState } from '../platform/types'
 
 export const ONBOARDING_STORAGE_KEY = 'dsh-mobile-onboarding-v1'
@@ -16,6 +16,7 @@ interface OnboardingProps {
    */
   onOpenVersions?: () => void
   onOpenLibrary?: () => void
+  onOpenPet?: () => void
   onDone: () => void
   onSaveSettings?: (settings: RuntimeSettingsUpdate) => Promise<boolean>
 }
@@ -52,8 +53,9 @@ function usesBundledSource(settings: RuntimeSettings | null): boolean {
 }
 
 export function Onboarding({
-  busy, runtime, settings, onInstall, onOpenVersions, onOpenLibrary, onDone, onSaveSettings,
+  busy, runtime, settings, onInstall, onOpenVersions, onOpenLibrary, onOpenPet, onDone, onSaveSettings,
 }: OnboardingProps) {
+  const [welcome, setWelcome] = useState(Boolean(onOpenPet && onOpenLibrary))
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
@@ -119,6 +121,23 @@ export function Onboarding({
     }
   }
 
+  if (welcome && onOpenPet && onOpenLibrary) {
+    const paths = [
+      { title:t('先使用本地资料'), hint:t('从其他 App 分享文字、图片或录音到资料库。'), icon:BookOpen, open:() => { onDone(); onOpenLibrary() } },
+      { title:t('设置桌宠'), hint:t('允许显示在其他应用上层，即可在桌面呼出鲸鱼娘。'), icon:Sparkles, open:() => { onDone(); onOpenPet() } },
+      { title:t('配置 AI 对话'), hint:t('连接模型，准备对话和后台任务。'), icon:MessageCircle, open:() => setWelcome(false) },
+    ]
+    return <div className="dialog-backdrop" role="presentation">
+      <section className="dialog onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <button className="dialog-close" type="button" aria-label={t('跳过引导')} onClick={onDone}><X size={19}/></button>
+        <h2 className="onboarding-title" id="onboarding-title">{t('欢迎使用鲸鱼助手')}</h2>
+        <div className="onboarding-body onboarding-paths">{paths.map(({title,hint,icon:Icon,open}) =>
+          <button type="button" key={title} aria-label={title} onClick={open}>
+            <Icon size={22} aria-hidden="true"/><span><strong>{title}</strong><small>{hint}</small></span><ArrowRight size={16} aria-hidden="true"/>
+          </button>)}</div>
+      </section>
+    </div>
+  }
   return (
     <div className="dialog-backdrop" role="presentation">
       <div className="dialog onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
@@ -203,7 +222,8 @@ export function Onboarding({
                 </div>
               )}
               <div className="dialog-actions onboarding-nav">
-                {onOpenLibrary && <button className="button button-quiet" type="button" disabled={saving || busy !== null} onClick={() => { onDone(); onOpenLibrary() }}>{t("先使用本地资料")}</button>}
+                {onOpenPet && step === 0 && <button className="button button-quiet" type="button" disabled={saving} onClick={() => setWelcome(true)}><ArrowLeft size={16}/>{t('返回开始页')}</button>}
+                {!onOpenPet && onOpenLibrary && <button className="button button-quiet" type="button" disabled={saving || busy !== null} onClick={() => { onDone(); onOpenLibrary() }}>{t("先使用本地资料")}</button>}
                 {step > 0 && (
                   <button className="button button-secondary" type="button" onClick={() => setStep(step - 1)} disabled={saving}><ArrowLeft size={18} />{t("上一步")}</button>
                 )}

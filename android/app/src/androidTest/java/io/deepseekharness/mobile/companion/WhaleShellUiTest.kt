@@ -243,13 +243,39 @@ class WhaleShellUiTest {
             saved = JSONArray(js("[localStorage.getItem('dsh-mobile-language-v1'),localStorage.getItem('dsh-mobile-onboarding-v1')]"))
             for (key in keys) js("localStorage.removeItem(" + JSONObject.quote(key) + ")")
             inst.runOnMainSync { host.bridge.webView.reload() }
-            val entry = "Array.from(document.querySelectorAll('.onboarding-nav button')).find(b=>b.textContent==='先使用本地资料'||b.textContent==='Use the local library')"
-            until("首次打开未直接显示本地资料入口") { js("!!($entry)")=="true" }
+            val pet = InstrumentationRegistry.getArguments().getString("firstPath") == "pet"
+            val entry = if (pet) ".onboarding-paths button:nth-child(2)" else ".onboarding-paths button:first-child"
+            val selector = "document.querySelector('$entry')"
+            until("首次使用入口未就绪") { js("!!($selector)")=="true" }
+            check(js("document.querySelectorAll('.onboarding-paths button').length") == "3")
+            if (pet) {
+                shot(host.bridge.webView,"whale-first-use.png")
+                webTap("document.querySelector('.onboarding-paths button:last-child')")
+                until("模型路径没有打开密钥框") { js("!!document.querySelector('.onboarding-fields input')")=="true" }
+                webTap("document.querySelector('.onboarding-nav button')")
+                until("返回开始页失败") { js("!!($selector)")=="true" }
+            }
             check(js("!document.querySelector('.language-screen') && !localStorage.getItem('dsh-mobile-language-v1')")=="true")
-            webTap(entry)
-            until("没有模型配置操作也能进入本地资料库") { js("!!document.querySelector('.memory-workspace .library-search')")=="true" }
+            webTap(selector)
+            if (pet) {
+                until("没有到达桌宠设置") { js("!!document.querySelector('#pet-start-settings') && !!document.querySelector('[aria-labelledby=pet-start-settings] input[role=switch]')")=="true" }
+                check(js("localStorage.getItem('dsh-mobile-onboarding-v1')")=="\"1\"")
+                if (!android.provider.Settings.canDrawOverlays(app)) {
+                    webTap("document.querySelector('[aria-labelledby=pet-start-settings] button.button-secondary')")
+                    until("系统悬浮窗授权页未打开") {
+                        inst.uiAutomation.rootInActiveWindow?.packageName?.toString() == "com.android.settings"
+                    }
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_BACK")).use { it.readBytes() }
+                    until("从系统设置返回后没有保留桌宠入口") {
+                        inst.uiAutomation.rootInActiveWindow?.packageName?.toString() == app.packageName &&
+                            js("!!document.querySelector('#pet-start-settings') && !document.querySelector('.onboarding-dialog')")=="true"
+                    }
+                    check(!android.provider.Settings.canDrawOverlays(app))
+                    inst.sendStatus(0,Bundle().apply { putString("overlayReturn","system settings returned to pet controls; permission remained off") })
+                }
+            } else until("没有模型配置操作也能进入本地资料库") { js("!!document.querySelector('.memory-workspace .library-search')")=="true" }
             check(js("!localStorage.getItem('dsh-mobile-language-v1')")=="true")
-            inst.sendStatus(0,Bundle().apply { putString("firstRun","no language gate, local library reached, no language preference written") })
+            inst.sendStatus(0,Bundle().apply { putString("firstRun",if (pet) "model path returned to welcome; pet settings reached" else "local library reached without credentials") })
         } finally {
             saved?.let {
                 for ((i,key) in listOf("dsh-mobile-language-v1","dsh-mobile-onboarding-v1").withIndex()) {

@@ -44,6 +44,21 @@ const next = (times = 1) => {
 describe('Onboarding', () => {
   beforeEach(() => { saveLanguage('zh-CN') })
 
+  it('从配置页返回开始页仍保留草稿，选择桌宠不会保存密钥或安装环境', () => {
+    const props = renderOnboarding({onOpenPet:vi.fn(),onOpenLibrary:vi.fn()})
+    fireEvent.click(screen.getByRole('button',{name:'配置 AI 对话'}))
+    fireEvent.change(screen.getByLabelText('DeepSeek API Key'),{target:{value:'test-draft'}})
+    fireEvent.click(screen.getByRole('button',{name:'返回开始页'}))
+    fireEvent.click(screen.getByRole('button',{name:'配置 AI 对话'}))
+    expect(screen.getByLabelText('DeepSeek API Key')).toHaveValue('test-draft')
+    fireEvent.click(screen.getByRole('button',{name:'返回开始页'}))
+    fireEvent.click(screen.getByRole('button',{name:'设置桌宠'}))
+    expect(props.onOpenPet).toHaveBeenCalledOnce()
+    expect(props.onDone).toHaveBeenCalledOnce()
+    expect(props.onInstall).not.toHaveBeenCalled()
+    expect(props.onSaveSettings).not.toHaveBeenCalled()
+  })
+
   it('首屏直接是模型步骤，且密钥输入不遮罩', () => {
     renderOnboarding()
     expect(screen.getByText('配置模型')).toBeDefined()

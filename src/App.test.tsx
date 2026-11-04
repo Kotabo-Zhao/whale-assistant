@@ -561,11 +561,9 @@ describe('App conversation gate', () => {
       })
     render(<App />)
 
-    // 首次配置窗口现在只有两步（配模型 → 装运行环境），没有旧版的「开始使用」收尾页：
-    // 本用例关心的是「回到前台后凭据状态会不会刷新」，先把窗口关掉再去模型页看。
-    const onboarding = await screen.findByRole('dialog', { name: '配置模型' })
+    const onboarding = await screen.findByRole('dialog', { name: '欢迎使用鲸鱼助手' })
     fireEvent.click(within(onboarding).getByRole('button', { name: '跳过引导' }))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '配置模型' })).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '欢迎使用鲸鱼助手' })).toBeNull())
     await arriveAtSettingsHome()
     await openSettingsPage('模型与密钥')
 
@@ -622,12 +620,12 @@ describe('App conversation gate', () => {
 describe('应用语言', () => {
   beforeEach(beforeEachAppTest)
 
-  it('初次打开按系统语言显示模型引导，无需先选择语言', async () => {
+  it('初次打开按系统语言显示欢迎页，可直接使用资料库', async () => {
     window.localStorage.clear()
     const languages = vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-US'])
     try {
       render(<App />)
-      expect(await screen.findByRole('dialog', { name: 'Set up a model' })).toBeVisible()
+      expect(await screen.findByRole('dialog', { name: 'Welcome to Whale Assistant' })).toBeVisible()
       expect(screen.queryByText('选择语言 / Choose your language')).toBeNull()
       expect(bridge.setAppLanguage).not.toHaveBeenCalled()
       expect(window.localStorage.getItem('dsh-mobile-language-v1')).toBeNull()

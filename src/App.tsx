@@ -2616,6 +2616,42 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         {page === 'terminal-background' && <AppearanceSettings scope="background" />}
         {page === 'terminal-dsh-background' && <AppearanceSettings scope="dsh" />}
 
+        {page === 'runtime' && <section className="settings-section" aria-labelledby="pet-start-settings">
+          <div className="section-title"><div><h2 id="pet-start-settings">{t('设置桌宠')}</h2><p>{t('开启悬浮球并保存后，即可在桌面打开鲸鱼娘。')}</p></div></div>
+          {/* 悬浮球与「后台保持」是两个互相独立的开关，但各自都会提高本应用进程被系统回收的优先级：
+              开悬浮球不会去拉起运行时的保活服务；悬浮球自身由独立的前台服务承载，
+              与「后台保持」一样只提高优先级，不保证进程不被系统结束。 */}
+          <label className="toggle-row">
+            <span>
+              <strong>{t("悬浮球")}</strong>
+              <small>
+                {!overlayPermissionKnown
+                  ? t("暂时无法确认悬浮窗权限")
+                  : overlayBall.canDrawOverlays
+                  ? t("在其他应用上层显示悬浮球，点按展开 AI 对话小窗")
+                  : t("需要「显示在其他应用上层」权限才能使用")}
+              </small>
+              {overlayBallEnabled && overlayPermissionKnown && !overlayBall.canDrawOverlays ? (
+                <small className="status-text-error">{t("系统权限已关闭")}</small>
+              ) : null}
+            </span>
+            {/* 只禁用「开启」方向：没有权限且当前是关的就禁用，防止误开后无声失败；
+                已经开着时仍允许关闭，否则权限被系统撤销后用户无法在应用内关掉这个功能。 */}
+            <input
+              type="checkbox"
+              role="switch"
+              checked={overlayBallEnabled}
+              disabled={(!overlayPermissionKnown || !overlayBall.canDrawOverlays) && !overlayBallEnabled}
+              onChange={event => setOverlayBallDraft(event.target.checked)}
+            />
+          </label>
+          {overlayBallReadFailed && <p className="status-text-error" role="alert">{t("无法读取悬浮球状态，正在重试")}</p>}
+          {overlayPermissionKnown && !overlayBall.canDrawOverlays && (
+            <button className="button button-secondary" type="button" onClick={onOpenOverlaySettings} disabled={busy !== null}>
+              <ExternalLink size={18} />{t("前往系统设置开启")}</button>
+          )}
+          <CompanionSettingsButton disabled={busy !== null} />
+        </section>}
         {page === 'runtime' && (
         <section className="settings-section" aria-labelledby="keep-alive-settings">
           <div className="section-title section-title-action">
@@ -2656,39 +2692,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
               onChange={event => setDraft({ ...settings, prewarmHarness: event.target.checked })}
             />
           </label>
-          {/* 悬浮球与「后台保持」是两个互相独立的开关，但各自都会提高本应用进程被系统回收的优先级：
-              开悬浮球不会去拉起运行时的保活服务；悬浮球自身由独立的前台服务承载，
-              与「后台保持」一样只提高优先级，不保证进程不被系统结束。 */}
-          <label className="toggle-row">
-            <span>
-              <strong>{t("悬浮球")}</strong>
-              <small>
-                {!overlayPermissionKnown
-                  ? t("暂时无法确认悬浮窗权限")
-                  : overlayBall.canDrawOverlays
-                  ? t("在其他应用上层显示悬浮球，点按展开 AI 对话小窗")
-                  : t("需要「显示在其他应用上层」权限才能使用")}
-              </small>
-              {overlayBallEnabled && overlayPermissionKnown && !overlayBall.canDrawOverlays ? (
-                <small className="status-text-error">{t("系统权限已关闭")}</small>
-              ) : null}
-            </span>
-            {/* 只禁用「开启」方向：没有权限且当前是关的就禁用，防止误开后无声失败；
-                已经开着时仍允许关闭，否则权限被系统撤销后用户无法在应用内关掉这个功能。 */}
-            <input
-              type="checkbox"
-              role="switch"
-              checked={overlayBallEnabled}
-              disabled={(!overlayPermissionKnown || !overlayBall.canDrawOverlays) && !overlayBallEnabled}
-              onChange={event => setOverlayBallDraft(event.target.checked)}
-            />
-          </label>
-          {overlayBallReadFailed && <p className="status-text-error" role="alert">{t("无法读取悬浮球状态，正在重试")}</p>}
-          <CompanionSettingsButton disabled={busy !== null} />
-          {overlayPermissionKnown && !overlayBall.canDrawOverlays && (
-            <button className="button button-secondary" type="button" onClick={onOpenOverlaySettings} disabled={busy !== null}>
-              <ExternalLink size={18} />{t("前往系统设置开启")}</button>
-          )}
+
           <div className="settings-status-list">
             <div className="settings-status-row">
               <span>{t("前台服务")}</span>
@@ -5514,6 +5518,7 @@ export function App() {
             setActiveView('versions')
           }}
           onOpenLibrary={() => setActiveView('assistant-memory')}
+          onOpenPet={() => setActiveView('settings-runtime')}
           onDone={() => {
             try {
               window.localStorage.setItem(ONBOARDING_STORAGE_KEY, '1')
