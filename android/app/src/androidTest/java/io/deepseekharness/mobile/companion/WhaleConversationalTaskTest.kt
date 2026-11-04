@@ -454,15 +454,24 @@ class WhaleConversationalTaskTest {
         }
     }
 
+    // -e boundSession true runs the same concurrency contract after a main-session handoff.
+    // Keep the assertion identical: accepting only after the first reply is not concurrency.
     @Test fun independentReportIsAcceptedDuringAnotherReply() {
         val token = UUID.randomUUID().toString().take(8)
         val tmp = File(app.cacheDir, "pet-independent-$token").apply { mkdirs() }
         val transcript = CompanionBubbleHistory(storage(tmp))
         val desk = WorkerDashboardStore(app)
+        val boundSession = InstrumentationRegistry.getArguments().getString("boundSession") == "true"
+        val sink = object : io.deepseekharness.mobile.runtime.RuntimeEventSink {
+            override fun onProgress(snapshot: io.deepseekharness.mobile.runtime.RuntimeStateSnapshot) = Unit
+            override fun onTerminalOutput(sessionId: String, dataBase64: String, suppressPublicOutput: Boolean) = Unit
+            override fun onTerminalExit(sessionId: String, exitCode: Int) = Unit
+        }
         val first = "请直接用中文给我讲一篇完整的长童话，主角是小鲸鱼和海猫，分十五段写，每段都写出场景、对白和细节。"
         val next = "另一件独立的事：明早交接要用「蓝港差异报告 $token」。甲表写周四交付九箱，乙表写周五交付六箱，整理成一份列出差异和待确认事项的交接报告。"
         lateinit var window: CompanionBubbleWindow
         val screenCycle = InstrumentationRegistry.getArguments().getString("screenCycle") == "true"
+        var windowReady = false
         val power = app.getSystemService(android.os.PowerManager::class.java)
         var sleepRequested = false
         fun setScreen(on: Boolean) {
@@ -473,8 +482,19 @@ class WhaleConversationalTaskTest {
         fun work() = desk.list().getJSONArray("items").let { rows -> (0 until rows.length()).map(rows::getJSONObject)
             .filter { it.optString("title").contains(token) || it.optString("scope").contains(token) } }
         try {
+            if (boundSession) {
+                val controller = io.deepseekharness.mobile.runtime.RuntimeHost.acquire(app,sink)
+                io.deepseekharness.mobile.runtime.RuntimeHost.ensureDeviceBridge(controller)
+                if (runCatching { controller.openHarnessAccess() }.isFailure)
+                    io.deepseekharness.mobile.runtime.RuntimeHost.startHarness(controller)
+                val client = HarnessBubbleClient(controller.openHarnessAccess())
+                val session = client.call("session/create",JSONObject()).getString("sessionId")
+                client.command(session,"/permission read-only")
+                CompanionBubbleChat(app,historyStore=transcript).resumeSession(session)
+            }
             inst.runOnMainSync {
                 window = CompanionBubbleWindow(app, app.getSystemService(WindowManager::class.java), autoOpenOnDelivery=false, historyStore=transcript) { intArrayOf(52,260,128,128) }
+                windowReady = true
                 window.show()
                 val panel = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible=true }.get(window) as View
                 val input = views(panel).filterIsInstance<EditText>().single()
@@ -483,6 +503,7 @@ class WhaleConversationalTaskTest {
                 input.setText(next); send.performClick()
                 input.setText("还没发的第三句")
             }
+            inst.sendStatus(0,Bundle().apply { putString("conversationPath",if (boundSession) "bound-read-only-session" else "direct") })
             await("首轮回复期间未见独立工单",120_000) {
                 val accepted = work().isNotEmpty() || desk.pending().let { commands -> (0 until commands.length()).any { commands.getJSONObject(it).optString("task").contains(token) } }
                 var outstanding = false
@@ -532,7 +553,8 @@ class WhaleConversationalTaskTest {
             inst.sendStatus(0, Bundle().apply { putString("overlap", "worker accepted while first reply outstanding; one report completed") })
         } finally {
             if (sleepRequested) setScreen(true)
-            inst.runOnMainSync { window.destroy() }
+            if (windowReady) inst.runOnMainSync { window.destroy() }
+            if (boundSession) io.deepseekharness.mobile.runtime.RuntimeHost.detachPluginSink(sink)
             check(tmp.parentFile == app.cacheDir); tmp.walkBottomUp().forEach { it.delete() }
         }
     }
