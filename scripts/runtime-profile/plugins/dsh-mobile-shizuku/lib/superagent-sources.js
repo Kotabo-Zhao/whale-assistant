@@ -38,6 +38,7 @@ export function githubReviewTrigger(repo, pull, comment, botLogin) {
   trigger.threads = [{ source: 'github', id: reviewThread }, { source: 'github', id: issueThread }]
   trigger.channel = { source: 'github', thread: reviewThread, address: { repo, issue: String(pull), review: String(root) } }
   trigger.meta.review = root
+  trigger.meta.pull = true
   return trigger
 }
 export function feishuTrigger(event, botOpenId) {

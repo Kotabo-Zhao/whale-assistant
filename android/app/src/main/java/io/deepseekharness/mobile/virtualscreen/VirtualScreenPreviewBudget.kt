@@ -34,8 +34,16 @@ internal object VirtualScreenBudgetPolicy {
     /** 连续这么多拍超预算也算 [SATURATED]：比例还没上来，但已经卡住了。 */
     const val SATURATED_RUN = 5
 
-    /** 这一档每拍允许花掉的时间（毫秒）。档位名不在允许列表里时抛异常，与续排延迟同一套契约。 */
-    fun budgetMillis(mode: String): Long = VirtualScreenPolicy.previewPullInterval(mode).toLong()
+    /**
+     * 这一档每拍允许花掉的时间（毫秒）。档位名不在允许列表里时抛异常，与续排延迟同一套契约。
+     *
+     * [panelRefreshHz] 是副屏面板的实际刷新率：给了就按 [VirtualScreenPolicy.effectiveFrameInterval]
+     * 夹取（采集侧也是同一份夹取，见 `VirtualScreenPolicy.previewPullDelay` 的三参重载）；
+     * 不给（0f / 负数）时保持旧口径「档位间隔」，让既有调用方与单测行为不变。
+     */
+    fun budgetMillis(mode: String, panelRefreshHz: Float = 0f): Long =
+        if (panelRefreshHz > 0f) VirtualScreenPolicy.effectiveFrameInterval(mode, panelRefreshHz).toLong()
+        else VirtualScreenPolicy.previewPullInterval(mode).toLong()
 
     /** 百分比取整（向下），用于判读阈值与展示，避免各处各算一份。 */
     fun percent(part: Int, total: Int): Int =
@@ -95,6 +103,11 @@ internal data class PreviewBudgetSnapshot(
  */
 internal class VirtualScreenPreviewBudget(
     window: Int = VirtualScreenBudgetPolicy.WINDOW_BEATS,
+    /**
+     * 面板刷新率读数（真机传 `Display.refreshRate`）。0f 表示还没读到，此时预算退回
+     * 「档位间隔」的旧口径；读到之后与采集侧用同一份夹取，避免状态行把省电夹取报成「跟不上档位」。
+     */
+    private val panelRefreshHz: () -> Float = { 0f },
 ) {
     private val size = window.coerceAtLeast(1)
     private val elapsed = LongArray(size)
@@ -106,7 +119,7 @@ internal class VirtualScreenPreviewBudget(
     /** 记一拍：[elapsedMillis] 是这一拍从开始到画面落到主线程的耗时，[mode] 是当刻档位。 */
     fun record(mode: String, elapsedMillis: Long): PreviewBudgetSnapshot {
         val spent = elapsedMillis.coerceAtLeast(0L)
-        val allowed = VirtualScreenBudgetPolicy.budgetMillis(mode).coerceAtLeast(1L)
+        val allowed = VirtualScreenBudgetPolicy.budgetMillis(mode, panelRefreshHz()).coerceAtLeast(1L)
         elapsed[cursor] = spent
         budget[cursor] = allowed
         cursor = (cursor + 1) % size

@@ -662,7 +662,8 @@ function createManager(rootDirectory, installPackage, parseYaml, probeGit) {
       if (!exists(candidate)) continue
       safe(candidate)
       const resolved = fs.realpathSync(candidate)
-      if (![...modules, home, path.join(root, 'opt/dsh/plugins')].some(base => within(base, resolved))) fail('PLUGIN_PATH_INVALID')
+      const localTimer = name === '@local/dsh-timer' && resolved === path.join(root, 'root/timer-plugin')
+      if (!localTimer && ![...modules, home, path.join(root, 'opt/dsh/plugins')].some(base => within(base, resolved))) fail('PLUGIN_PATH_INVALID')
       return resolved
     }
     return null

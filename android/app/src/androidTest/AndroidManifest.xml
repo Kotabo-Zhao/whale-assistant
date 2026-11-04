@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 仅在测试 APK 中安装的无用户数据测试应用。主 APK 不包含此入口。 -->
     <application>
+        <activity android:name="io.deepseekharness.mobile.companion.ForeignDropSource" android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar"/>
+        <provider android:name="io.deepseekharness.mobile.companion.ForeignDropProvider" android:authorities="${applicationId}.dragprobe"
+            android:exported="false" android:grantUriPermissions="true" />
         <activity
             android:name="io.deepseekharness.mobile.virtualscreen.VirtualScreenProbeActivity"
             android:exported="true"

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { arriveAtSettingsHome } from './__tests__/appTestHarness'
+import { expandSettingsGroup, arriveAtSettingsHome } from './__tests__/appTestHarness'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { beforeEachAppTest, bridge, FOREGROUND_SERVICE_SETTLE_MS, keepAlive, notInstalledState, openSettingsPage, readyState, runningState, settings } from './__tests__/appTestHarness'
 import type { RuntimeProgress, RuntimeVersionsState } from './platform/types'
@@ -644,6 +644,7 @@ describe('运行时版本管理', () => {
    */
   async function openVersionsPage(): Promise<void> {
     await screen.findByRole('heading', { name: '设置' }, { timeout: 5_000 })
+    expandSettingsGroup('运行与存储')
     fireEvent.click(await screen.findByRole('button', { name: /版本管理/ }, { timeout: 5_000 }))
     await screen.findByRole('heading', { name: '版本管理' }, { timeout: 5_000 })
   }

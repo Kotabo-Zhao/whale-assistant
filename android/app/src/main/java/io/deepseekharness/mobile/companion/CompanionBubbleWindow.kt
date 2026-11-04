@@ -13,16 +13,17 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import io.deepseekharness.mobile.R
+import androidx.core.widget.doAfterTextChanged
 
 /** Native floating chat; recent completed messages are restored across service restarts. */
-internal class CompanionBubbleWindow(private val context: Context, private val wm: WindowManager, private val onState: (String) -> Unit = {}, private val openSession: (String) -> Unit = {}, private val petBounds: () -> IntArray) {
+internal class CompanionBubbleWindow(private val context: Context, private val wm: WindowManager, private val onState: (String) -> Unit = {}, private val openSession: (String) -> Unit = {}, private val onWorkerCounts: (Int, Int, Int) -> Unit = { _, _, _ -> }, private val autoOpenOnDelivery: Boolean = true, private val onBackgroundReport: ((String) -> Unit)? = null, private val historyStore: CompanionBubbleHistory = CompanionBubbleHistory(context), private val petBounds: () -> IntArray) {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
-    private val historyStore = CompanionBubbleHistory(context)
     private val anchorStore = CompanionSessionAnchorStore(context)
     private val restored = historyStore.load()
     private val history = restored?.messages?.toMutableList() ?: mutableListOf()
-    private val chat = CompanionBubbleChat(context, restored)
+    private val chat = CompanionBubbleChat(context, restored, historyStore, ::dispatchTask)
     private var root: LinearLayout? = null
     private var previewDialog: android.app.AlertDialog? = null
     private var questionDialog: android.app.AlertDialog? = null
@@ -34,11 +35,40 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var closed = false
     private var draft = chat.pendingUser.orEmpty()
     private var lastError: String? = null
+    private var inFlightUser: String? = null
+    private var failedUser: String? = null
+    private var captureDialog: android.app.AlertDialog? = null
     private var positionUpdater: (() -> Unit)? = null
+    private val workerPanel = CompanionWorkerPanel(context, { id -> hide(); openSession(id) }, onWorkerCounts, ::hide)
+    private var renderWorkerReport: ((org.json.JSONObject) -> Unit)? = null
+    private val workerReportListener: (org.json.JSONObject) -> Unit = { report ->
+        handler.post {
+            if (!closed) {
+                when (report.optString("state")) {
+                    "completed" -> onState("taskDone")
+                    "waiting" -> onState("taskWaiting")
+                    "failed", "cancelled", "blocked" -> onState("taskFailed")
+                }
+                if (visible) renderWorkerReport?.let { render ->
+                    render(report); WorkerReportInbox(context).markSeen(listOf(report.optString("id")))
+                } else if (onBackgroundReport != null) {
+                    onBackgroundReport.invoke(report.optString("state"))
+                } else if (autoOpenOnDelivery) show()
+            }
+        }
+    }
+    init { WorkerReportInbox.subscribe(workerReportListener) }
     private val richViews = mutableListOf<android.webkit.WebView>()
+    /** 后台投递回合（Worker 回执等）的本地收件箱；不参与对话历史与导出。 */
+    private val deliveryInbox = CompanionDeliveryInbox(context)
+    private var deliveryWatcher: CompanionDeliveryWatcher? = null
     val visible: Boolean get() = root != null
 
     fun toggle() { if (visible) hide() else show() }
+    private fun dispatchTask(task: String, mode: String, id: String, title: String): org.json.JSONObject = workerPanel.submit(task, mode, id, title)
+    fun composeTask() { if (!closed) workerPanel.compose() }
+    fun openTaskInbox() { if (!closed) workerPanel.open() }
+    fun refreshWorkerStatus() { workerPanel.refreshStatus() }
     /**
      * Start the pet UI on a main-workspace session selected by the user.  Its local bubble
      * history is archived before switching; the main Harness transcript is never read here.
@@ -47,14 +77,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         if (closed || busy || !BubbleSessionRegistry.valid(sessionId)) return false
         busy = true
         val generation = ++request
+        deliveryWatcher?.stop(); deliveryWatcher = null
         hide()
         executor.execute {
-            val result = runCatching { historyStore.archiveAndClear(); chat.resumeSession(sessionId) }
+            val result = runCatching { historyStore.archiveAndClear(); deliveryInbox.clear(); chat.resumeSession(sessionId) }
             handler.post {
                 if (closed || request != generation) return@post
                 busy = false
                 result.onSuccess {
-                    history.clear(); draft = ""; lastError = null
+                    history.clear(); draft = ""; lastError = null; failedUser = null
                     show("已接续主对话会话；主对话正文不会复制到桌宠。现在可以继续发送消息。")
                 }.onFailure {
                     lastError = "无法切换到主对话会话，原桌宠记录已保留。"
@@ -68,36 +99,93 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         if (closed || visible) return
         val density = context.resources.displayMetrics.density
         fun dp(n: Int) = (n * density).toInt()
+        val ui = PetUi(context)
+        val palette = ui.palette
+        val foreground = ui.ink
+        val secondary = ui.muted
+        val accent = ui.accent
+        fun bar() = ui.shape(ui.surface, 12)
         val metrics = context.resources.displayMetrics
-        val width = minOf(dp(320), metrics.widthPixels - dp(16))
+        val width = minOf(dp(340), (metrics.widthPixels - dp(16)).coerceAtLeast(1))
         val pet = petBounds()
         var petOnRight = pet[0] + pet[2] / 2 >= metrics.widthPixels / 2
         // This estimate only selects the order before measuring; the final coordinates use actual height.
         var showAbove = pet[1] >= dp(175) || pet[1] + pet[3] + dp(175) > metrics.heightPixels
         val panel = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
+            background = ui.shape(ui.surface, 20, ui.line)
+            clipToOutline = true
+            setPadding(dp(1), dp(1), dp(1), dp(1))
         }
         val knowledgeAllowed = CompanionStore(context).knowledgeModelAccess
         val accessBadge = TextView(context).apply {
             text = if (knowledgeAllowed) "角色对话 · 资料已授权，按需调用工具" else "角色对话 · 资料未授权，点击打开设置"
-            textSize = 11f; setTextColor(if (knowledgeAllowed) Color.rgb(42, 104, 83) else Color.rgb(126, 78, 44))
+            textSize = 13f; setTextColor(secondary); gravity = Gravity.CENTER_VERTICAL; minHeight = dp(44)
             setPadding(dp(12), dp(5), dp(12), dp(5))
             contentDescription = text
             setOnClickListener {
                 context.startActivity(Intent(context, CompanionActivity::class.java)
+                    .putExtra(CompanionActivity.OPEN_PAGE, CompanionPreferencePage.LIBRARY.name)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
             }
         }
-        panel.addView(accessBadge)
-        val content = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = if (showAbove) Gravity.BOTTOM else Gravity.TOP }
-        val scroll = ScrollView(context).apply { addView(content); isFillViewport = true }
-        panel.addView(scroll, LinearLayout.LayoutParams(-1, minOf(dp(460), (metrics.heightPixels * 0.55f).toInt())))
+        val sessionActions = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = android.view.View.GONE
+            background = bar(); addView(accessBadge)
+        }
+        val workerBadge = ui.text("后台任务", 12f, accent, true).apply {
+            gravity = Gravity.CENTER; minHeight = dp(44); maxWidth = dp(88)
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(9), 0, dp(9), 0); contentDescription = "后台任务"
+            background = ui.action(ui.soft, 12); setOnClickListener { workerPanel.open() }
+        }
+        val headingEnd = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL; addView(workerBadge); addView(ui.close(::hide)) }
+        panel.addView(ui.header(ui.string(R.string.pet_ui_name), ui.string(R.string.pet_ui_chat_title), headingEnd))
+        val shortcuts = LinearLayout(context).apply {
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(2), dp(8), 0)
+        }
+        val toolShelf = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        fun shortcut(label: String, icon: Int, description: String, click: () -> Unit) {
+            shortcuts.addView(ui.text(label, 13f, foreground).apply {
+                gravity = Gravity.CENTER; minHeight = dp(44); contentDescription = description
+                setPadding(dp(5), 0, dp(5), 0); background = ui.action(ui.surface, 10)
+                ui.leadingIcon(this, icon, 16); isFocusable = true; setOnClickListener { click() }
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        sessionActions.addView(ui.text(ui.string(R.string.pet_manual_assign), 14f, accent).apply {
+            minHeight = dp(44); gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), 0, dp(12), 0); ui.leadingIcon(this, R.drawable.ic_pet_letter)
+            contentDescription = "交办独立后台任务"; setOnClickListener {
+                sessionActions.visibility = android.view.View.GONE
+                panel.post { positionUpdater?.invoke() }
+                composeTask()
+            }
+        })
+        shortcut("存资料", R.drawable.ic_pet_shell, "存入本地资料库") { openCapture() }
+        shortcut(ui.string(R.string.pet_menu_tools), R.drawable.ic_whale_nav_plugins, ui.string(R.string.pet_menu_tools)) {
+            sessionActions.visibility = android.view.View.GONE
+            if (toolShelf.childCount > 0) toolShelf.removeAllViews()
+            else toolShelf.addView(WhalePetToolShelf(context, { panel.post { positionUpdater?.invoke() } }, ::hide))
+            panel.post { positionUpdater?.invoke() }
+        }
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(6))
+            gravity = if (showAbove) Gravity.BOTTOM else Gravity.TOP
+        }
+        val scroll = ScrollView(context).apply { addView(content); isVerticalScrollBarEnabled = false; setBackgroundColor(ui.canvas) }
+        panel.addView(scroll, LinearLayout.LayoutParams(-1, dp(120)))
+        panel.addView(toolShelf); panel.addView(sessionActions); panel.addView(shortcuts)
+        content.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) panel.post { if (root === panel) positionUpdater?.invoke() }
+        }
         fun styleBubble(view: android.view.View, isUser: Boolean) {
-            view.setPadding(dp(13), dp(9), dp(13), dp(9))
-            view.background = GradientDrawable().apply {
-                setColor(if (isUser) Color.rgb(205, 235, 255) else Color.rgb(255, 248, 252))
-                cornerRadius = dp(16).toFloat()
-                setStroke(dp(1), if (isUser) Color.rgb(164, 214, 241) else Color.rgb(243, 209, 225))
+            view.setPadding(dp(12), dp(8), dp(12), dp(8))
+            view.background = ui.shape(if (isUser) ui.soft else ui.answer, 14, if (isUser) null else ui.line).apply {
+                val round = dp(15).toFloat(); val tip = dp(5).toFloat()
+                cornerRadii = if (isUser) floatArrayOf(round,round,tip,tip,round,round,round,round)
+                    else floatArrayOf(tip,tip,round,round,round,round,round,round)
             }
         }
         fun atBottom(): Boolean = scroll.getChildAt(0)?.let { child ->
@@ -106,7 +194,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         fun bubble(message: String, isUser: Boolean): TextView {
             val shouldFollow = isUser || atBottom()
             val view = TextView(context).apply {
-                text = CompanionRichText.render(message); textSize = 15f; setTextColor(Color.rgb(44, 54, 75)); tag = isUser; maxWidth = width - dp(45)
+                text = CompanionRichText.render(message, ui); textSize = 15f; setTextColor(ui.ink); setLinkTextColor(ui.accent); tag = isUser; maxWidth = width - dp(45)
                 movementMethod = android.text.method.LinkMovementMethod.getInstance()
                 styleBubble(this, isUser)
             }
@@ -137,7 +225,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     }
                     override fun onPageFinished(v: android.webkit.WebView, url: String) {
                         val quoted = org.json.JSONObject.quote(message).replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-                        v.evaluateJavascript("renderMessage($quoted)") { value ->
+                        val bodyColor = String.format(java.util.Locale.ROOT, "#%06x", ui.ink and 0xffffff)
+                        val quietColor = String.format(java.util.Locale.ROOT, "#%06x", ui.muted and 0xffffff)
+                        val linkColor = String.format(java.util.Locale.ROOT, "#%06x", ui.accent and 0xffffff)
+                        val codeColor = String.format(java.util.Locale.ROOT, "#%06x", ui.soft and 0xffffff)
+                        v.evaluateJavascript("document.body.style.cssText='--ink:$bodyColor;--muted:$quietColor;--link:$linkColor;--code:$codeColor';renderMessage($quoted)") { value ->
                             val height = value.toIntOrNull() ?: return@evaluateJavascript
                             if (root !== panel || height <= 0) return@evaluateJavascript
                             v.layoutParams = v.layoutParams.apply { this.height = dp(height + 22) }
@@ -222,10 +314,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val segment = ""
             val view = TextView(context).apply {
                 text = "资料来源 · ${citation.displayName}$segment$coverage"
-                textSize = 12f; setTextColor(Color.rgb(48, 91, 125)); maxWidth = width - dp(45)
+                textSize = 12f; setTextColor(ui.accent); maxWidth = width - dp(45)
                 contentDescription = "回答资料来源：${citation.displayName}$segment$coverage"
                 setPadding(dp(12), dp(7), dp(12), dp(7))
-                background = GradientDrawable().apply { setColor(Color.rgb(238, 247, 255)); cornerRadius = dp(12).toFloat(); setStroke(dp(1), Color.rgb(177, 213, 240)) }
+                background = ui.action(ui.soft, 12, ui.line)
                 isClickable = true
                 setOnClickListener {
                     runCatching {
@@ -245,13 +337,43 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val user = it.role == "user"
             bubble(parsed.text, user).also { view -> renderCompleted(view, parsed.text, user) }; (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (!user) CompanionBubbleChatPolicy.citedSources(parsed.text, it.citations).forEach(::citationCard)
         }
+        fun workerReport(report: org.json.JSONObject) {
+            val state = when (report.optString("state")) {
+                "completed" -> "已完成"
+                "waiting" -> "需要你回答"
+                "blocked" -> "遇到阻碍"
+                "failed" -> "未完成"
+                "cancelled" -> "已取消"
+                else -> "状态更新"
+            }
+            val text = "后台任务 · ${report.optString("title")} · $state\n${report.optString("text")}".trim()
+            bubble(text, false).also { view -> renderCompleted(view, text, false) }
+        }
+        val workerInbox = WorkerReportInbox(context)
+        val unseenReports = workerInbox.unseen()
+        unseenReports.forEach(::workerReport)
+        renderWorkerReport = ::workerReport
+        // 后台任务结果：用户那一轮已经结束，回执是在同一会话里新起的一轮，历史里没有它。
+        // 单独从收件箱追加，既不改对话历史（历史要求用户/助手严格交替），也不会被误当成新提问。
+        val deliveries = deliveryInbox.unseen()
+        if (deliveries.isNotEmpty()) {
+            bubble("后台任务有结果了（不是新的提问，可以继续说）", false)
+            deliveries.forEach { item ->
+                val parsed = CompanionBubbleChatPolicy.parseInlineImages(item.text)
+                bubble(parsed.text, false).also { view -> renderCompleted(view, parsed.text, false) }
+                parsed.images.forEach(::imageBubble)
+            }
+            scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
+        }
         if (busy) {
             chat.pendingUser?.let { bubble(it, true) }
             val live = bubble(liveText.ifBlank { "正在恢复回复…" }, false)
-            renderLive = { text -> live.text = CompanionRichText.render(text); panel.post { positionUpdater?.invoke() } }
+            renderLive = { text -> live.text = CompanionRichText.render(text, ui); panel.post { positionUpdater?.invoke() } }
         }
         val input = EditText(context).apply {
-            hint = "回答问题或继续聊天…"; textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
+            hint = ui.string(R.string.pet_ui_input); setTextColor(foreground); setHintTextColor(secondary)
+            imeOptions = imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
+            background = null; setPadding(dp(10), dp(8), dp(2), dp(8)); minHeight = dp(44); textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
             setText(draft); setSelection(text.length)
             addTextChangedListener(object : android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -259,11 +381,17 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 override fun afterTextChanged(s: android.text.Editable?) = Unit
             })
         }
-        val send = TextView(context).apply { text = "发送"; textSize = 16f; setPadding(dp(10), dp(12), dp(10), dp(12)) }
-        val footer = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), 0, dp(4), 0); background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(24).toFloat() } }
+        val send = ui.text(ui.string(R.string.pet_ui_send), 14f, ui.onPrimary, true).apply {
+            gravity = Gravity.CENTER; minWidth = dp(54); minHeight = dp(44)
+            background = ui.action(ui.primary, 12); isEnabled = !busy
+        }
+        val footer = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), dp(2), dp(2), dp(2)); background = ui.shape(ui.canvas, 14, ui.line)
+        }
         var waitingInMain = false
         val continueButton = TextView(context).apply {
-            text = "主对话"; textSize = 13f; setPadding(dp(4), dp(12), dp(4), dp(12))
+            text = "主对话"; setTextColor(android.content.res.ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()), intArrayOf(secondary, accent))); textSize = 13f; setPadding(dp(4), dp(12), dp(4), dp(12))
             contentDescription = "在主对话继续桌宠会话"
             isEnabled = !busy && chat.handoffSessionId() != null
             setOnClickListener {
@@ -271,7 +399,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
         }
         val newTopic = TextView(context).apply {
-            text = "新话题"; textSize = 13f; setPadding(dp(4), dp(12), dp(4), dp(12))
+            text = "新话题"; setTextColor(continueButton.textColors); textSize = 13f; setPadding(dp(4), dp(12), dp(4), dp(12))
             contentDescription = "开始新话题并保留之前的聊天记录"
             isEnabled = !busy && (history.isNotEmpty() || lastError != null)
             setOnClickListener {
@@ -279,22 +407,34 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 busy = true; send.isEnabled = false; input.isEnabled = false; isEnabled = false; continueButton.isEnabled = false
                 val generation = ++request
                 executor.execute {
-                    val result = runCatching { historyStore.archiveAndClear(); chat.startNewTopic() }
+                    val result = runCatching { historyStore.archiveAndClear(); deliveryInbox.clear(); chat.startNewTopic() }
                     handler.post {
                         if (closed || request != generation) return@post
                         busy = false
-                        result.onSuccess { history.clear(); draft = ""; lastError = null }
+                        result.onSuccess { history.clear(); draft = ""; lastError = null; failedUser = null }
                             .onFailure { lastError = "无法开启新话题，原聊天记录已保留" }
                         if (root != null) { hide(); show() }
                     }
                 }
             }
         }
-        footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f)); footer.addView(send); footer.addView(continueButton); footer.addView(newTopic); footer.addView(TextView(context).apply { text = "×"; textSize = 22f; setPadding(dp(4), dp(5), dp(6), dp(5)); setOnClickListener { hide() } }); panel.addView(footer)
-        val status = TextView(context).apply { text = ""; textSize = 12f; setTextColor(Color.rgb(80, 45, 45)); background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(10).toFloat() } }
+        sessionActions.addView(LinearLayout(context).apply { addView(continueButton); addView(newTopic) })
+        footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        footer.addView(ui.text("⋯", 20f, secondary).apply {
+            gravity = Gravity.CENTER; minWidth = dp(44); minHeight = dp(44)
+            contentDescription = ui.string(R.string.pet_menu_session); background = ui.action(ui.canvas, 10)
+            setOnClickListener {
+                toolShelf.removeAllViews()
+                sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
+                panel.post { positionUpdater?.invoke() }
+            }
+        })
+        footer.addView(send)
+        panel.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(10), 0, dp(10), dp(9)) })
+        val status = TextView(context).apply { text = ""; textSize = 12f; setTextColor(foreground); background = bar() }
         panel.addView(status)
         val answerQuestion = TextView(context).apply {
-            text = "回答助手的问题"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); setTextColor(Color.rgb(35, 91, 140))
+            text = "回答助手的问题"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); setTextColor(accent); background = bar()
             visibility = if (pendingQuestion != null) android.view.View.VISIBLE else android.view.View.GONE
             setOnClickListener { showQuestion() }
         }
@@ -302,25 +442,36 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         // Message bubbles always precede the input, regardless of the pet's screen position.
         status.text = if (busy) "正在回复…" else lastError.orEmpty()
         status.visibility = if (busy || lastError != null) android.view.View.VISIBLE else android.view.View.GONE
-        if (busy) { status.text = "正在回复…"; send.isEnabled = false; input.isEnabled = false }
+        if (busy) { status.text = "正在回复…"; send.isEnabled = false; input.isEnabled = inFlightUser != null }
         var failedMessage: TextView? = null
+        var retryText: String? = null
+        status.setOnClickListener {
+            if (!busy) (chat.pendingUser ?: failedUser)?.let { retryText = it; send.performClick() }
+        }
         send.setOnClickListener {
-            val message = runCatching { CompanionBubbleChatPolicy.validateMessage(input.text.toString()) }.getOrNull() ?: return@setOnClickListener
             if (busy) return@setOnClickListener
+            val message = runCatching { CompanionBubbleChatPolicy.validateMessage(retryText ?: input.text.toString()) }.getOrNull() ?: return@setOnClickListener
+            retryText = null
+            if (chat.pendingUser?.let { it != message } == true) {
+                status.text = "上一条消息需要恢复，点此重试。"; status.visibility = android.view.View.VISIBLE
+                return@setOnClickListener
+            }
+            inFlightUser = message; failedUser = null
+            if (input.text.toString().trim() == message) input.text.clear()
             failedMessage?.let { content.removeView(it) }; failedMessage = null
             lastError = null
             val sentBubble = bubble(message, true)
             renderCompleted(sentBubble, message, true)
             val streamingBubble = bubble("正在输入…", false)
             liveText = ""
-            renderLive = { text -> streamingBubble.text = CompanionRichText.render(text); panel.post { positionUpdater?.invoke() } }
+            renderLive = { text -> streamingBubble.text = CompanionRichText.render(text, ui); panel.post { positionUpdater?.invoke() } }
             waitingInMain = false
-            busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = false; send.isEnabled = false; input.isEnabled = false; status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
+            busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = false; send.isEnabled = false; status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
             chat.onInteractionNeeded = { question -> handler.post {
                 if (!closed && request == generation && root === panel) {
                     waitingInMain = true
-                    streamingBubble.text = CompanionRichText.render(question)
+                    streamingBubble.text = CompanionRichText.render(question, ui)
                     status.text = "需要你回答，请点“主对话”继续。"
                     status.visibility = android.view.View.VISIBLE
                     continueButton.isEnabled = chat.handoffSessionId() != null
@@ -384,7 +535,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     if (closed || request != generation) return@post
                     acceptingPartials.set(false); latestPartial.set(null)
                     val samePanel = root === panel
-                    busy = false; send.isEnabled = true; input.isEnabled = true
+                    inFlightUser = null; busy = false; send.isEnabled = true; input.isEnabled = true
                     result.onSuccess { answer ->
                         pendingQuestion = null; questionDialog?.dismiss(); questionDialog = null; answerQuestion.visibility = android.view.View.GONE
                         onState("reply")
@@ -401,15 +552,22 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                                 })
                             }
                         } }
-                        draft = ""
-                        if (samePanel) { streamingBubble.text = CompanionRichText.render(answer.text); renderCompleted(streamingBubble, answer.text, false); answer.images.forEach(::imageBubble); answer.citations.take(2).forEach(::citationCard); input.text.clear() }
+                        // 本轮调用过 mobile_workers、或这个会话名下有未结束的任务：父会话里还会有一轮
+                        // 由 Worker 回执触发的新回复，那不是用户的请求，气泡的流折叠看不到它 —— 交给投递监察器推回来。
+                        if (answer.tools.contains("mobile_workers") || hasActiveWorkers()) armDeliveryWatcher(answer.turn)
+                        if (samePanel) { streamingBubble.text = CompanionRichText.render(answer.text, ui); renderCompleted(streamingBubble, answer.text, false); answer.images.forEach(::imageBubble); answer.citations.take(2).forEach(::citationCard) }
                         status.text = ""; status.visibility = android.view.View.GONE
                     }.onFailure { error ->
                         onState("idle")
-                        failedMessage = sentBubble
+                        failedMessage = sentBubble; failedUser = message
+                        if (draft.isEmpty()) {
+                            draft = message
+                            if (samePanel) { input.setText(message); input.setSelection(input.length()) }
+                        }
                         if (samePanel) content.removeView(streamingBubble)
                         status.text = error.message?.takeIf { it.startsWith("本机") || it.startsWith("对话") || it.startsWith("回复") || it.startsWith("模型") }
                             ?: "发送失败，请检查本机服务和网络；输入已保留。"
+                        status.append(" · 点此重试")
                         lastError = status.text.toString()
                         status.visibility = android.view.View.VISIBLE
                     }
@@ -433,14 +591,20 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val frame = android.graphics.Rect().also { panel.getWindowVisibleDisplayFrame(it) }
             val frameBottom = if (frame.bottom > 0) minOf(metrics.heightPixels, frame.bottom) else metrics.heightPixels
             val usable = minOf(frameBottom, metrics.heightPixels - keyboard)
-            val desiredScroll = minOf(dp(460), (metrics.heightPixels * 0.55f).toInt(), (usable - dp(110)).coerceAtLeast(dp(120)))
+            val gap = dp(8)
+            val hasSideRoom = maxOf(currentPet[0], metrics.widthPixels - currentPet[0] - currentPet[2]) >= width + gap
+            val availableHeight = if (hasSideRoom) usable else minOf(usable, maxOf(currentPet[1], usable - currentPet[1] - currentPet[3]) - gap)
+            val chrome = if (panel.measuredHeight > scroll.measuredHeight) panel.measuredHeight - scroll.measuredHeight else dp(110)
+            val natural = content.measuredHeight.takeIf { it > 0 } ?: dp(112)
+            val desiredScroll = minOf(dp(400), (metrics.heightPixels * .55f).toInt(), natural.coerceAtLeast(dp(72)),
+                (availableHeight - chrome - dp(4)).coerceAtLeast(dp(44)))
             val scrollParams = scroll.layoutParams as LinearLayout.LayoutParams
             if (scrollParams.height != desiredScroll) { scrollParams.height = desiredScroll; scroll.layoutParams = scrollParams }
             panel.measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
                 android.view.View.MeasureSpec.makeMeasureSpec(metrics.heightPixels, android.view.View.MeasureSpec.AT_MOST))
             val actualHeight = panel.measuredHeight.coerceIn(1, metrics.heightPixels)
-            val point = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(metrics.widthPixels, metrics.heightPixels,
-                currentPet[0], currentPet[1], currentPet[2], currentPet[3], width, actualHeight, dp(2), dp(30))
+            val point = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(metrics.widthPixels, usable.coerceAtLeast(actualHeight),
+                currentPet[0], currentPet[1], currentPet[2], currentPet[3], width, actualHeight, dp(2), gap)
             val placedAbove = point.y + actualHeight <= currentPet[1]
             val right = currentPet[0] + currentPet[2] / 2 >= metrics.widthPixels / 2
             if (placedAbove != showAbove || right != petOnRight) {
@@ -457,15 +621,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
                 content.requestLayout()
             }
-            val insets = panel.rootWindowInsets
-            val imeBottom = if (android.os.Build.VERSION.SDK_INT >= 30 && insets?.isVisible(android.view.WindowInsets.Type.ime()) == true)
-                insets.getInsets(android.view.WindowInsets.Type.ime()).bottom else 0
-            val visibleFrame = android.graphics.Rect().also { panel.getWindowVisibleDisplayFrame(it) }
-            val visibleBottom = if (visibleFrame.bottom > 0) minOf(metrics.heightPixels, visibleFrame.bottom) else metrics.heightPixels
-            val availableBottom = minOf(visibleBottom, metrics.heightPixels - imeBottom).coerceAtLeast(actualHeight)
-            val newY = minOf(point.y, (availableBottom - actualHeight - dp(4)).coerceAtLeast(0))
-            val moved = params.x != point.x || params.y != newY
-            params.x = point.x; params.y = newY
+            val moved = params.x != point.x || params.y != point.y
+            params.x = point.x; params.y = point.y
             if (root === panel && moved) runCatching { wm.updateViewLayout(panel, params) }
             Unit
         }
@@ -476,8 +633,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         updatePosition()
         if (runCatching { wm.addView(panel, params) }.isSuccess) {
             root = panel; positionUpdater = updatePosition
+            workerInbox.markSeen(unseenReports.map { it.optString("id") })
+            deliveryInbox.markSeen(deliveries)
+            workerPanel.attach(workerBadge)
             executor.execute { chat.prewarm() }
-            if (!busy && chat.pendingUser != null) handler.post { if (root === panel && !busy) send.performClick() }
+            armDeliveryWatcherIfNeeded()
+            if (!busy && chat.pendingUser != null) handler.post { if (root === panel && !busy) { retryText = chat.pendingUser; send.performClick() } }
         }
     }
     /** Reply to the original tool call, without another chat prompt. */
@@ -527,7 +688,101 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
     }
+    /**
+     * 盯住本会话后续的「后台投递回合」（Worker 回执 / 屏幕陪看唤醒）。
+     *
+     * 只在**本轮确实调用过 mobile_workers** 时布防：没有派工就没有回执，不必白跑。
+     * 同一个窗口只允许一个监察器；换会话、开新话题、窗口销毁都会停掉。
+     */
+    private fun armDeliveryWatcher(turn: Int?) {
+        deliveryWatcher?.stop(); deliveryWatcher = null
+        val session = chat.currentSessionId() ?: return
+        // 从「上次已经看到过的回合」和「本轮回合」里取较大的一个：重开气泡时不会把旧回执再推一遍，
+        // 而进程重启后也能接着上次的位置继续盯。
+        val startTurn = maxOf(turn ?: -1, deliveryInbox.lastSeenTurn())
+        deliveryWatcher = CompanionDeliveryWatcher(
+            context, chat, session, startTurn,
+            onDelivery = { delivery -> handleDelivery(delivery) },
+            onDone = { deliveryWatcher = null },
+        ).also { it.start() }
+    }
+
+    /** 这个会话名下是否还有没结束的 Worker：有就说明后续一定会有回执要推回气泡。 */
+    private fun hasActiveWorkers(): Boolean {
+        val session = chat.currentSessionId() ?: return false
+        return runCatching { WorkerDashboardStore(context).activeFor(session) }.getOrDefault(false)
+    }
+
+    /** 打开气泡时补一次布防：用户可能在派工后才重新打开气泡（或进程被杀后重开）。 */
+    private fun armDeliveryWatcherIfNeeded() {
+        if (deliveryWatcher != null) return
+        if (hasActiveWorkers()) armDeliveryWatcher(null)
+    }
+
+    /** 结果到达：先落收件箱（进程重启后仍能看到），再按窗口状态刷新或弹出。 */
+    private fun handleDelivery(delivery: Delivery) {
+        val session = chat.currentSessionId() ?: return
+        deliveryInbox.add(CompanionDeliveryInbox.Item(delivery.turn, delivery.text, System.currentTimeMillis(), session))
+        deliveryInbox.rememberTurn(delivery.turn)
+        handler.post {
+            if (closed) return@post
+            onState("reply")
+            when {
+                root != null -> { hide(); show() }
+                autoOpenOnDelivery -> show()
+            }
+        }
+    }
+
+    fun openCapture() {
+        if (closed || captureDialog != null) return
+        fun dp(n: Int) = (n * context.resources.displayMetrics.density + .5f).toInt()
+        val ui = PetUi(context)
+        val counter = ui.text("", 12f, ui.muted).apply { gravity = Gravity.END }
+        val field = ui.editor(EditText(context)).apply {
+            hint = ui.string(R.string.pet_ui_note)
+            minLines = 2; maxLines = 4
+            doAfterTextChanged {
+                val size = it?.length ?: 0
+                counter.text = "$size / 8000"
+                if (error != null && size in 1..CompanionKnowledgeData.MAX_RECORD_TEXT && !it.isNullOrBlank() && '\u0000' !in it) error = null
+            }
+            setText(draft); setSelection(length())
+        }
+        val form = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(4), dp(18), dp(2))
+            addView(field)
+            counter.setPadding(0, dp(5), 0, 0); addView(counter)
+        }
+        val dialog = ui.dialogBuilder("存入本地资料库", ui.string(R.string.pet_ui_capture_hint), R.drawable.ic_whale_nav_memory)
+            .setView(ScrollView(context).apply { addView(form) }).setPositiveButton("保存文字", null).setNeutralButton("选文件", null)
+            .setNegativeButton("取消", null).create()
+        fun submit(pick: Boolean) {
+            val value = field.text.toString()
+            if (value.length > CompanionKnowledgeData.MAX_RECORD_TEXT || '\u0000' in value || (!pick && value.isBlank())) {
+                field.error = "请填写有效文字，最多 8000 字。"; return
+            }
+            val result = runCatching {
+                context.startActivity(Intent(context, WhaleMemoryShareActivity::class.java).apply {
+                    action = if (pick) WhaleMemoryShareActivity.PICK else WhaleMemoryShareActivity.FROM_PET
+                    if (value.isNotBlank()) putExtra(Intent.EXTRA_TEXT, value)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            }
+            if (result.isSuccess) dialog.dismiss()
+            else field.error = "未能打开保存入口，请重试。"
+        }
+        dialog.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+        dialog.setOnDismissListener { if (captureDialog === dialog) captureDialog = null }
+        captureDialog = dialog
+        dialog.show()
+        ui.finishDialog(dialog)
+        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { submit(false) }
+        dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener { submit(true) }
+    }
+
     fun followPet() { positionUpdater?.invoke() }
-    fun hide() { renderLive = null; questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { closed = true; request++; busy = false; hide(); executor.shutdownNow() }
+    fun hide() { captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
+    fun destroy() { closed = true; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); executor.shutdownNow() }
 }

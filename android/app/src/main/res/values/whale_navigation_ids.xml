@@ -1,0 +1,4 @@
+<resources>
+    <item name="harness_tab_memory" type="id" />
+    <item name="harness_tab_tasks" type="id" />
+</resources>

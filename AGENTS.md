@@ -119,6 +119,32 @@ Git 提交/发布规范见 [`.agents/rules/git-workflow.md`](.agents/rules/git-w
 
 要打开混淆必须同时补保留规则、做真机验证（启动/Shizuku/分享打开文件/插件管理），并回写本条。
 
+## 11. Worker 的工具边界按「读 / 操作」分两张表，不要合并回一张 `device` 集合
+
+`workers.js` 里 `deviceRead`（电量、前台应用、`device_info`、应用列表、系统设置、后台任务、wait）在
+**read 模式也允许**；`deviceAction`（点击、输入、启动、截图、控件树、Shell、文件读写、屏幕陪看）只在
+**device 模式**允许，并且 device 任务之间互斥。守卫走纯函数 `workerToolAllowed(mode, name)`。
+
+历史缺陷：原来只有一张只覆盖部分工具的 `device` 集合，导致「只读地查一下电量」这种正常任务必然
+`blocked`（回执是「此 Worker 不允许该工具」），device 模式也漏了 battery/info。合并回去会重新引入。
+`mobile-device-tools.test.mjs` 与 `mobile-workers.test.mjs` 的「worker tool policy」用例钉住这张表。
+
+## 12. 桌宠必须能看到「用户没问、后台投递触发」的回合
+
+气泡的流折叠（`BubbleSessionStream`）按设计只认 `user/message.source.rpcId == requestId` 的那一轮，
+并且 WebSocket 在 `turn/end` 就关闭。Worker 回执 / 屏幕陪看唤醒是父会话里**新的一轮**用户消息
+（`source.kind = mobile-workers|mobile-screen-watch`），不会出现在气泡里——这不是「主会话停了」。
+
+修复是三件事，缺一不可：
+1. `HarnessBubbleClient.recentRecords` 必须**先开 `$events` 再开 `session/follow`，且 `assistantStream: true`**；
+   只开 follow 或传 false 会被 Host 拒（表现为 `本机对话连接中断`，轮询静默拿到空）。
+2. 布防看**会话名下真实未结束的 Worker**（`WorkerDashboardStore.activeFor`），不能只看某轮回复里
+   出现过 `mobile_workers`——否则重开气泡/进程重启后就不再盯了。
+3. `lastSeenTurn` 持久化在收件箱里，避免重开气泡时把旧回执重复推一遍。
+
+结果展示走 `CompanionDeliveryInbox`（独立文件），**不要写进 `CompanionBubbleHistory`**：那份历史要求
+用户/助手严格交替（`messages.size % 2 == 0`），硬塞一条助手消息只能伪造用户消息。
+
 ## 改动前先跑这些
 
 本机 pnpm 不可用时用 node 直调（PATH 前置 `node` 目录）：

@@ -17,6 +17,7 @@
          POST_NOTIFICATIONS 仅影响 Android 13+ 是否显示通知，服务本身不依赖它。 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <!-- 目标应用副屏预览需要独立的前台服务；通知用于让用户随时结束会话。 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
@@ -113,7 +114,7 @@
         </provider>
         <!-- Shizuku Manager 以独立 UID 绑定用户服务；必须允许外部绑定，
              同时由 Shizuku 官方 API_V23 权限保护，未获 Shizuku 授权的调用方无法访问。 -->
-        <activity android:name=".companion.CompanionActivity" android:exported="false" />
+        <activity android:name=".companion.CompanionActivity" android:exported="false" android:theme="@style/AppTheme.Harness" />
         <receiver android:name=".companion.CompanionReminderReceiver" android:exported="false" />
         <receiver android:name=".companion.CompanionRecurringReceiver" android:exported="false" />
         <receiver android:name=".companion.CompanionRecurringClockReceiver" android:exported="false">
@@ -123,6 +124,7 @@
             </intent-filter>
         </receiver>
         <service android:name=".companion.UnderstandingJobService" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".companion.WhaleParseJobService" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".companion.SharedMemoryJobService" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".companion.SemanticIndexJobService" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".companion.CompanionNotificationService" android:label="鲸鱼娘通知摘要"
@@ -238,7 +240,26 @@
             android:noHistory="true"
             android:theme="@style/AppTheme.Transparent" />
 
+        <activity android:name=".companion.WhaleScreenConsentActivity" android:exported="false"
+            android:excludeFromRecents="true" android:taskAffinity="${applicationId}.screenCollect"
+            android:theme="@style/AppTheme.Transparent" />
+        <service android:name=".companion.WhaleScreenCollectService" android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+        <service android:name=".companion.WhaleScreenTileService" android:exported="true"
+            android:label="收藏这一屏" android:icon="@drawable/ic_overlay_ball"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
+        <activity android:name=".companion.WhaleDirectCaptureActivity" android:exported="false"
+            android:excludeFromRecents="true" android:taskAffinity="${applicationId}.capture"
+            android:theme="@style/AppTheme.Transparent" />
+        <service android:name=".companion.WhaleMemoryTileService" android:exported="true"
+            android:label="收藏剪贴板" android:icon="@drawable/ic_overlay_ball"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
         <!-- 独立目标可供荣耀任意门登记，也可在系统分享面板中直接保存文字。 -->
+        <activity android:name=".features.WhaleFeatureActivity" android:exported="false" />
         <activity
             android:name=".companion.WhaleMemoryShareActivity"
             android:exported="true"
@@ -246,6 +267,11 @@
             android:excludeFromRecents="true"
             android:taskAffinity="${applicationId}.share"
             android:theme="@style/AppTheme.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -262,6 +288,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="text/*" />
+                <data android:mimeType="audio/*" />
                 <data android:mimeType="application/*" />
             </intent-filter>
         </activity>

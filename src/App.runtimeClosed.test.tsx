@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { arriveAtSettingsHome, beforeEachAppTest, bridge, runningState } from './__tests__/appTestHarness'
+import { expandSettingsGroup, arriveAtSettingsHome, beforeEachAppTest, bridge, runningState } from './__tests__/appTestHarness'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
 vi.mock('./components/TerminalPanel', () => ({
@@ -56,6 +56,7 @@ describe('运行时已关闭时的至多一次恢复重试', () => {
 
     // 打开入口只认用户点击：先进设置首页，再点「打开 Harness」触发启动链。
     await arriveAtSettingsHome()
+    expandSettingsGroup('运行与存储')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
 
     // 重试链路成功后恰好两次：不能是 1（没重试）也不能是 3（循环了）。
@@ -76,6 +77,7 @@ describe('运行时已关闭时的至多一次恢复重试', () => {
     render(<App />)
 
     await arriveAtSettingsHome()
+    expandSettingsGroup('运行与存储')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
 
     const alert = await screen.findByRole('alert')
@@ -105,6 +107,7 @@ describe('运行时已关闭时的至多一次恢复重试', () => {
     render(<App />)
 
     await arriveAtSettingsHome()
+    expandSettingsGroup('运行与存储')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
 
     // 文案来自同一张受控码表：证明走的是「有码的错误」这条路，而不是退化成原生 message。

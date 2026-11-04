@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { arriveAtSettingsHome } from './__tests__/appTestHarness'
+import { expandSettingsGroup, arriveAtSettingsHome } from './__tests__/appTestHarness'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { beforeEachAppTest, bridge } from './__tests__/appTestHarness'
 import { APP_UPDATE_REMINDER_ENABLED_KEY } from './appUpdateReminder'
@@ -18,6 +18,7 @@ const cachedUpdate: AppUpdateState = {
 async function openVersions(): Promise<void> {
   // 开机不再自动进设置首页：先导航，再进「版本管理」。
   await arriveAtSettingsHome()
+  expandSettingsGroup('运行与存储')
   fireEvent.click(screen.getByRole('button', { name: /版本管理/ }))
   await screen.findByRole('heading', { name: '版本管理' })
 }

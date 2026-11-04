@@ -1,6 +1,8 @@
 # Android architecture
 
-当前个人分支使用 Capacitor 主界面与原生内嵌 Harness 对话区域。对话标签直接进入运行时页面，仍遵守凭据、运行环境更新和生命周期守卫；独立 HarnessActivity 保留为兼容入口。Ubuntu 内的 dsh web 仅监听回环地址，继续使用既有鉴权。首页本地概览通过 CompanionDashboard 读取统计和提醒，不调用模型。助手设置入口已进入设置首页，管理工作台首次展开时加载。插件目录与已安装管理共用安装操作入口；目前安装会停止运行环境，尚不具备等待任务结束和自动恢复对话的完整维护事务。
+桌宠独立派工、SuperAgent 工单、本地资料检索及应用功能工坊的权限与生命周期见[鲸鱼助手任务、创作与多模态记忆架构](鲸鱼助手任务创作与多模态记忆架构.md)。
+
+当前个人分支使用 Capacitor 主界面与原生内嵌 Harness 对话区域。对话标签直接进入运行时页面，仍遵守凭据、运行环境更新和生命周期守卫；独立 HarnessActivity 保留为兼容入口。Ubuntu 内的 dsh web 仅监听回环地址，继续使用既有鉴权。首页本地概览通过 CompanionDashboard 读取统计和提醒，不调用模型。助手偏好在设置中按需加载，资料管理统一进入记忆页。插件目录与已安装管理共用安装操作入口；目前安装会停止运行环境，尚不具备等待任务结束和自动恢复对话的完整维护事务。
 
 ## Runtime installation
 
@@ -312,6 +314,50 @@ applicable license texts and make complete corresponding source available by a
 method allowed by those licenses. Recording the commit and hashes is necessary
 but is not, by itself, corresponding source. The current import record does
 not assert that the shipped binaries can be rebuilt bit-for-bit.
+
+## Cross-app memory capture
+
+A global Android drag can terminate on the floating pet. A private activity holds the drop's temporary content grant until ingestion finishes. A clipboard tile reads once, after its transparent window receives focus. The screen tile requests a fresh MediaProjection, releases the display as soon as one frame is acquired, and runs local OCR on that frame. Both tiles can operate with the pet off. The Android Sharesheet and selected-text action remain independent entry points.
+
+Attachments are linked when the original record is committed. Captions carry the anchor ID and the generation of that import. Detail views and authorized model reads resolve only live matching originals. No document schema rebuild or inference from timestamps is needed.
+
+### Share intake and deferred parsing
+
+The share and drag activities need a temporary URI grant only to copy each selected original. A bounded stream goes through the private inbox and into verified, content-addressed storage. The importer reserves a persisted Android JobScheduler wakeup before committing the original, its caption links and its parse ticket together. The source app regains focus after the selected bytes are saved. Guest inbox delivery and text extraction run independently of the share window.
+
+A single background decoder reads the verified local copy. Chunks, coverage and ticket consumption commit together. Each import gets a fresh ticket, so a late result cannot publish against an original that was deleted and reimported. A stopped job can reclaim an interrupted ticket. After three interrupted attempts the item offers a manual retry. The screen-capture tile keeps its separate, local-only OCR path. Snapshot restore discards operational tickets, checks index trigger definitions against the installed app and rebuilds the search index from restored records.
+
+Semantic indexing and long-term memory extraction each share a single scheduled wakeup across row mutations. A pending earlier wake satisfies later requests. If an earlier deadline arrives it can replace the scheduled one. Requests made during a running batch are retained until the next wake has been reserved. Disabling long-term memory pauses its extraction jobs without delaying file OCR or transcription.
+
+## Native worker task browsing
+
+The guest ledger remains authoritative for execution. The native mirror keeps the complete task and its compact card in the same atomic JSON write. New readers can read the bounded first line for card metadata. A normal JSON reader still sees the entire original record. Legacy mirrors stay in place; the catalog streams past their history arrays. The default page reads filenames and modification times, then opens only its requested cards. Status counts, owner checks and group filters use a process-local index. A bounded 2 MiB card cache excludes full histories. Missing guest records are checked against the live guest directory. One damaged native mirror remains on disk and has its own unavailable state.
+
+Both task surfaces request 20 cards per page. The pet requests counts when its task panel is closed. Opening one task reads that mirror and returns at most 12 input, progress and report events with their revision numbers. Earlier pages remain addressable. The management UI listens for native changes while visible, falls back to a timer when a subscription is unavailable, and checks screen-watch state only while its settings section is open. Native command persistence uses its own lock so browsing long histories does not delay accepting a new task.
+
+The connected-device task-page probe in `scripts/profile-worker-page-idle.py` observes a manual refresh first, then counts list, detail and screen-watch reads while the selected page is visible. It records main-process CPU time and battery temperature separately.
+
+## Authored application tools
+
+A tool has one atomic record under the app's private features directory. Authorship through `mobile_whale_feature` produces a draft. Publication remains an explicit action in the native library. The management UI and the pet read the same cache of published titles and revisions, and subscribe to publication changes while visible. Direct launches resolve the currently active revision. A newer draft does not rename or replace the active shortcut.
+
+The native dispatch form also offers a creation worker mode. A user-selected local start command binds a single worker to its own draft identifier before acknowledgement. The native record preserves this binding when guest execution snapshots arrive. Each authoring call verifies the current assignment, revision, task state and queued cancellations under the command-store lock. Read and device workers, external channel decisions and ordinary main-session dispatches cannot mint this grant. An interrupted creator requires an explicit local resume. A task receipt links to the version actually saved. Publishing a preview compares both the latest draft and the active revision, and never happens as a side effect of worker completion.
+
+Published tools can expose a single HTML output element marked `data-whale-result`. Native chrome samples its text only after the user taps the collection action. A separate native dialog lets the user edit or cancel. Saving checks that the same revision is still active and records the tool title as provenance. Preview pages retain their own storage origin and cannot offer this action. The tool has no JavaScript bridge to memory, files or Android device APIs.
+
+## 应用导航
+
+嵌入式对话和 React 管理界面都提供对话、记忆、事项、工具和我的五个入口。原生导航只向管理 WebView 派发允许的固定路由。切页隐藏对话容器，保留其独立的 WebView、凭据边界和会话。横屏掌机使用侧栏，窄竖屏使用底部导航。工具与插件管理分别使用独立页面，历史记录保存从工具打开插件页的返回位置。主应用记忆入口默认显示资料，设置将助手与外观、运行与存储、设备与诊断分成三个并列入口，返回时可恢复原来的分组。跨组搜索可直接打开设置。助手偏好提供开关，并链接到同一资料库。首次语言选择跟随系统首选的受支持语言，已有手选设置优先。首次引导同时提供本地资料入口。
+
+## Recent captures
+
+Explicit text and original-file intake commit a bounded, eight-entry list of references in the knowledge transaction. Each reference identifies a current record and a capture time. Original files carry a generation that changes on reimport after deletion. Capture reads resolve the reference against the current library and return at most three original text chunks or an image description. The reader uses the write path’s stable primary keys and exposes the next surviving segment even if an earlier segment was deleted. Existing originals are readable from their detail page. Both backup export and restore discard this device-local list. The management view subscribes to coalesced native changes while mounted and rereads only while visible.
+
+## Whale companion animation
+
+The overlay uses a local weighted mesh over the same whale-maid artwork. PetActing selects clips from persisted task submissions, current Worker counts and incoming reports. PetSkeleton composes parent and child transforms for the head, fins, hair, arms, feet and two tail segments. PetSkin binds vertices on the avatar loading thread. Rendering writes into reusable vertex buffers. Hiding the overlay or enabling reduced motion cancels the frame scheduler.
+
+A Worker receipt can raise a short non-focusable hint. The full conversation stays behind a user action and chooses a free side of the avatar when there is insufficient room above and below it. Device evidence and the role of each state are recorded in [the development log](鲸鱼助手持续开发与真机日志-20261104.md).
 
 ## Secrets and logs
 

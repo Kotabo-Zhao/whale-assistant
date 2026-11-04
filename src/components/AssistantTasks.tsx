@@ -25,6 +25,7 @@ const localDateTime = (at = Date.now() + 60 * 60 * 1000): string => {
 
 /** User-facing task ledger backed by the same rows the Agent reads; it never fabricates tasks. */
 export function AssistantTasks({ onOpenSession }: { onOpenSession?: (id: string) => void }) {
+  const [section, setSection] = useState<'workers' | 'todo' | 'history'>(onOpenSession ? 'workers' : 'todo')
   const [items, setItems] = useState<CompanionRow[]>([])
   const [filter, setFilter] = useState<TaskState | 'all'>('all')
   const [loading, setLoading] = useState(true)
@@ -36,6 +37,7 @@ export function AssistantTasks({ onOpenSession }: { onOpenSession?: (id: string)
   const [nextOffset, setNextOffset] = useState<number | null>(null)
 
   useEffect(() => {
+    if (section !== 'todo') return
     let active = true
     setLoading(true); setMessage('')
     const readDashboard = (runtimeBridge as { companionDashboard?: (request: { operation: 'taskList'; query: string }) => Promise<Record<string, unknown>> }).companionDashboard
@@ -46,7 +48,7 @@ export function AssistantTasks({ onOpenSession }: { onOpenSession?: (id: string)
       if (active) setMessage('无法读取事项；不会把读取失败显示成没有事项。')
     }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [revisionToken])
+  }, [revisionToken, section])
 
   const visible = useMemo(() => filter === 'all' ? items : items.filter(item => item.state === filter), [filter, items])
   const askSource = (row: CompanionRow): void => {
@@ -113,11 +115,16 @@ export function AssistantTasks({ onOpenSession }: { onOpenSession?: (id: string)
   }
 
   return <section className="assistant-tasks" aria-labelledby="assistant-tasks-title">
-    <header><div><span className="workspace-kicker">YOUR ASSISTANT</span><h2 id="assistant-tasks-title">事项</h2><p>来自通知或资料整理的待办候选。标题和来源可能不准确，请先核对再完成、取消或设置提醒。</p></div>
-      <button className="icon-button" type="button" aria-label="刷新事项" disabled={loading || busyId !== null} onClick={() => setRevisionToken(value => value + 1)}><RefreshCw size={18} /></button></header>
-    {onOpenSession && <AssistantWorkers onOpenSession={onOpenSession} />}
-    {onOpenSession && <AssistantExecutions onOpenSession={onOpenSession} />}
-    <h3>我的待办</h3>
+    <header><div><span className="workspace-kicker">任务中心</span><h2 id="assistant-tasks-title">事项</h2>
+      <p>{section === 'workers' ? '把任务交给后台，随时回来查看结果或回答追问。' : section === 'todo' ? '核对从通知与资料中整理出的待办，安排提醒。' : '查看桌宠会话中每次操作的状态。'}</p></div>
+      {section === 'todo' && <button className="icon-button" type="button" aria-label="刷新事项" disabled={loading || busyId !== null} onClick={() => setRevisionToken(value => value + 1)}><RefreshCw size={18} /></button>}</header>
+    {onOpenSession && <nav className="task-destinations" aria-label="事项工作区">
+      {([['workers', '后台任务'], ['todo', '我的待办'], ['history', '执行记录']] as const).map(([value, title]) =>
+        <button key={value} type="button" aria-pressed={section === value} onClick={() => setSection(value)}>{title}</button>)}
+    </nav>}
+    {onOpenSession && <div hidden={section !== 'workers'}><AssistantWorkers onOpenSession={onOpenSession} visible={section === 'workers'} /></div>}
+    {section === 'history' && onOpenSession && <AssistantExecutions onOpenSession={onOpenSession} />}
+    {section === 'todo' && <><h3>我的待办</h3>
     <div className="assistant-task-filters" role="tablist" aria-label="事项状态筛选">{states.map(state => <button key={state.id} type="button" role="tab" aria-selected={filter === state.id} onClick={() => setFilter(state.id)}>{state.label}</button>)}</div>
     {loading && <p role="status">正在读取事项…</p>}
     {message && <p role="status">{message}</p>}
@@ -127,6 +134,7 @@ export function AssistantTasks({ onOpenSession }: { onOpenSession?: (id: string)
       {reminderFor === row.id && <form className="assistant-task-reminder" onSubmit={event => { event.preventDefault(); schedule(row) }}><label>提醒时间<input type="datetime-local" required value={reminderAt} onChange={event => setReminderAt(event.target.value)} /></label><button type="submit" disabled={busyId !== null}>确认安排</button><button type="button" disabled={busyId !== null} onClick={() => setReminderFor(null)}>返回</button></form>}
     </article>)}</div>
     {nextOffset !== null && <button type="button" className="button button-secondary" disabled={loading || busyId !== null} onClick={loadMore}>加载更多事项</button>}
+    </>}
   </section>
 }
 

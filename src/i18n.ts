@@ -15,6 +15,19 @@ export function readLanguage(): Language | null {
   }
 }
 
+export function defaultLanguage(languages: readonly string[]): Language {
+  for (const tag of languages) {
+    const base = tag.toLowerCase().split(/[-_]/, 1)[0]
+    if (base === 'en') return 'en'
+    if (base === 'zh') return 'zh-CN'
+  }
+  return 'zh-CN'
+}
+
+function currentLanguage(): Language {
+  return readLanguage() ?? defaultLanguage(navigator.languages?.length ? navigator.languages : [navigator.language])
+}
+
 export function saveLanguage(value: string): boolean {
   if (value !== 'zh-CN' && value !== 'en') return false
   try {
@@ -29,19 +42,21 @@ export function saveLanguage(value: string): boolean {
 
 function subscribe(listener: () => void): () => void {
   window.addEventListener(LANGUAGE_EVENT, listener)
+  window.addEventListener('languagechange', listener)
   window.addEventListener('storage', listener)
   return () => {
     window.removeEventListener(LANGUAGE_EVENT, listener)
+    window.removeEventListener('languagechange', listener)
     window.removeEventListener('storage', listener)
   }
 }
 
-export function useLanguage(): Language | null {
-  return useSyncExternalStore(subscribe, readLanguage, () => null)
+export function useLanguage(): Language {
+  return useSyncExternalStore(subscribe, currentLanguage, () => 'zh-CN')
 }
 
 // 仅对受控文案查表；插值仍由 React 转义，不使用 HTML 注入。
 export function t(message: string, ...values: (string | number)[]): string {
-  const text = readLanguage() === 'en' && Object.hasOwn(english, message) ? english[message] : message
+  const text = currentLanguage() === 'en' && Object.hasOwn(english, message) ? english[message] : message
   return text.replace(/\{(\d+)\}/g, (placeholder, index: string) => String(values[Number(index)] ?? placeholder))
 }

@@ -3,13 +3,93 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { WorkerQueue, installWorkers } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/workers.js'
+import { WorkerQueue, installWorkers, heartbeatTier, activeRowCount, readLaunchBudget, workerToolAllowed, HEARTBEAT_ACTIVE_MS, HEARTBEAT_CHANNEL_MS, HEARTBEAT_IDLE_MS } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/workers.js'
 
 function fixture(t) {
   const dir = mkdtempSync(join(tmpdir(), 'mobile-workers-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   return { queue: new WorkerQueue(dir), dir }
 }
+test('heartbeat tier: active rows/pending deliveries 5 s, channels 15 s, idle 60 s', () => {
+  assert.equal(HEARTBEAT_ACTIVE_MS, 5000)
+  assert.equal(HEARTBEAT_CHANNEL_MS, 15000)
+  assert.equal(HEARTBEAT_IDLE_MS, 60000)
+  assert.equal(heartbeatTier({}), HEARTBEAT_IDLE_MS)
+  assert.equal(heartbeatTier({ channels: true }), HEARTBEAT_CHANNEL_MS)
+  assert.equal(heartbeatTier({ hasTasks: true }), HEARTBEAT_CHANNEL_MS)
+  assert.equal(heartbeatTier({ tasks: 1 }), HEARTBEAT_ACTIVE_MS)
+  assert.equal(heartbeatTier({ mirrors: 1, channels: true }), HEARTBEAT_ACTIVE_MS)
+  // Before the first settings snapshot the channel state is unknown; do not idle for a minute.
+  assert.equal(heartbeatTier({ settingsReady: false }), HEARTBEAT_ACTIVE_MS)
+  assert.equal(heartbeatTier({ tasks: 1, settingsReady: false }), HEARTBEAT_ACTIVE_MS)
+  // History rows are settled: completed/failed/cancelled/interrupted do not keep the 5 s tier.
+  assert.equal(activeRowCount([{ state: 'completed' }, { state: 'failed' }, { state: 'cancelled' }, { state: 'interrupted' }]), 0)
+  assert.equal(activeRowCount([{ state: 'queued' }, { state: 'starting' }, { state: 'running' }, { state: 'cancelling' }, { state: 'waiting' }, { state: 'blocked' }]), 6)
+  assert.equal(heartbeatTier({ tasks: activeRowCount([{ state: 'completed' }]) }), HEARTBEAT_IDLE_MS)
+  // A report whose outbox receipt is still pending keeps the 5 s tier.
+  assert.equal(heartbeatTier({ pendingDeliveries: 1 }), HEARTBEAT_ACTIVE_MS)
+})
+
+test('dependent work waits for all successful predecessors', t => {
+  const { queue } = fixture(t)
+  queue.save({ id: 'first', mode: 'read', state: 'running', owner: 'p', sessionId: 'first' })
+  queue.save({ id: 'second', mode: 'read', state: 'queued', owner: 'p', sessionId: 'second', dependsOn: ['first'] })
+  assert.deepEqual(queue.runnable().map(row => row.id), [])
+  queue.save({ ...queue.rows.get('first'), state: 'failed' })
+  assert.deepEqual(queue.runnable().map(row => row.id), [])
+  queue.save({ ...queue.rows.get('first'), state: 'completed' })
+  assert.deepEqual(queue.runnable().map(row => row.id), ['second'])
+})
+
+test('load pressure delays starts without limiting task creation', () => {
+  assert.equal(readLaunchBudget(100, 2, 8), Infinity)
+  assert.equal(readLaunchBudget(1, 20, 8), 0)
+  assert.equal(readLaunchBudget(0, 20, 8), 1)
+  assert.equal(readLaunchBudget(0, 1, 8, { thermal: 3 }), 0)
+  assert.equal(readLaunchBudget(1, 1, 8, { conserve: true }), 0)
+  assert.equal(readLaunchBudget(0, 1, 8, { thermal: 2 }), 1)
+})
+
+test('higher priority queued work starts before other eligible work', t => {
+  const { queue } = fixture(t)
+  queue.save({ id: 'low', mode: 'device', state: 'queued', owner: 'p', sessionId: 'low', priority: 1 })
+  queue.save({ id: 'high', mode: 'device', state: 'queued', owner: 'p', sessionId: 'high', priority: 8 })
+  assert.deepEqual(queue.runnable().map(row => row.id), ['high'])
+})
+
+test('a restarted queue retains the dependency and priority of a task', t => {
+  const { queue, dir } = fixture(t)
+  queue.save({ id: 'before', mode: 'read', state: 'waiting', owner: 'p', sessionId: 'before' })
+  queue.save({ id: 'after', mode: 'read', state: 'queued', owner: 'p', sessionId: 'after', group: '目标', dependsOn: ['before'], priority: 7 })
+  const restored = new WorkerQueue(dir)
+  assert.equal(restored.rows.get('after').group, '目标')
+  assert.equal(restored.rows.get('after').priority, 7)
+  assert.deepEqual(restored.runnable(), [])
+})
+
+test('worker tool policy: read mode can query device status but never touch the device', () => {
+  // 纯读取工具两种模式都允许。
+  for (const name of ['read', 'grep', 'web_search', 'mobile_knowledge_read', 'mobile_task_search'])
+    assert.equal(workerToolAllowed('read', name), true, name)
+  // 设备只读状态查询：read 模式必须允许（此前缺失导致「只读查电量」必然 blocked）。
+  for (const name of ['mobile_device_battery', 'mobile_device_current_app', 'mobile_device_info',
+    'mobile_device_list_packages', 'mobile_device_get_setting', 'mobile_device_capabilities',
+    'mobile_device_background_tasks', 'mobile_device_wait'])
+    assert.equal(workerToolAllowed('read', name), true, name)
+  // 设备操作与屏幕/文件类：read 模式一律拒绝。
+  for (const name of ['mobile_device_tap', 'mobile_device_input_text', 'mobile_device_app_launch',
+    'mobile_device_screenshot', 'mobile_device_ui_dump', 'mobile_device_shell', 'mobile_see_now',
+    'mobile_device_file_read', 'mobile_device_file_write', 'mobile_device_task'])
+    assert.equal(workerToolAllowed('read', name), false, name)
+  // device 模式在此之上允许操作类工具。
+  for (const name of ['mobile_device_tap', 'mobile_device_app_launch', 'mobile_device_screenshot',
+    'mobile_device_ui_dump', 'mobile_device_shell', 'mobile_device_file_write', 'mobile_device_battery'])
+    assert.equal(workerToolAllowed('device', name), true, name)
+  // 未知工具默认拒绝，报告工具始终允许。
+  assert.equal(workerToolAllowed('device', 'bash'), false)
+  assert.equal(workerToolAllowed('read', 'mobile_worker_report'), true)
+})
+
 test('unlimited reads run while device tasks serialize', t => {
   const { queue } = fixture(t)
   for (const [id, mode] of [['a', 'device'], ['b', 'device'], ['c', 'read'], ['d', 'read']])
@@ -51,6 +131,7 @@ test('restart resumes read tasks with a new receipt, but does not replay phone a
 })
 
 test('worker question releases its slot and reply returns to that same worker and parent', async t => {
+  const chatReceipts = process.env.DSH_WORKER_RECEIPT_MODE === 'chat'
   const { dir } = fixture(t)
   const tools = new Map(), events = new Map(), agents = new Map()
   const makeAgent = id => {
@@ -97,16 +178,18 @@ test('worker question releases its slot and reply returns to that same worker an
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(row.state, 'waiting')
   await installed.syncDomainReports()
-  assert.equal(row.outbox[0].delivery, 'pending')
-  assert.equal(new WorkerQueue(dir).rows.get(row.id).outbox[0].delivery, 'pending')
+  assert.equal(row.outbox[0].delivery, chatReceipts ? 'pending' : 'suppressed')
+  assert.equal(new WorkerQueue(dir).rows.get(row.id).outbox[0].delivery, chatReceipts ? 'pending' : 'suppressed')
   failParentFlush = false
   await installed.flushNotifications(row)
-  assert.equal(row.outbox[0].delivery, 'delivered')
-  assert.equal(parent.inbox.nextTurn.length, 1)
+  assert.equal(row.outbox[0].delivery, chatReceipts ? 'delivered' : 'suppressed')
+  assert.equal(parent.inbox.nextTurn.length, chatReceipts ? 1 : 0)
   assert.equal(row.reports[0].question, '哪种颜色？')
   assert.deepEqual(row.toolEvidence, { bash: { calls: 1, failures: 1 }, read: { calls: 1, failures: 0 } })
-  assert.match(parent.inbox.nextTurn[0].content[0].text, /"bash":\{"calls":1,"failures":1\}/)
-  assert.match(parent.inbox.nextTurn[0].content[0].text, /哪种颜色/)
+  if (chatReceipts) {
+    assert.match(parent.inbox.nextTurn[0].content[0].text, /"bash":\{"calls":1,"failures":1\}/)
+    assert.match(parent.inbox.nextTurn[0].content[0].text, /哪种颜色/)
+  }
   await call({ action: 'reply', id: row.id, task: '蓝色' })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(row.state, 'running')
@@ -124,8 +207,8 @@ test('worker question releases its slot and reply returns to that same worker an
   const reloaded = new WorkerQueue(dir).rows.get(row.id)
   assert.deepEqual(reloaded.reports.map(item => item.state), ['waiting', 'completed'])
   assert.deepEqual(reloaded.inputs.map(item => item.kind), ['request', 'reply'])
-  assert.equal(parent.inbox.nextTurn.length, 2)
-  assert.match(parent.inbox.nextTurn[1].content[0].text, /蓝色确认/)
+  assert.equal(parent.inbox.nextTurn.length, chatReceipts ? 2 : 0)
+  if (chatReceipts) assert.match(parent.inbox.nextTurn[1].content[0].text, /蓝色确认/)
   // A completed task can receive an explicit update; subsequent inputs wait in order.
   await call({ action: 'add', id: row.id, task: '补充一' })
   await new Promise(resolve => setImmediate(resolve))
@@ -156,20 +239,41 @@ test('worker question releases its slot and reply returns to that same worker an
   assert.deepEqual(row.inputs.filter(item => item.kind === 'update').map(item => item.text), ['补充一', '补充二', '补充三'])
   assert.deepEqual(row.reports.map(item => item.state), ['waiting', 'completed', 'completed', 'completed', 'completed'])
   assert.deepEqual(row.outbox.map(item => item.revision), [1, 2, 3, 4, 5])
-  assert.ok(row.outbox.every(item => item.delivery === 'delivered'))
-  assert.deepEqual(new WorkerQueue(dir).rows.get(row.id).outbox.map(item => item.delivery), Array(5).fill('delivered'))
-  await call({ action: 'add', id: row.id, task: '再做一轮' })
+  assert.ok(row.outbox.every(item => item.delivery === (chatReceipts ? 'delivered' : 'suppressed')))
+  assert.deepEqual(new WorkerQueue(dir).rows.get(row.id).outbox.map(item => item.delivery), Array(5).fill(chatReceipts ? 'delivered' : 'suppressed'))
+  const nextParent = makeAgent('session-next')
+  events.get('session/event')(nextParent.session, { type: 'user/message', data: { id: 'new-topic', source: { kind: 'user' } } })
+  const shared = JSON.parse((await call({ action: 'status' }, nextParent)).text)
+  assert.ok(shared.some(item => item.id === row.id && item.owner === parent.id))
+  await call({ action: 'add', id: row.id, task: '再做一轮' }, nextParent)
   await new Promise(resolve => setImmediate(resolve))
-  await call({ action: 'add', id: row.id, task: '待取消' })
+  assert.equal(child.inbox.nextTurn.at(-1).content[0].text, '再做一轮')
+  await call({ action: 'add', id: row.id, task: '待取消' }, nextParent)
   tools.get('mobile_worker_report').execute({ state: 'progress', summary: '正在核对' }, { agent: child })
   assert.equal(row.state, 'running')
   assert.equal(row.progress, '正在核对')
   assert.equal(child.guards[0]({ name: 'read' }), undefined)
   tools.get('mobile_worker_report').execute({ state: 'blocked', summary: '缺少必要权限' }, { agent: child })
   events.get('session/event')(child.session, { type: 'turn/end', data: { turn: 6, reason: { kind: 'completed' } } })
+  await new Promise(resolve => setImmediate(resolve))
+  await installed.flushNotifications(row)
+  if (chatReceipts) assert.match(nextParent.inbox.nextTurn.at(-1).content[0].text, /缺少必要权限/)
+  else assert.equal(nextParent.inbox.nextTurn.length, 0)
   assert.equal(row.state, 'blocked')
   assert.equal(row.reports.at(-1).state, 'blocked')
-  await call({ action: 'cancel', id: row.id })
+  await call({ action: 'cancel', id: row.id }, nextParent)
   assert.equal(row.state, 'cancelled')
   assert.equal(row.inputs.find(item => item.text === '待取消').delivery, 'cancelled')
+})
+
+test('a creation worker has only its draft and reporting tools; restart requires an explicit resume', t => {
+  for (const name of ['mobile_whale_feature', 'mobile_worker_report']) assert.equal(workerToolAllowed('create', name), true)
+  for (const name of ['bash', 'read', 'mobile_knowledge_read', 'mobile_device_tap', 'mobile_device_info', 'mobile_workers'])
+    assert.equal(workerToolAllowed('create', name), false, name)
+  for (const mode of ['read', 'device']) assert.equal(workerToolAllowed(mode, 'mobile_whale_feature'), false)
+  const { queue, dir } = fixture(t)
+  queue.save({ id: 'creator', mode: 'create', owner: 'desk', sessionId: 'session-worker-creator', state: 'running', revision: 1, input: 'draft' })
+  const restored = new WorkerQueue(dir).rows.get('creator')
+  assert.equal(restored.state, 'interrupted')
+  assert.equal(restored.revision, 1)
 })

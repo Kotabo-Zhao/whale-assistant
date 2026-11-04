@@ -402,10 +402,17 @@ class VirtualScreenActivity : Activity() {
         }
         resumed = true
         VirtualScreenService.current?.hideOverlay()
+        // 页面重新可见：恢复取帧拍子（与 onPause 的暂停成对）。控件没被销毁，因此这里只续拍、
+        // 不重建 View；首拍仍由 refresh 在需要时创建 preview。
+        preview?.preview?.resumeFrameLoop()
         main.post(refresh)
     }
     override fun onPause() {
         resumed = false; main.removeCallbacks(refresh)
+        // 页面进后台/被覆盖时停止预览取帧：拍子原本只在 View detach 时才停，而切后台并不会 detach，
+        // 于是每 16 毫秒仍在截图/解码/上屏，用户却看不到页面。这里只停拍子（preview 视图保留，
+        // 会话与目标应用都不受影响），onResume 再续拍；isFinishing 的清理路径保持不变。
+        preview?.preview?.pauseFrameLoop()
         if (isFinishing) {
             preview?.let { content.removeView(it) }; preview = null
         }

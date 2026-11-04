@@ -898,11 +898,18 @@ class VirtualScreenPreview(context: android.content.Context) : androidx.appcompa
     )
     private val inputBusy = AtomicBoolean(false)
     /**
+     * 最近一拍从宿主状态里读到的面板刷新率（0f = 还没读到）。
+     *
+     * 取帧调度与预算记账都用它把间隔夹到面板上限（见 [VirtualScreenPolicy.effectiveFrameInterval]）；
+     * 每拍只从已经取到的 `state` 里抄一次，不额外读 DisplayManager。
+     */
+    @Volatile private var panelRefreshHz = 0f
+    /**
      * 副屏预览的性能预算记账（纯 Kotlin，见 [VirtualScreenPreviewBudget]）：每一拍记一次实际耗时与
      * 当刻档位允许的预算，偏慢时把说明并到画面状态行上——档位写着 60fps、实测只有一半帧率时，
      * 用户需要看到的是「跟不上档位」，而不是自己去把两个数字对一遍。
      */
-    private val budget = VirtualScreenPreviewBudget()
+    private val budget = VirtualScreenPreviewBudget(panelRefreshHz = { panelRefreshHz })
     /**
      * 拖动端口：悬浮小窗会装上它，原生预览页不装 —— 于是预览页里的手势语义与改造前完全一致。
      */
@@ -1098,6 +1105,9 @@ class VirtualScreenPreview(context: android.content.Context) : androidx.appcompa
                     val service = checkNotNull(VirtualScreenService.current)
                     // 帧率必须来自与这一帧同一拍的状态：health 的快照最多旧 1500 毫秒，拿它贴帧率会慢半拍。
                     val state = service.freshState()
+                    panelRefreshHz = state.optDouble("displayRefreshRate", 0.0).let {
+                        if (it.isFinite() && it > 0.0) it.toFloat() else 0f
+                    }
                     id = state.getString("sessionId")
                     channel = state.optString("touchChannel", "")
                     mode = VirtualScreenPolicy.frameModeOf(state.optString(VirtualScreenPolicy.PREVIEW_FIELD))
@@ -1186,6 +1196,8 @@ class VirtualScreenPreview(context: android.content.Context) : androidx.appcompa
         postDelayed = { delay, action -> main.postDelayed(action, delay) },
         removeCallbacks = { action -> main.removeCallbacks(action) },
         beat = tick,
+        // 面板刷新率由 tick 每拍从宿主状态抄进 [panelRefreshHz]；读不到时策略层按 17 毫秒兜底。
+        panelRefreshHz = { panelRefreshHz },
     )
 
     /**
@@ -1232,5 +1244,31 @@ class VirtualScreenPreview(context: android.content.Context) : androidx.appcompa
             screenOffRegistered = false
         }
         clearFrame()
+    }
+
+    /**
+     * 页面/小窗暂时不可见时**只停取帧拍子**，不销毁控件。
+     *
+     * 停掉排队中的那一拍；在途那一拍回到主线程后按 `pump.fetchLanded` 的约定不再续排。
+     * 与 [releaseOnDetach] 的区别：不动线程池、不清画面、不推进控件代号——重新可见时直接
+     * [resumeFrameLoop] 就能从下一拍继续，不需要重建 View、也不丢最后一帧。
+     *
+     * 调用方：`VirtualScreenActivity.onPause`（页面切后台期间不再每 16 毫秒起一次取帧）。
+     */
+    internal fun pauseFrameLoop() {
+        pump.stop()
+    }
+
+    /**
+     * 恢复取帧：重置预算并投递首拍。
+     *
+     * 未挂在窗口上或线程池已释放时什么都不做——那种情况下重新挂载会由
+     * [onAttachedToWindow] 走 `lifecycle.attach()` + `pump.start()` 的同一条路径。
+     * 重复调用是幂等的（[VirtualScreenPreviewPump.start] 已经跑着就返回 false）。
+     */
+    internal fun resumeFrameLoop() {
+        if (!isAttachedToWindow || executor == null) return
+        budget.reset()
+        pump.start()
     }
 }

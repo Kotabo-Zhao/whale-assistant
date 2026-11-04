@@ -1,89 +1,23 @@
 package io.deepseekharness.mobile.companion
 
 import android.content.Context
-import android.net.Uri
-import io.deepseekharness.mobile.runtime.RuntimeSharedInbox
 import io.deepseekharness.mobile.runtime.RuntimeStore
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.LinkOption
-import java.nio.file.StandardCopyOption
-import java.nio.file.StandardOpenOption
-import java.util.UUID
 
-/** Preserve user-selected originals even if a parser cannot understand them. */
 internal object WhaleDocumentImport {
-    private const val MAX_BYTES = 64L * 1024 * 1024
-    fun import(context: Context, uri: Uri, mime: String?): String {
-        require(uri.scheme == "content")
-        val app = context.applicationContext
-        val name = runCatching { app.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
-            if (it.moveToFirst()) it.getString(0) else null
-        } }.getOrNull().orEmpty()
-        val ext = name.substringAfterLast('.', "").lowercase().takeIf { it.matches(Regex("[a-z0-9]{1,8}")) }
-            ?: when (mime) { "application/pdf" -> "pdf"; "text/plain" -> "txt"; else -> "bin" }
-        val inbox = RuntimeSharedInbox(RuntimeStore(app))
-        val target = File(inbox.stagingDirectory(), "${UUID.randomUUID()}-shared-document.$ext")
-        var extracted: String? = null
-        var originalId = ""
-        val sourceDigest = java.security.MessageDigest.getInstance("SHA-256")
-        inbox.withPendingFile { pending ->
-            requireNotNull(app.contentResolver.openInputStream(uri)).use { input ->
-                Files.newOutputStream(pending.toPath(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, LinkOption.NOFOLLOW_LINKS).use { output ->
-                    val buffer = ByteArray(64 * 1024); var total = 0L
-                    while (true) {
-                        val n = input.read(buffer); if (n < 0) break; if (n == 0) continue
-                        total += n; require(total <= MAX_BYTES) { "document too large" }; sourceDigest.update(buffer, 0, n); output.write(buffer, 0, n)
-                    }
-                    require(total > 0)
-                }
-            }
-            originalId = sourceDigest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
-            KnowledgeObjects(app).store(pending, originalId, MAX_BYTES)
-            CompanionKnowledgeStore(app).registerOriginal(originalId, name, mime.orEmpty())
-            extracted = runCatching { WhaleDocumentText.extract(pending, ext, mime) }.getOrNull()
-            RuntimeSharedInbox.withLock { Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE) }
-        }
-        val text = extracted?.takeIf { it.isNotBlank() }
-        val knowledge = CompanionKnowledgeStore(app)
-        if (text != null) {
-            val saved = runCatching { knowledge.addDocument(text, originalId, name, requireOriginal = true) }
-            val delivered = runCatching { inbox.deliver() }.getOrDefault(false)
-            val where = if (delivered) "文件已保存到收件箱" else "文件已暂存，运行环境就绪后可用"
-            if (saved.isFailure) return "$where；解析文字未保存，请稍后重试"
-            val coverage = if (text.contains("[内容过长，已截取]") || text.contains("[仅提取前")) "partial" else "extracted_text"
-            knowledge.updateOriginalCoverage(originalId, coverage)
-            val rows = saved.getOrThrow()
-            for (i in 0 until rows.length()) {
-                val row = rows.getJSONObject(i)
-                if (row.getString("text").isBlank()) continue
-                SharedMemoryJobs.enqueueWithoutSchedule(app, row.getString("id"), row.getString("text"), "share:" + CompanionMemorySuppression.digest(row.getString("text")))
-            }
-            SharedMemoryJobs.schedule(app, 0)
-            return "$where；已分段保存，后台整理中" + if (text.contains("[内容过长，已截取]") || text.contains("[仅提取前")) "（解析范围有限，原文件已保留）" else ""
-        }
-        val key = runCatching { RuntimeStore(app).readModelCredential("deepseek") }.getOrNull()
-        val scan = if (text == null && ext == "pdf" && !key.isNullOrBlank())
-            runCatching { RuntimeSharedInbox.withLock { WhaleDocumentText.renderPdfPages(target) } }.getOrNull() else null
-        val delivered = runCatching { inbox.deliver() }.getOrDefault(false)
-        val where = if (delivered) "文件已保存到收件箱" else "文件已暂存，运行环境就绪后可用"
-        if (scan != null && !key.isNullOrBlank()) {
-            val analyzed = runCatching {
-                val descriptions = scan.first.mapIndexed { index, jpeg ->
-                    "第 ${index + 1} 页：\n" + DeepSeekVisionModel(key).analyze(jpeg)
-                }
-                val heading = if (scan.second > descriptions.size) "扫描 PDF：仅分析前 ${descriptions.size} / ${scan.second} 页\n" else "扫描 PDF 分析：\n"
-                val contents = (heading + descriptions.joinToString("\n\n")).take(CompanionKnowledgeData.MAX_RECORD_TEXT)
-                val analysis = knowledge.registerImageAnalysis(originalId, contents)
-                val stableId = "share:$originalId"
-                SharedMemoryJobs.enqueueWithoutSchedule(app, analysis.getString("id"), analysis.getString("text"), stableId)
-                knowledge.updateOriginalCoverage(originalId, if (scan.second > scan.first.size) "partial" else "model_description")
-                SharedMemoryJobs.schedule(app, 0)
-            }.isSuccess
-            return if (!analyzed) "$where；扫描文件分析未完成" else if (scan.second > scan.first.size)
-                "$where；扫描文件仅分析前 ${scan.first.size} 页，其余未完成" else where
-        }
-        return "$where；文件内容未完成解析，请检查格式或密码"
+    fun parse(app: Context, file: File, ext: String, mime: String): WhaleParsedContent? {
+        val audio = WhaleAudioTranscript.supports(ext, mime)
+        val text = if (audio) WhaleAudioTranscript.recognize(app, file) else WhaleDocumentText.extract(file, ext, mime)
+        if (!text.isNullOrBlank()) return WhaleParsedContent.document(text, if (audio) "audio_transcript" else null)
+        if (ext != "pdf" && mime != "application/pdf") return null
+        val key = RuntimeStore(app).readModelCredential("deepseek")?.takeIf { it.isNotBlank() } ?: return null
+        val (pages, total) = WhaleDocumentText.renderPdfPages(file)
+        if (pages.isEmpty()) return null
+        val descriptions = pages.mapIndexed { index, jpeg -> "第 ${index + 1} 页：\n" + DeepSeekVisionModel(key).analyze(jpeg) }
+        val heading = if (total > pages.size) "扫描 PDF：仅分析前 ${pages.size} / $total 页\n" else "扫描 PDF 分析：\n"
+        val summary = heading + descriptions.joinToString("\n\n")
+        val partial = total > pages.size || summary.length > CompanionKnowledgeData.MAX_RECORD_TEXT
+        return WhaleParsedContent(summary.take(CompanionKnowledgeData.MAX_RECORD_TEXT), if (partial) "partial" else "model_description", description = true)
     }
 }
 

@@ -10,7 +10,7 @@ import java.io.ByteArrayOutputStream
 
 /** Produces a bounded preview only after the caller has checked the current authorization. */
 internal object KnowledgeImageModel {
-    fun preview(context: Context, originalId: String): String {
+    fun preview(context: Context, originalId: String, thumbnail: Boolean = false): String {
         val store = CompanionKnowledgeStore(context)
         val original = store.originalInfo(originalId) ?: error("原件记录不存在")
         require(original.optString("mime").startsWith("image/", ignoreCase = true)) { "该原件不是图片" }
@@ -19,7 +19,8 @@ internal object KnowledgeImageModel {
         BitmapFactory.decodeFile(file.path, bounds)
         require(bounds.outWidth in 1..12_000 && bounds.outHeight in 1..12_000) { "图片尺寸不受支持" }
         var sample = 1
-        while (maxOf(bounds.outWidth / sample, bounds.outHeight / sample) > 1024) sample *= 2
+        val maxSide = if (thumbnail) 160 else 1024
+        while (maxOf(bounds.outWidth / sample, bounds.outHeight / sample) > maxSide) sample *= 2
         val bitmap = requireNotNull(BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }))
         val rotation = when (runCatching { android.media.ExifInterface(file.path).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, 1) }.getOrDefault(1)) {
             3 -> 180; 6 -> 90; 8 -> 270; else -> 0

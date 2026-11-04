@@ -16,8 +16,8 @@ internal class CompanionBubbleHistory(context: Context) {
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return null
         return try { decode(file.readFully()) } catch (_: Exception) { writable = false; null }
     }
-    @Synchronized fun save(snapshot: Snapshot) {
-        if (!writable) return
+    @Synchronized fun save(snapshot: Snapshot, requireWritable: Boolean = false) {
+        if (!writable) { check(!requireWritable) { "对话记录不可写，未交办新任务。" }; return }
         val bytes = encode(snapshot)
         var output: java.io.FileOutputStream? = null
         try { output = file.startWrite(); output.write(bytes); file.finishWrite(output) }

@@ -18,6 +18,7 @@ internal class SemanticControl(context: Context) {
         if (!value) editor.putBoolean("memory_enabled", false)
         check(editor.commit())
         SemanticKnowledgeSearch.clearCache()
+        if (!value) SemanticEmbeddings.releaseWhenIdle()
         if (!value && java.io.File(app.noBackupFilesDir, "semantic-index-v1.db").isFile) SemanticIndex(app).use { it.clear() }
     }
     fun invalidate(id: String? = null) = synchronized(lock) {

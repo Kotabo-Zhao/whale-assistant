@@ -15,6 +15,7 @@ interface OnboardingProps {
    * 缺省时不显示这个按钮（测试与嵌入式用法不需要它）。
    */
   onOpenVersions?: () => void
+  onOpenLibrary?: () => void
   onDone: () => void
   onSaveSettings?: (settings: RuntimeSettingsUpdate) => Promise<boolean>
 }
@@ -51,7 +52,7 @@ function usesBundledSource(settings: RuntimeSettings | null): boolean {
 }
 
 export function Onboarding({
-  busy, runtime, settings, onInstall, onOpenVersions, onDone, onSaveSettings,
+  busy, runtime, settings, onInstall, onOpenVersions, onOpenLibrary, onDone, onSaveSettings,
 }: OnboardingProps) {
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -202,6 +203,7 @@ export function Onboarding({
                 </div>
               )}
               <div className="dialog-actions onboarding-nav">
+                {onOpenLibrary && <button className="button button-quiet" type="button" disabled={saving || busy !== null} onClick={() => { onDone(); onOpenLibrary() }}>{t("先使用本地资料")}</button>}
                 {step > 0 && (
                   <button className="button button-secondary" type="button" onClick={() => setStep(step - 1)} disabled={saving}><ArrowLeft size={18} />{t("上一步")}</button>
                 )}

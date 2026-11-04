@@ -1,4 +1,10 @@
 <resources>
+    <string name="whale_workbench">工作台</string>
+    <string name="whale_tab_memory">记忆</string>
+    <string name="whale_tab_tasks">事项</string>
+    <string name="whale_tab_tools">工具</string>
+    <string name="whale_tab_account">我的</string>
+
     <string name="harness_tab_home">首页</string>
     <string name="harness_tab_chat">对话</string>
     <string name="harness_tab_chat_active">对话，当前标签</string>
@@ -43,7 +49,7 @@
     <string name="diagnostic_share_subject">DeepSeek Harness 诊断日志</string>
     <!-- 悬浮球。文案固定，不含 URL、端口、凭据或会话内容。 -->
     <!-- 球本身的读屏名称：名词性短语，不复用下面那句状态语形式的通知标题。 -->
-    <string name="overlay_ball_content_description">悬浮球</string>
+    <string name="overlay_ball_content_description">鲸鱼桌宠，点按对话，长按打开快捷菜单</string>
     <string name="overlay_conversation_title">Harness AI 对话</string>
     <string name="overlay_conversation_expand">全屏</string>
     <string name="overlay_conversation_close">关闭</string>

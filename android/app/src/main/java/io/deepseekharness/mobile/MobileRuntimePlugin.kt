@@ -336,6 +336,28 @@ class MobileRuntimePlugin : Plugin() {
      * 订阅者对象：插件销毁后取消订阅，运行时不会继续向已销毁的 WebView 派发事件。
      */
     private val eventSink = PluginEventSink()
+    private val workerEvents = Handler(Looper.getMainLooper())
+    private val workerChangeQueued = java.util.concurrent.atomic.AtomicBoolean()
+    private val workerChange = Runnable {
+        workerChangeQueued.set(false)
+        if (!destroying.get()) notifyListeners("workerDashboardChanged", JSObject())
+    }
+    private val captureChangeQueued = java.util.concurrent.atomic.AtomicBoolean()
+    private val captureChange = Runnable {
+        captureChangeQueued.set(false)
+        if (!destroying.get()) notifyListeners("knowledgeCapturesChanged", JSObject())
+    }
+    private val onCaptureChange: () -> Unit = {
+        if (!destroying.get() && captureChangeQueued.compareAndSet(false, true)) workerEvents.postDelayed(captureChange, 120)
+    }
+    private val onFeatureChange: () -> Unit = {
+        workerEvents.post { if (!destroying.get()) notifyListeners("featureToolsChanged", JSObject()) }
+        Unit
+    }
+
+    private val onWorkerChange: () -> Unit = {
+        if (!destroying.get() && workerChangeQueued.compareAndSet(false, true)) workerEvents.postDelayed(workerChange, 120)
+    }
 
     /**
      * 进行中的系统身份确认（`resetAccessibilityPasswordWithBiometric`）。
@@ -615,6 +637,9 @@ class MobileRuntimePlugin : Plugin() {
             // Shizuku 是可选能力；已就绪的 Binder 仍由下面的启动尝试覆盖。
         }
         shizukuAutoConnect.request()
+        io.deepseekharness.mobile.features.WhaleFeatureStore.subscribe(onFeatureChange)
+        io.deepseekharness.mobile.companion.CompanionKnowledgeStore.subscribeCaptures(onCaptureChange)
+        io.deepseekharness.mobile.companion.WorkerDashboardStore.subscribe(onWorkerChange)
         // 悬浮球可以在插件加载时恢复，keep-alive 不能：后者要求运行时确实在跑，
         // 没跑就启动只会留下一个无法解释的通知；悬浮球与运行时无关，只取决于
         // 「用户开关 + 系统权限」（syncOverlayBallService 内部判断），所以重启应用后
@@ -671,6 +696,11 @@ class MobileRuntimePlugin : Plugin() {
      * 两者都不再持有时由 RuntimeHost 释放，语义与旧实现一致。
      */
     override fun handleOnDestroy() {
+        io.deepseekharness.mobile.features.WhaleFeatureStore.unsubscribe(onFeatureChange)
+        io.deepseekharness.mobile.companion.WorkerDashboardStore.unsubscribe(onWorkerChange)
+        io.deepseekharness.mobile.companion.CompanionKnowledgeStore.unsubscribeCaptures(onCaptureChange)
+        workerEvents.removeCallbacks(captureChange)
+        workerEvents.removeCallbacks(workerChange)
         if (!destroying.compareAndSet(false, true)) return
         harnessOpenRequests.invalidate()
         harnessStartGeneration.incrementAndGet()
@@ -4020,6 +4050,30 @@ class MobileRuntimePlugin : Plugin() {
     @PluginMethod
     fun companionDashboard(call: PluginCall) {
         val request = call.getObject("request") ?: run { call.reject("缺少操作参数", "COMPANION_INPUT_INVALID"); return }
+        if (request.optString("operation") == "addMemoryTile") {
+            val screen = request.optString("kind") == "screen"
+            val label = if (screen) "收藏这一屏" else "收藏剪贴板"
+            if (android.os.Build.VERSION.SDK_INT < 33) {
+                call.resolve(JSObject().put("message", "下拉快捷设置，点编辑并添加“$label”。"))
+                return
+            }
+            activity.runOnUiThread {
+                val service = if (screen) io.deepseekharness.mobile.companion.WhaleScreenTileService::class.java else io.deepseekharness.mobile.companion.WhaleMemoryTileService::class.java
+                runCatching {
+                    activity.getSystemService(android.app.StatusBarManager::class.java).requestAddTileService(
+                        android.content.ComponentName(activity, service), label,
+                        android.graphics.drawable.Icon.createWithResource(activity, R.drawable.ic_overlay_ball), activity.mainExecutor) { response ->
+                        val message = when (response) {
+                            android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED,
+                            android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "可从快捷设置点“$label”。"
+                            else -> "可在快捷设置的编辑页手动添加“$label”。"
+                        }
+                        call.resolve(JSObject().put("message", message))
+                    }
+                }.onFailure { call.resolve(JSObject().put("message", "请在快捷设置的编辑页添加“$label”。")) }
+            }
+            return
+        }
         execute(call) {
             JSObject.fromJSONObject(io.deepseekharness.mobile.companion.CompanionDashboard(context).execute(request))
         }

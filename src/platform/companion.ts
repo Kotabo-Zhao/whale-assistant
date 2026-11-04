@@ -1,6 +1,17 @@
 /** 助手管理请求的共享契约；原生仍校验所有字段与数据版本。 */
 export type CompanionRequest =
-  | { operation: 'workerList' | 'screenWatchStatus' | 'screenWatchStop' }
+  | { operation: 'addMemoryTile'; kind: 'clipboard' | 'screen' }
+  | { operation: 'knowledgeAttachments'; id: string; expectedText: string; offset: number }
+  | { operation: 'knowledgeRetryParse'; id: string; expected: string }
+  | { operation: 'knowledgeReadLink'; id: string; expectedText: string }
+  | { operation: 'featureLibrary' | 'featureTools' }
+  | { operation: 'featureOpen'; id: string; revision: string }
+  | { operation: 'knowledgePickFiles' }
+  | { operation: 'workerSubmit'; task: string; mode: 'read' | 'device' | 'create' }
+  | { operation: 'workerPreviewDraft'; id: string; revision: string }
+  | { operation: 'workerList' | 'workerGroups' | 'screenWatchStatus' | 'screenWatchStop' }
+  | { operation: 'workerPage'; filter: string; group: string; offset: number; limit: number }
+  | { operation: 'workerDetail'; id: string; offset: number }
   | { operation: 'screenWatchSet'; enabled: boolean }
   | { operation: 'workerControl'; id: string; action: 'cancel' | 'resume' | 'reply' | 'add'; task: string }
   | { operation: 'personaList' }
@@ -11,6 +22,8 @@ export type CompanionRequest =
   | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; reminderAtMs: number }
   | { operation: 'taskDelete'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string }
   | { operation: 'memoryPage'; before: number; revision: number }
+  | { operation: 'knowledgeRecentCaptures' }
+  | { operation: 'knowledgeCaptureRead'; id: string; createdAt: number; generation?: string; offset: number }
   | { operation: 'knowledgeList'; query?: string; offset?: number; source?: 'shared_text' | 'text_file' | 'original' | 'image_analysis'; coverage?: 'not_parsed' | 'partial' | 'extracted_text' | 'model_description' }
   | { operation: 'overview' | 'memorySuggestionsReset' | 'memoryResumeAutomatic' }
   | { operation: 'memoryReview'; text: string; id?: string }
@@ -25,7 +38,7 @@ export type CompanionRequest =
   | { operation: 'knowledgeUndoDelete'; id: string }
   | { operation: 'knowledgeBatchUndoDelete'; ids: string[] }
   | { operation: 'knowledgeProcessingStatus' | 'knowledgeProcessingRetry' | 'knowledgeProcessingCancel' | 'knowledgeProcessingResume'; id: string; expectedText: string }
-  | { operation: 'knowledgeImagePreview'; id: string; originalId: string; expectedText: string }
+  | { operation: 'knowledgeImagePreview'; id: string; originalId: string; expectedText: string; thumbnail?: boolean }
   /** Irreversibly removes every local record linked to this verified original. */
   | { operation: 'knowledgeRemoveOriginal'; id: string; originalId: string; expectedText: string }
   | { operation: 'quietHoursSet'; start: number; end: number }

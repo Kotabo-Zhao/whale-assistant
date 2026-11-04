@@ -754,7 +754,7 @@ async function bottomNav(): Promise<HTMLElement> {
 /** 底栏「我的」入口通向设置页；兼容旧标签与英文。 */
 async function settingsTab(): Promise<HTMLElement> {
   const nav = await bottomNav()
-  for (const label of ['我的', '设置', 'Mine', 'Settings']) {
+  for (const label of ['我的', '设置', 'Account', 'Mine', 'Settings']) {
     const found = within(nav).queryByRole('button', { name: label })
     if (found !== null) return found
   }
@@ -816,8 +816,14 @@ export async function arriveAtSettingsHome(): Promise<void> {
  * 三级页（自动化设置里的无障碍 / 副屏 / 自动参数）与二级页是同一条路由，
  * 所以这里点的是二级页上那一行入口按钮，等待口径与二级页一致：先等按钮、再等标题。
  */
+export function expandSettingsGroup(name: string): void {
+  const heading = screen.getByRole('button', { name })
+  if (heading.getAttribute('aria-expanded') === 'false') fireEvent.click(heading)
+}
+
 export async function openSettingsPage(name: string, sub?: string): Promise<void> {
   await openSettingsHome()
+  expandSettingsGroup(/自动化|设备 Shell|诊断/.test(name) ? '设备与诊断' : /后台|文件|版本|运行时/.test(name) ? '运行与存储' : '助手与外观')
   const entry = await screen.findByRole('button', { name: new RegExp(name) }, {
     timeout: SETTINGS_NAV_TIMEOUT_MS,
   })
@@ -843,6 +849,7 @@ export async function openSettingsPage(name: string, sub?: string): Promise<void
  */
 export async function openFilesPage(): Promise<void> {
   await openSettingsHome()
+  expandSettingsGroup('运行与存储')
   const entry = await screen.findByRole('button', { name: /文件管理/ }, {
     timeout: SETTINGS_NAV_TIMEOUT_MS,
   })

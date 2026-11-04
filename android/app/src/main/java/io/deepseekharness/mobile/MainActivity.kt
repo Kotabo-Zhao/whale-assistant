@@ -56,6 +56,7 @@ class MainActivity : BridgeActivity() {
         registerPlugin(MobileRuntimePlugin::class.java)
         super.onCreate(savedInstanceState)
         io.deepseekharness.mobile.companion.SharedMemoryJobs.bootstrap(applicationContext)
+        io.deepseekharness.mobile.companion.WhaleParseJobs.recover(applicationContext)
         val semantic = io.deepseekharness.mobile.companion.SemanticControl(applicationContext)
         if (semantic.enabled && !semantic.isComplete()) runCatching { io.deepseekharness.mobile.companion.SemanticIndexJobs.schedule(applicationContext, 5_000) }
         io.deepseekharness.mobile.companion.CompanionRecurringReminder.requestRecovery(applicationContext)
@@ -143,6 +144,9 @@ class MainActivity : BridgeActivity() {
     internal fun navigateFromHarness(tab: String) {
         val target = when (tab) {
             "conversation" -> "conversation"
+            "assistant-memory" -> "assistant-memory"
+            "assistant-tasks" -> "assistant-tasks"
+            "tools" -> "tools"
             "plugins" -> "plugins"
             "settings" -> "settings"
             else -> return

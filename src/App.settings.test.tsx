@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { arriveAtSettingsHome } from './__tests__/appTestHarness'
+import { expandSettingsGroup, arriveAtSettingsHome } from './__tests__/appTestHarness'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { beforeEachAppTest, bridge, FOREGROUND_SERVICE_SETTLE_MS, notInstalledState, openSettingsPage, readyState, settings } from './__tests__/appTestHarness'
 import type { ModelCatalogResult, RuntimeSettings, RuntimeSettingsUpdate } from './platform/types'
@@ -195,6 +195,7 @@ describe('悬浮球设置', () => {
     render(<App />)
   await arriveAtSettingsHome()
     bridge.getSettings.mockRejectedValueOnce(new Error('read failed'))
+    expandSettingsGroup('运行与存储')
     fireEvent.click(screen.getByRole('button', { name: /后台/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('无法读取最新设置，请重试')
     expect(screen.queryByRole('button', { name: '保存' })).toBeNull()

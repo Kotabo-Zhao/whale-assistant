@@ -1,0 +1,33 @@
+<resources>
+    <string name="pref_home">Assistant preferences</string>
+    <string name="pref_pet">Desktop pet</string>
+    <string name="pref_pet_summary">Appearance, motion and permissions</string>
+    <string name="pref_data">Memory and library</string>
+    <string name="pref_data_summary">What the assistant remembers and retrieves</string>
+    <string name="pref_alerts">Notifications and reminders</string>
+    <string name="pref_alerts_summary">Notifications, reminders and quiet hours</string>
+    <string name="pref_daily">Daily assistant</string>
+    <string name="pref_daily_summary">Frequent apps, calendar and briefs</string>
+    <string name="pref_permissions">System permissions</string>
+    <string name="pref_permissions_summary">Overlay, notifications and background operation</string>
+    <string name="pref_memory">Long-term memory</string>
+    <string name="pref_memory_summary">Review memories and adjust proactive chat</string>
+    <string name="pref_library">Local library</string>
+    <string name="pref_library_summary">Search, import and chat access</string>
+    <string name="pref_backup">Backup and restore</string>
+    <string name="pref_backup_summary">Unified backups and encrypted archives</string>
+    <string name="pref_maintenance">Storage maintenance</string>
+    <string name="pref_maintenance_summary">Legacy formats, migration and verification</string>
+    <string name="pref_notifications">Notification privacy</string>
+    <string name="pref_notifications_summary">Capture, display and source permissions</string>
+    <string name="pref_reminders">Reminders and quiet hours</string>
+    <string name="pref_reminders_summary">One-time reminders, schedules and quiet hours</string>
+    <string name="pref_background">Background processing</string>
+    <string name="pref_background_summary">Models, suggested tasks and retries</string>
+    <string name="pref_records">Notification history</string>
+    <string name="pref_records_summary">Review, search and remove local records</string>
+    <string name="pref_apps">Frequent apps</string>
+    <string name="pref_apps_summary">Shortcuts and usage suggestions</string>
+    <string name="pref_brief">Calendar and briefs</string>
+    <string name="pref_brief_summary">Timing, date range and reminders</string>
+</resources>

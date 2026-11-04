@@ -1,10 +1,7 @@
 package io.deepseekharness.mobile.companion
 
-import android.app.job.JobInfo
 import android.app.job.JobParameters
-import android.app.job.JobScheduler
 import android.app.job.JobService
-import android.content.ComponentName
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import io.deepseekharness.mobile.OverlayBallService
@@ -22,7 +19,7 @@ internal object SharedMemoryJobs {
     /** Model calls are remote and cannot be cancelled reliably, so a stale worker must lose its durable claim. */
     private const val LEASE_DURATION_MS = 15 * 60_000L
     private val lock = Any()
-    private val running = AtomicBoolean(false)
+    internal val wakeup = MemoryJobWakeup(JOB_ID, SharedMemoryJobService::class.java, network = true)
     private val executor = Executors.newSingleThreadExecutor()
     private fun database(context: Context): SQLiteDatabase {
         val db = SQLiteDatabase.openOrCreateDatabase(UnifiedUnderstandingStore.path(context), null)
@@ -120,7 +117,7 @@ internal object SharedMemoryJobs {
         schedule(app, 60_000)
         return true
     }
-    internal fun enqueueWithoutSchedule(context: Context, id: String, text: String, event: String) = synchronized(lock) {
+    internal fun enqueueWithoutSchedule(context: Context, id: String, text: String, event: String = stableEvent(text)) = synchronized(lock) {
         database(context).use { enqueueRow(it, id, text, event) }
     }
     internal fun resetDelays(context: Context) = synchronized(lock) { database(context).use { it.execSQL("UPDATE shared_jobs SET next_at=0 WHERE state='queued'") } }
@@ -223,7 +220,7 @@ internal object SharedMemoryJobs {
             Job(candidate.first, candidate.second, candidate.third, generation, token)
         } finally { db.endTransaction() }
     } }
-    private fun delayUntilNext(context: Context): Long? = synchronized(lock) { database(context).use { db ->
+    internal fun delayUntilNext(context: Context): Long? = synchronized(lock) { database(context).use { db ->
         db.rawQuery("SELECT MIN(CASE state WHEN 'queued' THEN next_at WHEN 'running' THEN lease_until END) FROM shared_jobs WHERE state IN ('queued','running')", null).use { c -> if (!c.moveToFirst() || c.isNull(0)) null else (c.getLong(0) - System.currentTimeMillis()).coerceAtLeast(0) }
     } }
     private fun failureKey(job: Job) = "${job.id}:${job.hash}"
@@ -277,11 +274,9 @@ internal object SharedMemoryJobs {
     } }
     fun schedule(context: Context, delayMs: Long) {
         val app = context.applicationContext
-        if (running.get()) return
+        if (!CompanionMemoryStore(app).enabled) return
         val due = delayUntilNext(app) ?: return
-        val info = JobInfo.Builder(JOB_ID, ComponentName(app, SharedMemoryJobService::class.java))
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setMinimumLatency(maxOf(delayMs.coerceAtLeast(0), due)).setPersisted(true).build()
-        check(app.getSystemService(JobScheduler::class.java)?.schedule(info) == JobScheduler.RESULT_SUCCESS) { "scheduler unavailable" }
+        wakeup.request(app, maxOf(delayMs, due))
     }
     fun runOne(context: Context, stopped: AtomicBoolean, modelOverride: UnderstandingModel? = null): Boolean {
         val app = context.applicationContext
@@ -314,8 +309,6 @@ internal object SharedMemoryJobs {
         if (stopped.get()) return true
         return hasDueWork(app)
     }
-    fun begin() = running.compareAndSet(false, true)
-    fun end() { running.set(false) }
     fun pendingCount(context: Context): Long = synchronized(lock) { database(context).use { db ->
         db.rawQuery("SELECT COUNT(*) FROM shared_jobs WHERE state IN ('queued','running')", null).use { it.moveToFirst(); it.getLong(0) }
     } }
@@ -335,29 +328,33 @@ class SharedMemoryJobService : JobService() {
     @Volatile private var stopped = AtomicBoolean(false)
     override fun onStartJob(params: JobParameters): Boolean {
         val cancelled = AtomicBoolean(false); stopped = cancelled
+        SharedMemoryJobs.wakeup.start(params)
         executor.execute {
-            if (!SharedMemoryJobs.begin()) { if (!cancelled.get()) jobFinished(params, true); return@execute }
-            SharedMemoryJobs.status(applicationContext, "正在整理资料")
-            val result = runCatching { SharedMemoryJobs.runOne(applicationContext, cancelled) }
-            SharedMemoryJobs.end()
-            if (!cancelled.get()) {
-                jobFinished(params, false)
-                if (result.isFailure) {
-                    SharedMemoryJobs.status(applicationContext, "处理失败，等待网络、模型或记忆设置恢复后重试")
-                    SharedMemoryJobs.schedule(applicationContext, 0)
-                } else {
-                    val pending = SharedMemoryJobs.pendingCount(applicationContext)
-                    SharedMemoryJobs.status(applicationContext, when {
-                        pending == 0L -> "已处理完待整理资料"
-                        result.getOrDefault(false) -> "已处理一条，等待继续"
-                        else -> "有 ${pending} 条资料等待重试"
-                    })
-                    SharedMemoryJobs.schedule(applicationContext, 2_000)
+            try {
+                val app = applicationContext
+                if (!CompanionMemoryStore(app).enabled) {
+                    SharedMemoryJobs.status(app, "长期记忆整理已关闭")
+                    SharedMemoryJobs.wakeup.finish(this, params, null)
+                    return@execute
                 }
+                SharedMemoryJobs.status(app, "正在整理资料")
+                var processed = 0
+                var more = true
+                while (!cancelled.get() && more && processed < 8) {
+                    more = runCatching { SharedMemoryJobs.runOne(app, cancelled) }.getOrDefault(false)
+                    processed++
+                }
+                if (!cancelled.get()) {
+                    val due = SharedMemoryJobs.delayUntilNext(app)
+                    SharedMemoryJobs.status(app, if (due == null) "已处理完待整理资料" else "还有资料等待整理或重试")
+                    SharedMemoryJobs.wakeup.finish(this, params, due?.coerceAtLeast(2_000))
+                }
+            } catch (_: Exception) {
+                if (!cancelled.get()) SharedMemoryJobs.wakeup.finish(this, params, null, retry = true)
             }
         }
         return true
     }
-    override fun onStopJob(params: JobParameters): Boolean { stopped.set(true); return true }
+    override fun onStopJob(params: JobParameters): Boolean { stopped.set(true); SharedMemoryJobs.wakeup.stop(params); return true }
     override fun onDestroy() { stopped.set(true); executor.shutdown(); super.onDestroy() }
 }

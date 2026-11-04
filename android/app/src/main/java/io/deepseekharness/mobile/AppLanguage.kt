@@ -15,11 +15,15 @@ internal object AppLanguage {
             .edit().putString(KEY, language).commit()
     }
 
-    /** 读取当前应用语言；未设置或为非法值时回落到简体中文。 */
+    /** 没有手动选择时，使用系统首选的受支持语言。 */
     fun current(context: Context): String = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
         .getString(KEY, null)
         ?.takeIf { it == "en" || it == "zh-CN" }
-        ?: "zh-CN"
+        ?: android.content.res.Resources.getSystem().configuration.locales.let { locales ->
+            (0 until locales.size()).firstNotNullOfOrNull { index ->
+                when (locales[index].language) { "zh" -> "zh-CN"; "en" -> "en"; else -> null }
+            } ?: "zh-CN"
+        }
 
     fun localizedContext(context: Context): Context {
         val language = current(context)

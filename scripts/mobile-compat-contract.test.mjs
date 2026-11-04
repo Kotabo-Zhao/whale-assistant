@@ -373,7 +373,7 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
   assert.equal(packageJson.name, '@deepseek-harness/dsh-mobile-shizuku')
   assert.equal(packageJson.dsh?.bundle?.patch, './cordis.patch.yml')
   assert.match(patch, /name: '@deepseek-harness\/dsh-mobile-shizuku'/)
-  assert.match(plugin, /export const inject = \['tools', 'systemPrompt', 'attachments', 'llm'\]/)
+  assert.match(plugin, /export const inject = \['tools', 'systemPrompt', 'attachments', 'llm', 'sessionController', 'sessionPersistence', 'permissionPresets'\]/)
   for (const tool of [
     'mobile_device_background_tasks',
     'mobile_device_screenshot',
@@ -444,11 +444,14 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
       'mobile_knowledge_read',
       'mobile_knowledge_forget',
       'mobile_knowledge_undo_forget',
+      'mobile_knowledge_forget_original',
       'mobile_knowledge_image',
       'mobile_knowledge_status',
       'mobile_knowledge_retry',
       'mobile_notification_search',
       'mobile_calendar_today',
+      'mobile_task_search',
+      'mobile_task_update',
       'mobile_companion_search',
       'mobile_companion_capabilities',
       'mobile_memory_search',
@@ -487,6 +490,7 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
       'mobile_device_file_write',
       'mobile_device_file_upload',
       'mobile_device_file_mkdir',
+      'mobile_whale_feature',
     ],
   )
 
@@ -816,7 +820,7 @@ test('keep-alive keeps the device bridge process-scoped and the notification ent
   assert.doesNotMatch(nativePlugin, /stopDeviceBridge/)
   assert.match(nativePlugin, /RuntimeHost\.acquireDeviceBridge \{/)
   assert.match(nativePlugin, /RuntimeHost\.deviceCommands\(\)/)
-  assert.match(nativePlugin, /RuntimeHost\.deviceCommandsOrNull\(\)\?\.onOutput/)
+  assert.match(runtimeHost, /deviceCommandsOrNull\(\)\?\.onOutput\(sessionId, dataBase64\)/)
 
   // 回归 2：桥构建失败绝不能穿出 load()（设备桥只服务设备 Shell，属可选能力）。
   assert.match(

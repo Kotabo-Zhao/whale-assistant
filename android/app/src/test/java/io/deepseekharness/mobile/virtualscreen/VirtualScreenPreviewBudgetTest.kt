@@ -31,6 +31,24 @@ class VirtualScreenPreviewBudgetTest {
         }
     }
 
+    @Test fun `面板刷新率参与预算且未提供读数时保持旧口径`() {
+        // 给了面板读数：与采集侧同一份夹取，240fps@60Hz 的预算是 17 毫秒而不是 4 毫秒。
+        assertEquals(17L, VirtualScreenBudgetPolicy.budgetMillis("240fps", 60f))
+        assertEquals(17L, VirtualScreenBudgetPolicy.budgetMillis("60fps", 60f))
+        assertEquals(33L, VirtualScreenBudgetPolicy.budgetMillis("30fps", 60f))
+        assertEquals(180L, VirtualScreenBudgetPolicy.budgetMillis("limited", 60f))
+        assertEquals(9L, VirtualScreenBudgetPolicy.budgetMillis("240fps", 120f))
+        // 不给读数（0f/负数）时保持旧口径，既有调用方与用例的行为不变。
+        assertEquals(4L, VirtualScreenBudgetPolicy.budgetMillis("240fps"))
+        assertEquals(4L, VirtualScreenBudgetPolicy.budgetMillis("240fps", 0f))
+        // 记账也用同一份读数：4 毫秒耗时在 240fps@60Hz 下不再算超预算（否则省电夹取会被报成「跟不上档位」）。
+        val budget = VirtualScreenPreviewBudget(panelRefreshHz = { 60f })
+        record(budget, "240fps", 4L, times = VirtualScreenBudgetPolicy.MIN_SAMPLE_BEATS)
+        val snapshot = budget.snapshot()
+        assertEquals(0, snapshot.overBudget)
+        assertEquals(VirtualScreenBudgetPolicy.OK, snapshot.verdict)
+    }
+
     @Test fun `样本不足时不下结论且状态行不加说明`() {
         val budget = VirtualScreenPreviewBudget()
         // 11 拍全部远超预算，但还没到 12 拍的下限：这是「首帧解码 / 建线程」的一次性开销区间。

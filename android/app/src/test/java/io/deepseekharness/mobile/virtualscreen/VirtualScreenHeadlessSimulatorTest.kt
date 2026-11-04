@@ -134,7 +134,7 @@ class VirtualScreenHeadlessSimulatorTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `每个档位的续排延迟都等于 previewPullDelay 且每拍只续排一次`() {
+    fun `每个档位的续排延迟都等于按面板夹取后的 previewPullDelay 且每拍只续排一次`() {
         val sim = VirtualScreenHeadlessSimulator()
         sim.script(SimFrame(SimFrameKind.CONTENT))
         sim.startPump()
@@ -146,8 +146,9 @@ class VirtualScreenHeadlessSimulatorTest {
             val before = sim.pumpDelays.size
             assertNotNull(sim.beat())
             assertEquals("每拍只续排一次", 1, sim.pumpDelays.size - before)
-            assertEquals("档位表里的间隔就是采集间隔", interval, VirtualScreenPolicy.previewPullInterval(mode))
-            expected += VirtualScreenPolicy.previewPullDelay(mode, 0)
+            // 档位表本身仍是原值：夹取只发生在采集节奏上，不改用户看到的档位契约。
+            assertEquals("档位表里的间隔就是档位间隔", interval, VirtualScreenPolicy.frameInterval(mode))
+            expected += VirtualScreenPolicy.previewPullDelay(mode, 0, sim.panelRefreshHz)
             actual += sim.pumpDelays.last()
         }
 
@@ -179,11 +180,12 @@ class VirtualScreenHeadlessSimulatorTest {
     }
 
     @Test
-    fun `取帧下限成立：最快的档位也要等够 PREVIEW_PULL_FLOOR_MILLIS`() {
+    fun `采集间隔先按面板夹取_最快档也要等够一帧面板时长`() {
+        // 档位表本身仍然满足取帧下限（4 毫秒），这条契约不变；夹取只发生在采集节奏上。
         VirtualScreenPolicy.FRAME_MODES.keys.forEach { mode ->
             assertTrue(
-                "档位 $mode 的采集间隔低于取帧下限",
-                VirtualScreenPolicy.previewPullInterval(mode) >= VirtualScreenPolicy.PREVIEW_PULL_FLOOR_MILLIS,
+                "档位 $mode 的档位间隔低于取帧下限",
+                VirtualScreenPolicy.frameInterval(mode) >= VirtualScreenPolicy.PREVIEW_PULL_FLOOR_MILLIS,
             )
         }
 
@@ -197,11 +199,11 @@ class VirtualScreenHeadlessSimulatorTest {
         sim.startPump()
 
         sim.beat()
-        assertEquals(4L, sim.pumpDelays.last())
+        assertEquals("240fps 在 60Hz 面板上被夹到 17 毫秒", 17L, sim.pumpDelays.last())
         sim.beat()
-        assertEquals("正好用掉 4 毫秒：余量 0 也保底 1 毫秒", 1L, sim.pumpDelays.last())
+        assertEquals("扣掉 4 毫秒耗时：余 13 毫秒", 13L, sim.pumpDelays.last())
         sim.beat()
-        assertEquals(1L, sim.pumpDelays.last())
+        assertEquals("耗时超过间隔：夹到下界 1 毫秒", 1L, sim.pumpDelays.last())
         assertTrue("续排延迟永远不小于 1 毫秒", sim.pumpDelays.drop(1).all { it >= 1L })
     }
 

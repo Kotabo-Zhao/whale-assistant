@@ -1,0 +1,25 @@
+<resources>
+    <string name="pet_menu_home">Quick actions</string>
+    <string name="pet_menu_chat">Chat</string>
+    <string name="pet_menu_assign">New task</string>
+    <string name="pet_menu_capture">Save to library</string>
+    <string name="pet_menu_inbox">Task inbox</string>
+    <string name="pet_menu_tools">My tools</string>
+    <string name="pet_menu_device">Device controls</string>
+    <string name="pet_menu_studio">Tool workshop</string>
+    <string name="pet_menu_harness">Harness window</string>
+    <string name="pet_menu_display">Virtual display</string>
+    <string name="pet_menu_app">Open main app</string>
+    <string name="pet_menu_hide">Hide pet</string>
+    <string name="pet_menu_disable">Turn off accessibility</string>
+    <string name="pet_menu_disabled">Accessibility is off</string>
+    <string name="pet_menu_back">Back</string>
+    <string name="pet_menu_close">Close</string>
+    <string name="pet_menu_session">Chat options</string>
+    <string name="pet_menu_counts">Whale pet. Tap to chat or hold for quick actions. %1$d tasks running, %2$d need attention.</string>
+    <string name="pet_menu_clipboard">Save clipboard</string>
+    <string name="pet_menu_screen">Save this screen</string>
+    <string name="pet_menu_files">Choose local files</string>
+    <string name="pet_menu_write">Write a note</string>
+    <string name="pet_menu_launch_error">Could not open this option. Try again.</string>
+</resources>

@@ -45,44 +45,44 @@ internal object CompanionRichText {
         }.joinToString("\n")
     }
 
-    fun render(source: String): Spanned {
+    fun render(source: String, ui: PetUi? = null): Spanned {
         val result = SpannableStringBuilder()
         blocks(source).forEachIndexed { index, block ->
             if (index > 0) result.append('\n')
             val start = result.length
             if (block.fenced) {
                 result.append(block.text)
-                code(result, start, result.length)
+                code(result, start, result.length, ui)
                 return@forEachIndexed
             }
             if (block.math) {
                 result.append(latex(block.text))
-                math(result, start, result.length)
+                math(result, start, result.length, ui)
                 return@forEachIndexed
             }
             val raw = block.text
             val heading = Regex("^(#{1,6})\\s+(.+)$").matchEntire(raw)
             when {
                 heading != null -> {
-                    appendInline(result, heading.groupValues[2])
+                    appendInline(result, heading.groupValues[2], ui)
                     result.setSpan(StyleSpan(Typeface.BOLD), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     result.setSpan(RelativeSizeSpan((1.45f - (heading.groupValues[1].length - 1) * .09f).coerceAtLeast(1.0f)), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
                 raw.trimStart().startsWith("> ") -> {
                     result.append("│ ")
-                    appendInline(result, raw.trimStart().removePrefix("> "))
-                    result.setSpan(ForegroundColorSpan(Color.rgb(74, 99, 125)), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    appendInline(result, raw.trimStart().removePrefix("> "), ui)
+                    result.setSpan(ForegroundColorSpan(ui?.muted ?: Color.rgb(74, 99, 125)), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
                 else -> {
                     val prefix = listPrefix(raw)
-                    if (prefix != null) { result.append(prefix.first); appendInline(result, prefix.second) } else appendInline(result, raw)
+                    if (prefix != null) { result.append(prefix.first); appendInline(result, prefix.second, ui) } else appendInline(result, raw, ui)
                 }
             }
         }
         return result
     }
 
-    private fun appendInline(result: SpannableStringBuilder, value: String) {
+    private fun appendInline(result: SpannableStringBuilder, value: String, ui: PetUi?) {
         var offset = 0
         inline.findAll(value).forEach { match ->
             result.append(value.substring(offset, match.range.first))
@@ -103,22 +103,22 @@ internal object CompanionRichText {
                 }
                 token.startsWith('`') -> {
                     result.append(token.substring(1, token.length - 1))
-                    code(result, start, result.length)
+                    code(result, start, result.length, ui)
                 }
                 token.startsWith('$') -> {
                     result.append(latex(token.substring(1, token.length - 1)))
-                    math(result, start, result.length)
+                    math(result, start, result.length, ui)
                 }
                 token.startsWith("\\(") -> {
                     result.append(latex(token.substring(2, token.length - 2)))
-                    math(result, start, result.length)
+                    math(result, start, result.length, ui)
                 }
                 token.startsWith('[') -> {
                     val label = token.substringAfter('[').substringBefore(']')
                     val url = token.substringAfter("(").removeSuffix(")")
                     result.append(label)
                     result.setSpan(URLSpan(url), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    result.setSpan(ForegroundColorSpan(Color.rgb(22, 104, 174)), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    result.setSpan(ForegroundColorSpan(ui?.accent ?: Color.rgb(22, 104, 174)), start, result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
             }
             offset = match.range.last + 1
@@ -195,14 +195,14 @@ internal object CompanionRichText {
         return output
     }
 
-    private fun code(text: SpannableStringBuilder, start: Int, end: Int) {
+    private fun code(text: SpannableStringBuilder, start: Int, end: Int, ui: PetUi?) {
         if (end <= start) return
         text.setSpan(TypefaceSpan(Typeface.MONOSPACE), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        text.setSpan(BackgroundColorSpan(Color.rgb(239, 242, 247)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        text.setSpan(BackgroundColorSpan(ui?.soft ?: Color.rgb(239, 242, 247)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
-    private fun math(text: SpannableStringBuilder, start: Int, end: Int) {
-        code(text, start, end)
-        text.setSpan(ForegroundColorSpan(Color.rgb(77, 52, 120)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    private fun math(text: SpannableStringBuilder, start: Int, end: Int, ui: PetUi?) {
+        code(text, start, end, ui)
+        text.setSpan(ForegroundColorSpan(ui?.accent ?: Color.rgb(77, 52, 120)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 }

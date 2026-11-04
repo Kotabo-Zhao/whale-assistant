@@ -1,10 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
-import { SlidersHorizontal } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
 import type { CompanionQuickSettings } from '../platform/types'
 import './CompanionSettingsButton.css'
-const CompanionWorkspace = lazy(() => import('./CompanionWorkspace').then(module => ({ default: module.CompanionWorkspace })))
 
 const options: { key: keyof CompanionQuickSettings; title: string; hint: string }[] = [
   { key: 'memoryEnabled', title: '允许使用长期记忆', hint: '已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。' },
@@ -20,11 +18,10 @@ const options: { key: keyof CompanionQuickSettings; title: string; hint: string 
   { key: 'quietHoursEnabled', title: '启用免打扰', hint: '免打扰时段内暂停气泡和休息提示；时间可在更多设置中调整。' },
 ]
 
-export function CompanionSettingsButton({ disabled }: { disabled: boolean }) {
+export function CompanionSettingsButton({ disabled, openMemory }: { disabled: boolean; openMemory?: () => void }) {
   const [settings, setSettings] = useState<CompanionQuickSettings | null>(null)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState('')
-  const [workspaceOpened, setWorkspaceOpened] = useState(false)
   useEffect(() => {
     let live = true
     void Promise.resolve().then(() => runtimeBridge.getCompanionQuickSettings())
@@ -38,11 +35,7 @@ export function CompanionSettingsButton({ disabled }: { disabled: boolean }) {
     catch { setMessage('保存助手设置失败，请重试') }
     finally { setWorking(false) }
   }
-  return <section className="companion-settings" aria-labelledby="companion-settings-title">
-    <div className="companion-settings-intro"><span className="companion-settings-icon"><SlidersHorizontal size={20} /></span>
-      <div><h3 id="companion-settings-title">{t('鲸鱼娘与个人助手')}</h3><p>{t('桌面提醒与长期记忆，集中在这里管理。')}</p></div>
-    </div>
-    <p className="plugin-hint">{t('先按需打开下面的功能；关闭时已有数据不会自动删除。部分功能还需要系统权限，可在桌面设置中检查。')}</p>
+  return <section className="companion-settings" aria-label={t('助手偏好')}>
     {['记忆与资料', '通知与提醒'].map((group, index) => <details key={group} className="companion-settings-group"><summary><strong>{t(group)}</strong><small>{t(index === 0 ? '管理助手能记住和使用的信息' : '选择哪些提醒可以出现')}</small></summary>
     {options.slice(index === 0 ? 0 : 5, index === 0 ? 5 : undefined).map(option => <label className="toggle-row" key={option.key}>
       <span><strong>{t(option.title)}</strong><small>{t(option.hint)}</small></span>
@@ -50,10 +43,10 @@ export function CompanionSettingsButton({ disabled }: { disabled: boolean }) {
         onChange={event => { const value = event.target.checked; if (option.key === 'knowledgeModelAccess' && value && !window.confirm('允许助手检索资料？相关内容可能发送给当前模型服务。')) return; void update(option.key, value) }} />
     </label>)}
     </details>)}
-    <details className="companion-settings-group companion-workspace-group" onToggle={event => { if (event.currentTarget.open) setWorkspaceOpened(true) }}><summary><strong>{t('管理提醒、资料与记忆')}</strong><small>{t('查看、编辑以及导入导出本地内容')}</small></summary>{workspaceOpened && <Suspense fallback={<p>正在加载助手工作台…</p>}><CompanionWorkspace /></Suspense>}</details>
+    {openMemory && <button className="button button-secondary" type="button" onClick={openMemory}>{t('打开记忆')}</button>}
     <button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => {
       setMessage(''); void runtimeBridge.openCompanionSettings().catch(() => setMessage('无法打开助手设置，请在安卓应用中重试'))
-    }}>{t('更多通知与桌面设置')}</button>
+    }}>{t('全部助手偏好')}</button>
     {message && <p className="status-text-error" role="alert">{t(message)}</p>}
   </section>
 }

@@ -144,7 +144,7 @@ function RecoveryNotice({ recovery, unresolved, locked, onRepair, onPrune }: {
   </section>
 }
 
-export function PluginSettings({ bridge, runtime, onBack, onStopRequested }: { bridge: RuntimeBridge; runtime: RuntimeState; onBack: () => void; onStopRequested?: () => void }) {
+export function PluginSettings({ bridge, runtime, onBack, onStopRequested, backLabel = '返回设置' }: { backLabel?: string; bridge: RuntimeBridge; runtime: RuntimeState; onBack: () => void; onStopRequested?: () => void }) {
   useLanguage()
   const [catalog, setCatalog] = useState<PluginCatalog | null>(null)
   const [catalogReadFailed, setCatalogReadFailed] = useState(false)
@@ -325,7 +325,7 @@ export function PluginSettings({ bridge, runtime, onBack, onStopRequested }: { b
       <div><p className="eyebrow">{t('应用管理')}</p><h1>{t('插件管理')}</h1></div>
       <div className="heading-actions">
         <button className="button button-secondary compact-button" type="button" disabled={busy || stopping || proposalBusy} onClick={() => { void run({ operation: 'list' }); void refreshProposal() }}><RefreshCw size={18} />{t('刷新')}</button>
-        <button className="icon-button" type="button" title={t('返回设置')} aria-label={t('返回设置')} onClick={onBack} disabled={busy || stopping}><ArrowLeft size={19} /></button>
+        <button className="icon-button" type="button" title={t(backLabel)} aria-label={t(backLabel)} onClick={onBack} disabled={stopping || (busy && !loadingList)}><ArrowLeft size={19} /></button>
       </div>
     </div>
     <p className="plugin-description">{t('浏览社区插件、安装并管理已有插件，都在这里完成。')}</p>

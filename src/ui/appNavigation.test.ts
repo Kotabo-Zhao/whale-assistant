@@ -8,7 +8,8 @@ describe('主导航归属', () => {
   it('会话管理返回助手区域，对话与插件保持独立', () => {
     expect(primaryDestination('sessions')).toBe('conversation')
     expect(primaryDestination('harness')).toBe('harness')
-    expect(primaryDestination('plugins')).toBe('plugins')
+    expect(primaryDestination('plugins')).toBe('tools')
+    expect(primaryDestination('tools')).toBe('tools')
     expect(primaryDestination('assistant-memory')).toBe('assistant-memory')
     expect(primaryDestination('assistant-tasks')).toBe('assistant-tasks')
   })

@@ -32,7 +32,15 @@ export class SuperagentChannels {
         if (typeof comment.issue_url !== 'string' || !comment.issue_url.toLowerCase().startsWith(base.toLowerCase())) throw new Error('GitHub 事件不属于配置的仓库')
         const issue = Number(comment.issue_url.slice(base.length))
         const trigger = githubTrigger(config.repo, issue, comment, config.botLogin)
-        if (trigger) triggers.push(trigger)
+        if (trigger) {
+          triggers.push(trigger)
+          if (comment.updated_at && comment.created_at && comment.updated_at !== comment.created_at) {
+            const edited = { ...trigger, id: `${trigger.id}:edit:${comment.updated_at}`, at: comment.updated_at, human: false,
+              text: `评论已编辑：\n${trigger.text}`, meta: { ...trigger.meta, edited: true } }
+            delete edited.addressed
+            triggers.push(edited)
+          }
+        }
       }
       if (items.length < 100) break
     }
@@ -43,7 +51,7 @@ export class SuperagentChannels {
     if (!config?.enabled) return []
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(config.repo || '') || !/^[A-Za-z0-9-]+$/.test(config.botLogin || '')) throw new Error('GitHub 来源配置无效')
     const token = await this.credentials('github'); if (!token) throw new Error('GitHub 凭据不可用')
-    const triggers = []
+    const triggers = []; triggers.closures = []
     for (const kind of ['issues', 'pulls/comments']) for (let page = 1;; page++) {
       const url = new URL(`https://api.github.com/repos/${config.repo}/${kind}`)
       url.searchParams.set('per_page', '100'); url.searchParams.set('page', String(page))
@@ -54,7 +62,13 @@ export class SuperagentChannels {
       if (!Array.isArray(items)) throw new Error('GitHub 响应无效')
       for (const item of items) {
         let trigger
-        if (kind === 'issues') trigger = githubIssueTrigger(config.repo, item, config.botLogin)
+        if (kind === 'issues') {
+          if (item.pull_request && item.state === 'closed' && item.closed_at) {
+            triggers.closures.push({ thread: { source: 'github', id: `${config.repo.toLowerCase()}#${item.number}` },
+              outcome: item.pull_request.merged_at ? 'merged' : 'closed', at: item.closed_at })
+          }
+          trigger = githubIssueTrigger(config.repo, item, config.botLogin)
+        }
         else {
           const prefix = `https://api.github.com/repos/${config.repo}/pulls/`
           if (typeof item.pull_request_url !== 'string' || !item.pull_request_url.toLowerCase().startsWith(prefix.toLowerCase())) throw new Error('GitHub 评审不属于配置的仓库')
@@ -75,6 +89,50 @@ export class SuperagentChannels {
     const item = result.data.items.find(entry => entry.message_id === messageId)
     if (!item || item.chat_id !== chat) throw new Error('飞书话题不属于已授权群')
     return item.thread_id || undefined
+  }
+  async githubChecks(pull) {
+    const config = this.configuration().github
+    if (!config?.enabled || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(config.repo || '') || !Number.isSafeInteger(pull) || pull < 1) throw new Error('GitHub 检查目标无效')
+    const token = await this.credentials('github'); if (!token) throw new Error('GitHub 凭据不可用')
+    const base = `https://api.github.com/repos/${config.repo}`
+    const pr = await this.request(`${base}/pulls/${pull}`, token, { headers: { accept: 'application/vnd.github+json' } })
+    const sha = pr.head?.sha
+    if (!/^[a-f0-9]{40}$/i.test(sha || '')) throw new Error('GitHub PR 提交版本无效')
+    const triggers = [], thread = `${config.repo.toLowerCase()}#${pull}`
+    for (let page = 1;; page++) {
+      const data = await this.request(`${base}/commits/${sha}/check-runs?per_page=100&page=${page}`, token, { headers: { accept: 'application/vnd.github+json' } })
+      if (!Array.isArray(data.check_runs)) throw new Error('GitHub 检查结果无效')
+      for (const check of data.check_runs) {
+        if (!Number.isSafeInteger(check.id) || !check.status) continue
+        const status = String(check.status), conclusion = String(check.conclusion || '')
+        triggers.push({ id: `github:${config.repo.toLowerCase()}:check:${check.id}:${sha}:${status}:${conclusion}`, source: 'github',
+          threads: [{ source: 'github', id: thread }], actor: { source: 'github', id: 'github-checks' }, human: false,
+          at: check.completed_at || check.started_at || new Date().toISOString(), text: `CI 检查 ${check.name || check.id}：${status}${conclusion ? ` / ${conclusion}` : ''}；提交 ${sha}`,
+          channel: { source: 'github', thread, address: { repo: config.repo, issue: String(pull) } }, meta: { repo: config.repo, issue: pull, check: check.id } })
+      }
+      if (data.check_runs.length < 100) break
+    }
+    return triggers
+  }
+  async githubReviews(pull) {
+    const config = this.configuration().github
+    if (!config?.enabled || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(config.repo || '') || !Number.isSafeInteger(pull) || pull < 1) throw new Error('GitHub 评审目标无效')
+    const token = await this.credentials('github'); if (!token) throw new Error('GitHub 凭据不可用')
+    const thread = `${config.repo.toLowerCase()}#${pull}`, triggers = []
+    for (let page = 1;; page++) {
+      const items = await this.request(`https://api.github.com/repos/${config.repo}/pulls/${pull}/reviews?per_page=100&page=${page}`, token,
+        { headers: { accept: 'application/vnd.github+json' } })
+      if (!Array.isArray(items)) throw new Error('GitHub 评审结果无效')
+      for (const review of items) {
+        if (!Number.isSafeInteger(review.id) || !review.submitted_at || !review.state) continue
+        triggers.push({ id: `github:${config.repo.toLowerCase()}:pull-review:${review.id}:${review.state}`, source: 'github',
+          threads: [{ source: 'github', id: thread }], actor: { source: 'github', id: review.user?.login || 'github-review' }, human: false,
+          at: review.submitted_at, text: `PR 评审 ${review.user?.login || '未知'}：${review.state}\n${review.body || ''}`,
+          channel: { source: 'github', thread, address: { repo: config.repo, issue: String(pull) } }, meta: { repo: config.repo, issue: pull, pullReview: review.id } })
+      }
+      if (items.length < 100) break
+    }
+    return triggers
   }
   async feishuHistory(chat, startTime, threadId, rootId) {
     const config = this.configuration().feishu

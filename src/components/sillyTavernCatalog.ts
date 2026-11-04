@@ -21,9 +21,12 @@ export async function loadOfficialCards(): Promise<CatalogCard[]> {
   const response = await fetchOfficial(OFFICIAL_CATALOG)
   const list: unknown = await response.json()
   if (!Array.isArray(list)) throw new Error('官方目录格式无效')
-  return list.filter((row): row is CatalogCard & { type: string } =>
-    row && row.type === 'character' && typeof row.id === 'string' && typeof row.name === 'string' &&
-    typeof row.description === 'string' && typeof row.url === 'string' && row.url.startsWith(OFFICIAL_ASSETS))
+  return (list as unknown[]).filter((row): row is CatalogCard & { type: string } => {
+    if (!row || typeof row !== 'object') return false
+    const card = row as Record<string, unknown>
+    return card.type === 'character' && typeof card.id === 'string' && typeof card.name === 'string' &&
+      typeof card.description === 'string' && typeof card.url === 'string' && card.url.startsWith(OFFICIAL_ASSETS)
+  })
 }
 
 /** SillyTavern PNG cards use a base64-encoded JSON payload in a chara or ccv3 tEXt chunk. */

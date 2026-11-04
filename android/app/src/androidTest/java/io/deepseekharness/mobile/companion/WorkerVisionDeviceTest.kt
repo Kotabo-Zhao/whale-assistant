@@ -14,6 +14,97 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class WorkerVisionDeviceTest {
+    @Test fun guestSqliteWalRollsBackOnPrivateScratch() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = io.deepseekharness.mobile.runtime.RuntimeStore(context)
+        val resolver = io.deepseekharness.mobile.runtime.RuntimeLaunchResolver(context, store, includeCredentials = false)
+        val script = """
+            const { DatabaseSync } = require('node:sqlite')
+            const fs = require('node:fs'), path = require('node:path'), os = require('node:os')
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'whale-sqlite-test-'))
+            const file = path.join(dir, 'domain.db')
+            try {
+              const db = new DatabaseSync(file)
+              try {
+                const mode = db.prepare('PRAGMA journal_mode=WAL').get().journal_mode
+                db.exec('PRAGMA synchronous=FULL; CREATE TABLE check_state (n INTEGER); BEGIN IMMEDIATE; INSERT INTO check_state VALUES (1); ROLLBACK')
+                if (mode !== 'wal' || db.prepare('SELECT count(*) AS n FROM check_state').get().n !== 0) throw Error('WAL_ROLLBACK_FAILED')
+                console.log('WHALE_GUEST_SQLITE_WAL_OK')
+              } finally { db.close() }
+            } finally {
+              for (const name of [file, file+'-wal', file+'-shm']) if (fs.existsSync(name)) fs.unlinkSync(name)
+              fs.rmdirSync(dir)
+            }
+        """.trimIndent()
+        val result = io.deepseekharness.mobile.runtime.ProcessProbe.run(resolver.launch(listOf("/opt/node/bin/node", "-e", script)),
+            store.currentRoot, 30L, outputLimit = 4096)
+        assertTrue("guest SQLite exit=${result.exitCode} ${result.output.take(180)}", result.succeeded && "WHALE_GUEST_SQLITE_WAL_OK" in result.output)
+    }
+    @Test fun guestCrashKeepsTicketAndReceiptOnTheSameCommit() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = io.deepseekharness.mobile.runtime.RuntimeStore(context)
+        val resolver = io.deepseekharness.mobile.runtime.RuntimeLaunchResolver(context, store, includeCredentials = false)
+        val script = """
+            import assert from 'node:assert/strict'
+            import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+            import { tmpdir } from 'node:os'
+            import { join } from 'node:path'
+            import { spawnSync } from 'node:child_process'
+            import { SuperagentDomain } from '/opt/dsh/plugins/dsh-mobile-shizuku/lib/superagent-domain.js'
+            const dir = mkdtempSync(join(tmpdir(), 'whale-domain-crash-'))
+            try {
+              const domain = new SuperagentDomain(dir)
+              domain.repo.atomic(() => {
+                domain.repo.tickets.save({ id:'one', title:'working' })
+                domain.effects.set('start:one',{id:'start:one',generation:'one'})
+              })
+              const original = readFileSync(domain.path)
+              const child = `
+                import { SuperagentDomain } from '/opt/dsh/plugins/dsh-mobile-shizuku/lib/superagent-domain.js'
+                const domain = new SuperagentDomain(process.argv[1])
+                domain.repo.atomic(() => {
+                  domain.repo.tickets.save({id:'one',title:'finished'})
+                  domain.acknowledgeEffect('start:one','one')
+                  if (process.argv[2] === 'before') process.kill(process.pid,'SIGKILL')
+                  domain.messages.set('result:one',{id:'result:one',status:'pending'})
+                })
+                process.kill(process.pid,'SIGKILL')
+              `
+              for (const moment of ['before','after']) {
+                const stopped = spawnSync('/opt/node/bin/node',['--input-type=module','-e',child,dir,moment], { timeout:12000 })
+                assert.ok(stopped.signal === 'SIGKILL' || stopped.status === 137, 'isolated child did not reach kill point: '+stopped.status+'/'+stopped.signal)
+                const restored = new SuperagentDomain(dir)
+                if (moment === 'before') {
+                  assert.deepEqual(readFileSync(restored.path),original)
+                  assert.equal(restored.repo.tickets.get('one').title,'working')
+                  assert.equal(restored.pendingEffects().length,1)
+                  assert.equal(restored.pendingMessages().length,0)
+                } else {
+                  assert.equal(restored.repo.tickets.get('one').title,'finished')
+                  assert.equal(restored.pendingEffects().length,0)
+                  assert.equal(restored.pendingMessages().length,1)
+                }
+              }
+              console.log('WHALE_BEFORE_AND_AFTER_COMMIT_OK')
+            } finally { rmSync(dir,{recursive:true,force:true}) }
+        """.trimIndent()
+        val result = io.deepseekharness.mobile.runtime.ProcessProbe.run(
+            resolver.launch(listOf("/opt/node/bin/node", "--input-type=module", "-e", script)),
+            store.currentRoot, 40L, outputLimit = 4096)
+        assertTrue("guest crash test exit=${result.exitCode} ${result.output.takeLast(900)}",
+            result.succeeded && "WHALE_BEFORE_AND_AFTER_COMMIT_OK" in result.output)
+    }
+
+    @Test fun diagnosePluginCheckpoint() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = io.deepseekharness.mobile.runtime.RuntimeStore(context)
+        val resolver = io.deepseekharness.mobile.runtime.RuntimeLaunchResolver(context, store, includeCredentials = false)
+        val result = io.deepseekharness.mobile.runtime.ProcessProbe.run(
+            resolver.launch(listOf("/opt/node/bin/node", "/root/.dsh-mobile/plugin-manager.cjs", "checkpoint")), store.currentRoot, 180L, outputLimit = 256 * 1024)
+        val payload = runCatching { JSONObject(result.output.trimEnd().lineSequence().last()) }.getOrNull()
+        val code = payload?.optString("error")?.take(100).orEmpty()
+        assertTrue("checkpoint exit=${result.exitCode} timeout=${result.timedOut} code=$code start=${result.startError?.javaClass?.simpleName}", result.succeeded && code.isEmpty())
+    }
     private fun withClient(run: (HarnessBubbleClient) -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val sink = object : RuntimeEventSink {
@@ -160,7 +251,8 @@ class WorkerVisionDeviceTest {
         try {
             controller.stopRuntime()
             controller.install(io.deepseekharness.mobile.runtime.RuntimeSource(null, null))
-            assertEquals("0.3.42-whale-superagent", controller.store.installedManifest()!!.version)
+            val expected = context.assets.open("runtime/runtime-manifest.json").bufferedReader().use { JSONObject(it.readText()).getString("version") }
+            assertEquals(expected, controller.store.installedManifest()!!.version)
         } finally { RuntimeHost.detachPluginSink(sink) }
     }
     private fun send(client: HarnessBubbleClient, session: String, text: String): CompanionBubbleChat.Reply {

@@ -48,7 +48,14 @@ internal class SuperagentSettings(context: Context) {
         val diagnostics = JSONObject().put("errors", request.optJSONObject("errors") ?: JSONObject())
             .put("problems", request.optJSONArray("problems") ?: JSONArray()).put("pendingReplies", request.optInt("pendingReplies", 0))
         require(diagnostics.toString().length <= 32000)
-        check(prefs.edit().putString("unapproved", actors.toString()).putString("diagnostics", diagnostics.toString()).commit())
+        // This is a display mirror; the guest is authoritative and re-sends it every pump.
+        // Async apply() is fine here, and skipping identical snapshots avoids a sync write
+        // every heartbeat (the previous code committed twice on every 5 s refresh).
+        val nextActors = actors.toString()
+        val nextDiagnostics = diagnostics.toString()
+        if (prefs.getString("unapproved", "[]") == nextActors &&
+            prefs.getString("diagnostics", "{}") == nextDiagnostics) return
+        prefs.edit().putString("unapproved", nextActors).putString("diagnostics", nextDiagnostics).apply()
     }
     /** Only the token-authenticated loopback device bridge uses this result. */
     fun runtime(): JSONObject = JSONObject().put("config", config()).put("credentials", credentials())

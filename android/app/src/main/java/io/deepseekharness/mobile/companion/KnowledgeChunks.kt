@@ -1,6 +1,8 @@
 package io.deepseekharness.mobile.companion
 
 internal object KnowledgeChunks {
+    fun recordId(documentId: String, index: Int) = java.util.UUID.nameUUIDFromBytes("$documentId:$index".toByteArray(Charsets.UTF_8)).toString()
+
     fun split(text: String): List<String> {
         require(text.isNotBlank() && text.length <= CompanionKnowledgeData.MAX_DOCUMENT_TEXT)
         val result = mutableListOf<String>(); var offset = 0

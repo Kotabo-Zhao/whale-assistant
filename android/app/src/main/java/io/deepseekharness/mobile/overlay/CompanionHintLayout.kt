@@ -14,7 +14,18 @@ internal object CompanionHintLayout {
         val x = (ballX.toLong() + ballWidth - bubbleWidth).coerceIn(0L, maxX.toLong()).toInt()
         val above = ballY.toLong() - gap - bubbleHeight
         val below = ballY.toLong() + ballHeight + gap
-        val preferred = if (above >= minY) above else if (below <= maxY) below else above
-        return Position(x, preferred.coerceIn(minY.toLong(), maxY.toLong()).toInt())
+        if (above >= minY) return Position(x, above.toInt().coerceAtMost(maxY))
+        if (below <= maxY) return Position(x, below.toInt().coerceAtLeast(minY))
+        // A tall conversation usually fits beside the pet on a landscape handheld.
+        val left = ballX - gap - bubbleWidth
+        val right = ballX + ballWidth + gap
+        val sideX = when {
+            left >= 0 -> left
+            right <= maxX -> right
+            else -> null
+        }
+        if (sideX != null) return Position(sideX, (ballY + (ballHeight - bubbleHeight) / 2).coerceIn(minY, maxY))
+        val largerSpace = if (ballY > screenHeight - ballY - ballHeight) above else below
+        return Position(x, largerSpace.coerceIn(minY.toLong(), maxY.toLong()).toInt())
     }
 }

@@ -1,0 +1,17 @@
+<resources>
+    <color name="pet_surface">#1D263B</color>
+    <color name="pet_canvas">#151E31</color>
+    <color name="pet_ink">#F6F4FF</color>
+    <color name="pet_muted">#BBC7DE</color>
+    <color name="pet_accent">#C2D0FF</color>
+    <color name="pet_soft">#303E60</color>
+    <color name="pet_primary">#B5C7FF</color>
+    <color name="pet_on_primary">#1B2C53</color>
+    <color name="pet_line">#404F6D</color>
+    <color name="pet_answer">#24304A</color>
+    <color name="pet_alert">#FFADB6</color>
+    <color name="pet_rose">#493347</color>
+    <color name="pet_honey">#493F39</color>
+    <color name="pet_pink">#F092B7</color>
+    <color name="pet_gold">#F2BD70</color>
+</resources>

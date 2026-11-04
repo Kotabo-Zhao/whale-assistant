@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { arriveAtSettingsHome } from './__tests__/appTestHarness'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -26,13 +26,13 @@ import { applyCard, DEFAULT_CARD } from './appearance'
  * `getComputedStyle` 拿不到 `color-mix()` 的结果。所以这里做两件互补的事：
  *  1. 解析 `src/styles.css`：芯片规则引用的令牌在深浅两套主题里都有值，
  *     换成用户卡片配色后取值随之变化，且对文字/底色算 WCAG 对比度；
- *  2. 渲染真实 `<App />`：确认首页那排芯片正是被 `.settings-categories button` 命中的元素。
+ *  2. 渲染真实 `<App />`：确认首页那排芯片正是被 `.account-group-toggle` 命中的元素。
  * 合起来就是「切换 `data-theme` / 卡片令牌后，分类芯片的颜色随之变化」，
  * 而且不会因为 jsdom 能力缺失而变成永远为真的假绿。
  */
 
 const STYLESHEET = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8').replace(/\r\n?/g, '\n')
-const CHIP_SELECTOR = '.settings-categories button'
+const CHIP_SELECTOR = '.account-group-toggle'
 const LIGHT_BLOCK = ':root'
 const DARK_BLOCK = ":root[data-theme='dark']"
 
@@ -167,7 +167,7 @@ describe('设置分类卡片：取色跟着主题令牌走', () => {
   })
 
   it('选中态仍然是强调色（主题色）而不是卡片色', () => {
-    const selected = ruleBody(`${CHIP_SELECTOR}[aria-selected="true"]`)
+    const selected = ruleBody(`${CHIP_SELECTOR}[aria-expanded="true"]`)
     expect(selected).toContain('var(--blue-soft)')
     expect(selected).toContain('var(--blue)')
   })
@@ -226,22 +226,16 @@ describe('设置分类卡片：DOM 与样式表对得上', () => {
    * `findBy*` 默认只等 1 s，而启动链把视图推到设置首页要将近 1 s（并行跑更慢），
    * 放宽的是等待，不是断言。
    */
-  it('首页的分类芯片正是被 .settings-categories button 命中的元素', async () => {
+  it('首页的设置分组正是被 .account-group-toggle 命中的元素', async () => {
     render(<App />)
   await arriveAtSettingsHome()
       await screen.findByRole('heading', { name: '设置' }, { timeout: 5_000 })
 
-    fireEvent.click(screen.getByRole('button', { name: '按分类筛选' }))
-    const listbox = screen.getByRole('listbox', { name: '筛选功能分类' })
-    const chips = within(listbox).getAllByRole('option')
-    expect(chips.length).toBeGreaterThan(1)
-
-    for (const chip of chips) {
-      expect(chip.tagName).toBe('BUTTON')
-      // 样式表那条规则的命中范围 = 这些真实元素，而不是某个已经改名的类名。
-      expect(chip.matches(CHIP_SELECTOR)).toBe(true)
-    }
-    // 选中态由 aria-selected 表达，样式表里选中态那条规则挂在同一个选择器上。
-    expect(chips.filter(chip => chip.getAttribute('aria-selected') === 'true')).toHaveLength(1)
+    const toggles = ['助手与外观','运行与存储','设备与诊断'].map(name => screen.getByRole('button', { name }))
+    expect(toggles.every(button => button.matches(CHIP_SELECTOR))).toBe(true)
+    expect(toggles.filter(button => button.getAttribute('aria-expanded') === 'true')).toHaveLength(1)
+    fireEvent.click(toggles[2])
+    expect(toggles[2]).toHaveAttribute('aria-expanded', 'true')
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'false')
   })
 })

@@ -61,7 +61,8 @@ class CompanionKnowledgeStoreTest {
         assertEquals("你好\n世界", CompanionKnowledgeTextFile.decode("\uFEFF你好\n世界".toByteArray(Charsets.UTF_8)))
         assertThrows(Exception::class.java) { CompanionKnowledgeTextFile.decode(byteArrayOf(0xc3.toByte(), 0x28)) }
         assertThrows(Exception::class.java) { CompanionKnowledgeTextFile.decode("x\u0000y".toByteArray()) }
-        assertThrows(Exception::class.java) { CompanionKnowledgeTextFile.decode("x".repeat(8001).toByteArray()) }
+        assertEquals(8001, CompanionKnowledgeTextFile.decode("x".repeat(8001).toByteArray()).length)
+        assertThrows(Exception::class.java) { CompanionKnowledgeTextFile.decode("x".repeat(CompanionKnowledgeData.MAX_DOCUMENT_TEXT + 1).toByteArray()) }
         assertThrows(Exception::class.java) { CompanionKnowledgeTextFile.decode(ByteArray(32001)) }
         val rows = JSONArray()
         assertTrue(CompanionKnowledgeData.add(rows, "文件内容", 1, "text_file"))
@@ -69,6 +70,21 @@ class CompanionKnowledgeStoreTest {
         assertEquals("text_file", JSONArray(plan.additions).getJSONObject(0).getString("source"))
         assertThrows(Exception::class.java) { CompanionKnowledgeData.add(rows, "bad", 2, "other") }
     }
+    @Test fun backupKeepsDistinctOriginalsAndDropsOnlyTheirLiveWorkTickets() {
+        val incoming = JSONArray()
+        for (letter in listOf("a", "b")) {
+            incoming.put(JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("originalId", letter.repeat(64))
+                .put("text", "[原件已保存]").put("createdAt", 1).put("source", "original").put("displayName", "文件")
+                .put("mime", "text/plain").put("coverage", "not_parsed").put("parseState", "processing").put("parseTicket", "parse:test$letter"))
+        }
+        val bytes = CompanionKnowledgeBackup.encode(incoming)
+        val saved = JSONArray(CompanionKnowledgeBackup.plan(bytes, JSONArray()).additions)
+        assertEquals(2, saved.length())
+        assertTrue(incoming.getJSONObject(0).has("parseTicket"))
+        assertFalse(saved.getJSONObject(0).has("parseTicket"))
+        assertEquals("needs_retry", saved.getJSONObject(0).getString("parseState"))
+    }
+
     @Test fun originalAndImageAnalysisRowsRequireStableLinksAndCoverage() {
         val originalId = "a".repeat(64)
         val original = JSONObject().put("id", java.util.UUID.randomUUID().toString()).put("text", "[原件已保存，解析状态需另行核对]")

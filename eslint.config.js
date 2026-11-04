@@ -8,6 +8,8 @@ export default tseslint.config(
   {
     ignores: [
       'dist',
+      'build', // 本地设备报告、验收镜像和上游对照副本。
+      'scripts/vendor/dsh-superagent', // 固定版本的上游源码，由引擎回归测试覆盖。
       'packages/**', // 独立包的 lib/src 由其自身 tsconfig/typecheck 覆盖
       'android/app/src/main/assets/public',
       'android/**/build',

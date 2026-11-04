@@ -367,3 +367,11 @@ it('刷新失败保留原记录并标明可能过期', async () => {
   expect(screen.getByText('example-plugin')).toBeInTheDocument()
   expect(screen.getByText('下面保留上次读取的记录，可能不是最新状态。请刷新后再核对。')).toBeInTheDocument()
 })
+
+it('读取插件目录时允许返回工具页', () => {
+  const bridge = { ...createBrowserBridge(), managePlugins: vi.fn(() => new Promise<PluginCatalog>(() => {})) }
+  const back = vi.fn()
+  render(<PluginSettings bridge={bridge} runtime={runtime} onBack={back} backLabel="返回工具" />)
+  fireEvent.click(screen.getByRole('button', { name: '返回工具' }))
+  expect(back).toHaveBeenCalledOnce()
+})

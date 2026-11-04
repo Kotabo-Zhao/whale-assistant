@@ -15,12 +15,15 @@ package io.deepseekharness.mobile.virtualscreen
  * @param postDelayed 投递一拍（真机传 `Handler.postDelayed`）。
  * @param removeCallbacks 取消已投递但还没跑的那一拍（真机传 `Handler.removeCallbacks`）。
  * @param beat 一拍的动作；必须是稳定实例，见类注释。
+ * @param panelRefreshHz 副屏面板的实际刷新率（Hz，读不到给 0f）：续排间隔按它夹取，
+ *   避免 60Hz 面板上按 4 毫秒空转（见 [VirtualScreenPolicy.effectiveFrameInterval]）。
  */
 internal class VirtualScreenPreviewPump(
     private val now: () -> Long,
     private val postDelayed: (Long, Runnable) -> Unit,
     private val removeCallbacks: (Runnable) -> Unit,
     private val beat: Runnable,
+    private val panelRefreshHz: () -> Float = { 0f },
 ) {
     /** 是否在跑：stop 之后本拍落地不再续排（在途那一拍回主线程时循环已经停掉）。 */
     private var running = false
@@ -71,13 +74,13 @@ internal class VirtualScreenPreviewPump(
     /**
      * 本拍落地：按档位续排下一拍并返回延迟毫秒数。
      *
-     * 延迟 = [VirtualScreenPolicy.previewPullDelay]（即档位间隔减去本拍耗时，且不短于 1 毫秒）；
-     * 本拍耗时超过档位间隔时不追赶积压：多花的时间从下一拍的等待里扣掉，不会连发补拍。
-     * 已经 [stop] 则不再投递，返回 0。
+     * 延迟 = [VirtualScreenPolicy.previewPullDelay]（三参重载：档位间隔先按面板刷新率夹取，
+     * 再减去本拍耗时，且不短于 1 毫秒）；本拍耗时超过档位间隔时不追赶积压：多花的时间从下一拍的
+     * 等待里扣掉，不会连发补拍。已经 [stop] 则不再投递，返回 0。
      */
     fun fetchLanded(mode: String): Long {
         if (!running) return 0L
-        val delay = VirtualScreenPolicy.previewPullDelay(mode, now() - startedAtMillis)
+        val delay = VirtualScreenPolicy.previewPullDelay(mode, now() - startedAtMillis, panelRefreshHz())
         postDelayed(delay, beat)
         return delay
     }

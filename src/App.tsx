@@ -1,8 +1,11 @@
+import './components/WorkspaceShell.css'
+import { ToolsWorkspace } from './components/ToolsWorkspace'
 import { AssistantOverview } from './components/AssistantOverview'
 import type { AppView } from './ui/appNavigation'
 import { AppSidebar, BottomNavigation } from './components/AppNavigation'
 import { Capacitor } from '@capacitor/core'
 import appMark from './assets/app-mark.png'
+import whaleWave from './assets/whale-wave.svg'
 import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
 import { TaskStarter } from './components/TaskStarter'
@@ -70,7 +73,6 @@ import {
   Share2,
   ShieldCheck,
   SlidersHorizontal,
-  ListFilter,
   Smartphone,
   Square,
   SquareTerminal,
@@ -79,6 +81,8 @@ import {
   X,
   ListChecks,
   MessageSquare,
+  Bell,
+  Languages,
 } from 'lucide-react'
 import { Onboarding, ONBOARDING_STORAGE_KEY } from './components/Onboarding'
 import { hasConfiguredModelCredential, MODEL_PROVIDERS } from './modelProviders'
@@ -204,20 +208,16 @@ function isSettingsView(view: AppView): boolean {
 }
 
 /** 按用户用途分类；分类只影响入口展示，不改动设置草稿。 */
-type SettingsHomeGroup = 'runtime' | 'files' | 'versions' | 'models' | 'appearance' | 'device' | 'diagnostics'
+type SettingsHomeGroup = 'assistant' | 'workspace' | 'device'
 
 const SETTINGS_HOME_GROUPS: { id: SettingsHomeGroup; label: string }[] = [
-  { id: 'models', label: '模型连接' },
-  { id: 'appearance', label: '外观与显示' },
-  { id: 'device', label: '设备与自动化' },
-  { id: 'runtime', label: '后台' },
-  { id: 'files', label: '文件管理' },
-  { id: 'versions', label: '版本管理' },
-  { id: 'diagnostics', label: '日志与排查' },
+  { id: 'assistant', label: '助手与外观' },
+  { id: 'workspace', label: '运行与存储' },
+  { id: 'device', label: '设备与诊断' },
 ]
 
 /** 入口点下去要去哪：设置二级页，或外壳一级页。 */
-type SettingsHomeTarget = { kind: 'page'; page: SettingsPage } | { kind: 'view'; view: AppView }
+type SettingsHomeTarget = { kind: 'page'; page: SettingsPage } | { kind: 'view'; view: AppView } | { kind: 'preference'; key: 'assistant' | 'language' }
 
 interface SettingsHomeEntry {
   /** 稳定标识：只用于 React key、图标与测试定位；改标题不影响它，也不参与匹配。 */
@@ -242,7 +242,16 @@ interface SettingsHomeEntry {
  */
 const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   {
-    id: 'assistant-persona', group: 'appearance', title: '鲸鱼娘人格',
+    id: 'models',
+    group: 'assistant',
+    title: '模型与密钥',
+    hint: '供应商、API Key 与自定义模型',
+    keywords: ['模型', '密钥', 'key', 'api', 'apikey', 'api key', '供应商', 'provider', 'token', '凭据', '自定义模型', 'deepseek', 'openai', 'anthropic'],
+    target: { kind: 'page', page: 'models' },
+    icon: <KeyRound size={20} />,
+  },
+  {
+    id: 'assistant-persona', group: 'assistant', title: '鲸鱼娘人格',
     hint: '角色卡、性格、情境与示例对话',
     keywords: ['人格', '人设', '角色卡', '鲸鱼娘', 'persona', 'character'],
     target: { kind: 'view', view: 'assistant-persona' }, icon: <Bot size={20} />,
@@ -250,7 +259,7 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   // —— 后台：运行环境来源与后台保活配置；Harness 服务的启停统一在首页。
   {
     id: 'environment',
-    group: 'runtime',
+    group: 'workspace',
     title: 'Ubuntu 运行时',
     hint: '安装进度、版本、来源与重置',
     keywords: ['ubuntu', '运行时', '环境', '安装', '重置', '更新', '来源', 'proot', 'linux', 'runtime', 'reset', 'install'],
@@ -259,7 +268,7 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   },
   {
     id: 'runtime-page',
-    group: 'runtime',
+    group: 'workspace',
     title: '后台',
     hint: '保活、悬浮球、预启动与设备连接',
     keywords: ['后台', '保活', '保持', '悬浮球', '前台服务', '通知', '电池', 'keepalive', 'background', 'overlay', 'foreground'],
@@ -269,7 +278,7 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   // —— 文件管理：手机侧与访客之间对外可见的目录都在这一个页面里。
   {
     id: 'files',
-    group: 'files',
+    group: 'workspace',
     title: '文件管理',
     hint: '外部工作区：一处浏览、建文件夹与搬运',
     keywords: ['文件', '文件夹', '目录', '外部工作区', '投递区', '共享目录', '导入', '导出', '搬运', '浏览', '新建文件夹', 'mailbox', 'storage', 'file', 'files', 'folder', 'directory'],
@@ -282,7 +291,7 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   // —— 版本管理：磁盘上有哪几份运行时、现在用哪一份。
   {
     id: 'versions',
-    group: 'versions',
+    group: 'workspace',
     title: '版本管理',
     hint: '保留上一版本，可一键切回；装新版本仍在运行环境页',
     keywords: ['版本', 'version', '运行时版本', '上一版本', '回退', '切回', '切换', '回滚', '降级', '升级', '更新', 'dsh', 'previous', 'rollback', 'switch', 'retained'],
@@ -292,17 +301,8 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
 
   // —— 配置入口按模型、外观、设备与诊断分别归类。
   {
-    id: 'models',
-    group: 'models',
-    title: '模型与密钥',
-    hint: '供应商、API Key 与自定义模型',
-    keywords: ['模型', '密钥', 'key', 'api', 'apikey', 'api key', '供应商', 'provider', 'token', '凭据', '自定义模型', 'deepseek', 'openai', 'anthropic'],
-    target: { kind: 'page', page: 'models' },
-    icon: <KeyRound size={20} />,
-  },
-  {
     id: 'terminal-settings',
-    group: 'appearance',
+    group: 'assistant',
     title: '主题',
     hint: '字号配色与背景',
     keywords: ['主题', '外观', '字号', '字体', '深色', '浅色', '背景', '壁纸', '视频', '图片', '透明度', '卡片', '颜色', '强调色', 'theme', 'font', 'appearance', 'background', 'color'],
@@ -329,13 +329,17 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   },
   {
     id: 'diagnostics',
-    group: 'diagnostics',
+    group: 'device',
     title: '诊断与日志',
     hint: '日志与采集、设备能力与反馈',
     keywords: ['诊断', '日志', 'log', 'logs', '采集', '保留', '导出', '排查', '报错', '错误', '崩溃', '重启', '自检', 'self check', '浏览器', '外置浏览器', 'browser', 'chrome', 'webview'],
     target: { kind: 'page', page: 'diagnostics' },
     icon: <ScrollText size={20} />,
   },
+  { id: 'assistant-preference', group: 'assistant', title: '助手偏好', hint: '记忆、通知与提醒',
+    keywords: ['助手', '记忆', '通知', '提醒', 'memory', 'notifications'], icon: <Bell size={20}/>, target: { kind: 'preference', key: 'assistant' } },
+  { id: 'app-language', group: 'assistant', title: '界面语言', hint: '选择应用显示语言',
+    keywords: ['语言', '中文', '英语', 'language', 'english'], icon: <Languages size={20}/>, target: { kind: 'preference', key: 'language' } },
 ]
 
 /**
@@ -374,6 +378,7 @@ const APP_VIEWS: AppView[] = [
   'terminal',
   'environment',
   'plugins',
+  'tools',
   'versions',
   'files',
 ]
@@ -426,8 +431,9 @@ function viewFromHash(hash: string): AppView | null {
  * 「在设置二级页按返回直接退出应用」。写入历史后，返回键先回退到上一条记录，
  * 再由 popstate 把视图恢复成上一级。
  */
-function pushViewEntry(view: AppView): void {
-  window.history.pushState({ [VIEW_STATE_KEY]: view }, '', viewAddress(view))
+function pushViewEntry(view: AppView, from: AppView): void {
+  const state = view === 'plugins' && from === 'tools' ? { [VIEW_STATE_KEY]: view, toolsParent: true } : { [VIEW_STATE_KEY]: view }
+  window.history.pushState(state, '', viewAddress(view))
 }
 
 /**
@@ -654,10 +660,9 @@ function bridgedRuntimeCode(error: unknown): string | undefined {
 
 function Brand() {
   return (
-    <div className="brand" aria-label="DeepSeek Harness">
+    <div className="brand">
       <span className="brand-symbol" aria-hidden="true"><img src={appMark} alt="" width={26} height={26} /></span>
-      <span className="brand-name">deepseek</span>
-      <span className="brand-badge">HARNESS</span>
+      <span className="brand-name">{t("鲸鱼助手")}</span>
     </div>
   )
 }
@@ -813,10 +818,11 @@ interface ConversationScreenProps {
   onStop: () => void
   onOpenTerminal: () => void
   onOpenTasks: () => void
+  onNavigate: (view: AppView) => void
   onUpdate: () => void
 }
 
-function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onStop, onOpenTerminal, onOpenTasks, onUpdate }: ConversationScreenProps) {
+function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onStop, onOpenTerminal, onOpenTasks, onNavigate, onUpdate }: ConversationScreenProps) {
   const installed = runtimeInstalled(runtime)
   const transitioning = runtimeTransitioning(runtime)
   const updateRequired = installed && runtime.updateAvailable && !transitioning
@@ -836,21 +842,12 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
 
   return (
     <div className="screen conversation-gate">
-      {/* 运行阶段徽章只保留页头那一处：同一屏里重复两个相同状态纯属噪声。 */}
-      <div className="home-welcome">
-        <div className="home-welcome-copy">
-          <p className="home-kicker">WHALE ASSISTANT · YOUR SPACE</p>
-          <h2>{t("你好，我是你的手机助手")}</h2>
-          <p>{t("从这里开始对话、管理任务与探索插件。")}</p>
-        </div>
-        <span className="home-welcome-mark" aria-hidden="true"><img src={appMark} alt="" /></span>
-      </div>
-      <AssistantOverview onOpenTasks={onOpenTasks} />
       <div className="screen-heading home-section-heading">
         <div>
-          <p className="eyebrow">{t("你的工作台")}</p>
+          <p className="eyebrow">{t("工作台")}</p>
           <h1>{updateRequired ? t("更新运行环境") : runtime.phase === 'error' ? t("运行环境需要处理") : installed ? (launchingHarness ? t("正在进入对话") : stoppingHarness ? t("正在停止运行环境") : t("对话已就绪")) : t("准备运行环境")}</h1>
         </div>
+        <img className="whale-signature" src={whaleWave} alt="" width={53} height={32} />
       </div>
 
       <section className="launch-panel">
@@ -944,6 +941,13 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
           )}
         </div>
       </section>
+
+      <nav className="desk-shortcuts" aria-label={t('工作台快捷入口')}>
+        <button type="button" onClick={onOpenTasks}>{t('后台任务')}<ChevronRight size={16}/></button>
+        <button type="button" onClick={() => onNavigate('assistant-memory')}>{t('查看资料')}<ChevronRight size={16}/></button>
+        <button type="button" onClick={() => onNavigate('tools')}>{t('我的工具')}<ChevronRight size={16}/></button>
+      </nav>
+      <AssistantOverview onOpenTasks={onOpenTasks} />
 
       {keepAlive.reconnectRequired && !transitioning && (
         <div className="inline-alert warning" role="alert">
@@ -1212,6 +1216,8 @@ function TerminalScreen({ bridge, fontSize, onAuthorize, onBack, onConnect, onEr
 }
 
 interface SettingsHomeScreenProps {
+  lastGroup: SettingsHomeGroup | null
+  onGroupChange: (group: SettingsHomeGroup | null) => void
   busy: string | null
   keepAlive: KeepAliveState
   runtime: RuntimeState
@@ -1227,23 +1233,33 @@ interface SettingsHomeScreenProps {
  *
  * 筛选只决定这一屏显示哪些入口，不改变任何行为：点下去走的是同一条路。
  */
-function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onLaunch, onOpenPage, onOpenView }: SettingsHomeScreenProps) {
+function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAlive, runtime, shizuku, onLaunch, onOpenPage, onOpenView }: SettingsHomeScreenProps) {
   /** 过滤词只活在组件里：离开设置首页即清空，下次进来不该被上次的搜索框卡住。 */
   const [query, setQuery] = useState('')
-  const [assistantOpened, setAssistantOpened] = useState(false)
+  const [preference, setPreference] = useState<string | null>(null)
   /** 已确认的查找词：只有点搜索图标或按回车才落地。输入过程本身不筛选——
       移动端输入法组合中途触发筛选，列表刷新会把候选词条顶掉，搜索看起来就是「不能用」。 */
   const [appliedQuery, setAppliedQuery] = useState('')
   /** 输入法是否正在组合（中文/日文等）。组合中途的 Enter 是「确认候选词」，不是「提交搜索」——
       照抄 `ApplicationPicker` 的既有范式：不放行会被吞掉候选词，正好破坏本组件想保护的输入。 */
   const [isComposing, setIsComposing] = useState(false)
-  const [category, setCategory] = useState<SettingsHomeGroup | 'all'>('all')
+  const [expanded, setExpanded] = useState<SettingsHomeGroup | null>(() => {
+    const state: unknown = window.history.state
+    if (state && typeof state === 'object' && 'settingsGroup' in state) {
+      if (state.settingsGroup === null) return null
+      return SETTINGS_HOME_GROUPS.find(group => group.id === state.settingsGroup)?.id ?? 'assistant'
+    }
+    return lastGroup
+  })
+  function toggleGroup(id: SettingsHomeGroup) {
+    const next = expanded === id ? null : id
+    setExpanded(next)
+    onGroupChange(next)
+    window.history.replaceState({ ...window.history.state, settingsGroup: next }, '')
+  }
   const searchInputRef = useRef<HTMLInputElement>(null)
-  /** 分类芯片默认收起：换行后占 4 行，会把功能入口挤出首屏；由搜索框旁的筛选钮展开。 */
-  const [filterOpen, setFilterOpen] = useState(false)
   /** 每个分组只留命中的入口；整组都没命中就连标题一起不渲染，避免空标题刷屏。 */
   const groups = SETTINGS_HOME_GROUPS
-    .filter(group => category === 'all' || category === group.id)
     .map(group => ({ group, entries: SETTINGS_HOME_ENTRIES.filter(entry => entry.group === group.id && matchesSettingsHomeQuery(entry, appliedQuery)) }))
     .filter(item => item.entries.length > 0)
   const matched = groups.reduce((total, item) => total + item.entries.length, 0)
@@ -1254,7 +1270,6 @@ function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onL
     const nextValue = value.slice(0, 120)
     setQuery(nextValue)
     setAppliedQuery(nextValue.trim())
-    setCategory('all')
   }
 
   /** 运行环境更新提示跟随当前状态，其余入口使用固定说明。 */
@@ -1273,23 +1288,19 @@ function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onL
   const openEntry = (entry: SettingsHomeEntry): void => {
     if (entry.target.kind === 'page') onOpenPage(entry.target.page)
     else if (entry.target.kind === 'view') onOpenView(entry.target.view)
+    else setPreference(value => value === entry.id ? null : entry.id)
   }
 
   return (
-    <div className="screen settings-screen">
+    <div className="screen settings-screen account-workspace">
       <div className="screen-heading management-heading">
         <div>
-          <p className="eyebrow">{t("应用管理")}</p>
           <h1>{t("设置")}</h1>
         </div>
-        <button className="button button-primary conversation-button" type="button" onClick={onLaunch} disabled={busy !== null || !runtimeInstalled(runtime)}>
-          {busy === 'launch' ? <Loader2 className="spin" size={18} /> : runtime.updateAvailable ? <RefreshCw size={18} /> : <Bot size={18} />}
-          {runtime.updateAvailable ? t("更新运行环境") : t("打开 Harness")}
-        </button>
+        <img className="whale-signature" src={whaleWave} alt="" width={53} height={32} />
       </div>
 
-      <details className="assistant-settings-entry" onToggle={event => { if (event.currentTarget.open) setAssistantOpened(true) }}><summary><strong>鲸鱼娘与个人助手</strong><small>自动记忆、通知、提醒及资料管理</small></summary>{assistantOpened && <CompanionSettingsButton disabled={busy !== null} />}</details>
-      <LanguageSettings />
+
 
       {/* 搜索框固定在入口列表上方：入口一多，用户第一反应是找框，而不是往下翻。
           刻意不做边输边筛：输入法组合中途触发筛选会把候选词顶掉，改为点搜索图标或回车确认。 */}
@@ -1321,8 +1332,8 @@ function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onL
             }
           }}
           maxLength={120}
-          placeholder={t("按功能词查找入口")}
-          aria-label={t("按功能词查找入口")}
+          placeholder={t("搜索设置")}
+          aria-label={t("搜索设置")}
           autoComplete="off"
         />
         {query !== '' && (
@@ -1330,26 +1341,12 @@ function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onL
             <X size={16} />
           </button>
         )}
-        {/* 已选了具体分类时筛选钮高亮，收起芯片后用户仍能看出列表正被筛选。 */}
-        <button className={`settings-search-filter ${category !== 'all' ? 'is-filtered' : ''}`} type="button"
-          onClick={() => setFilterOpen(open => !open)} aria-label={t("按分类筛选")}
-          aria-expanded={filterOpen} aria-controls="settings-categories">
-          <ListFilter size={18} />
-        </button>
         <button className="settings-search-go" type="button" onClick={() => applySearch(searchInputRef.current?.value ?? query)} aria-label={t("搜索入口")}>
           <Search size={18} />
         </button>
       </div>
 
       {/* 收起时保留隐藏容器：aria-controls 指向的元素始终存在（与 harness-log-body 同一约定）。 */}
-      <div id="settings-categories" className="settings-categories" role="listbox" aria-label={t("筛选功能分类")} hidden={!filterOpen}>
-        <button type="button" role="option" aria-label={t("筛选分类：全部分类")} aria-selected={category === 'all'} onClick={() => setCategory('all')}>{t("全部分类")}</button>
-        {SETTINGS_HOME_GROUPS.map(group => (
-          <button key={group.id} type="button" role="option" aria-label={`${t("筛选分类：")} ${t(group.label)}`} aria-selected={category === group.id}
-            onClick={() => { setCategory(group.id); setQuery(''); setAppliedQuery('') }}>{t(group.label)}</button>
-        ))}
-      </div>
-
       {/* 结果条用 role="status"：输入时读屏能听到「找到几个」，而不是列表安静地变了一下。 */}
       {searching && (
         <p className="settings-note" role="status">
@@ -1359,13 +1356,24 @@ function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onL
         </p>
       )}
 
+      {!searching && <nav className="account-sections" aria-label={t('设置分类')}>
+        {SETTINGS_HOME_GROUPS.map(group => <button key={group.id} type="button" className="account-group-toggle"
+          aria-label={t(group.label)} aria-expanded={expanded === group.id} aria-controls={'settings-group-' + group.id} onClick={() => toggleGroup(group.id)}>
+          {group.id === 'assistant' ? <Bot size={18}/> : group.id === 'workspace' ? <HardDrive size={18}/> : <SlidersHorizontal size={18}/>}
+          <strong>{t(group.label)}</strong></button>)}
+      </nav>}
       <div className="settings-directory">
       {groups.map(({ group, entries }) => (
-        <section className="management-list" key={group.id} aria-label={t(group.label)}>
-          {/* 分组标题刻意不用 h1/h2：页头已经有一个「设置」，再加一个同名标题会让
-              「按标题名找元素」一次命中两个（测试与读屏都受影响），分组名走 section 的 aria-label。 */}
-          <p className="management-group-title">{t(group.label)}</p>
-          {entries.map(entry => (
+        <section className="management-list" id={'settings-group-' + group.id} key={group.id} aria-label={t(group.label)} hidden={!searching && expanded !== group.id}>
+          {searching && <h2 className="management-group-title">{t(group.label)}</h2>}
+          {(searching || expanded === group.id) && <div>
+          {entries.map(entry => entry.target.kind === 'preference' ? <div key={entry.id} className="account-preference">
+            <button className="management-row" type="button" aria-expanded={preference === entry.id} onClick={() => openEntry(entry)}>
+              <span className="management-icon">{entry.icon}</span><span className="management-copy"><strong>{t(entry.title)}</strong>
+              <small>{t(entry.hint)}</small></span><ChevronRight size={18}/></button>
+            {preference === entry.id && (entry.target.key === 'language' ? <LanguageSettings /> :
+              <CompanionSettingsButton disabled={busy !== null} openMemory={() => onOpenView('assistant-memory')} />)}
+          </div> : (
             <button className="management-row" key={entry.id} type="button" onClick={() => openEntry(entry)}>
               <span className="management-icon">{entry.icon}</span>
               <span className="management-copy">
@@ -1375,6 +1383,13 @@ function SettingsHomeScreen({ busy, diagnostic, keepAlive, runtime, shizuku, onL
               <ChevronRight size={18} />
             </button>
           ))}
+          {group.id === 'workspace' && !searching && (
+            <button className="button button-secondary compact-button directory-runtime-action" type="button" onClick={onLaunch} disabled={busy !== null || !runtimeInstalled(runtime)}>
+          {busy === 'launch' ? <Loader2 className="spin" size={18} /> : runtime.updateAvailable ? <RefreshCw size={18} /> : <Bot size={18} />}
+          {runtime.updateAvailable ? t("更新运行环境") : t("打开 Harness")}
+        </button>
+          )}
+          </div>}
         </section>
       ))}
       </div>
@@ -3380,7 +3395,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
 
 export function App() {
   const language = useLanguage()
-  useEffect(() => { document.documentElement.lang = language ?? 'zh-CN' }, [language])
+  useEffect(() => { document.documentElement.lang = language }, [language])
   /**
    * 输入法弹起时把界面整体让出被遮挡的高度（见 [observeKeyboardInset]）。
    *
@@ -3403,6 +3418,7 @@ export function App() {
    * 未知时为 null：历史回退/前进之后无法再知道相邻记录是谁。
    */
   const previousViewRef = useRef<AppView | null>(null)
+  const lastSettingsGroup = useRef<SettingsHomeGroup | null>('assistant')
   const [runtime, setRuntime] = useState<RuntimeState>(EMPTY_RUNTIME)
   const [settings, setSettings] = useState<RuntimeSettings | null>(null)
   /**
@@ -3784,14 +3800,14 @@ export function App() {
     activeViewRef.current = next
     previousViewRef.current = current
     setActiveViewState(next)
-    pushViewEntry(next)
+    pushViewEntry(next, current)
   }, [])
 
   // 原生对话页的标签只发送固定视图名，不接收来自访客 WebView 的导航指令。
   useEffect(() => {
     const navigate = (event: Event) => {
       const target = (event as CustomEvent<unknown>).detail
-      if (target === 'conversation' || target === 'plugins' || target === 'settings') setActiveView(target)
+      if (target === 'conversation' || target === 'assistant-memory' || target === 'assistant-tasks' || target === 'tools' || target === 'plugins' || target === 'settings') setActiveView(target)
     }
     window.addEventListener('dsh-native-tab', navigate)
     return () => window.removeEventListener('dsh-native-tab', navigate)
@@ -3832,7 +3848,11 @@ export function App() {
       previousViewRef.current = null
       setActiveViewState(restored)
       // 记录无法识别时把地址拉回视图，避免出现「界面在主视图、地址停在二级页」。
-      replaceViewEntry(restored)
+      if (viewFromHistoryState(event.state) === null) replaceViewEntry(restored)
+      else if (window.location.hash !== (restored === ROOT_VIEW ? '' : '#' + restored)) {
+        // 已识别的视图保留子页面的位置，例如资料阅读与原件详情。
+        window.history.replaceState(event.state as unknown, '', viewAddress(restored))
+      }
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
@@ -4518,7 +4538,7 @@ export function App() {
   const deleteSessionSnapshot = useCallback((id: string) => runtimeBridge.deleteRuntimeSessionSnapshot(id), [])
   const loadAppUpdate = useCallback((forceRefresh = false) => runtimeBridge.getAppUpdateState(forceRefresh), [])
   const setAppUpdateChannel = useCallback((channel: AppUpdateChannel) => runtimeBridge.setAppUpdateChannel(channel), [])
-  const appUpdateReminder = useAppUpdateReminder(language !== null && !booting && !onboardingOpen, loadAppUpdate)
+  const appUpdateReminder = useAppUpdateReminder(!booting && !onboardingOpen, loadAppUpdate)
   const downloadAppUpdate = useCallback(() => runtimeBridge.downloadAppUpdate(), [])
   const installAppUpdate = useCallback(() => runtimeBridge.installAppUpdate(), [])
   const openAppUpdateInstallSettings = useCallback(() => runtimeBridge.openAppUpdateInstallSettings(), [])
@@ -5359,21 +5379,26 @@ export function App() {
   const screen = (() => {
     switch (activeView) {
       case 'harness':
-        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onUpdate={requestRuntimeUpdate} />
+        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
       case 'conversation':
-        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onUpdate={requestRuntimeUpdate} />
+        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
       case 'sessions':
         return <SessionManager onBack={() => backToView('conversation')} onOpenHarness={launchHarness} />
       case 'assistant-memory':
-        return <CompanionWorkspace initialPanel="memory" />
+        return <CompanionWorkspace initialPanel="knowledge" library />
       case 'assistant-tasks':
         return <AssistantTasks onOpenSession={launchHarness} />
       case 'assistant-persona':
         return <CompanionPersona onBack={() => backToView('settings')} />
       case 'terminal':
         return <TerminalScreen bridge={runtimeBridge} fontSize={settings?.terminalFontSize ?? 14} onAuthorize={requestShizukuPermission} onBack={() => backToView('settings')} onConnect={connectShizuku} onError={terminalError} onOpenEnvironment={() => setActiveView('environment')} onOpenShizuku={openShizuku} runtime={runtime} shizuku={shizuku} />
-      case 'plugins':
-        return <PluginSettings bridge={runtimeBridge} runtime={runtime} onBack={() => backToView('settings')} onStopRequested={() => { stopRequested.current = true }} />
+      case 'tools':
+        return <ToolsWorkspace plugins={() => setActiveView('plugins')} />
+      case 'plugins': {
+        const entry: unknown = window.history.state
+        const fromTools = !!entry && typeof entry === 'object' && 'toolsParent' in entry && entry.toolsParent === true
+        return <PluginSettings bridge={runtimeBridge} runtime={runtime} backLabel={fromTools ? '返回工具' : '返回设置'} onBack={() => fromTools ? window.history.back() : backToView('settings')} onStopRequested={() => { stopRequested.current = true }} />
+      }
       case 'environment':
         return <EnvironmentScreen busy={busy} bundledSource={settings === null || settings.manifestUrl.trim() === ''} runtime={runtime} onBack={() => backToView('settings')} onInstall={installRuntime} onReset={() => setResetOpen(true)} onStart={() => launchHarness()} onStop={stopRuntime} onUpdate={requestRuntimeUpdate} />
       case 'versions':
@@ -5407,7 +5432,7 @@ export function App() {
       case 'files':
         return <FilesScreen busy={busy} filesRoot={filesRoot} lastMailboxExport={lastMailboxExport} lastMailboxImport={lastMailboxImport} mailbox={mailbox} mailboxDirectory={mailboxDirectory} mailboxDirectoryReadFailed={mailboxDirectoryReadFailed} mailboxReadFailed={mailboxReadFailed} storageAccess={storageAccess} storageDirectory={storageDirectory} storageDirectoryReadFailed={storageDirectoryReadFailed} storageDirs={storageDirs} storageDirsReadFailed={storageDirsReadFailed} onAddStorageDirectory={addStorageDirectory} onBack={() => backToView('settings')} onCreateFilesFolder={createFilesFolder} onExternalFileAction={externalFileAction} onExportMailbox={exportMailbox} onImportMailbox={importMailbox} onOpenAllFilesAccess={openAllFilesAccessSettings} onOpenFilesDirectory={openFilesDirectory} onRefreshMailbox={refreshMailbox} onRemoveStorageDirectory={removeStorageDirectory} onSelectFilesRoot={selectFilesRoot} />
       case 'settings':
-        return <SettingsHomeScreen busy={busy} diagnostic={diagnostic} keepAlive={keepAlive} runtime={runtime} shizuku={shizuku} onLaunch={() => launchHarness()} onOpenPage={openSettings} onOpenView={setActiveView} />
+        return <SettingsHomeScreen lastGroup={lastSettingsGroup.current} onGroupChange={group => { lastSettingsGroup.current = group }} busy={busy} diagnostic={diagnostic} keepAlive={keepAlive} runtime={runtime} shizuku={shizuku} onLaunch={() => launchHarness()} onOpenPage={openSettings} onOpenView={setActiveView} />
       default: {
         const page = settingsPageOf(activeView)
         if (page === null) return null
@@ -5418,10 +5443,6 @@ export function App() {
       }
     }
   })()
-
-  if (language === null) {
-    return <main className="language-screen"><LanguageSettings initial /></main>
-  }
 
   if (booting) {
     return (
@@ -5439,9 +5460,10 @@ export function App() {
       <AppSidebar activeView={activeView} onNavigate={setActiveView} />
       <div className="app-frame">
         <header className="mobile-header">
-          <div className="header-brand-group"><Brand /></div>
+          <button className="header-brand-group brand-home" type="button" aria-label={t('工作台')} onClick={() => setActiveView('conversation')}><Brand /></button>
           <div className="header-actions">
             <PhaseBadge phase={runtime.phase} />
+            <button type="button" className="icon-button mobile-session-entry" title={t('会话管理')} aria-label={t('会话管理')} onClick={() => setActiveView('sessions')}><MessageSquare size={18} /></button>
             {activeView === 'conversation' && (
               <button className="icon-button header-settings" type="button" aria-label={t("打开应用设置")} title={t("应用设置")} onClick={() => setActiveView('settings')}>
                 <Settings2 size={19} />
@@ -5491,6 +5513,7 @@ export function App() {
             setOnboardingOpen(false)
             setActiveView('versions')
           }}
+          onOpenLibrary={() => setActiveView('assistant-memory')}
           onDone={() => {
             try {
               window.localStorage.setItem(ONBOARDING_STORAGE_KEY, '1')

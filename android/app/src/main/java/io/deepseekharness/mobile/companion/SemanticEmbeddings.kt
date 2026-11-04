@@ -21,17 +21,44 @@ internal class SemanticEmbeddings(context: Context) {
         private val environment: OrtEnvironment by lazy { OrtEnvironment.getEnvironment() }
         private val lock = Any()
         private var runtime: Runtime? = null
+        private var users = 0
+        private var generation = 0L
+        private var releaseRequested = false
+        private var timer: java.util.concurrent.ScheduledFuture<*>? = null
+        private val evictor = java.util.concurrent.ScheduledThreadPoolExecutor(1) { task ->
+            Thread(task, "whale-semantic-idle").apply { isDaemon = true }
+        }.apply { removeOnCancelPolicy = true }
+        private fun scheduleEviction(delay: Long) {
+            timer?.cancel(false)
+            val token = ++generation
+            timer = evictor.schedule({
+                val old = synchronized(lock) {
+                    if (users != 0 || generation != token) null else runtime.also { runtime = null; timer = null; releaseRequested = false }
+                }
+                old?.session?.close()
+            }, delay, java.util.concurrent.TimeUnit.SECONDS)
+        }
+        fun releaseWhenIdle() = synchronized(lock) {
+            if (runtime != null) {
+                releaseRequested = true
+                if (users == 0) scheduleEviction(0)
+            }
+        }
     }
 
     private data class Runtime(val session: OrtSession, val tokenizer: BgeBaseZhTokenizer)
 
     fun embed(texts: List<String>): List<FloatArray> {
         require(texts.size in 1..16 && texts.all { it.isNotBlank() && it.length <= 1_500 })
-        return texts.map { embedOne(it) }
+        val active = synchronized(lock) {
+            generation++; timer?.cancel(false); timer = null
+            loadRuntime().also { users++ }
+        }
+        try { return texts.map { embedOne(active, it) } }
+        finally { synchronized(lock) { users--; if (users == 0) scheduleEviction(if (releaseRequested) 0 else 60) } }
     }
 
-    private fun embedOne(text: String): FloatArray {
-        val active = loadRuntime()
+    private fun embedOne(active: Runtime, text: String): FloatArray {
         val ids = active.tokenizer.encode(text)
         val masks = LongArray(ids.size) { 1L }
         val types = LongArray(ids.size)

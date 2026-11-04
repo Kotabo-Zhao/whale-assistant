@@ -3,8 +3,6 @@ package io.deepseekharness.mobile.companion
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.content.res.Configuration
-import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.provider.Settings
@@ -15,6 +13,14 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.ImageView
+import android.widget.ImageButton
+import android.content.res.ColorStateList
+import android.graphics.drawable.RippleDrawable
+import androidx.activity.OnBackPressedCallback
+import io.deepseekharness.mobile.AppLanguage
+import io.deepseekharness.mobile.AppThemePreference
+import io.deepseekharness.mobile.R
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import java.text.DateFormat
@@ -26,14 +32,20 @@ class CompanionActivity : AppCompatActivity() {
     private lateinit var store: CompanionStore
     private lateinit var content: LinearLayout
     private lateinit var scroll: ScrollView
-    private val dark: Boolean get() = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-    private val ink: Int get() = Color.parseColor(if (dark) "#E8F3FF" else "#173454")
-    private val muted: Int get() = Color.parseColor(if (dark) "#ADC4D9" else "#526B82")
+    private lateinit var pageTitle: TextView
+    private lateinit var palette: Context
+    private var page = CompanionPreferencePage.HOME
+    private val parents = mutableListOf<CompanionPreferencePage>()
+    private val positions = mutableMapOf<CompanionPreferencePage, Int>()
+    private var restoredScroll: Int? = null
+    private val ink: Int get() = palette.getColor(R.color.overlay_panel_foreground)
+    private val muted: Int get() = palette.getColor(R.color.overlay_panel_muted_foreground)
     private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
-    private fun surface(color: String, stroke: String? = null) = GradientDrawable().apply {
-        setColor(Color.parseColor(color)); cornerRadius = dp(16).toFloat()
-        if (stroke != null) setStroke(dp(1), Color.parseColor(stroke))
+    private fun surface(border: Boolean = true) = GradientDrawable().apply {
+        setColor(palette.getColor(R.color.harness_page_background)); cornerRadius = dp(14).toFloat()
+        if (border) setStroke(dp(1), palette.getColor(R.color.harness_search_border))
     }
+    private fun actionSurface() = RippleDrawable(ColorStateList.valueOf(palette.getColor(R.color.harness_search_action)), surface(), null)
     private val memoryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val memoryHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var memoryBusy = false
@@ -327,7 +339,19 @@ class CompanionActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        supportActionBar?.hide()
+        palette = AppThemePreference.palette(AppLanguage.localizedContext(this))
+        AppThemePreference.apply(this)
+        savedInstanceState?.let { state ->
+            page = CompanionPreferencePage.from(state.getString("preferencePage")) ?: CompanionPreferencePage.HOME
+            state.getStringArrayList("preferenceParents")?.mapNotNullTo(parents, CompanionPreferencePage::from)
+            state.getBundle("preferenceScroll")?.let { saved ->
+                for (key in saved.keySet()) CompanionPreferencePage.from(key)?.let { positions[it] = saved.getInt(key) }
+            }
+            restoredScroll = positions[page]
+        }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = navigateBack()
+        })
         CompanionRecurringReminder.requestRecovery(applicationContext)
         memoryExecutor.execute { runCatching { CompanionReminder(applicationContext).restore() } }
         store = CompanionStore(this)
@@ -335,21 +359,64 @@ class CompanionActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             val pad = dp(20)
             setPadding(pad, pad, pad, pad)
-            setBackgroundColor(Color.parseColor(if (dark) "#0D1A2A" else "#F1F7FC"))
+            setBackgroundColor(palette.getColor(R.color.harness_toolbar_background))
         }
         scroll = ScrollView(this).apply { isFillViewport = true; addView(content) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor(if (dark) "#0D1A2A" else "#F1F7FC"))
-            addView(sectionNavigation(), LinearLayout.LayoutParams(-1, -2))
+            setBackgroundColor(palette.getColor(R.color.harness_toolbar_background))
+            addView(preferenceToolbar(), LinearLayout.LayoutParams(-1, -2))
             addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         }
         setContentView(root)
         io.deepseekharness.mobile.AppWindowInsets.apply(this)
     }
 
+    private fun go(next: CompanionPreferencePage) {
+        if (page == next) return
+        positions[page] = scroll.scrollY
+        parents.add(page)
+        page = next
+        renderAt(0)
+    }
+
+    private fun navigateBack() {
+        if (parents.isEmpty()) { finish(); return }
+        page = parents.removeAt(parents.lastIndex)
+        renderAt(positions[page] ?: 0)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        positions[page] = scroll.scrollY
+        outState.putString("preferencePage", page.name)
+        outState.putStringArrayList("preferenceParents", ArrayList(parents.map { it.name }))
+        outState.putBundle("preferenceScroll", Bundle().apply { positions.forEach { (key, value) -> putInt(key.name, value) } })
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
+    private fun incomingPage(): CompanionPreferencePage? = when {
+        intent.hasExtra(OPEN_PAGE) -> CompanionPreferencePage.from(intent.getStringExtra(OPEN_PAGE)).also { intent.removeExtra(OPEN_PAGE) }
+        intent.hasExtra(OPEN_KNOWLEDGE_ID) || intent.hasExtra(OPEN_KNOWLEDGE_REVISION) -> CompanionPreferencePage.LIBRARY
+        intent.getBooleanExtra("open_recurring_reminders", false) || intent.getBooleanExtra(CompanionHintContent.OPEN_ONCE_REMINDERS, false) -> CompanionPreferencePage.REMINDERS
+        intent.getBooleanExtra("open_pending_memories", false) || intent.getBooleanExtra("open_memory_suggestions", false) -> CompanionPreferencePage.MEMORY
+        intent.getBooleanExtra("open_task_list", false) -> CompanionPreferencePage.BACKGROUND
+        intent.getBooleanExtra("open_calendar_brief", false) -> CompanionPreferencePage.BRIEF
+        intent.getBooleanExtra("open_usage_suggestions", false) -> CompanionPreferencePage.APPS
+        intent.getBooleanExtra("open_notification_list", false) || intent.getBooleanExtra("open_notification_candidates", false) -> CompanionPreferencePage.RECORDS
+        else -> null
+    }
+
     override fun onResume() {
-        super.onResume(); render()
+        super.onResume()
+        val destination = incomingPage()
+        if (destination != null) { page = destination; parents.clear() }
+        renderAt(if (destination != null) 0 else restoredScroll ?: scroll.scrollY)
+        restoredScroll = null
         val citationId = intent?.getStringExtra(OPEN_KNOWLEDGE_ID)
         val citationRevision = intent?.getStringExtra(OPEN_KNOWLEDGE_REVISION)
         if (citationId != null || citationRevision != null) {
@@ -445,12 +512,39 @@ class CompanionActivity : AppCompatActivity() {
         }.setNegativeButton("关闭", null).show()
     }
 
-    private fun render() {
+    private fun render() = renderAt(scroll.scrollY)
+
+    private fun renderAt(position: Int) {
         memoryViewGeneration++
-        val previousScroll = scroll.scrollY
+        memoryCountGeneration++
+        readinessGeneration++
         content.removeAllViews()
-        hero()
-        readinessCard()
+        pageTitle.text = palette.getString(page.title)
+        when (page) {
+            CompanionPreferencePage.HOME -> links(CompanionPreferencePage.PET, CompanionPreferencePage.DATA,
+                CompanionPreferencePage.ALERTS, CompanionPreferencePage.DAILY)
+            CompanionPreferencePage.PET -> renderPet()
+            CompanionPreferencePage.PERMISSIONS -> readinessCard()
+            CompanionPreferencePage.DATA -> links(CompanionPreferencePage.MEMORY, CompanionPreferencePage.LIBRARY, CompanionPreferencePage.BACKUP)
+            CompanionPreferencePage.MEMORY -> renderMemory()
+            CompanionPreferencePage.LIBRARY -> renderLibrary()
+            CompanionPreferencePage.BACKUP -> renderBackup()
+            CompanionPreferencePage.MAINTENANCE -> renderMaintenance()
+            CompanionPreferencePage.ALERTS -> links(CompanionPreferencePage.NOTIFICATIONS, CompanionPreferencePage.REMINDERS,
+                CompanionPreferencePage.BACKGROUND, CompanionPreferencePage.RECORDS)
+            CompanionPreferencePage.NOTIFICATIONS -> renderNotifications()
+            CompanionPreferencePage.BACKGROUND -> renderBackground()
+            CompanionPreferencePage.REMINDERS -> renderReminders()
+            CompanionPreferencePage.RECORDS -> renderHistory()
+            CompanionPreferencePage.DAILY -> links(CompanionPreferencePage.APPS, CompanionPreferencePage.BRIEF)
+            CompanionPreferencePage.APPS -> renderApps()
+            CompanionPreferencePage.BRIEF -> renderBrief()
+        }
+        val rendered = page
+        scroll.post { if (!isFinishing && !isDestroyed && rendered == page) scroll.scrollTo(0, position) }
+    }
+
+    private fun renderPet() {
         heading("桌面形象")
         val permissionNames = linkedMapOf("default" to "跟随主应用默认", "read-only" to "仅查看", "workspace-write" to "工作区内修改", "danger-full-access" to "完全权限")
         button("桌宠会话权限 · ${permissionNames[store.bubblePermissionPreset]}") {
@@ -474,7 +568,10 @@ class CompanionActivity : AppCompatActivity() {
             android.widget.Toast.makeText(this, if (applied) "动态效果已更新。" else "已保存，下次显示悬浮形象时生效。", android.widget.Toast.LENGTH_SHORT).show()
         }
         paragraph("开启后，悬浮鲸鱼娘保持静止可见状态，不播放眨眼、摆动或点击缩放；系统“移除动画”设置同样会停止这些动态效果。")
-        paragraph("通知和使用数据默认在本机处理；单独开启对话访问后，相关内容可能发送给当前模型服务。系统和应用可能限制读取。")
+        links(CompanionPreferencePage.PERMISSIONS)
+    }
+
+    private fun renderMemory() {
         val memory = CompanionMemoryStore(this)
         heading("长期记忆", "memory")
         toggle("允许助手使用长期记忆", memory.enabled) { memory.enabled = it }
@@ -511,59 +608,6 @@ class CompanionActivity : AppCompatActivity() {
                 .setView(input).setNegativeButton("取消", null)
                 .setPositiveButton("搜索") { _, _ -> showMemories(input.text.toString().trim()) }.show()
         }
-        button("导出统一备份（资料、原件、记忆、事项、桌宠会话映射）") { if(!memoryBusy) unifiedExport.launch("whale-memory.whalememory") }
-        paragraph("备份包含关联原件、个人资料、桌宠最近本地消息快照及会话组织标记，未加密；请选择可信的保存位置。Harness 会话正文、密钥和运行环境不包含在备份中。")
-        button("导出加密个人知识包") { if (!memoryBusy) knowledgePackageExport.launch("whale-personal.wpk") }
-        button("导入加密个人知识包") { if (!memoryBusy) knowledgePackageImport.launch(arrayOf("application/octet-stream", "application/x-whale-knowledge-package", "*/*")) }
-        paragraph("加密知识包使用你输入的口令和 AES-GCM；口令、模型密钥与 Harness 会话正文都不会写入包。导入会合并结构化资料和本地会话标记，提醒需重新核对。")
-        button("恢复统一备份") { if(!memoryBusy) unifiedImport.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*")) }
-        val rollback = java.io.File(noBackupFilesDir, "last-unified-rollback.sqlite")
-        if(rollback.isFile) button("回退到上次恢复前") {
-            if(!memoryBusy) androidx.appcompat.app.AlertDialog.Builder(this).setTitle("回退资料和记忆？")
-                .setMessage("将使用本机上次恢复前快照；现有删除保护仍保留，提醒不会自动重新启用。")
-                .setNegativeButton("取消",null).setPositiveButton("回退") { _, _ ->
-                    runMemoryIo("正在回退…", { UnifiedMemoryBackup.restore(this, rollback) }) { outcome -> android.widget.Toast.makeText(this, if(outcome.isSuccess) "已回退" else "回退失败，原数据保留",android.widget.Toast.LENGTH_LONG).show(); render() }
-                }.show()
-        }
-        button("导出长期记忆") { if (!memoryBusy) memoryExport.launch("whale-memory.json") else paragraph("记忆文件操作正在进行，请稍候。") }
-        val databaseActive = runCatching { memory.usesDatabase() }.getOrNull()
-        paragraph(when (databaseActive) { true -> "长期记忆存储：SQLite，不设固定条数上限；检索只返回最相关的少量结果，避免记忆积累拖慢对话。旧版本应用无法读取数据库。"; false -> "长期记忆仍为原 JSON（最多 100 条）；下一次记忆读写会先自动核对并迁移到 SQLite。"; null -> "无法读取记忆存储状态。" })
-        if (databaseActive == false) button("迁移长期记忆到数据库") {
-            runMemoryIo("正在迁移并核对长期记忆…", { memory.migrateToDatabase() }) { result ->
-                android.widget.Toast.makeText(this, result.fold({ "已迁移并核对 $it 条记忆。" }, { "迁移失败，原记忆仍为当前数据。" }), android.widget.Toast.LENGTH_LONG).show()
-                render()
-            }
-        }
-        if (databaseActive == true) button("将长期记忆回退到原格式") {
-            runMemoryIo("正在导出并核对长期记忆…", { memory.rollbackToLegacy() }) { result ->
-                android.widget.Toast.makeText(this, result.fold({ "已回退并核对 $it 条记忆。" }, { "回退失败；旧格式最多 100 条，数据库仍为当前数据。" }), android.widget.Toast.LENGTH_LONG).show()
-                render()
-            }
-        }
-        button("校验长期记忆迁移副本") {
-            runMemoryIo("正在核对记忆迁移副本…", {
-                val snapshot = CompanionMemoryStore(this).exportForUser()
-                val original = CompanionMemoryFormat.parse(snapshot)
-                UnifiedUnderstandingStore.open(this).use { destination ->
-                    if (!destination.memories.isImported()) destination.stageLegacy(snapshot)
-                    check(destination.memories.readAll().toString() == original.toString()) { "staged snapshot differs" }
-                    check(CompanionMemoryFormat.parse(destination.exportLegacyRollback()).toString() == original.toString()) { "rollback export differs" }
-                    original.length()
-                }
-            }) { result ->
-                val message = result.fold({ "已校验 $it 条迁移副本及旧格式导出；正式记忆仍使用原文件。" }, { "迁移副本核对失败或已过期；原记忆没有改动。" })
-                android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
-            }
-        }
-        button("从文件导入记忆") { if (!memoryBusy) memoryImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("记忆文件操作正在进行，请稍候。") }
-        paragraph("备份为未加密 JSON，包含记忆、来源和删除抑制；云盘可能同步。单次备份限 8 MB；导入前核对合并，超过 100 条需先启用数据库。")
-        button("清空全部长期记忆") {
-            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清空长期记忆？")
-                .setMessage("这会删除全部长期记忆，无法撤销。")
-                .setNegativeButton("取消", null).setPositiveButton("清空") { _, _ ->
-                    runCatching { memory.clearForUser() }.onSuccess { render() }.onFailure { paragraph("无法清空记忆，原数据已保留。") }
-                }.show()
-        }
         toggle("桌宠对话使用相关记忆", store.bubbleMemoryAccess) { enabled ->
             if (!enabled) { store.bubbleMemoryAccess = false; render() }
             else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许桌宠对话使用记忆？")
@@ -586,6 +630,9 @@ class CompanionActivity : AppCompatActivity() {
                     render()
                 }.setNegativeButton("取消", null).show()
         }
+    }
+
+    private fun renderLibrary() {
         heading("本地资料", "knowledge")
         val sharedQueueStatus = TextView(this).apply { text = "正在读取资料整理状态…"; textSize = 14f; setTextColor(muted) }
         content.addView(sharedQueueStatus)
@@ -647,9 +694,73 @@ class CompanionActivity : AppCompatActivity() {
         button("撤销最近删除的资料") { showRecentKnowledgeTrash() }
         button("导入文本文件") { if (!memoryBusy) knowledgeTextFile.launch(arrayOf("text/plain", "application/octet-stream")) else paragraph("文件操作正在进行，请稍候。") }
         paragraph("文本文件须为 UTF-8，最多 200 万字或 8 MB；长文本会完整分段保存，确认页只显示预览。")
+    }
+
+    private fun renderBackup() {
+        button("导出统一备份（资料、原件、记忆、事项、桌宠会话映射）") { if(!memoryBusy) unifiedExport.launch("whale-memory.whalememory") }
+        paragraph("备份包含关联原件、个人资料、桌宠最近本地消息快照及会话组织标记，未加密；请选择可信的保存位置。Harness 会话正文、密钥和运行环境不包含在备份中。")
+        button("导出加密个人知识包") { if (!memoryBusy) knowledgePackageExport.launch("whale-personal.wpk") }
+        button("导入加密个人知识包") { if (!memoryBusy) knowledgePackageImport.launch(arrayOf("application/octet-stream", "application/x-whale-knowledge-package", "*/*")) }
+        paragraph("加密知识包使用你输入的口令和 AES-GCM；口令、模型密钥与 Harness 会话正文都不会写入包。导入会合并结构化资料和本地会话标记，提醒需重新核对。")
+        button("恢复统一备份") { if(!memoryBusy) unifiedImport.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*")) }
+        val rollback = java.io.File(noBackupFilesDir, "last-unified-rollback.sqlite")
+        if(rollback.isFile) button("回退到上次恢复前") {
+            if(!memoryBusy) androidx.appcompat.app.AlertDialog.Builder(this).setTitle("回退资料和记忆？")
+                .setMessage("将使用本机上次恢复前快照；现有删除保护仍保留，提醒不会自动重新启用。")
+                .setNegativeButton("取消",null).setPositiveButton("回退") { _, _ ->
+                    runMemoryIo("正在回退…", { UnifiedMemoryBackup.restore(this, rollback) }) { outcome -> android.widget.Toast.makeText(this, if(outcome.isSuccess) "已回退" else "回退失败，原数据保留",android.widget.Toast.LENGTH_LONG).show(); render() }
+                }.show()
+        }
+        links(CompanionPreferencePage.MAINTENANCE)
+    }
+
+    private fun renderMaintenance() {
+        val memory = CompanionMemoryStore(this)
+        button("导出长期记忆") { if (!memoryBusy) memoryExport.launch("whale-memory.json") else paragraph("记忆文件操作正在进行，请稍候。") }
+        val databaseActive = runCatching { memory.usesDatabase() }.getOrNull()
+        paragraph(when (databaseActive) { true -> "长期记忆存储：SQLite，不设固定条数上限；检索只返回最相关的少量结果，避免记忆积累拖慢对话。旧版本应用无法读取数据库。"; false -> "长期记忆仍为原 JSON（最多 100 条）；下一次记忆读写会先自动核对并迁移到 SQLite。"; null -> "无法读取记忆存储状态。" })
+        if (databaseActive == false) button("迁移长期记忆到数据库") {
+            runMemoryIo("正在迁移并核对长期记忆…", { memory.migrateToDatabase() }) { result ->
+                android.widget.Toast.makeText(this, result.fold({ "已迁移并核对 $it 条记忆。" }, { "迁移失败，原记忆仍为当前数据。" }), android.widget.Toast.LENGTH_LONG).show()
+                render()
+            }
+        }
+        if (databaseActive == true) button("将长期记忆回退到原格式") {
+            runMemoryIo("正在导出并核对长期记忆…", { memory.rollbackToLegacy() }) { result ->
+                android.widget.Toast.makeText(this, result.fold({ "已回退并核对 $it 条记忆。" }, { "回退失败；旧格式最多 100 条，数据库仍为当前数据。" }), android.widget.Toast.LENGTH_LONG).show()
+                render()
+            }
+        }
+        button("校验长期记忆迁移副本") {
+            runMemoryIo("正在核对记忆迁移副本…", {
+                val snapshot = CompanionMemoryStore(this).exportForUser()
+                val original = CompanionMemoryFormat.parse(snapshot)
+                UnifiedUnderstandingStore.open(this).use { destination ->
+                    if (!destination.memories.isImported()) destination.stageLegacy(snapshot)
+                    check(destination.memories.readAll().toString() == original.toString()) { "staged snapshot differs" }
+                    check(CompanionMemoryFormat.parse(destination.exportLegacyRollback()).toString() == original.toString()) { "rollback export differs" }
+                    original.length()
+                }
+            }) { result ->
+                val message = result.fold({ "已校验 $it 条迁移副本及旧格式导出；正式记忆仍使用原文件。" }, { "迁移副本核对失败或已过期；原记忆没有改动。" })
+                android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+        button("从文件导入记忆") { if (!memoryBusy) memoryImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("记忆文件操作正在进行，请稍候。") }
+        paragraph("备份为未加密 JSON，包含记忆、来源和删除抑制；云盘可能同步。单次备份限 8 MB；导入前核对合并，超过 100 条需先启用数据库。")
+        button("清空全部长期记忆") {
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("清空长期记忆？")
+                .setMessage("这会删除全部长期记忆，无法撤销。")
+                .setNegativeButton("取消", null).setPositiveButton("清空") { _, _ ->
+                    runCatching { memory.clearForUser() }.onSuccess { render() }.onFailure { paragraph("无法清空记忆，原数据已保留。") }
+                }.show()
+        }
         button("导出资料备份") { if (!memoryBusy) knowledgeExport.launch("whale-knowledge.json") else paragraph("文件操作正在进行，请稍候。") }
         button("导入资料备份") { if (!memoryBusy) knowledgeImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) else paragraph("文件操作正在进行，请稍候。") }
         paragraph("资料备份为未加密 JSON，包含完整文字；云盘可能同步。导入前可核对，确认后合并，不覆盖已有资料。")
+    }
+
+    private fun renderNotifications() {
         heading("通知与隐私", "notifications")
         toggle("允许助手对话访问通知摘要", store.notificationModelAccess) { enabled ->
             if (!enabled) { store.notificationModelAccess = false; render() }
@@ -666,6 +777,15 @@ class CompanionActivity : AppCompatActivity() {
             render()
         }
         paragraph("开启后记录通知来源、标题和正文，最多 50 条；只在读取或新增时清理超过 7 天的记录。验证码与密码使用简单规则过滤，不能保证识别所有敏感内容。")
+        paragraph("通知和使用数据默认在本机处理；单独开启对话访问后，相关内容可能发送给当前模型服务。系统和应用可能限制读取。")
+        val notificationAllowed = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+        paragraph(if (notificationAllowed) "系统通知读取授权：已授予。系统可能停止服务或限制后台运行。" else "系统通知读取授权：未授予。开启采集后还需在系统设置中授权。")
+        button("打开系统通知读取授权") { openSettings(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS) }
+        button("设置不采集通知的应用") { selectExcludedApps() }
+        paragraph("可从已记录过的应用中选择不再采集的来源；已有记录不会自动删除。")
+    }
+
+    private fun renderBackground() {
         val backgroundProviders = understandingProviderChoices(io.deepseekharness.mobile.runtime.RuntimeStore(this).settings())
         button("后台整理模型服务 · ${store.understandingProvider}") {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择后台整理的模型服务")
@@ -800,11 +920,9 @@ class CompanionActivity : AppCompatActivity() {
                     }
                 }.show()
         }
-        val notificationAllowed = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
-        paragraph(if (notificationAllowed) "系统通知读取授权：已授予。系统可能停止服务或限制后台运行。" else "系统通知读取授权：未授予。开启采集后还需在系统设置中授权。")
-        button("打开系统通知读取授权") { openSettings(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS) }
-        button("设置不采集通知的应用") { selectExcludedApps() }
-        paragraph("可从已记录过的应用中选择不再采集的来源；已有记录不会自动删除。")
+    }
+
+    private fun renderReminders() {
         toggle("桌面休息提醒", store.reminders) { store.reminders = it }
         paragraph("悬浮助手运行且设备已解锁时，约每 90 分钟显示一次休息提示；低电量时可发系统通知（需通知权限）。系统可能停止后台服务。")
         heading("提醒与免打扰", "reminders")
@@ -843,6 +961,9 @@ class CompanionActivity : AppCompatActivity() {
         }
         paragraph("仅影响重复提醒气泡；默认显示通用提示。气泡遵守免打扰和屏幕锁定限制。")
         paragraph("按手机当前时区安排；系统省电可能延迟，重启时错过的次数不会集中补发。")
+    }
+
+    private fun renderApps() {
         heading("常用应用", "apps")
         val shortcuts = runCatching { store.shortcuts().sorted() }.getOrNull()
         if (shortcuts == null) paragraph("无法读取快捷方式，原数据已保留。")
@@ -859,6 +980,9 @@ class CompanionActivity : AppCompatActivity() {
         paragraph("开启后，悬浮助手运行且解锁时，在本机按最近约 7 天的使用时长建议快捷方式，最多每天提示一次；不记录或发送使用数据，不推断个人属性。需要使用情况访问权限，系统可能限制后台提示。")
         button("查看常用应用建议") { showUsageSuggestions() }
         button("查看最近 7 天使用情况") { showUsage() }
+    }
+
+    private fun renderBrief() {
         heading("日历与本地简报", "brief")
         paragraph("查看简报时会读取可用的日历、提醒、通知和近 7 天使用情况；使用统计需要单独授权，仅在本机展示。分类可能漏判或出错。")
         toggle("每天提示查看简报", store.dailyBriefEnabled) { store.dailyBriefEnabled = it; render() }
@@ -901,6 +1025,9 @@ class CompanionActivity : AppCompatActivity() {
                 }.show()
         }
         button("查看本地简报") { showBrief() }
+    }
+
+    private fun renderHistory() {
         button("查看通知候选事项") { showNotificationCandidates() }
         paragraph("本地规则仅提供待核对的候选，不会自动安排提醒或发送回复。")
         button("查看通知习惯摘要") { showNotificationSummary() }
@@ -916,8 +1043,6 @@ class CompanionActivity : AppCompatActivity() {
                 .setNegativeButton("取消", null).setPositiveButton("清除") { _, _ -> store.clear(); render() }.show()
         }
         renderRecords()
-        button("返回") { finish() }
-        scroll.post { if (!isFinishing && !isDestroyed) scroll.scrollTo(0, previousScroll) }
     }
 
     private fun chooseAvatarSize() {
@@ -939,7 +1064,7 @@ class CompanionActivity : AppCompatActivity() {
         val status = TextView(this).apply {
             text = "正在读取状态…"; textSize = 14f; setTextColor(ink)
             setLineSpacing(dp(5).toFloat(), 1f); setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = surface(if (dark) "#172B40" else "#FFFFFF", if (dark) "#294660" else "#DCEAF5")
+            background = surface()
         }
         content.addView(status)
         val generation = ++readinessGeneration
@@ -1693,6 +1818,7 @@ class CompanionActivity : AppCompatActivity() {
     }
 
     private fun renderRecords() {
+        if (page != CompanionPreferencePage.RECORDS) return
         val previousScroll = scroll.scrollY
         // Rebuild to avoid appending duplicate lists on repeated refresh.
         if (content.findViewWithTag<LinearLayout>("records") != null) content.removeView(content.findViewWithTag("records"))
@@ -1708,7 +1834,7 @@ class CompanionActivity : AppCompatActivity() {
             val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(row.optLong("time")))
             list.addView(TextView(this).apply {
                 text = "$time · ${row.optString("package")}\n${row.optString("title")}\n${row.optString("text")}\n点击处理"
-                setTextColor(ink); setPadding(dp(14), dp(12), dp(14), dp(12)); background = surface(if (dark) "#172B40" else "#FFFFFF")
+                setTextColor(ink); setPadding(dp(14), dp(12), dp(14), dp(12)); background = surface(border = false)
                 isFocusable = true
                 setOnClickListener { showRecordActions(row, time) }
             }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
@@ -1720,8 +1846,7 @@ class CompanionActivity : AppCompatActivity() {
                 renderRecords()
             }
         })
-        val returnButton = content.childCount - 1
-        content.addView(list, if (returnButton >= 0 && content.getChildAt(returnButton) is Button && (content.getChildAt(returnButton) as Button).text == "返回") returnButton else content.childCount)
+        content.addView(list)
         scroll.post { if (!isFinishing && !isDestroyed) scroll.scrollTo(0, previousScroll) }
     }
 
@@ -2283,41 +2408,78 @@ class CompanionActivity : AppCompatActivity() {
         android.widget.Toast.makeText(this, "摘要已复制，可自行粘贴到对话；可能由所选模型服务处理。", android.widget.Toast.LENGTH_LONG).show()
     }
 
-    private fun hero() {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(18))
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.parseColor("#174F8D"), Color.parseColor("#357CB2"))).apply { cornerRadius = dp(22).toFloat() }
+    private fun preferenceToolbar(): LinearLayout = LinearLayout(this).apply {
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(8), dp(4), dp(16), dp(4))
+        setBackgroundColor(palette.getColor(R.color.harness_page_background))
+        addView(ImageButton(this@CompanionActivity).apply {
+            setImageDrawable(palette.getDrawable(R.drawable.ic_arrow_back)); setColorFilter(ink)
+            contentDescription = palette.getString(R.string.pet_menu_back)
+            background = RippleDrawable(ColorStateList.valueOf(palette.getColor(R.color.harness_search_action)), null, null)
+            setOnClickListener { navigateBack() }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        pageTitle = TextView(this@CompanionActivity).apply {
+            setPadding(dp(8), 0, 0, 0); textSize = 20f; setTypeface(typeface, Typeface.BOLD); setTextColor(ink)
+            androidx.core.view.ViewCompat.setAccessibilityHeading(this, true)
         }
-        card.addView(TextView(this).apply { text = "WHALE COMPANION"; textSize = 11f; letterSpacing = 0.12f; setTextColor(Color.parseColor("#D4EEFF")) })
-        card.addView(TextView(this).apply { text = "鲸鱼娘助手"; textSize = 25f; setTypeface(typeface, Typeface.BOLD); setTextColor(Color.WHITE); setPadding(0, dp(6), 0, dp(4)) })
-        card.addView(TextView(this).apply { text = "记住重要的事，陪你从容处理每一天。"; textSize = 14f; setTextColor(Color.parseColor("#E3F3FF")) })
-        content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        addView(PetPortrait(this@CompanionActivity, PetUi(this@CompanionActivity), R.drawable.ic_pet_whale),
+            LinearLayout.LayoutParams(dp(36), dp(36)))
+        addView(pageTitle)
     }
-    private fun sectionNavigation(): android.widget.HorizontalScrollView {
-        val items = listOf("status" to "状态", "memory" to "记忆", "knowledge" to "资料", "notifications" to "通知", "reminders" to "提醒", "apps" to "常用", "brief" to "日历与简报")
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(14), dp(8), dp(14), dp(8)) }
-        for ((id, label) in items) {
-            val item = Button(this).apply {
-                text = label; textSize = 13f; isAllCaps = false; minHeight = dp(44); minimumWidth = 0
-                setPadding(dp(16), 0, dp(16), 0); elevation = 0f
-                setTextColor(ink); background = surface(if (dark) "#172B40" else "#FFFFFF", if (dark) "#294660" else "#DCEAF5")
-                contentDescription = "跳转到$label"
-                setOnClickListener {
-                    val section = content.findViewWithTag<View>("section:$id") ?: return@setOnClickListener
-                    scroll.smoothScrollTo(0, section.top)
-                    section.announceForAccessibility("已定位到$label")
+
+    private fun links(vararg pages: CompanionPreferencePage) {
+        val cards = pages.map(::preferenceCard)
+        content.addView(object : LinearLayout(this) {
+            private var columns = 0
+            init { orientation = VERTICAL }
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val innerWidth = View.MeasureSpec.getSize(widthMeasureSpec)
+                val wanted = if (innerWidth >= dp(560) && cards.size > 1) 2 else 1
+                if (wanted != columns) {
+                    columns = wanted
+                    cards.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it) }
+                    removeAllViews()
+                    for (group in cards.chunked(columns)) {
+                        val row = LinearLayout(context)
+                        group.forEachIndexed { index, card ->
+                            row.addView(card, LayoutParams(0, -2, 1f).apply { if (index > 0) marginStart = dp(10) })
+                        }
+                        if (columns == 2 && group.size == 1) row.addView(View(context), LayoutParams(0, 1, 1f).apply { marginStart = dp(10) })
+                        addView(row, LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+                    }
                 }
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
             }
-            row.addView(item, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
-        }
-        return android.widget.HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            contentDescription = "助手设置分区导航"
-            addView(row)
-        }
+        }, LinearLayout.LayoutParams(-1, -2))
     }
-    private fun heading(value: String, section: String? = null) { content.addView(TextView(this).apply {
+
+    private fun preferenceCard(target: CompanionPreferencePage): View = LinearLayout(this).apply {
+        gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(74)
+        setPadding(dp(14), dp(12), dp(12), dp(12))
+        background = actionSurface()
+        val label = palette.getString(target.title); val detail = palette.getString(target.summary)
+        contentDescription = "$label，$detail"
+        isFocusable = true
+        addView(ImageView(this@CompanionActivity).apply {
+            setImageDrawable(palette.getDrawable(target.icon)); setColorFilter(palette.getColor(R.color.harness_search_focus))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(22), dp(22)))
+        addView(LinearLayout(this@CompanionActivity).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, dp(4), 0)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            addView(TextView(this@CompanionActivity).apply { text = label; textSize = 16f; setTextColor(ink); setTypeface(typeface, Typeface.BOLD) })
+            addView(TextView(this@CompanionActivity).apply { text = detail; textSize = 13f; setTextColor(muted); setPadding(0, dp(3), 0, 0) })
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(ImageView(this@CompanionActivity).apply {
+            setImageDrawable(palette.getDrawable(R.drawable.ic_pet_forward)); setColorFilter(muted)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(16), dp(16)))
+        setOnClickListener { go(target) }
+    }
+
+    private fun heading(value: String, section: String? = null) {
+        if (value == pageTitle.text) return
+        content.addView(TextView(this).apply {
         text = value; textSize = 19f; setTypeface(typeface, Typeface.BOLD); setTextColor(ink); setPadding(0, dp(24), 0, dp(10))
         if (section != null) tag = "section:$section"
         androidx.core.view.ViewCompat.setAccessibilityHeading(this, true)
@@ -2329,18 +2491,19 @@ class CompanionActivity : AppCompatActivity() {
     private fun toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
         content.addView(Switch(this).apply {
             text = label; textSize = 15f; setTextColor(ink); isChecked = checked; minHeight = dp(56)
-            setPadding(dp(14), dp(8), dp(14), dp(8)); background = surface(if (dark) "#172B40" else "#FFFFFF")
+            setPadding(dp(14), dp(8), dp(14), dp(8)); background = surface(border = false)
             setOnCheckedChangeListener { _, value -> onChange(value) }
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6); bottomMargin = dp(6) })
     }
     private fun button(label: String, onClick: () -> Unit) { content.addView(Button(this).apply {
         text = label; textSize = 15f; isAllCaps = false; gravity = Gravity.CENTER_VERTICAL or Gravity.START
         setTextColor(ink); minHeight = dp(52); setPadding(dp(16), dp(8), dp(16), dp(8)); elevation = 0f
-        background = surface(if (dark) "#172B40" else "#FFFFFF", if (dark) "#294660" else "#DCEAF5")
+        background = actionSurface()
         setOnClickListener { onClick() }
     }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4); bottomMargin = dp(4) }) }
     private fun openSettings(action: String) { runCatching { startActivity(Intent(action)) }.onFailure { paragraph("无法打开系统设置，请手动前往系统设置。") } }
     companion object {
+        internal const val OPEN_PAGE = "whale_preferences_page"
         const val OPEN_KNOWLEDGE_ID = "open_knowledge_id"
         const val OPEN_KNOWLEDGE_REVISION = "open_knowledge_revision"
     }

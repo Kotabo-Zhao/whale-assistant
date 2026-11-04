@@ -432,6 +432,25 @@ function fixture(t, install, probeGit) {
   return { root, write, profile, pluginFile, manager: createManager(root, install, JSON.parse, probeGit) }
 }
 
+test('更新前安全收拢本地计时插件，同时拒绝其他目录冒充该插件', t => {
+  const { root, write, profile, manager } = fixture(t)
+  fs.writeFileSync(profile, JSON.stringify({ dsh: { profile: { bundles: ['@local/dsh-timer'] } } }))
+  const timer = path.join(root, 'root/timer-plugin')
+  write('root/timer-plugin/package.json', { name: '@local/dsh-timer', version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.json' } } })
+  write('root/timer-plugin/cordis.patch.json', [])
+  const link = path.join(root, 'root/.dsh/profiles/web/node_modules/@local/dsh-timer')
+  fs.mkdirSync(path.dirname(link), { recursive: true })
+  fs.symlinkSync(timer, link, 'junction')
+  assert.equal(manager.checkpoint().preserved, 1)
+  assert.ok(fs.realpathSync(link).includes('plugin-manager'))
+  assert.ok(fs.existsSync(path.join(timer, 'package.json')))
+  fs.unlinkSync(link)
+  const other = path.join(root, 'root/other-plugin')
+  write('root/other-plugin/package.json', { name: '@local/dsh-timer', version: '1.0.0' })
+  fs.symlinkSync(other, link, 'junction')
+  assert.throws(() => manager.checkpoint(), /PLUGIN_PATH_INVALID/)
+})
+
 test('不启动 Harness 即可列出官方、第三方配置文件及子插件', t => {
   const { manager } = fixture(t)
   const groups = manager.list().plugins

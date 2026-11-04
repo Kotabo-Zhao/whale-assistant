@@ -8,7 +8,19 @@ export function installScreenWatch(ctx, { defineTool, bridge, assertImageCapable
   let sampling = false
   let stopped = false
   let lastError = null
-  const stop = () => { current = null }
+  let timer = null
+  // The 1 s sampler is armed only while a capture is active; idle hosts run no timer.
+  function arm() {
+    if (stopped || timer !== null) return
+    timer = setInterval(() => { void sample() }, 1000)
+    timer.unref?.()
+  }
+  function disarm() {
+    if (timer === null) return
+    clearInterval(timer)
+    timer = null
+  }
+  const stop = () => { current = null; disarm() }
   async function sample() {
     if (!current || sampling || stopped) return
     sampling = true
@@ -39,13 +51,12 @@ export function installScreenWatch(ctx, { defineTool, bridge, assertImageCapable
     } catch (error) {
       if (run === current) {
         lastError = error.message; current = null
+        disarm()
         await bridge('screenWatch', JSON.stringify({ action: 'stop', session: run.owner })).catch(() => {})
       }
     } finally { sampling = false }
   }
-  const timer = setInterval(() => { void sample() }, 1000)
-  timer.unref?.()
-  ctx.on('dispose', () => { stopped = true; stop(); clearInterval(timer) })
+  ctx.on('dispose', () => { stopped = true; stop(); disarm() })
   ctx.tools.register(defineTool({ name: 'mobile_see_now',
     description: '屏幕陪看：仅在用户明确要求并已在事项页开启授权时 start。复用 Shizuku，每秒本地采样，只把关键帧拼图交给模型；每次最多持续两分钟。peek 取最新拼图，watch 最多等待 12 秒，stop 停止。读取细小文字时 detail=true 单帧显示。普通回复直接显示在共享会话，禁用语音。',
     parameters: { action: { type: 'string', required: true, enum: ['start', 'peek', 'watch', 'stop', 'status'] }, detail: { type: 'boolean' } },
@@ -64,6 +75,7 @@ export function installScreenWatch(ctx, { defineTool, bridge, assertImageCapable
         lastError = null
         await bridge('screenWatch', JSON.stringify({ action: 'start', session: owner }), exec.signal)
         current = { owner, startedAt: Date.now(), sequence: 0, detail: args.detail === true, first: true, notified: false, consuming: true, active: true }
+        arm()
         await sample()
       }
       const run = current

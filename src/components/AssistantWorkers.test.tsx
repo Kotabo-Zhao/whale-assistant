@@ -1,18 +1,20 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
-const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn() }))
+const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn(), addWorkerDashboardListener: vi.fn() }))
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { AssistantWorkers } from './AssistantWorkers'
 it('answers only the selected worker and leaves screen capture opt-in', async () => {
-  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerList'
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerPage'
     ? { items: [{ id: 'task-one', text: '验收任务', state: 'waiting', question: '请选择颜色', sessionId: 'session-one', inputs: [{ id: 'i1', revision: 1, kind: 'request', text: '选择颜色', delivery: 'delivered', readAt: 1 }], reports: [{ revision: 1, summary: '请选择颜色' }] }] }
+    : request.operation === 'workerDetail' ? { id: 'task-one', events: [{ type: 'input', id: 'i1', revision: 1, text: '选择颜色', delivery: 'delivered', readAt: 1 }], historyCount: 1 }
     : { enabled: false, active: false }))
   const open = vi.fn()
   render(<AssistantWorkers onOpenSession={open} />)
   expect(await screen.findByText('请选择颜色')).toBeInTheDocument()
   expect(screen.getByRole('checkbox', { name: /允许屏幕陪看/ })).not.toBeChecked()
-  expect(screen.getByText('查看任务记录')).toBeInTheDocument()
-  expect(screen.getByText(/已进入任务会话/)).toBeInTheDocument()
+  expect(bridge.companionDashboard).not.toHaveBeenCalledWith(expect.objectContaining({ operation: 'workerDetail' }))
+  fireEvent.click(screen.getByText('任务详情'))
+  expect(await screen.findByText(/已进入任务会话/)).toBeInTheDocument()
   fireEvent.change(screen.getByRole('textbox', { name: /你的回答/ }), { target: { value: '蓝色' } })
   fireEvent.click(screen.getByRole('button', { name: '提交并继续' }))
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'workerControl', id: 'task-one', action: 'reply', task: '蓝色' }))
@@ -21,19 +23,22 @@ it('answers only the selected worker and leaves screen capture opt-in', async ()
 })
 
 it('queues an update on a completed task', async () => {
-  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerList'
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerPage'
     ? { items: [{ id: 'task-done', text: '已完成任务', state: 'completed', sessionId: 'session-done' }] }
     : { enabled: false, active: false }))
   render(<AssistantWorkers onOpenSession={vi.fn()} />)
+  const expand = await screen.findByRole('button', { name: '追加信息' })
+  expect(screen.queryByRole('textbox', { name: /追加任务信息/ })).not.toBeInTheDocument()
+  fireEvent.click(expand)
   const field = await screen.findByRole('textbox', { name: /追加任务信息/ })
   fireEvent.change(field, { target: { value: '补充范围' } })
-  fireEvent.click(screen.getByRole('button', { name: '追加信息' }))
+  fireEvent.click(screen.getByRole('button', { name: '提交补充' }))
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'workerControl', id: 'task-done', action: 'add', task: '补充范围' }))
 })
 
 
 it('keeps a historical task visible without offering actions when its ledger is missing', async () => {
-  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerList'
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerPage'
     ? { items: [{ id: 'lost-task', text: '旧任务', state: 'waiting', missingLedger: true, uiError: '找不到任务执行记录', sessionId: 'old-session' }] }
     : { enabled: false, active: false }))
   render(<AssistantWorkers onOpenSession={vi.fn()} />)
@@ -41,4 +46,48 @@ it('keeps a historical task visible without offering actions when its ledger is 
   expect(screen.queryByRole('button', { name: '提交并继续' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '取消任务' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: '查看任务会话' })).toBeInTheDocument()
+})
+
+it('后台创作是显式任务类型，草稿预览绑定任务和修订', async () => {
+  const revision = 'c'.repeat(64)
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerPage'
+    ? { items: [{ id: 'worker-one', text: '生成工具', state: 'completed', mode: 'create', authoredDraft: { revision } }] } : { ok: true }))
+  render(<AssistantWorkers onOpenSession={vi.fn()} />)
+  expect(screen.queryByRole('textbox', { name: '交办新任务' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '手动交办' }))
+  fireEvent.change(screen.getByLabelText('任务类型'), { target: { value: 'create' } })
+  fireEvent.change(screen.getByRole('textbox', { name: '交办新任务' }), { target: { value: '制作工时换算器' } })
+  fireEvent.click(screen.getByRole('button', { name: '交办' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'workerSubmit', task: '制作工时换算器', mode: 'create' }))
+  fireEvent.click(await screen.findByRole('button', { name: '预览工具草稿' }))
+  expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'workerPreviewDraft', id: 'worker-one', revision })
+})
+
+it('有原生订阅时，静置不扫描工单或屏幕状态，翻页只取该页', async () => {
+  vi.useFakeTimers()
+  const remove = vi.fn()
+  let changed: (() => void) | undefined
+  bridge.addWorkerDashboardListener.mockImplementation((fn: () => void) => { changed = fn; return Promise.resolve({ remove }) })
+  let pageCalls = 0
+  bridge.companionDashboard.mockImplementation((req: { operation: string; offset: number }) => {
+    expect(req.operation).toBe('workerPage')
+    pageCalls++
+    return Promise.resolve({ total: 21, groups: ['目标甲'], items: [{ id: 'task-'+req.offset, text: '页首'+req.offset }] })
+  })
+  try {
+    const app = render(<AssistantWorkers onOpenSession={vi.fn()} />)
+    await act(async () => {})
+    expect(screen.getByText('页首0')).toBeInTheDocument()
+    expect(pageCalls).toBe(1)
+    await act(async () => { vi.advanceTimersByTime(45000); await Promise.resolve() })
+    expect(pageCalls).toBe(1)
+    await act(async () => { changed?.(); await Promise.resolve() })
+    expect(pageCalls).toBe(2)
+    await act(async () => { fireEvent.click(screen.getByRole('button',{ name: '下一页' })); await Promise.resolve() })
+    expect(screen.getByText('页首20')).toBeInTheDocument()
+    expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'workerPage', group: '', filter: 'all', offset: 20, limit: 20 })
+    app.unmount()
+    await act(async () => {})
+    expect(remove).toHaveBeenCalled()
+  } finally { bridge.addWorkerDashboardListener.mockReset(); vi.useRealTimers() }
 })

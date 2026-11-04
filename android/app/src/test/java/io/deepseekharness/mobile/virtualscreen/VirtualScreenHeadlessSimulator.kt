@@ -44,6 +44,12 @@ internal class VirtualScreenHeadlessSimulator(
     initialSession: String = "s1",
     initialMode: String = "30fps",
     var defaultCostMillis: Long = 0L,
+    /**
+     * 模拟的面板刷新率（Hz）。真机上采集间隔会按它夹取（[VirtualScreenPolicy.effectiveFrameInterval]），
+     * 因此模拟器也必须用同一个读数，否则「档位间隔」与「实际续排延迟」在时间线上对不上。
+     * 默认 60Hz 与主流真机一致；给 0f 可覆盖「读不到面板」的 17 毫秒兜底。
+     */
+    val panelRefreshHz: Float = 60f,
 ) {
     // ------------------------------------------------------------------
     // 虚拟时钟：两个读数由一个时钟一起推进（真机上是 uptimeMillis 与 elapsedRealtime 两个不同的钟）
@@ -134,7 +140,10 @@ internal class VirtualScreenHeadlessSimulator(
     fun changeMode(next: String) {
         VirtualScreenPolicy.frameInterval(next)
         mode = next
-        record(SimEvent.KIND_FRAME, "档位切换到 $next（采集间隔 ${VirtualScreenPolicy.previewPullInterval(next)}ms）")
+        record(
+            SimEvent.KIND_FRAME,
+            "档位切换到 $next（采集间隔 ${VirtualScreenPolicy.effectiveFrameInterval(next, panelRefreshHz)}ms）",
+        )
     }
 
     // ------------------------------------------------------------------
@@ -166,6 +175,8 @@ internal class VirtualScreenHeadlessSimulator(
         },
         removeCallbacks = { queued = false },
         beat = beatToken,
+        // 与真机同一条夹取：续排延迟不能比面板一帧还密。
+        panelRefreshHz = { panelRefreshHz },
     )
 
     /** 拍子是否在跑（镜像 [startPump] / [stopPump] 这两个动作本身）。 */

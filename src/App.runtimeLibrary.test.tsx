@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { arriveAtSettingsHome } from './__tests__/appTestHarness'
+import { expandSettingsGroup, arriveAtSettingsHome } from './__tests__/appTestHarness'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { beforeEachAppTest, bridge } from './__tests__/appTestHarness'
 
@@ -52,6 +52,7 @@ async function openVersionsPage(): Promise<void> {
   render(<App />)
   await arriveAtSettingsHome()
     await screen.findByRole('heading', { name: '设置' }, { timeout: 5_000 })
+  expandSettingsGroup('运行与存储')
   fireEvent.click(await screen.findByRole('button', { name: /版本管理/ }, { timeout: 5_000 }))
   await screen.findByRole('heading', { name: '版本管理' }, { timeout: 5_000 })
 }

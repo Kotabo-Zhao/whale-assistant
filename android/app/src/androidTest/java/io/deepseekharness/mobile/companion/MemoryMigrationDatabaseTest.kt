@@ -172,6 +172,31 @@ class MemoryMigrationDatabaseTest {
         }
     }
 
+    @Test fun exactSearchFindsOldPhraseBehindFrequentBigrams() {
+        val oldest = row("记住这句 ＡＢＣＤ")
+        val rows = JSONArray().put(oldest)
+        repeat(620) { rows.put(row("ＡＢ分隔ＢＣ分隔ＣＤ $it")) }
+        rows.put(row("不展示 ABCD").put("status", "pending"))
+        MemoryMigrationDatabase(file).use { db ->
+            db.importLegacy(fixture(JSONArray()))
+            db.replaceAll(rows)
+        }
+        MemoryMigrationDatabase(file).use { db ->
+            val start = android.os.SystemClock.elapsedRealtimeNanos()
+            val found = db.search("abcd", 0)
+            assertEquals("exact", found.getString("matchMode"))
+            assertEquals(1, found.getInt("matchedCount"))
+            assertEquals(oldest.getString("id"), found.getJSONArray("items").getJSONObject(0).getString("id"))
+            val common = db.search("ＡＢ", 610)
+            assertEquals(621, common.getInt("matchedCount"))
+            assertEquals(620, common.getInt("nextOffset"))
+            assertEquals(oldest.getString("id"), db.search("AB", 620).getJSONArray("items").getJSONObject(0).getString("id"))
+            InstrumentationRegistry.getInstrumentation().sendStatus(0, android.os.Bundle().apply {
+                putInt("confirmedRows", 621); putLong("threeExactQueriesUs", (android.os.SystemClock.elapsedRealtimeNanos() - start) / 1000)
+            })
+        }
+    }
+
     @Test fun indexedSearchTracksUpdatesAndExcludesPending() {
         val visible = row("喜欢喝咖啡")
         val pending = row("待确认咖啡").put("status", "pending")

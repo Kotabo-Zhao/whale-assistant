@@ -1,3 +1,4 @@
+import { AuthoredTools } from './AuthoredTools'
 import { useEffect, useState } from 'react'
 import { Bell, Brain, BookOpen, ListTodo, RefreshCw } from 'lucide-react'
 import { runtimeBridge } from '../platform/native'
@@ -26,6 +27,7 @@ export function AssistantOverview({ onOpenTasks }: { onOpenTasks?: () => void })
   const upcoming = data ? [...data.reminders, ...data.recurring].filter(row => row.state === 'scheduled' && Number(row.nextAt ?? row.at) > Date.now()).sort((a,b) => Number(a.nextAt ?? a.at) - Number(b.nextAt ?? b.at)).slice(0, 3) : []
   return <section className="assistant-overview" aria-label="本地助手概览">
     <header><div><span className="eyebrow">PERSONAL ASSISTANT</span><h2>我的助手</h2><p>近期事项、提醒与本地信息摘要</p></div><button className="icon-button" aria-label="刷新助手概览" disabled={loading} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></header>
+    <AuthoredTools bridge={runtimeBridge} />
     {loading && <p>正在读取手机上的助手数据…</p>}
     {failed && <p role="status">暂时无法读取概览。{data ? '下方保留上次结果，请刷新后核对。' : '不会把读取失败当作没有事项。'}</p>}
     {data && <><div className="assistant-metrics"><div><Bell size={19} /><strong>{data.notificationCount}</strong><span>已保存通知</span></div><div><Brain size={19} /><strong>{data.memoryCount}</strong><span>长期记忆</span></div><div><BookOpen size={19} /><strong>{data.knowledgeCount}</strong><span>本地资料</span></div><div><ListTodo size={19} /><strong>{data.tasks.length}</strong><span>近期待办</span></div></div>

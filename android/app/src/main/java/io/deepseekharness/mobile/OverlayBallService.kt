@@ -1,16 +1,27 @@
 package io.deepseekharness.mobile
 
+import io.deepseekharness.mobile.overlay.PetAction
+import io.deepseekharness.mobile.overlay.PetActing
+import io.deepseekharness.mobile.overlay.PetPose
+import io.deepseekharness.mobile.companion.WorkerDashboardStore
+import io.deepseekharness.mobile.companion.WhaleDirectCaptureActivity
+import io.deepseekharness.mobile.companion.WhaleMemoryShareActivity
+import io.deepseekharness.mobile.companion.WhaleScreenConsentActivity
+import io.deepseekharness.mobile.companion.PetActionMenu
 import android.annotation.SuppressLint
 import android.Manifest
 import android.net.Uri
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -20,6 +31,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.ContextThemeWrapper
@@ -81,19 +93,22 @@ class OverlayBallService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var ballView: View? = null
-    private var companionAnimator: android.animation.ValueAnimator? = null
+    private var companionFrame: Runnable? = null
+    private var petDragLean = 0f
     private var petDrawable: io.deepseekharness.mobile.overlay.CompanionPetDrawable? = null
-    private var petTapAt = -1L
-    private var petChatState = "idle"
-    private var petReplyAt = 0L
+    private val petActing = PetActing()
+    private val taskAccepted: () -> Unit = {
+        hintHandler.post { if (!avatarDestroyed) petActing.react(PetAction.ACCEPT, SystemClock.uptimeMillis()) }
+        Unit
+    }
     private var petBlinkAt = -1000L
     private val blinkOpen = Runnable { petDrawable?.blinkAmount = 0f }
     private val blinkTick = object : Runnable {
         override fun run() {
-            if (!ballAttached || avatarDestroyed || !companionMotionEnabled()) return
+            if (!companionMotionAllowed()) return
             petBlinkAt = SystemClock.uptimeMillis()
             hintHandler.postDelayed(blinkOpen, 300)
-            hintHandler.postDelayed(this, if (petChatState == "thinking") 3300 else 4800)
+            hintHandler.postDelayed(this, if (petActing.action == PetAction.WORK) 3300 else 4800)
         }
     }
     private val avatarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-avatar").apply { isDaemon = true } }
@@ -105,7 +120,41 @@ class OverlayBallService : Service() {
     private val reminderHints = io.deepseekharness.mobile.companion.CompanionHintQueue<QueuedReminderHint>()
     private val hintHandler = Handler(Looper.getMainLooper())
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
-    private val bubbleChat by lazy { io.deepseekharness.mobile.companion.CompanionBubbleWindow(this, windowManager, { state -> petChatState = state; if (state == "reply") petReplyAt = SystemClock.uptimeMillis() }, { sessionId -> openHarness(sessionId) }) { intArrayOf(layoutParams.x, layoutParams.y, layoutParams.width, layoutParams.height) } }
+    private val bubbleChat by lazy { io.deepseekharness.mobile.companion.CompanionBubbleWindow(this, windowManager, { state ->
+        val now = SystemClock.uptimeMillis()
+        when (state) {
+            "thinking" -> petActing.chatThinking = true
+            "idle" -> petActing.chatThinking = false
+            "reply" -> { petActing.chatThinking = false; petActing.react(PetAction.CELEBRATE, now) }
+            "taskDone" -> petActing.react(PetAction.CELEBRATE, now)
+            "taskWaiting" -> petActing.react(PetAction.ASK, now)
+            "taskFailed" -> petActing.react(PetAction.SETBACK, now)
+        }
+    }, { sessionId -> openHarness(sessionId) }, { running, waiting, questions ->
+        petActing.waitingTasks = questions
+        petActing.runningTasks = running
+        ballView?.findViewById<android.widget.TextView>(R.id.companion_worker_badge)?.apply {
+            val count = if (waiting > 0) waiting else running
+            visibility = if (count > 0) View.VISIBLE else View.GONE
+            text = if (count > 99) "99+" else count.toString()
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(if (waiting > 0) android.graphics.Color.rgb(218, 92, 96) else android.graphics.Color.rgb(54, 137, 190))
+            }
+            ballView?.contentDescription = AppLanguage.localizedContext(context).getString(R.string.pet_menu_counts, running, waiting)
+        }
+    }, onBackgroundReport = ::showTaskReceipt) { intArrayOf(layoutParams.x, layoutParams.y, layoutParams.width, layoutParams.height) } }
+
+    private fun showTaskReceipt(state: String) {
+        val text = when (state) {
+            "waiting" -> "后台有个问题，点开回答"
+            "completed" -> "后台任务已完成，点开查看"
+            "failed", "blocked" -> "后台任务需要处理"
+            else -> return
+        }
+        showCompanionHint(text) { if (!bubbleChat.visible) bubbleChat.show() }
+    }
+
     private var proactiveMemoryRunning = false
     private var calendarQueryRunning = false
     private var usageQueryRunning = false
@@ -146,6 +195,21 @@ class OverlayBallService : Service() {
     private var ballAttached = false
     private var hiddenForHostApp = false
 
+    /**
+     * 屏幕可见性变化（亮屏 / 息屏 / 解锁）时重算一次动画门控。
+     *
+     * 动画只在「球真的可见」时跑（见 [companionMotionAllowed]）：息屏、锁屏、或本应用自己的
+     * 全屏界面盖住球时把它停掉，停止桌宠的逐帧绘制；亮屏/解锁后由同一个回调恢复。
+     * 注册用 [ContextCompat.RECEIVER_NOT_EXPORTED]（与 `VirtualScreenService` 的息屏接收器同一写法），
+     * 只收系统受保护广播，不接受其他应用的投递。
+     */
+    private val screenVisibility = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            runCatching { applyCompanionMotionPreference() }
+        }
+    }
+    private var screenVisibilityRegistered = false
+
     private var conversationView: View? = null
     private var conversationWebView: WebView? = null
     /** Detached transport page used only to turn a user-initiated OAuth popup into a browser intent. */
@@ -159,12 +223,8 @@ class OverlayBallService : Service() {
     private var fileChooserRequest: String? = null
     private lateinit var layoutParams: WindowManager.LayoutParams
 
-    /**
-     * 已挂到窗口上的二级球（按 [OverlayBallSecondaryPolicy.CHOICE_ORDER] 顺序）。
-     *
-     * 二级球的「是否展开」就等于这个列表是否为空 —— 不另设布尔字段，理由见策略里的说明。
-     */
-    private val secondaryViews = mutableListOf<View>()
+    private var actionMenu: PetActionMenu? = null
+
 
     /** 缩放手柄所在的独立 overlay 窗口；小窗关闭时一并摘除。 */
     private var conversationResizeHandle: View? = null
@@ -187,10 +247,24 @@ class OverlayBallService : Service() {
     override fun onCreate() {
         super.onCreate()
         activeService = this
+        WorkerDashboardStore.subscribeAccepted(taskAccepted)
         hintHandler.postDelayed(calendarTick, 5L * 1000)
         hintHandler.postDelayed(reminderTick, 15L * 60 * 1000)
         runCatching { ensureNotificationChannel() }
         windowManager = getSystemService(WindowManager::class.java)
+        // 亮屏 / 息屏 / 解锁都会改变「球是否可见」：收到后只重算动画门控，不重载头像、不动窗口。
+        if (!screenVisibilityRegistered) {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_USER_PRESENT)
+                addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+            }
+            runCatching {
+                ContextCompat.registerReceiver(this, screenVisibility, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+                screenVisibilityRegistered = true
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -289,9 +363,8 @@ class OverlayBallService : Service() {
         layoutParams.y = y
         runCatching { windowManager.updateViewLayout(view, layoutParams) }
         preferences.writePosition(x, y)
-        // 二级球跟随主球，并重新做一次安全区夹取：旋转后可用宽高都变了，
-        // 原来「排得下」的一列可能已经压到手势条区域。
-        layoutSecondaryChoices()
+        // Rotation changes the available space on each side of the pet.
+        layoutPetMenu()
         conversationParams?.let { params ->
             val (width, height) = conversationSize(metrics.widthPixels, metrics.heightPixels)
             params.width = width
@@ -308,18 +381,20 @@ class OverlayBallService : Service() {
     }
 
     override fun onDestroy() {
+        WorkerDashboardStore.unsubscribeAccepted(taskAccepted)
         calendarServiceDestroyed = true
         reminderHints.clear()
         avatarDestroyed = true
+        if (screenVisibilityRegistered) {
+            runCatching { unregisterReceiver(screenVisibility) }
+            screenVisibilityRegistered = false
+        }
         avatarExecutor.shutdownNow()
         calendarExecutor.shutdownNow()
         hintHandler.removeCallbacksAndMessages(null)
         bubbleChat.destroy()
         removeCompanionHint()
         detachConversation()
-        // 二级球必须先摘：它们的位置依赖 layoutParams，虽然在 onDestroy 里已经用不到，
-        // 但顺序反过来会让「先摘主球、后摘二级球」出现一次以失效坐标重排的窗口调用。
-        detachSecondaryChoices()
         detachBall()
         stopForegroundCompat()
         // 服务结束（含进入前台失败、权限被撤销、用户点「隐藏悬浮球」等自停路径）后必须
@@ -676,11 +751,26 @@ class OverlayBallService : Service() {
 
         // 单击打开原生气泡对话；长按保留 Harness 和副屏等快捷操作。
         view.setOnClickListener {
-            if (!stopIfOverlayPermissionRevoked()) { petTapAt = SystemClock.uptimeMillis(); detachSecondaryChoices(); bubbleChat.toggle() }
+            if (!stopIfOverlayPermissionRevoked()) { petActing.react(PetAction.TOUCH, SystemClock.uptimeMillis()); dismissPetMenu(); bubbleChat.toggle() }
         }
         view.setOnLongClickListener {
-            if (!stopIfOverlayPermissionRevoked()) toggleSecondaryChoices()
+            if (!stopIfOverlayPermissionRevoked()) togglePetMenu()
             true
+        }
+        val target = view.findViewById<android.widget.TextView>(R.id.companion_drop_hint)
+        view.setOnDragListener { _, event ->
+            when (event.action) {
+                android.view.DragEvent.ACTION_DRAG_STARTED -> {
+                    val accepted = io.deepseekharness.mobile.companion.WhaleDirectCaptureActivity.accepts(event.clipDescription)
+                    if (accepted) { target.text = "拖来收藏"; target.visibility = View.VISIBLE }
+                    accepted
+                }
+                android.view.DragEvent.ACTION_DRAG_ENTERED -> { target.text = "松手存入"; true }
+                android.view.DragEvent.ACTION_DRAG_EXITED -> { target.text = "拖来收藏"; true }
+                android.view.DragEvent.ACTION_DROP -> io.deepseekharness.mobile.companion.WhaleDirectCaptureActivity.drop(this, event)
+                android.view.DragEvent.ACTION_DRAG_ENDED -> { target.visibility = View.GONE; true }
+                else -> true
+            }
         }
         view.setOnTouchListener { touched, event -> handleTouch(touched, event, layoutParams.width) }
         // 球是否还在窗口上由视图的附着回调维护：客户端侧的移除一定会回调，系统侧的移除
@@ -721,11 +811,13 @@ class OverlayBallService : Service() {
         }
         ballView = view
         layoutParams = params
-        val avatar = view.findViewById<android.widget.ImageView>(R.id.companion_avatar)
-        configureCompanionMotion(avatar)
+        bubbleChat.refreshWorkerStatus()
         // 乐观置位：addView 返回时窗口已登记，首次遍历（附着回调）还没跑完，
         // 这一小段空窗期不能把刚挂上的球误判成陈旧视图。
+        // 必须在 configureCompanionMotion 之前置位：动画门控（companionMotionAllowed）要求球已挂上，
+        // 否则首次挂载时球会一直停在静态站姿、直到下一次亮屏/解锁广播才动起来。
         ballAttached = true
+        configureCompanionMotion()
         loadCompanionAvatar(view, size)
         return true
     }
@@ -738,54 +830,53 @@ class OverlayBallService : Service() {
     private fun companionMotionEnabled(): Boolean =
         android.animation.ValueAnimator.areAnimatorsEnabled() && !io.deepseekharness.mobile.companion.CompanionStore(this).reduceMotion
 
+    /**
+     * 动画是否可以真的跑：在 [companionMotionEnabled]（系统动画开关 + 用户「减少动态」）之外，
+     * 再要求**球此刻可见**——已挂上窗口、没被本应用自己的全屏界面盖住（[hiddenForHostApp]）、
+     * 屏幕亮着且没有锁屏。不可见时撤销帧回调和眨眼定时器。
+     *
+     * 停掉之后画面落在 [configureCompanionMotion] 开头写的静态站位（pose/位移/旋转/眨眼全部归零），
+     * 因此恢复时不会出现「从头猛地跳一下」。
+     */
+    private fun companionMotionAllowed(): Boolean =
+        ballAttached && !avatarDestroyed && !hiddenForHostApp &&
+            companionMotionEnabled() &&
+            (getSystemService(PowerManager::class.java)?.isInteractive == true) &&
+            (getSystemService(KeyguardManager::class.java)?.isKeyguardLocked != true)
+
     /** Reconfigure the current avatar after the user changes the accessibility preference. */
     private fun applyCompanionMotionPreference(): Boolean {
-        val avatar = ballView?.findViewById<android.widget.ImageView>(R.id.companion_avatar) ?: return false
+        if (ballView == null) return false
         if (!ballAttached || avatarDestroyed) return false
-        configureCompanionMotion(avatar)
+        configureCompanionMotion()
         return true
     }
 
-    private fun configureCompanionMotion(avatar: android.widget.ImageView) {
-        val density = resources.displayMetrics.density
+    private fun configureCompanionMotion() {
         hintHandler.removeCallbacks(blinkTick)
         hintHandler.removeCallbacks(blinkOpen)
-        companionAnimator?.cancel()
-        companionAnimator = null
+        companionFrame?.let(hintHandler::removeCallbacks)
+        companionFrame = null
         petDrawable?.blinkAmount = 0f
-        petDrawable?.bend = 0f
-        petDrawable?.leftArm = 0f
-        petDrawable?.rightArm = 0f
-        avatar.rotation = 0f
-        avatar.translationY = 0f
-        avatar.scaleX = 1f
-        avatar.scaleY = 1f
-        if (!companionMotionEnabled()) return
-        var thinkingBlend = 0f
-        companionAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 3600; repeatCount = android.animation.ValueAnimator.INFINITE
-            interpolator = android.view.animation.LinearInterpolator()
-            addUpdateListener {
+        petDrawable?.setPose(PetPose())
+        if (!companionMotionAllowed()) return
+        val powerSave = getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
+        companionFrame = object : Runnable {
+            override fun run() {
+                if (companionFrame !== this) return
                 val now = SystemClock.uptimeMillis()
-                if (petChatState == "reply" && now - petReplyAt > 1800) petChatState = "idle"
-                val target = if (petChatState == "thinking") 1f else 0f
-                thinkingBlend += (target - thinkingBlend) * 0.08f
-                val reply = if (petChatState == "reply") now - petReplyAt else -1L
-                val pose = io.deepseekharness.mobile.overlay.CompanionPetMotion.pose(now, thinkingBlend, reply)
-                val tap = io.deepseekharness.mobile.overlay.CompanionPetMotion.tapScale(now - petTapAt)
+                petDragLean *= .86f
+                petDrawable?.setPose(petActing.sample(now, petDragLean))
                 petDrawable?.blinkAmount = io.deepseekharness.mobile.overlay.CompanionPetMotion.blink(now - petBlinkAt)
-                petDrawable?.bend = kotlin.math.sin(now * 2.0 * Math.PI / (if (petChatState == "thinking") 2300.0 else 3800.0)).toFloat()
-                val arms = io.deepseekharness.mobile.overlay.CompanionPetMotion.arms(now, thinkingBlend, reply)
-                petDrawable?.leftArm = arms.left
-                petDrawable?.rightArm = arms.right
-                avatar.pivotY = avatar.height * 0.78f
-                avatar.rotation = pose.rotation
-                avatar.translationY = -density * pose.lift
-                avatar.scaleX = pose.scaleX * tap
-                avatar.scaleY = pose.scaleY * tap
+                val delay = when {
+                    powerSave -> 80L
+                    petActing.action != PetAction.IDLE || now - petBlinkAt in 0..280 -> 33L
+                    else -> 50L
+                }
+                hintHandler.postAtTime(this, now + delay)
             }
-            start()
         }
+        companionFrame?.run()
         if (petDrawable != null) hintHandler.postDelayed(blinkTick, 2400)
     }
 
@@ -793,7 +884,7 @@ class OverlayBallService : Service() {
     private fun loadCompanionAvatar(view: View, size: Int) {
         val generation = ++avatarGeneration
         avatarExecutor.execute {
-            val pair = runCatching {
+            val next = runCatching {
                 val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true; inScaled = false }
                 android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_open_v2, bounds)
                 val sample = io.deepseekharness.mobile.overlay.CompanionAvatarSizing.sample(bounds.outWidth, bounds.outHeight, size)
@@ -805,21 +896,20 @@ class OverlayBallService : Service() {
                 }
                 val body = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_body_v3, options)
                 if (body == null || body.width != open.width || body.height != open.height) { open.recycle(); closed.recycle(); body?.recycle(); error("body frame unavailable") }
-                Triple(open, closed, body)
+                io.deepseekharness.mobile.overlay.CompanionPetDrawable(open, closed, body)
             }.getOrNull() ?: return@execute
-            if (avatarDestroyed) { pair.first.recycle(); pair.second.recycle(); pair.third.recycle(); return@execute }
+            if (avatarDestroyed) { next.close(); return@execute }
             val posted = hintHandler.post {
                 if (!avatarDestroyed && avatarGeneration == generation && ballView === view && ballAttached) {
-                    val next = io.deepseekharness.mobile.overlay.CompanionPetDrawable(pair.first, pair.second, pair.third)
                     val old = petDrawable
                     hintHandler.removeCallbacks(blinkTick); hintHandler.removeCallbacks(blinkOpen)
                     petDrawable = next
                     view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
                     old?.close()
-                    if (companionMotionEnabled()) hintHandler.postDelayed(blinkTick, 2400)
-                } else { pair.first.recycle(); pair.second.recycle(); pair.third.recycle() }
+                    if (companionMotionAllowed()) hintHandler.postDelayed(blinkTick, 2400)
+                } else { next.close() }
             }
-            if (!posted) { pair.first.recycle(); pair.second.recycle(); pair.third.recycle() }
+            if (!posted) { next.close() }
         }
     }
 
@@ -835,7 +925,7 @@ class OverlayBallService : Service() {
         if (runCatching { windowManager.updateViewLayout(view, next) }.isFailure) return false
         layoutParams = next
         preferences.writePosition(x, y)
-        detachSecondaryChoices()
+        dismissPetMenu()
         removeCompanionHint()
         bubbleChat.hide()
         loadCompanionAvatar(view, size)
@@ -843,14 +933,15 @@ class OverlayBallService : Service() {
     }
 
     private fun detachBall() {
+        dismissPetMenu()
         reminderHints.clear()
         bubbleChat.hide()
         avatarGeneration++
         hintHandler.removeCallbacks(blinkTick); hintHandler.removeCallbacks(blinkOpen)
-        companionAnimator?.cancel()
-        companionAnimator = null
+        companionFrame?.let(hintHandler::removeCallbacks)
+        companionFrame = null
         ballView?.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(null)
-        petDrawable?.close(); petDrawable = null; petTapAt = -1L
+        petDrawable?.close(); petDrawable = null
         ballView?.let { view ->
             ballAttached = false
             runCatching { windowManager.removeView(view) }
@@ -867,16 +958,20 @@ class OverlayBallService : Service() {
         hiddenForHostApp = foreground
         if (foreground) {
             removeCompanionHint()
-            detachSecondaryChoices()
+            dismissPetMenu()
             bubbleChat.hide()
         }
-        val view = ballView ?: return
-        if (!ballAttached) return
-        val next = WindowManager.LayoutParams().apply { copyFrom(layoutParams) }
-        next.alpha = if (foreground) 0f else 1f
-        next.flags = if (foreground) next.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        else next.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-        if (runCatching { windowManager.updateViewLayout(view, next) }.isSuccess) layoutParams = next
+        val view = ballView
+        if (view != null && ballAttached) {
+            val next = WindowManager.LayoutParams().apply { copyFrom(layoutParams) }
+            next.alpha = if (foreground) 0f else 1f
+            next.flags = if (foreground) next.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            else next.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+            if (runCatching { windowManager.updateViewLayout(view, next) }.isSuccess) layoutParams = next
+        }
+        // 可见性变了：动画门控必须跟着重算。被本应用自己的全屏界面盖住时停帧（用户看不到球，
+        // 动画纯属白烧电），回到其他应用时从静态站姿重新起——这就是「零感知」的那一半。
+        runCatching { applyCompanionMotionPreference() }
     }
 
     /**
@@ -907,7 +1002,7 @@ class OverlayBallService : Service() {
                 // 重编号时坐标会跳，按位移算出来的球位会跟着跳一段。
                 if (event.pointerCount > 1) return true
                 // 长按已弹出菜单后不再拖动：此时 ACTION_UP 会直接返回，跳过吸附与落盘，
-                // 球会停在非吸附位置且位置没保存，全程还被不透明遮罩挡着。
+                // 这样从长按直接松手不会意外移动桌宠。
                 if (!longPressFired && !OverlayBallPolicy.isClick(deltaX, deltaY, slop)) {
                     val metrics = resources.displayMetrics
                     val (x, y) = OverlayBallPolicy.clampPosition(
@@ -915,13 +1010,13 @@ class OverlayBallService : Service() {
                         initialY + deltaY.toInt(),
                         metrics.widthPixels, metrics.heightPixels, size,
                     )
+                    petDragLean = ((x - layoutParams.x) / (size * .25f)).coerceIn(-1f, 1f)
                     layoutParams.x = x
                     layoutParams.y = y
                     runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
                     if (bubbleChat.visible) bubbleChat.followPet()
-                    // 二级球跟随主球：它们的位置全部由主球坐标推导，因此这里不需要缓存
-                    // 每个按钮的旧坐标，直接按新坐标重排一次即可。
-                    layoutSecondaryChoices()
+                    // Keep the open menu next to the moving pet.
+                    layoutPetMenu()
                 } else if (!longPressFired &&
                     OverlayBallPolicy.isLongPress(
                         deltaX, deltaY, slop,
@@ -960,7 +1055,7 @@ class OverlayBallService : Service() {
                     runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
                     if (bubbleChat.visible) bubbleChat.followPet()
                     preferences.writePosition(layoutParams.x, layoutParams.y)
-                    layoutSecondaryChoices()
+                    layoutPetMenu()
                 }
                 return true
             }
@@ -1020,7 +1115,7 @@ class OverlayBallService : Service() {
     private fun showConversation(access: HarnessAccess?) {
         // 同一时刻只应有一个「展开物」：小窗打开时收起二级球，否则按钮会浮在小窗之上，
         // 用户点哪里都像在跟另一个界面打架。
-        detachSecondaryChoices()
+        dismissPetMenu()
         val metrics = resources.displayMetrics
         val (width, height) = conversationSize(metrics.widthPixels, metrics.heightPixels)
         val (x, y) = OverlayBallPolicy.menuPosition(
@@ -1502,7 +1597,7 @@ class OverlayBallService : Service() {
                 }
             }
         }
-        if (secondaryViews.isNotEmpty()) showSecondaryChoices()
+        actionMenu?.let { showPetMenu(it.page) }
         runCatching {
             ensureNotificationChannel()
             if (isRunning) getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
@@ -1695,134 +1790,47 @@ class OverlayBallService : Service() {
         }
     }
 
-    // ── 二级球（长按主球展开） ──────────────────────────────────────────────
-
-    /**
-     * 长按主球：展开或收起二级球。
-     *
-     * 为什么用**长按**而不是单击展开：单击已经是「打开/关闭对话小窗」，那是这个球最高频的
-     * 动作，把它换成二级球会让老用户每次都要多点一下；而长按本来就没有占用（旧实现是弹
-     * 文字菜单）。代价是二级球的可发现性依赖用户愿意长按 —— 这一点由资源文案里的
-     * `contentDescription` 与文档里的真机验收项兜住，不做额外引导蒙层。
-     *
-     * 打开对话小窗 / 隐藏球 / 服务结束都会收起二级球：悬浮球同一时刻只应有一个「展开物」，
-     * 否则用户点哪个都像是在跟另一个打架。
-     */
-    private fun toggleSecondaryChoices() {
-        when (OverlayBallSecondaryPolicy.toggleChoice(expanded = secondaryViews.isNotEmpty())) {
-            OverlayBallSecondaryPolicy.Decision.COLLAPSE -> detachSecondaryChoices()
-            OverlayBallSecondaryPolicy.Decision.EXPAND -> showSecondaryChoices()
-        }
+    private fun togglePetMenu() {
+        if (actionMenu == null) showPetMenu() else dismissPetMenu()
     }
 
-    private fun showSecondaryChoices() {
-        detachSecondaryChoices()
+    private fun showPetMenu(page: PetActionMenu.Page = PetActionMenu.Page.HOME) {
+        dismissPetMenu()
         if (ballView == null) return
-        val order = OverlayBallSecondaryPolicy.CHOICE_ORDER
-        val size = dp(OverlayBallSecondaryPolicy.BUTTON_SIZE_DP)
-        for (choice in order) {
-            val view = buildSecondaryChoice(choice, size)
-            // 先加到屏幕外再统一排位：直接放在 0,0 会让第一帧闪现在左上角。
-            val params = secondaryParams(0, 0, size)
-            val added = runCatching { windowManager.addView(view, params) }
-            if (added.isFailure) {
-                // 加不上就整组收回：只剩一半的二级球比没有更让人困惑。
-                detachSecondaryChoices()
-                return
-            }
-            secondaryViews += view
-        }
-        layoutSecondaryChoices()
+        if (bubbleChat.visible) bubbleChat.hide()
+        val menu = PetActionMenu(overlayPalette(), page, { DeepSeekAccessibilityService.current() != null },
+            ::runPetAction, ::layoutPetMenu, ::dismissPetMenu)
+        val params = WindowManager.LayoutParams(0, 0, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.LEFT }
+        positionPetMenu(menu, params)
+        if (runCatching { windowManager.addView(menu, params) }.isSuccess) actionMenu = menu
     }
 
-    private fun buildSecondaryChoice(
-        choice: OverlayBallSecondaryPolicy.Choice,
-        size: Int,
-    ): View {
-        val connected = DeepSeekAccessibilityService.current() != null
-        val labelRes = when (choice) {
-            OverlayBallSecondaryPolicy.Choice.CONVERSATION ->
-                R.string.overlay_ball_secondary_conversation_description
-            OverlayBallSecondaryPolicy.Choice.VIRTUAL_SCREEN ->
-                R.string.overlay_ball_secondary_virtual_screen_description
-            OverlayBallSecondaryPolicy.Choice.RETURN_TO_APP ->
-                R.string.overlay_ball_secondary_return_description
-            OverlayBallSecondaryPolicy.Choice.HIDE_BALL ->
-                R.string.overlay_ball_secondary_hide_description
-            OverlayBallSecondaryPolicy.Choice.DISABLE_ACCESSIBILITY ->
-                if (OverlayBallSecondaryPolicy.showsDisabledState(connected)) {
-                    R.string.overlay_ball_secondary_accessibility_off_description
-                } else {
-                    R.string.overlay_ball_secondary_accessibility_on_description
-                }
-        }
-        return FrameLayout(this).apply {
-            // 命中区就是这个视图本身，尺寸由布局参数钉死不小于 40dp；里面那个圆点更小，
-            // 但按下判定的边界仍是这里，因此不需要额外的 touch delegate。
-            contentDescription = overlayString(labelRes)
-            isClickable = true
-            isFocusable = true
-            background = overlayPalette().getDrawable(R.drawable.bg_overlay_secondary_action)
-            addView(secondaryGlyph(choice, size, connected), FrameLayout.LayoutParams(size, size, Gravity.CENTER))
-            setOnClickListener {
-                // 点完先收起：动作本身可能让球消失（隐藏球）或让应用切到前台，
-                // 留着展开态只会出现「球没了、按钮还在」。
-                detachSecondaryChoices()
-                onSecondaryChoice(choice)
-            }
+    private fun runPetAction(action: PetActionMenu.Action) {
+        dismissPetMenu()
+        when (action) {
+            PetActionMenu.Action.CHAT -> bubbleChat.show()
+            PetActionMenu.Action.ASSIGN -> bubbleChat.composeTask()
+            PetActionMenu.Action.INBOX -> bubbleChat.openTaskInbox()
+            PetActionMenu.Action.WRITE -> bubbleChat.openCapture()
+            PetActionMenu.Action.CLIPBOARD -> openPetCapture(Intent(this, WhaleDirectCaptureActivity::class.java)
+                .setAction(WhaleDirectCaptureActivity.CLIPBOARD))
+            PetActionMenu.Action.SCREEN -> openPetCapture(Intent(this, WhaleScreenConsentActivity::class.java))
+            PetActionMenu.Action.FILES -> openPetCapture(Intent(this, WhaleMemoryShareActivity::class.java)
+                .setAction(WhaleMemoryShareActivity.PICK))
+            PetActionMenu.Action.HARNESS -> toggleConversation()
+            PetActionMenu.Action.DISPLAY -> openVirtualScreen()
+            PetActionMenu.Action.APP -> returnToApp()
+            PetActionMenu.Action.HIDE -> hideBall()
+            PetActionMenu.Action.DISABLE -> disableAccessibilityService()
         }
     }
 
-    private fun secondaryGlyph(
-        choice: OverlayBallSecondaryPolicy.Choice,
-        size: Int,
-        accessibilityConnected: Boolean,
-    ): TextView = TextView(this).apply {
-        val visual = dp(OverlayBallSecondaryPolicy.VISUAL_SIZE_DP)
-        text = when (choice) {
-            OverlayBallSecondaryPolicy.Choice.CONVERSATION -> SECONDARY_GLYPH_CONVERSATION
-            OverlayBallSecondaryPolicy.Choice.VIRTUAL_SCREEN -> SECONDARY_GLYPH_SCREEN
-            OverlayBallSecondaryPolicy.Choice.RETURN_TO_APP -> SECONDARY_GLYPH_RETURN
-            OverlayBallSecondaryPolicy.Choice.HIDE_BALL -> SECONDARY_GLYPH_HIDE
-            OverlayBallSecondaryPolicy.Choice.DISABLE_ACCESSIBILITY ->
-                if (OverlayBallSecondaryPolicy.showsDisabledState(accessibilityConnected)) {
-                    SECONDARY_GLYPH_DISABLED
-                } else {
-                    SECONDARY_GLYPH_CLOSE
-                }
-        }
-        setTextColor(overlayColor(R.color.overlay_secondary_foreground))
-        textSize = SECONDARY_TEXT_SIZE_SP
-        gravity = Gravity.CENTER
-        background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(
-                if (OverlayBallSecondaryPolicy.showsDisabledState(accessibilityConnected) &&
-                    choice == OverlayBallSecondaryPolicy.Choice.DISABLE_ACCESSIBILITY
-                ) {
-                    overlayColor(R.color.overlay_secondary_background_disabled)
-                } else {
-                    overlayColor(R.color.overlay_secondary_background)
-                },
-            )
-        }
-        layoutParams = FrameLayout.LayoutParams(visual, visual, Gravity.CENTER)
-        // 圆点自己也报一次：TalkBack 的焦点会落在最外层的可点击 FrameLayout 上，
-        // 但那层没有文字；两层都有描述时读数一致，不会出现「焦点在一处、描述在另一处」。
-        contentDescription = (parent as? View)?.contentDescription
-        // 不能设为可点击：抢占焦点会让无障碍用户在按钮组里多跳一层空视图。
-        isClickable = false
-        isFocusable = false
-    }
-
-    private fun onSecondaryChoice(choice: OverlayBallSecondaryPolicy.Choice) {
-        when (choice) {
-            OverlayBallSecondaryPolicy.Choice.CONVERSATION -> toggleConversation()
-            OverlayBallSecondaryPolicy.Choice.VIRTUAL_SCREEN -> openVirtualScreen()
-            OverlayBallSecondaryPolicy.Choice.RETURN_TO_APP -> returnToApp()
-            OverlayBallSecondaryPolicy.Choice.HIDE_BALL -> hideBall()
-            OverlayBallSecondaryPolicy.Choice.DISABLE_ACCESSIBILITY -> disableAccessibilityService()
-        }
+    private fun openPetCapture(intent: Intent) {
+        runCatching { startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)) }
+            .onFailure { toastCurrentThread(overlayString(R.string.pet_menu_launch_error)) }
     }
 
     /**
@@ -1878,75 +1886,36 @@ class OverlayBallService : Service() {
         }
     }
 
-    /** 按当前主球坐标重排二级球；没有展开时是无操作。 */
-    private fun layoutSecondaryChoices() {
-        if (secondaryViews.isEmpty()) return
+    private fun positionPetMenu(menu: PetActionMenu, params: WindowManager.LayoutParams) {
         val metrics = resources.displayMetrics
-        val size = dp(OverlayBallSecondaryPolicy.BUTTON_SIZE_DP)
-        val gap = dp(OverlayBallSecondaryPolicy.GAP_DP)
-        val layout = OverlayBallSecondaryPolicy.layout(
-            ballX = layoutParams.x,
-            ballY = layoutParams.y,
-            ballSize = layoutParams.width,
-            buttonSize = size,
-            count = secondaryViews.size,
-            screenWidth = metrics.widthPixels,
-            screenHeight = metrics.heightPixels,
-            gap = gap,
-            reserveTop = overlayReserveTop(),
-            reserveBottom = overlayReserveBottom(),
-        )
-        secondaryViews.forEachIndexed { index, view ->
-            val (x, y) = OverlayBallSecondaryPolicy.buttonPosition(
-                layout = layout,
-                index = index,
-                layerX = 0,
-                layerY = 0,
-                buttonSize = size,
-                screenWidth = metrics.widthPixels,
-                screenHeight = metrics.heightPixels,
-                reserveTop = overlayReserveTop(),
-                reserveBottom = overlayReserveBottom(),
-            )
-            val params = view.layoutParams as? WindowManager.LayoutParams ?: return@forEachIndexed
-            params.x = x
-            params.y = y
-            runCatching { windowManager.updateViewLayout(view, params) }
-        }
+        val gap = dp(8)
+        params.width = minOf(dp(264), (metrics.widthPixels - 2 * gap).coerceAtLeast(1))
+        val top = overlayReserveTop().coerceAtMost((metrics.heightPixels - 1).coerceAtLeast(0))
+        val bottom = (metrics.heightPixels - overlayReserveBottom()).coerceAtLeast(top + 1)
+        val band = OverlayBallSecondaryPolicy.menuBand(layoutParams.x, layoutParams.y,
+            layoutParams.width, layoutParams.height, params.width, metrics.widthPixels, top, bottom, gap)
+        menu.measure(View.MeasureSpec.makeMeasureSpec(params.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(band.maxHeight, View.MeasureSpec.AT_MOST))
+        params.height = menu.measuredHeight.coerceIn(1, band.maxHeight)
+        params.x = band.x
+        params.y = band.yFor(params.height)
     }
 
-    private fun detachSecondaryChoices() {
-        // 倒序摘除：后加的在下层，先摘上层可以避免出现一帧「缺了一个洞」的画面。
-        for (view in secondaryViews.asReversed()) {
-            runCatching { windowManager.removeView(view) }
-        }
-        secondaryViews.clear()
+    private fun layoutPetMenu() {
+        val menu = actionMenu ?: return
+        val params = menu.layoutParams as? WindowManager.LayoutParams ?: return
+        val x = params.x; val y = params.y; val w = params.width; val h = params.height
+        positionPetMenu(menu, params)
+        if (x != params.x || y != params.y || w != params.width || h != params.height)
+            runCatching { windowManager.updateViewLayout(menu, params) }
     }
 
-    private fun secondaryParams(x: Int, y: Int, size: Int): WindowManager.LayoutParams =
-        WindowManager.LayoutParams(
-            size,
-            size,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            // 与主球同一组标志：不可获焦，但必须能收触摸。
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            this.x = x
-            this.y = y
-        }
+    private fun dismissPetMenu() {
+        val menu = actionMenu ?: return
+        actionMenu = null
+        runCatching { windowManager.removeView(menu) }
+    }
 
-    /**
-     * 二级球要避开的安全区高度。
-     *
-     * 取「状态栏 / 导航栏」与一个固定余量的较大者：overlay 窗口的坐标是相对整个屏幕的，
-     * 而 `FLAG_LAYOUT_IN_SCREEN` 会让它铺到状态栏下面，因此不加余量时贴边的二级球
-     * 会压在状态栏或手势条上——看得见、点不准（系统手势区会先吃掉那一下）。
-     * 真实 inset 需要 `WindowInsets`，而 Service 侧拿不到可靠的 Activity 窗口，
-     * 所以这里用固定余量：宁可多让一点，也不要压到系统手势区。
-     */
     private fun overlayReserveTop(): Int = dp(SYSTEM_BAR_RESERVE_DP)
 
     private fun overlayReserveBottom(): Int = dp(SYSTEM_BAR_RESERVE_DP)
@@ -2202,13 +2171,6 @@ class OverlayBallService : Service() {
          * 而这三个动作的语义（回首页 / 关闭 / 禁用）在 Unicode 里都有无歧义的现成字符。
          * 每个按钮同时带 `contentDescription`，因此即便字体缺字（只有豆腐块）也不会失去含义。
          */
-        private const val SECONDARY_GLYPH_CONVERSATION = "\u2630" // ☰ 打开 Harness 对话
-        private const val SECONDARY_GLYPH_SCREEN = "\u25A3"       // ▣ 打开目标应用副屏
-        private const val SECONDARY_GLYPH_RETURN = "\u2302"      // ⌂
-        private const val SECONDARY_GLYPH_HIDE = "\u2715"        // ✕
-        private const val SECONDARY_GLYPH_CLOSE = "\u2298"       // ⊘ 关闭无障碍（已开启）
-        private const val SECONDARY_GLYPH_DISABLED = "\u2013"    // – 无障碍未开启（禁用态）
-        private const val SECONDARY_TEXT_SIZE_SP = 18f
 
         /**
          * overlay 窗口要避开的顶部 / 底部安全区高度（dp）。

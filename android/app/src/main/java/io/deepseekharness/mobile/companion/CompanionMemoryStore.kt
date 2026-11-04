@@ -18,6 +18,7 @@ class CompanionMemoryStore(context: Context) {
         get() = prefs.getBoolean("memory_enabled", true)
         set(value) {
             check(prefs.edit().putBoolean("memory_enabled", value).commit())
+            if (value) SharedMemoryJobs.schedule(app, 0)
             if (!value && SemanticControl(app).memoryEnabled) {
                 SemanticControl(app).setMemoryEnabled(false)
                 if (SemanticControl(app).enabled) runCatching { SemanticIndexJobs.schedule(app, 5_000L) }
@@ -48,6 +49,12 @@ class CompanionMemoryStore(context: Context) {
 
     /** UI management remains available even when model access is disabled. */
     fun listForUser(): JSONArray = synchronized(lock) { load() }
+    fun countForUser(): Long = synchronized(lock) {
+        if (!usesDatabase()) return@synchronized loadLegacy().length().toLong()
+        val path = UnifiedUnderstandingStore.path(app)
+        check(path.isFile) { "记忆数据库不可用" }
+        MemoryMigrationDatabase(path).use { db -> check(db.isImported()); db.count() }
+    }
     internal fun semanticPage(after: Long, limit: Int): List<Pair<Long, JSONObject>> = synchronized(lock) {
         require(after >= -1 && limit in 1..128)
         if (!enabled) return@synchronized emptyList()

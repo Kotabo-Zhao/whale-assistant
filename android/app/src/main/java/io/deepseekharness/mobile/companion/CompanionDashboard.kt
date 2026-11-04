@@ -54,8 +54,8 @@ internal class CompanionDashboard(private val context: Context) {
                     .put("captureEnabled", store.notificationCapture)
                     .put("notificationCount", records.length())
                     .put("categories", JSONObject(counts))
-                    .put("memoryCount", memory.listForUser().length())
-                    .put("knowledgeCount", knowledge.search("").length())
+                    .put("memoryCount", memory.countForUser())
+                    .put("knowledgeCount", knowledge.count())
                     .put("tasks", JSONArray().apply { tasks.forEach { item -> put(JSONObject()
                         .put("id", item.id).put("text", item.title).put("state", item.state)
                         .put("assessment", item.assessment?.let { JSONObject(it) } ?: JSONObject.NULL)
@@ -100,6 +100,16 @@ internal class CompanionDashboard(private val context: Context) {
             }
             "memoryResumeAutomatic" -> { memory.resumeAutomaticSources(); JSONObject().put("ok", true) }
             "memoryClear" -> { require(request.optBoolean("confirmed")); memory.clearForUser(); JSONObject().put("ok", true) }
+            "knowledgeRecentCaptures" -> knowledge.withParseDatabase {
+                JSONObject().put("items", it.captures.cards())
+            }
+            "knowledgeCaptureRead" -> knowledge.withParseDatabase { db ->
+                val row = db.captures.current(text("id"), request.getLong("createdAt"), request.optString("generation"))
+                    ?: return@withParseDatabase JSONObject().put("missing", true)
+                val (parts, next) = db.captures.contents(row, request.optInt("offset", 0))
+                JSONObject().put("row", reviewedKnowledgeRows(JSONArray().put(row)).getJSONObject(0))
+                    .put("items", parts).put("nextOffset", next ?: JSONObject.NULL)
+            }
             "knowledgeList" -> {
                 val rawQuery = request.opt("query")
                 val query = when (rawQuery) {
@@ -141,6 +151,9 @@ internal class CompanionDashboard(private val context: Context) {
                 val values = (0 until ids.length()).map { ids.optString(it) }
                 success(knowledge.undoMany(values))
             }
+            "knowledgeRetryParse" -> success(knowledge.withParseDatabase {
+                it.retryParse(text("id"), text("expected")) { WhaleParseJobs.reserve(context) }
+            })
             "knowledgeProcessingStatus" -> {
                 val id = text("id")
                 val expectedText = text("expectedText")
@@ -165,6 +178,10 @@ internal class CompanionDashboard(private val context: Context) {
                     SharedMemoryJobs.resumeRecord(context, id, value).also { if (it) SharedMemoryJobs.schedule(context, 0) }
                 }
             }
+            "knowledgeAttachments" -> {
+                val (items, next) = knowledge.attachmentPage(text("id"), text("expectedText"), request.getInt("offset"), 20)
+                JSONObject().put("items", reviewedKnowledgeRows(items)).put("nextOffset", next ?: JSONObject.NULL)
+            }
             "knowledgeImagePreview" -> {
                 val id = text("id")
                 val expectedText = text("expectedText")
@@ -172,7 +189,7 @@ internal class CompanionDashboard(private val context: Context) {
                 var preview: JSONObject? = null
                 check(knowledge.withUnchangedRecord(id, expectedText) {
                     check(knowledge.findById(id)?.optString("originalId") == originalId) { "资料已变化，请刷新后重试" }
-                    preview = JSONObject(KnowledgeImageModel.preview(context, originalId))
+                    preview = JSONObject(KnowledgeImageModel.preview(context, originalId, request.optBoolean("thumbnail")))
                 }) { "资料已变化，请刷新后重试" }
                 checkNotNull(preview)
             }
@@ -190,7 +207,48 @@ internal class CompanionDashboard(private val context: Context) {
             }
             "superagentSettings" -> SuperagentSettings(context).status()
             "superagentSettingsSave" -> SuperagentSettings(context).save(request)
+            "knowledgePickFiles" -> {
+                context.startActivity(android.content.Intent(context, WhaleMemoryShareActivity::class.java)
+                    .setAction(WhaleMemoryShareActivity.PICK).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                JSONObject().put("ok", true)
+            }
+            "knowledgeReadLink" -> {
+                val id = text("id")
+                val expected = text("expectedText")
+                val row = requireNotNull(knowledge.findById(id))
+                require(row.getString("text") == expected)
+                val url = row.getString("sourceUrl")
+                val article = runCatching { WhalePublicArticle.fetch(url) }.getOrElse {
+                    return JSONObject().put("ok", false).put("reason", "网页没有返回可读取的公开正文。原分享已保留，也可分享截图或导出文件。")
+                }
+                val origin = WhaleShareSource(row.optString("shareOrigin", "分享网页"), url)
+                val digest = CompanionMemorySuppression.digest(url + "\n" + article.text)
+                check(knowledge.withUnchangedRecord(id, expected) {
+                    check(knowledge.findById(id)?.optString("sourceUrl") == url)
+                    knowledge.addDocument(article.text, digest, article.title, origin = origin, mediaKind = "web_article")
+                })
+                JSONObject().put("ok", true).put("title", article.title)
+            }
+            "featureTools" -> JSONObject().put("items", JSONArray(
+                io.deepseekharness.mobile.features.WhaleFeatureStore(context).activeTools().map { it.json() }))
+            "featureOpen" -> {
+                io.deepseekharness.mobile.features.WhaleFeatureActivity.openTool(context, text("id"), text("revision"))
+                JSONObject().put("ok", true)
+            }
+            "featureLibrary" -> {
+                io.deepseekharness.mobile.features.WhaleFeatureActivity.openLibrary(context)
+                JSONObject().put("ok", true)
+            }
+            "workerPage" -> WorkerDashboardStore(context).page(request.optString("filter","all"),request.optString("group"),
+                request.optInt("offset",0),request.optInt("limit",20), withCounts = false)
+            "workerGroups" -> JSONObject().put("groups",WorkerDashboardStore(context).groups())
+            "workerDetail" -> WorkerDashboardStore(context).detail(text("id"),request.optInt("offset",0))
             "workerList" -> WorkerDashboardStore(context).list()
+            "workerPreviewDraft" -> {
+                WorkerDashboardStore(context).previewDraft(text("id"), text("revision"))
+                JSONObject().put("ok", true)
+            }
+            "workerSubmit" -> WorkerRuntimeWake.submit(context, text("task"), text("mode"))
             "workerControl" -> WorkerDashboardStore(context).command(request)
             "screenWatchStatus" -> ScreenWatchAccess(context).status()
             "screenWatchSet" -> { ScreenWatchAccess(context).enabled(request.getBoolean("enabled")); ScreenWatchAccess(context).status() }

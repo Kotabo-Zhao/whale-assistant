@@ -11,6 +11,7 @@ import java.net.URL
 internal object CompanionBubbleChatPolicy {
     fun personaContext(card: JSONObject): String = PetRoleplayPrompt.character(card, emptyList())
     fun clarificationGuidance(): String = "需要用户补充信息或做选择时可以调用 ask_user_question，桌宠支持原会话内回答；不要猜测用户答案或将提问视为已获许可。普通聊天中的问句可自然写在回复中。"
+    fun workerGuidance(): String = "用户可用陈述说明目的、材料和缺少的交付物，不必说帮我做、交办或选择模式。闲聊或单纯陈述日程不代表要派工。简短问答、讨论和单项查证直接回应。独立且耗时的整理、调查，特别是用户还要接着聊其他事情，或分别需要验证的多个子目标，应先按已有权限调用 mobile_workers 并传 action=start 派发，把材料交给 Worker。前台给出接单回执即可。用户明确要求仅讨论或不要执行时不要派工。询问结果、回答追问或变更已有工作时先查原工单，避免重复创建。确认接取后简短告知并让用户继续聊天，不在前台轮询。设备操作、发布和外部写入仍遵守原有授权。"
     fun capabilityGuidance(): String = "需要访问个人记忆、资料或事项时，先调用 mobile_companion_capabilities 核对实际权限；没有调用该工具或对应资料工具前，不得声称无法访问本地资料。工具调用不需要也不得填写 callerSession，会话身份由工具运行时从当前 Agent 会话自动附带。权限被拒绝时如实说明，不把它当作空结果。"
     fun memoryDigest(value: String): String = java.security.MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 255) }
@@ -103,11 +104,23 @@ internal class BubbleReplyCollector {
     }
 }
 
+/** 由后台投递（不是用户本轮请求）触发的回合来源；只有这些来源的回合需要推到桌宠。 */
+internal val DELIVERY_SOURCES = setOf("mobile-workers", "mobile-screen-watch")
+
+/** 一个后台投递回合的可见文本。 */
+internal data class Delivery(val turn: Int, val text: String)
+
 /** Uses the same authenticated local Harness and its selected model as the main conversation. */
-internal class CompanionBubbleChat(private val context: Context, restored: CompanionBubbleHistory.Snapshot? = null) {
+internal class CompanionBubbleChat(
+    private val context: Context, restored: CompanionBubbleHistory.Snapshot? = null,
+    private val historyStore: CompanionBubbleHistory = CompanionBubbleHistory(context),
+    private val dispatchTask: (String, String, String, String) -> JSONObject = { task, mode, id, title ->
+        WorkerRuntimeWake.submit(context, task, mode, commandId = id, title = title)
+    },
+) {
     data class Citation(val id: String, val revision: String, val displayName: String, val documentId: String?, val originalId: String?, val chunkIndex: Int, val chunkCount: Int, val parsingCoverage: String)
     data class Message(val role: String, val text: String, val images: List<String> = emptyList(), val citations: List<Citation> = emptyList())
-    data class Reply(val text: String, val images: List<String>, val citations: List<Citation>, val tools: Set<String> = emptySet())
+    data class Reply(val text: String, val images: List<String>, val citations: List<Citation>, val tools: Set<String> = emptySet(), val turn: Int? = null)
     private var sessionId: String? = restored?.sessionId
     private var sessionAccess: HarnessAccess? = null
     private var sessionScope: String? = restored?.scope
@@ -131,6 +144,7 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         runCatching { clientFor(access).warmUp() }
     }
 
+    @Synchronized
     private fun clientFor(access: HarnessAccess): HarnessBubbleClient {
         if (clientAccess != access) {
             clientAccess = access
@@ -149,14 +163,96 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         sessionScope = null
         pending = null
         continuedMainSession = true
-        CompanionBubbleHistory(context).save(CompanionBubbleHistory.Snapshot(sessionId, CompanionBubbleChatPolicy.memoryDigest("handoff"), emptyList(), continuedMain = true))
+        historyStore.save(CompanionBubbleHistory.Snapshot(sessionId, CompanionBubbleChatPolicy.memoryDigest("handoff"), emptyList(), continuedMain = true))
     }
+    /** 当前桌宠会话 id；没建立过 Harness 会话（例如纯角色直连）时返回 null。 */
+    fun currentSessionId(): String? = sessionId?.takeIf { it.startsWith("session-") }
+
+    /**
+     * 读 `turn` 之后、由后台投递（Worker 回执 / 屏幕陪看唤醒）触发的新回合助手文本。
+     *
+     * 这是「桌宠每次只回一条、后台任务结果推不回来」的修复入口：
+     * 本轮回复结束后，父会话仍会收到 `source.kind = mobile-workers|mobile-screen-watch` 的
+     * 用户消息，并在同一个 Harness 会话里跑出新回合；那些回合不属于原始 requestId，
+     * [BubbleSessionStream] 按设计不会渲染它们（它只认 `source.rpcId == requestId`），
+     * 所以这里用一次性的 `session/follow` 快照把「之后的新回合」取出来给桌宠展示。
+     *
+     * 只读：不发 prompt、不改会话、不消费事件。
+     */
+    fun deliveriesSince(lastTurn: Int, maxMessages: Int = 60): List<Delivery> {
+        val id = currentSessionId() ?: return emptyList()
+        val access = runCatching { RuntimeHost.controllerOrNull()?.openHarnessAccess() }.getOrNull() ?: return emptyList()
+        val records = clientFor(access).recentRecords(id, maxMessages)
+        android.util.Log.d("dsh-delivery", "session=$id lastTurn=$lastTurn records=${records.length()}")
+        var current = -1
+        val deliveryTurns = linkedSetOf<Int>()
+        val texts = linkedMapOf<Int, MutableList<String>>()
+        for (row in records.objects()) {
+            val event = row.optJSONObject("event") ?: continue
+            val data = event.optJSONObject("data") ?: continue
+            when (event.optString("type")) {
+                "turn/start" -> current = data.optInt("turn", current)
+                "user/message" -> {
+                    val kind = data.optJSONObject("source")?.optString("kind").orEmpty()
+                    if (kind in DELIVERY_SOURCES && current > lastTurn) deliveryTurns.add(current)
+                }
+                "assistant/message" -> {
+                    val turn = data.optInt("turn", -1)
+                    if (turn in deliveryTurns) {
+                        val text = data.optJSONObject("message")?.optJSONArray("content")?.objects().orEmpty()
+                            .filter { it.optString("type") == "text" }
+                            .joinToString("\n") { it.optString("text") }
+                        if (text.isNotBlank()) texts.getOrPut(turn) { mutableListOf() }.add(text)
+                    }
+                }
+            }
+        }
+        android.util.Log.d("dsh-delivery", "turn scan: deliveryTurns=$deliveryTurns texts=${texts.keys} kinds=${records.objects().mapNotNull { row -> row.optJSONObject("event")?.optJSONObject("data")?.optJSONObject("source")?.optString("kind")?.takeIf { it.isNotBlank() } }.distinct()}")
+        return texts.entries.sortedBy { it.key }.map { Delivery(it.key, it.value.joinToString("\n\n")) }
+    }
+
     fun snapshot(messages: List<Message>): CompanionBubbleHistory.Snapshot? =
         sessionId?.let { id -> sessionScope?.let { CompanionBubbleHistory.Snapshot(id, it, messages.toList(), pending?.toString(), continuedMainSession) } }
 
     fun handoffSessionId(): String? = sessionId?.takeIf { it.startsWith("session-") }
 
+    private fun directSession() {
+        if (sessionId?.startsWith("pet-direct-") != true) sessionId = "pet-direct-${java.util.UUID.randomUUID()}"
+        sessionScope = CompanionBubbleChatPolicy.memoryDigest("pet-direct")
+    }
+
+    private fun deniedBackground(mode: String, needs: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean): String? = when {
+        needs in setOf("library","both") && !knowledgeAllowed -> "这项工作需要访问本地资料。请先在资料设置中开启对话访问。"
+        needs in setOf("memory","both") && !memoryAllowed -> "这项工作需要访问长期记忆。请先开启桌宠的记忆访问。"
+        mode == "create" && CompanionStore(context).bubblePermissionPreset == "read-only" -> "桌宠会话当前设为仅查看。要生成工具草稿，需要先调整桌宠会话权限。"
+        else -> null
+    }
+
+    /** The same saved request ID is used after a process restart or an uncertain acknowledgement. */
+    private fun sendPendingWorker(history: List<Message>, memoryAllowed: Boolean, knowledgeAllowed: Boolean): Reply {
+        val request = requireNotNull(pending)
+        val user = CompanionBubbleChatPolicy.validateMessage(history.last().text)
+        check(request.getString("user") == user) { "对话还有一项交办待恢复，请先恢复原请求。" }
+        val mode = request.getString("mode"); require(mode == "read" || mode == "create")
+        val needs = request.getString("needs"); require(needs in setOf("none","library","memory","both"))
+        val store = historyStore
+        store.save(requireNotNull(snapshot(history.dropLast(1).takeLast(18))), requireWritable = true)
+        val denied = deniedBackground(mode, needs, memoryAllowed, knowledgeAllowed)
+        val answer = if (denied != null) "$denied 请在「后台任务」核对之前的交办。"
+            else {
+                val id = request.getString("requestId")
+                val title = request.optString("title").ifBlank { user.take(42) }
+                check(dispatchTask(request.getString("prompt"), mode, id, title).getString("commandId") == id)
+                if (mode == "create") "「$title」已交给后台制作工具草稿。可以继续聊，草稿准备好后能在「后台任务」预览。"
+                else "「$title」已交给后台处理。可以继续聊，进展和结果都在「后台任务」里。"
+            }
+        val finished = requireNotNull(snapshot((history + Message("assistant", answer)).takeLast(18))).copy(pending = null)
+        store.save(finished, requireWritable = true); pending = null
+        return Reply(answer, emptyList(), emptyList())
+    }
+
     fun fusedReply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit): Reply {
+        if (pending?.optString("kind") == "worker") return sendPendingWorker(history, memoryAllowed, knowledgeAllowed)
         fun harness(): Reply {
             val sink = object : io.deepseekharness.mobile.runtime.RuntimeEventSink {
                 override fun onProgress(snapshot: io.deepseekharness.mobile.runtime.RuntimeStateSnapshot) = Unit
@@ -175,13 +271,22 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
         // Once tools enter the conversation, keep the role and subsequent answers in that same Session.
         if (handoffSessionId() != null || io.deepseekharness.mobile.runtime.RuntimeStore(context).readModelCredential("deepseek").isNullOrBlank()) return harness()
         var delegated: Reply? = null
-        val result = PetDirectChat(context).reply(CompanionPersonaStore(context).active(), history, onPartial) { _, knowledgeQuery ->
+        val result = PetDirectChat(context).reply(CompanionPersonaStore(context).active(), history, onPartial, background = { decision ->
+            val mode = if (decision.intent == PetIntentRouter.Intent.BACKGROUND_CREATE) "create" else "read"
+            val denied = deniedBackground(mode, decision.needs, memoryAllowed, knowledgeAllowed)
+            if (denied != null) denied else {
+                directSession()
+                pending = JSONObject().put("kind","worker").put("requestId",java.util.UUID.randomUUID().toString())
+                    .put("mode",mode).put("needs",decision.needs).put("user",history.last().text)
+                    .put("title",decision.title(history.last().text)).put("prompt",decision.workerTask(history.last().text))
+                sendPendingWorker(history, memoryAllowed, knowledgeAllowed).also { delegated = it }.text
+            }
+        }) { _, knowledgeQuery ->
             if (knowledgeQuery && !knowledgeAllowed) "本地资料访问尚未授权，请先在桌宠资料设置中开启；尚未检索资料。"
             else harness().also { delegated = it }.text
         }
         delegated?.let { return it }
-        if (sessionId?.startsWith("pet-direct-") != true) sessionId = "pet-direct-${java.util.UUID.randomUUID()}"
-        sessionScope = CompanionBubbleChatPolicy.memoryDigest("pet-direct")
+        directSession()
         return Reply(result, emptyList(), emptyList())
     }
 
@@ -217,6 +322,7 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
             append(persona).append('\n')
             append(CompanionBubbleChatPolicy.clarificationGuidance()).append('\n')
             append(CompanionBubbleChatPolicy.capabilityGuidance()).append('\n')
+            append(CompanionBubbleChatPolicy.workerGuidance()).append('\n')
             if (memoryAllowed) append(CompanionBubbleChatPolicy.memoryToolGuidance()).append('\n')
             else append("桌宠记忆访问已关闭，不要查询长期记忆。\n")
             if (memoryAllowed && SemanticControl(context).memoryEnabled) append("可用 mobile_memory_hybrid_search，区分确认事实与待核实内容。\n")
@@ -226,12 +332,12 @@ internal class CompanionBubbleChat(private val context: Context, restored: Compa
             if (knowledgeAllowed && SemanticControl(context).enabled) append("可用 mobile_knowledge_hybrid_search，再读取原文核对。\n")
             append(CompanionBubbleChatPolicy.compressedContext(history.dropLast(1))).append('\n')
             append("用户当前请求：").append(CompanionBubbleChatPolicy.validateMessage(history.last().text)).append('\n').append(postHistory)
-        } else "$persona\n${CompanionBubbleChatPolicy.clarificationGuidance()}\n用户：${CompanionBubbleChatPolicy.validateMessage(history.last().text)}\n$postHistory\n请回复。"
+        } else "$persona\n${CompanionBubbleChatPolicy.clarificationGuidance()}\n${CompanionBubbleChatPolicy.workerGuidance()}\n用户：${CompanionBubbleChatPolicy.validateMessage(history.last().text)}\n$postHistory\n请回复。"
         check(pending == null || pendingUser == history.last().text) { "对话还有待恢复的请求，请先恢复原请求或开启新话题。" }
         val submission = pending ?: JSONObject().put("requestId", java.util.UUID.randomUUID().toString())
             .put("user", history.last().text).put("prompt", prompt).also { pending = it }
         // Persist before sending, including on the very first turn. A retry uses the same Host-deduplicated request ID.
-        val store = CompanionBubbleHistory(context)
+        val store = historyStore
         snapshot(history.dropLast(1).takeLast(18))?.let(store::save)
         val executions = PetExecutionStore(context)
         fun state(value: String) = executions.update(submission.getString("requestId"), currentSession, submission.getString("user"), value)
@@ -452,7 +558,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                             .filter { it.matches(Regex("sha256:[a-f0-9]{64}")) }.forEach(images::add)
                     }
                     val parsed = CompanionBubbleChatPolicy.parseInlineImages(fold.text().ifBlank { if (images.isNotEmpty()) "[图片]" else "本轮已结束，没有文字回复。" })
-                    CompanionBubbleChat.Reply(parsed.text, (images + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, citations), tools)
+                    CompanionBubbleChat.Reply(parsed.text, (images + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, citations), tools, fold.turn)
                 }
             } catch (error: Exception) {
                 latestError = error.message ?: latestError
@@ -461,6 +567,65 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             } finally { foregroundQuestions.clear(); socket.cancel() }
         }
         error(latestError)
+    }
+
+    /**
+     * 一次性读取会话最近的事件记录（只订阅到第一帧 `snapshot` 就断开）。
+     *
+     * 与 [followReplyWithImages] 走同一条已认证的 loopback WebSocket 与同一个 origin 校验；
+     * 区别只有三点：不发 prompt、只等 snapshot、读完立刻 cancel。轮询方因此不需要自己实现流式折叠。
+     */
+    fun recentRecords(sessionId: String, maxMessages: Int = 60, timeoutMillis: Long = 15_000): JSONArray {
+        val address = JSONObject().put("kind", "session").put("sessionId", sessionId)
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val records = java.util.concurrent.atomic.AtomicReference<JSONArray?>(null)
+        val streamId = java.util.UUID.randomUUID().toString()
+        val basic = java.util.Base64.getEncoder().encodeToString("${access.username}:${access.password}".toByteArray(Charsets.UTF_8))
+        val request = okhttp3.Request.Builder().url("ws://${base.host}:${base.port}/api/remote.mux")
+            .header("Authorization", "Basic $basic").apply { authCookie.takeIf { it.isNotEmpty() }?.let { header("Cookie", it) } }.build()
+        val socket = streamingClient.newWebSocket(request, object : okhttp3.WebSocketListener() {
+            override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
+                // 与 followReplyWithImages 同样先开 $events：Host 的 remote.mux 以它作为本连接的客户端侧注册，
+                // 只开 session/follow 会被拒（表现为一直收不到 snapshot，轮询静默拿到空）。
+                webSocket.send(
+                    JSONObject().put("type", "open").put("streamId", "$streamId-events").put("endpoint", "\$events")
+                        .put("payload", JSONObject().put("args", JSONObject())).toString(),
+                )
+                webSocket.send(
+                    JSONObject().put("type", "open").put("streamId", streamId).put("endpoint", "session/follow")
+                        .put("payload", JSONObject().put("args", JSONObject().put("request",
+                            JSONObject().put("address", address).put("assistantStream", true).put("maxMessages", maxMessages)))).toString(),
+                )
+            }
+            override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+                runCatching {
+                    val frame = JSONObject(text)
+                    if (frame.optString("streamId") != streamId) return
+                    if (frame.optString("type") in setOf("error", "end")) {
+                        failure.compareAndSet(null, "本机对话连接中断"); latch.countDown(); return
+                    }
+                    val value = frame.optJSONObject("value") ?: return
+                    if (value.optString("type") != "snapshot") return
+                    records.set(value.optJSONArray("records") ?: JSONArray())
+                    latch.countDown()
+                }.onFailure { failure.compareAndSet(null, it.message ?: "本机对话同步失败"); latch.countDown() }
+            }
+            override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
+                failure.compareAndSet(null, "本机对话连接失败，请检查服务状态"); latch.countDown()
+            }
+            override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
+                if (latch.count > 0) { failure.compareAndSet(null, "本机对话连接已关闭"); latch.countDown() }
+            }
+        })
+        try {
+            check(latch.await(timeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)) { "读取会话结果超时" }
+            failure.get()?.let { error(it) }
+            return records.get() ?: JSONArray()
+        } catch (error: Exception) {
+            android.util.Log.w("dsh-delivery", "recentRecords failed: ${error.javaClass.simpleName}: ${error.message}")
+            throw error
+        } finally { socket.cancel() }
     }
 
     private companion object {

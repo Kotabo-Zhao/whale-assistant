@@ -1,0 +1,23 @@
+<resources>
+    <string name="pet_ui_name">Whale</string>
+    <string name="pet_ui_chat_title">Just say what you need</string>
+    <string name="pet_ui_actions">Quick actions</string>
+    <string name="pet_ui_working">Working</string>
+    <string name="pet_ui_library">Local library</string>
+    <string name="pet_ui_task_label">Task</string>
+    <string name="pet_ui_mode_label">Mode</string>
+    <string name="pet_ui_input">Tell Whale what you need…</string>
+    <string name="pet_ui_capture_hint">Save a note or add a caption to a file.</string>
+    <string name="pet_ui_task_hint">Keep chatting or assign another task while this one runs.</string>
+    <string name="pet_ui_session">Session</string>
+    <string name="pet_ui_send">Send</string>
+    <string name="pet_ui_memory">Library</string>
+    <string name="pet_ui_new_task">New task</string>
+    <string name="pet_ui_live_chat">Chat</string>
+    <string name="pet_ui_note">Write a note…</string>
+    <string name="pet_source_clip">Save what you just copied</string>
+    <string name="pet_source_screen">Requires screen capture consent</string>
+    <string name="pet_source_file">Images, audio or documents</string>
+    <string name="pet_source_note">Save text or a link</string>
+    <string name="pet_manual_assign">Assign a task manually</string>
+</resources>

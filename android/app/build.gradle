@@ -60,6 +60,9 @@ def legalAssetSources = [
     'legal/licenses/xterm-LICENSE.txt'           : new File(appSourceRoot, 'node_modules/@xterm/xterm/LICENSE'),
     'legal/licenses/xterm-addon-fit-LICENSE.txt' : new File(appSourceRoot, 'node_modules/@xterm/addon-fit/LICENSE'),
     'legal/licenses/bge-base-zh-v1.5-MIT.txt'    : new File(appSourceRoot, 'legal/licenses/bge-base-zh-v1.5-MIT.txt'),
+    'legal/licenses/vosk-LICENSE.txt'            : new File(appSourceRoot, 'legal/licenses/vosk-LICENSE.txt'),
+    'legal/licenses/jna-LICENSE.txt'             : new File(appSourceRoot, 'legal/licenses/jna-LICENSE.txt'),
+    'legal/licenses/jsoup-LICENSE.txt'           : new File(appSourceRoot, 'legal/licenses/jsoup-LICENSE.txt'),
     'legal/licenses/lucide-react-LICENSE.txt'    : new File(appSourceRoot, 'node_modules/lucide-react/LICENSE'),
     'legal/licenses/katex-LICENSE.txt'           : new File(appSourceRoot, 'node_modules/katex/LICENSE'),
     'legal/licenses/markdown-it-LICENSE.txt'     : new File(appSourceRoot, 'node_modules/markdown-it/LICENSE'),
@@ -141,6 +144,8 @@ def downloadBgeBaseAssets = tasks.register('downloadBgeBaseAssets') {
         }
         downloadVerified(bgeModelUrl, bgeModelSha256, 'bge-base-zh-v1.5-int8.onnx')
         downloadVerified(bgeVocabUrl, bgeVocabSha256, 'bge-base-zh-v1.5-vocab.txt')
+        downloadVerified('https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip',
+            '3af8b0e7e0f835ae9d414ce5df580237a3cfb08d586c9fbbb0f7ff29ad5b14ba', 'vosk-model-small-cn-0.22.zip')
     }
 }
 
@@ -164,8 +169,8 @@ android {
         applicationId 'io.deepseekharness.mobile'
         minSdk 26
         targetSdk 35
-        versionCode 44
-        versionName '0.3.6'
+        versionCode 45
+        versionName '0.3.7'
 
         buildConfigField 'String', 'DEFAULT_MANIFEST_URL', envBuildValue('DSH_RUNTIME_MANIFEST_URL')
         buildConfigField 'String', 'DEFAULT_MANIFEST_SHA256', envBuildValue('DSH_RUNTIME_MANIFEST_SHA256')
@@ -292,6 +297,10 @@ dependencies {
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.31.1'
+    implementation 'com.alphacephei:vosk-android:0.3.75@aar'
+    implementation 'net.java.dev.jna:jna:5.18.1@aar'
+    implementation 'com.google.mlkit:text-recognition-chinese:16.0.1'
+    implementation 'org.jsoup:jsoup:1.18.3'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'

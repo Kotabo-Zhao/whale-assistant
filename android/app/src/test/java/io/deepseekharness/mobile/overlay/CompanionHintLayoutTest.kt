@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionHintLayoutTest {
+    @Test fun tallChatUsesFreeSideWithoutCoveringPet() {
+        val right = CompanionHintLayout.place(2560, 1380, 2260, 552, 264, 264, 960, 1110, 6, 24)
+        assertTrue(right.x + 960 + 24 <= 2260)
+        assertTrue(right.y >= 0 && right.y + 1110 <= 1380)
+        val left = CompanionHintLayout.place(2560, 1380, 12, 552, 264, 264, 960, 1110, 6, 24)
+        assertTrue(left.x >= 12 + 264 + 24)
+    }
     @Test fun choosesAboveOrBelowAndClampsMeasuredBubble() {
         assertEquals(CompanionHintLayout.Position(0, 108), CompanionHintLayout.place(360, 800, 0, 180, 56, 56, 220, 64, 24, 8))
         assertEquals(CompanionHintLayout.Position(140, 88), CompanionHintLayout.place(360, 800, 304, 24, 56, 56, 220, 100, 24, 8))

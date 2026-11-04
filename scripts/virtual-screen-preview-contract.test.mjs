@@ -9,6 +9,7 @@ const shell = await readFile(new URL('../android/app/src/main/java/io/deepseekha
 // 断言本身不变 —— 换的只是「判定写在哪一行」。
 const core = await readFile(new URL('../android/app/src/main/java/io/deepseekharness/mobile/virtualscreen/VirtualScreenPreviewCore.kt', import.meta.url), 'utf8')
 const pump = await readFile(new URL('../android/app/src/main/java/io/deepseekharness/mobile/virtualscreen/VirtualScreenPreviewPump.kt', import.meta.url), 'utf8')
+const policy = await readFile(new URL('../android/app/src/main/java/io/deepseekharness/mobile/virtualscreen/VirtualScreenPolicy.kt', import.meta.url), 'utf8')
 const tick = service.slice(service.indexOf('private val tick = object : Runnable')) + '\n' + core
 const fetch = tick.slice(tick.indexOf('worker.execute {'), tick.indexOf('main.post {'))
 
@@ -30,7 +31,11 @@ test('frame fetching never closes or replaces the currently displayed hardware b
 test('preview cadence subtracts fetch and presentation time without scheduling overlapping fetches', () => {
   assert.ok(tick.indexOf('pump.fetchStarted()') < tick.indexOf('worker.execute {'))
   assert.doesNotMatch(tick, /main\.postDelayed\(this,/u)
-  assert.match(pump, /VirtualScreenPolicy\.previewPullDelay\(mode, now\(\) - startedAtMillis\)/u)
+  // 续排延迟用三参重载：档位间隔先按面板实际刷新率夹取，再减去本拍耗时。
+  // 夹取函数本身也钉住，避免有人只改调用点、把 60Hz 面板上的 240fps 档放回 4 毫秒空转。
+  assert.match(pump, /VirtualScreenPolicy\.previewPullDelay\(mode, now\(\) - startedAtMillis, panelRefreshHz\(\)\)/u)
+  assert.match(policy, /fun effectiveFrameInterval\(mode: String, panelRefreshHz: Float\): Int/u)
+  assert.match(policy, /fun previewPullDelay\(mode: String, elapsedMillis: Long, panelRefreshHz: Float\): Long/u)
   const start = pump.slice(pump.indexOf('fun start('), pump.indexOf('fun stop('))
   assert.equal((start.match(/^\s*postDelayed\(/gmu) ?? []).length, 1)
   const landed = pump.slice(pump.indexOf('fun fetchLanded('))

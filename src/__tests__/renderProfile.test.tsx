@@ -1,3 +1,4 @@
+import { expandSettingsGroup } from './appTestHarness'
 import React, { Profiler, useState } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -234,6 +235,7 @@ describe('§5.6-B 渲染测量', () => {
       await arriveAtSettingsHome()
       await screen.findByRole('heading', { name: '设置' })
       await tick(6_000)
+      expandSettingsGroup('运行与存储')
       profile.reset()
 
       fireEvent.click(screen.getByRole('button', { name: '打开 Harness' }))

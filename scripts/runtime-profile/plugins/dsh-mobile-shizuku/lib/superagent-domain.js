@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
 import { Engine, MemoryRepositories } from './superagent-core.js'
 
 // Upstream domain engine, with one atomic snapshot for its repositories and its queued effects.
@@ -14,23 +15,40 @@ export class SuperagentDomain {
     this.messages = new Map()
     const fields = ['triggerRows', 'dispositions', 'threadRows', 'ticketRows', 'decisionRows']
     if (existsSync(this.path)) {
-      const state = JSON.parse(readFileSync(this.path, 'utf8'))
+      const text = readFileSync(this.path, 'utf8')
+      const state = JSON.parse(text)
+      this.committedDigest = createHash('sha256').update(text).digest('hex')
       for (const field of fields) this.repo[field] = new Map(state[field] ?? [])
       this.effects = new Map(state.effects ?? [])
       this.messages = new Map(state.messages ?? [])
       this.policyConfig = state.policy ?? this.policyConfig
     }
     const atomic = this.repo.atomic.bind(this.repo)
+    let depth = 0
     this.repo.atomic = fn => {
-      const effects = new Map(structuredClone([...this.effects]))
-      const messages = new Map(structuredClone([...this.messages]))
+      const effects = structuredClone(this.effects)
+      const messages = structuredClone(this.messages)
+      const policy = this.policyConfig
+      depth++
       try {
-        return atomic(() => { const result = fn(); this.persist(fields); return result })
-      } catch (error) { this.effects = effects; this.messages = messages; throw error }
+        return atomic(() => {
+          const result = fn()
+          if (depth === 1) this.persist(fields)
+          return result
+        })
+      } catch (error) {
+        this.effects = effects
+        this.messages = messages
+        this.policyConfig = policy
+        throw error
+      } finally { depth-- }
     }
     const enqueue = (kind, id, payload) => {
       const key = `${kind}:${id}`
-      if (!this.effects.has(key)) this.effects.set(key, { id: key, kind, payload, createdAt: Date.now() })
+      const existing = this.effects.get(key)
+      if (!existing || JSON.stringify(existing.payload) !== JSON.stringify(payload)) {
+        this.effects.set(key, { id: key, kind, payload, createdAt: Date.now(), generation: randomUUID() })
+      }
     }
     const config = () => this.policyConfig
     const sourceAllowed = (source, actor) => {
@@ -79,8 +97,12 @@ export class SuperagentDomain {
   persist(fields = ['triggerRows', 'dispositions', 'threadRows', 'ticketRows', 'decisionRows']) {
     const state = Object.fromEntries(fields.map(field => [field, [...this.repo[field]]]))
     state.effects = [...this.effects]; state.messages = [...this.messages]; state.policy = this.policyConfig
-    writeFileSync(`${this.path}.tmp`, JSON.stringify(state), { mode: 0o600 })
+    const text = JSON.stringify(state)
+    const digest = createHash('sha256').update(text).digest('hex')
+    if (digest === this.committedDigest) return
+    writeFileSync(`${this.path}.tmp`, text, { mode: 0o600, flush: true })
     renameSync(`${this.path}.tmp`, this.path)
+    this.committedDigest = digest
   }
   configure(policy) {
     if (!policy?.version || !policy.sources || typeof policy.sources !== 'object') throw new Error('无效的来源策略')
@@ -118,6 +140,24 @@ export class SuperagentDomain {
     const result = this.engine.receive(trigger); this.engine.evaluateDue(); return result
   }
   decide(triggerId, outcome) { const decision = this.engine.decide(triggerId, outcome); this.engine.evaluateDue(); return decision }
+  revokeTicket(ticketId) {
+    return this.repo.atomic(() => {
+      const ticket = this.repo.tickets.get(ticketId)
+      if (!ticket) throw new Error('工单不存在')
+      if (!ticket.ended) this.engine.stopTicket(ticketId, '用户撤回任务授权')
+      const current = this.repo.tickets.get(ticketId)
+      if (current.ended.by !== 'human') {
+        current.previousEnd = current.ended
+        current.ended = { at: new Date().toISOString(), by: 'human', outcome: 'stopped', reason: '用户撤回任务授权' }
+        current.updatedAt = current.ended.at
+        this.repo.tickets.save(current)
+      }
+      for (const message of this.messages.values()) {
+        if (message.ticketId === ticketId && message.status === 'pending') message.status = 'dropped'
+      }
+      return current
+    })
+  }
   // A person can approve a known sender in settings without granting a whole chat or mapping identities across services.
   unapprovedSenders() {
     const result = new Map()
@@ -140,10 +180,32 @@ export class SuperagentDomain {
     this.configure(policy)
   }
   pendingEffects() { return structuredClone([...this.effects.values()]) }
-  acknowledgeEffect(id) { this.repo.atomic(() => { this.effects.delete(id) }) }
+  acknowledgeEffect(id, generation) {
+    const effect = this.effects.get(id)
+    if (!effect || (generation !== undefined && (effect.generation ?? 0) !== generation)) return
+    this.repo.atomic(() => this.effects.delete(id))
+  }
+  failEffect(id, generation, error, now = Date.now()) {
+    this.repo.atomic(() => {
+      const effect = this.effects.get(id)
+      if (!effect || (effect.generation ?? 0) !== generation) return
+      effect.attempts = (effect.attempts ?? 0) + 1
+      effect.lastError = String(error?.message ?? error).slice(0, 300)
+      effect.nextAttemptAt = now + Math.min(300000, 5000 * 2 ** Math.min(effect.attempts - 1, 6))
+    })
+  }
   pendingMessages() { return structuredClone([...this.messages.values()].filter(row => row.status === 'pending')) }
   markMessage(id, status) {
     if (!['sent', 'dropped'].includes(status)) throw new Error('无效的消息回执')
     this.repo.atomic(() => { const row = this.messages.get(id); if (row?.status === 'pending') row.status = status })
+  }
+  failMessage(id, error, now = Date.now()) {
+    this.repo.atomic(() => {
+      const row = this.messages.get(id)
+      if (!row || row.status !== 'pending') return
+      row.attempts = (row.attempts ?? 0) + 1
+      row.lastError = String(error?.message ?? error).slice(0, 300)
+      row.nextAttemptAt = now + Math.min(300000, 5000 * 2 ** Math.min(row.attempts - 1, 6))
+    })
   }
 }

@@ -84,6 +84,22 @@ object VirtualScreenPolicy {
     fun frameInterval(mode: String): Int =
         FRAME_MODES[mode] ?: throw IllegalArgumentException("副屏预览模式不在允许列表")
 
+    /**
+     * 采集间隔按**面板实际刷新率**夹取（毫秒）：取「档位间隔」与「面板一帧的时长」的较大者。
+     *
+     * 为什么需要：档位是用户与工具面共用的契约（`FRAME_MODES` 的键与取值不动），但比面板刷新还密的
+     * 采集只是空转——60Hz 面板上 240fps 档每 4 毫秒取一帧，既不会让画面更顺，又持续消耗 CPU 与
+     * SurfaceFlinger 拷贝。这里只把**采集节奏**夹到面板上限，档位名、状态回显与预览页选项都不变。
+     *
+     * [panelRefreshHz] 读不到（≤0 或 NaN）时按 60Hz 的 17 毫秒兜底，而不是退回 4 毫秒：
+     * 宁可慢一点，也不要为一块未知面板空转。
+     */
+    fun effectiveFrameInterval(mode: String, panelRefreshHz: Float): Int {
+        val requested = frameInterval(mode)
+        val floor = if (panelRefreshHz > 0f) kotlin.math.ceil(1000f / panelRefreshHz).toInt() else 17
+        return maxOf(requested, floor)
+    }
+
     /** 预览模式对应的状态标签：limited → "limited-fps"，其余 → "realtime-<模式名>"（例如 "realtime-30fps"）。 */
     fun frameModeLabel(mode: String): String = if (mode == "limited") "limited-fps" else "realtime-$mode"
 
@@ -107,6 +123,16 @@ object VirtualScreenPolicy {
     /** 扣除本拍取帧与上屏耗时，不追赶积压帧，也不额外再等一个完整周期。 */
     fun previewPullDelay(mode: String, elapsedMillis: Long): Long =
         (previewPullInterval(mode).toLong() - elapsedMillis.coerceAtLeast(0L)).coerceAtLeast(1L)
+
+    /**
+     * 同上，但续排间隔先按面板刷新率夹取（[effectiveFrameInterval]）。
+     *
+     * 调度与预算必须用同一份夹取：否则 240fps 档在 60Hz 面板上会「按 17 毫秒取帧、按 4 毫秒判超预算」，
+     * 状态行会一直报「预览跟不上档位」——那是把省电修复显示成了故障。
+     */
+    fun previewPullDelay(mode: String, elapsedMillis: Long, panelRefreshHz: Float): Long =
+        (maxOf(PREVIEW_PULL_FLOOR_MILLIS, effectiveFrameInterval(mode, panelRefreshHz)).toLong() -
+            elapsedMillis.coerceAtLeast(0L)).coerceAtLeast(1L)
 
     // ── 预览页状态轮询的失败重试 ──────────────────────────────────────────────
     // 轮询跑在主线程，异常必须在循环里接住，否则会终结进程；但接住不等于停摆：

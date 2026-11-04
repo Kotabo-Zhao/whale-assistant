@@ -1,0 +1,33 @@
+<resources>
+    <string name="pref_home">助手偏好</string>
+    <string name="pref_pet">桌宠与权限</string>
+    <string name="pref_pet_summary">形象、动作和系统权限</string>
+    <string name="pref_data">记忆与资料</string>
+    <string name="pref_data_summary">助手可以记住和检索的内容</string>
+    <string name="pref_alerts">通知与提醒</string>
+    <string name="pref_alerts_summary">通知、提醒和免打扰</string>
+    <string name="pref_daily">日常助手</string>
+    <string name="pref_daily_summary">常用应用、日历和简报</string>
+    <string name="pref_permissions">系统权限</string>
+    <string name="pref_permissions_summary">悬浮窗、通知和后台运行</string>
+    <string name="pref_memory">长期记忆</string>
+    <string name="pref_memory_summary">查看记忆，调整主动搭话</string>
+    <string name="pref_library">本地资料</string>
+    <string name="pref_library_summary">资料检索、导入和对话授权</string>
+    <string name="pref_backup">备份与恢复</string>
+    <string name="pref_backup_summary">统一备份与加密知识包</string>
+    <string name="pref_maintenance">旧格式与数据维护</string>
+    <string name="pref_maintenance_summary">单项导入导出、迁移和校验</string>
+    <string name="pref_notifications">通知与隐私</string>
+    <string name="pref_notifications_summary">采集、显示和来源授权</string>
+    <string name="pref_reminders">提醒与免打扰</string>
+    <string name="pref_reminders_summary">事项提醒、重复提醒和安静时段</string>
+    <string name="pref_background">后台通知整理</string>
+    <string name="pref_background_summary">整理模型、候选事项和重试</string>
+    <string name="pref_records">通知记录</string>
+    <string name="pref_records_summary">查看、搜索和清理本地记录</string>
+    <string name="pref_apps">常用应用</string>
+    <string name="pref_apps_summary">快捷方式与使用建议</string>
+    <string name="pref_brief">日历与简报</string>
+    <string name="pref_brief_summary">简报时间、范围和日程提示</string>
+</resources>

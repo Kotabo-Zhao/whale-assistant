@@ -10,6 +10,7 @@ import java.util.UUID
 /** A consistent SQLite snapshot, copied as a stream by the user-facing SAF flow. */
 internal object UnifiedMemoryBackup {
     const val MAX_BYTES = 256L * 1024 * 1024
+    private const val PRIVATE_SCHEMA = "CREATE TABLE backup_private (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
     private val sets = setOf("memory_deleted_hashes", "memory_deleted_events", "memory_deleted_signatures", "automatic_memory_suppressed_sources")
     private val booleans = setOf("automatic_memory_suppressed_all")
     private fun <T> locked(block: () -> T): T = synchronized(CompanionKnowledgeStore.lock) { synchronized(CompanionMemoryStore.lock) { block() } }
@@ -27,8 +28,9 @@ internal object UnifiedMemoryBackup {
                 db.execSQL("VACUUM INTO ?", arrayOf(target.absolutePath))
             }
             SQLiteDatabase.openDatabase(target.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-                db.execSQL("CREATE TABLE IF NOT EXISTS backup_private (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                db.execSQL(PRIVATE_SCHEMA)
                 db.delete("backup_private", null, null)
+                discardParseTickets(db)
                 val prefs = context.getSharedPreferences("companion_private_v1", Context.MODE_PRIVATE)
                 for (key in sets) db.execSQL("INSERT INTO backup_private VALUES (?,?)", arrayOf(key, JSONArray(prefs.getStringSet(key, emptySet()).orEmpty().sorted()).toString()))
                 for (key in booleans) db.execSQL("INSERT INTO backup_private VALUES (?,?)", arrayOf(key, prefs.getBoolean(key, false).toString()))
@@ -36,6 +38,18 @@ internal object UnifiedMemoryBackup {
             require(target.length() <= MAX_BYTES) { "备份超过 256 MiB，请分批导出资料" }
             target
         } catch (e: Exception) { target.delete(); throw e }
+    }
+    // A user-selected backup restores records, never instructions to process local media or contact a model.
+    private fun discardParseTickets(db: SQLiteDatabase) {
+        db.delete("knowledge_meta", "key=?", arrayOf(KnowledgeCaptureFeed.KEY))
+        db.delete("knowledge_meta", "key GLOB 'parse:*'", null)
+        db.rawQuery("SELECT id,body FROM knowledge_records WHERE instr(body, ?) > 0 OR instr(body, ?) > 0", arrayOf("\"parseTicket\"", "\"parseState\"")).use { c ->
+            while (c.moveToNext()) {
+                val row = JSONObject(c.getString(1))
+                if (!CompanionKnowledgeBackup.clearPendingParse(row)) continue
+                db.execSQL("UPDATE knowledge_records SET body=? WHERE id=?", arrayOf(row.toString(), c.getString(0)))
+            }
+        }
     }
     private fun schemas(db: SQLiteDatabase): Map<String, String> = buildMap {
         db.rawQuery("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name!='backup_private' ORDER BY name", null).use { c ->
@@ -80,9 +94,19 @@ internal object UnifiedMemoryBackup {
             }
             val privateValues = mutableMapOf<String, String>()
             SQLiteDatabase.openDatabase(snapshot.path, null, SQLiteDatabase.OPEN_READONLY).use { source ->
-                require(source.version == live.version && schemas(source) == schema) { "备份版本或表结构不兼容" }
+                val incoming = schemas(source)
+                val derived = KnowledgeTextIndex.derivedTables
+                require(source.version == live.version && incoming.filterKeys { it !in derived } == schema.filterKeys { it !in derived } &&
+                    incoming.filterKeys { it in derived }.all { (name, sql) -> schema[name] == sql }) { "备份版本或表结构不兼容" }
+                source.rawQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name='backup_private'", null).use {
+                    require(it.moveToFirst() && it.getString(0) == PRIVATE_SCHEMA) { "备份保护记录结构无效" }
+                }
+                source.rawQuery("SELECT type,name,sql FROM sqlite_master WHERE type IN ('trigger','view')", null).use { c ->
+                    while (c.moveToNext()) require(c.getString(0) == "trigger" && KnowledgeTextIndex.triggers[c.getString(1)] == c.getString(2)) {
+                        "备份包含不受支持的触发器或视图"
+                    }
+                }
                 source.rawQuery("PRAGMA integrity_check", null).use { require(it.moveToFirst() && it.getString(0) == "ok") { "备份损坏" } }
-                source.rawQuery("SELECT name FROM sqlite_master WHERE type IN ('trigger','view')", null).use { require(!it.moveToFirst()) }
                 source.rawQuery("SELECT body FROM memories", null).use { c -> while (c.moveToNext()) CompanionMemoryFormat.validateRows(JSONArray().put(JSONObject(c.getString(0))), false) }
                 source.rawQuery("SELECT body FROM knowledge_records", null).use { c -> while (c.moveToNext()) CompanionKnowledgeData.validateRows(JSONArray().put(JSONObject(c.getString(0))), false) }
                 knowledgeDecisions(source)
@@ -118,7 +142,7 @@ internal object UnifiedMemoryBackup {
                     live.rawQuery("SELECT event_id FROM understanding_forget", null).use { c -> while(c.moveToNext()) forgottenEvents.add(c.getString(0)) }
                     val generation = live.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='generation'",null).use { if(it.moveToFirst()) it.getLong(0) else 0L }
                     for (table in schema.keys) {
-                        if (table in setOf("sources", "jobs")) continue
+                        if (table in setOf("sources", "jobs") || table in KnowledgeTextIndex.derivedTables) continue
                         live.delete(table, null, null)
                         live.execSQL("INSERT INTO $table SELECT * FROM incoming_backup.$table")
                     }
@@ -160,11 +184,17 @@ internal object UnifiedMemoryBackup {
                         live.execSQL("INSERT INTO memory_text_index VALUES (?,?)",arrayOf(id,CompanionMemorySuppression.digest(row.getString("text"))))
                         MemorySearchIndex.put(live,id,row)
                     } }
+                    discardParseTickets(live)
+                    KnowledgeTextIndex.rebuildAfterRestore(live)
                     beforeCommit()
                     live.setTransactionSuccessful()
                 } finally { live.endTransaction() }
             } finally { live.execSQL("DETACH DATABASE incoming_backup") }
         }
-        if (SemanticControl(context).enabled) runCatching { SemanticIndexJobs.schedule(context, 5_000) }
+        val semantic = SemanticControl(context)
+        if (semantic.enabled) {
+            semantic.invalidate()
+            runCatching { SemanticIndexJobs.schedule(context, 5_000) }
+        }
     }
 }

@@ -1,3 +1,4 @@
+import { defaultLanguage } from './i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LANGUAGE_STORAGE_KEY, readLanguage, saveLanguage, t } from './i18n'
 
@@ -25,4 +26,10 @@ describe('语言设置校验', () => {
     expect(saveLanguage('zh-CN')).toBe(true)
     expect(t('运行时 {0}', 'v1')).toBe('运行时 v1')
   })
+})
+
+it('优先采用系统列表中第一个受支持的语言', () => {
+  expect(defaultLanguage(['fr-FR', 'en-GB', 'zh-CN'])).toBe('en')
+  expect(defaultLanguage(['zh-Hant', 'en'])).toBe('zh-CN')
+  expect(defaultLanguage([])).toBe('zh-CN')
 })

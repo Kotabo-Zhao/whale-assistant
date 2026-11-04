@@ -1,0 +1,25 @@
+<resources>
+    <string name="pet_menu_home">快捷菜单</string>
+    <string name="pet_menu_chat">桌宠对话</string>
+    <string name="pet_menu_assign">交办任务</string>
+    <string name="pet_menu_capture">存资料</string>
+    <string name="pet_menu_inbox">后台任务</string>
+    <string name="pet_menu_tools">我的工具</string>
+    <string name="pet_menu_device">设备与显示</string>
+    <string name="pet_menu_studio">功能工坊</string>
+    <string name="pet_menu_harness">Harness 对话小窗</string>
+    <string name="pet_menu_display">目标应用副屏</string>
+    <string name="pet_menu_app">回到主应用</string>
+    <string name="pet_menu_hide">隐藏桌宠</string>
+    <string name="pet_menu_disable">关闭无障碍服务</string>
+    <string name="pet_menu_disabled">无障碍服务已关闭</string>
+    <string name="pet_menu_back">返回</string>
+    <string name="pet_menu_close">关闭</string>
+    <string name="pet_menu_session">会话选项</string>
+    <string name="pet_menu_counts">鲸鱼桌宠，点按对话，长按打开快捷菜单。%1$d 项后台任务运行中，%2$d 项待处理</string>
+    <string name="pet_menu_clipboard">收藏剪贴板</string>
+    <string name="pet_menu_screen">收藏这一屏</string>
+    <string name="pet_menu_files">选本地文件</string>
+    <string name="pet_menu_write">写一段文字</string>
+    <string name="pet_menu_launch_error">未能打开收藏入口，请重试。</string>
+</resources>

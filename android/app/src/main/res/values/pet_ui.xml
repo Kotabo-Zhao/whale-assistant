@@ -1,0 +1,23 @@
+<resources>
+    <string name="pet_ui_name">鲸鱼娘</string>
+    <string name="pet_ui_chat_title">直接说想做的事</string>
+    <string name="pet_ui_actions">快捷操作</string>
+    <string name="pet_ui_working">处理中</string>
+    <string name="pet_ui_library">本地资料库</string>
+    <string name="pet_ui_task_label">任务说明</string>
+    <string name="pet_ui_mode_label">执行方式</string>
+    <string name="pet_ui_input">告诉鲸鱼娘你想做什么…</string>
+    <string name="pet_ui_capture_hint">记下文字，或给文件附一段说明。</string>
+    <string name="pet_ui_task_hint">交办后，你可以继续对话或安排下一项任务。</string>
+    <string name="pet_ui_session">会话</string>
+    <string name="pet_ui_send">发送</string>
+    <string name="pet_ui_memory">记忆</string>
+    <string name="pet_ui_new_task">新任务</string>
+    <string name="pet_ui_live_chat">对话中</string>
+    <string name="pet_ui_note">写下内容…</string>
+    <string name="pet_source_clip">保存刚刚复制的内容</string>
+    <string name="pet_source_screen">需要本次系统授权</string>
+    <string name="pet_source_file">图片、录音或文档</string>
+    <string name="pet_source_note">记下文字或链接</string>
+    <string name="pet_manual_assign">手动交办任务</string>
+</resources>

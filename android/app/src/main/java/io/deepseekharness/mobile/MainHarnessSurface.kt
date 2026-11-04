@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -145,6 +144,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
     fun discard() { destroyView() }
 
     fun resume() {
+        (container as? HarnessWorkspaceShell)?.updateColors()
         claimIfUnowned()
         if (web != null && !AppAuthenticationState.ownsHarnessAccess(owner)) {
             val pending = pendingDraft
@@ -169,8 +169,8 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
 
     private fun ensureView(): WebView {
         web?.let { return it }
-        val root = LayoutInflater.from(activity).inflate(R.layout.activity_harness, null, false)
-        val view = root.findViewById<WebView>(R.id.harness_web_view)
+        val root = HarnessWorkspaceShell(activity, ::showAssistantTab)
+        val view = root.chat
         HarnessWebViewPolicy.configure(view.settings, activity.resources.configuration.fontScale)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) WebView.startSafeBrowsing(activity.applicationContext, null)
         val nextChrome = HarnessWebChromeClient(activity, { web }, ::authorized, ::authorize, ::chooseFile)
@@ -178,12 +178,6 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         view.webChromeClient = nextChrome
         web = view
         container = root
-        // 操作入口统一收进助手设置；保留按钮 ID 供旧版独立对话页兼容。
-        root.findViewById<View>(R.id.harness_tools).visibility = View.GONE
-        root.findViewById<View>(R.id.harness_manage).setOnClickListener { showAssistantTab("conversation") }
-        root.findViewById<View>(R.id.harness_tab_home).setOnClickListener { showAssistantTab("conversation") }
-        root.findViewById<View>(R.id.harness_tab_plugins).setOnClickListener { showAssistantTab("plugins") }
-        root.findViewById<View>(R.id.harness_tab_settings).setOnClickListener { showAssistantTab("settings") }
         activity.addContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         HarnessThemeBridge.attach(view)
         return view

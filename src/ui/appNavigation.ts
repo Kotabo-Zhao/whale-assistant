@@ -26,16 +26,18 @@ export type AppView =
   | 'settings-diagnostics-feedback'
   | 'terminal'
   | 'environment'
+  | 'tools'
   | 'plugins'
   | 'versions'
   | 'files'
 
-export type PrimaryDestination = 'conversation' | 'harness' | 'assistant-memory' | 'assistant-tasks' | 'plugins' | 'settings'
+export type PrimaryDestination = 'conversation' | 'harness' | 'assistant-memory' | 'assistant-tasks' | 'tools' | 'settings'
 
 /** 所有设置子页及工具页在两种导航中使用同一个归属。 */
 export function primaryDestination(view: AppView): PrimaryDestination {
   if (view === 'conversation' || view === 'sessions') return 'conversation'
   if (view === 'assistant-memory' || view === 'assistant-tasks') return view
-  if (view === 'harness' || view === 'plugins') return view
+  if (view === 'harness') return view
+  if (view === 'tools' || view === 'plugins') return 'tools'
   return 'settings'
 }

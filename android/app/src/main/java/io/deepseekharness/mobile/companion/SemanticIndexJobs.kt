@@ -1,10 +1,7 @@
 package io.deepseekharness.mobile.companion
 
-import android.app.job.JobInfo
 import android.app.job.JobParameters
-import android.app.job.JobScheduler
 import android.app.job.JobService
-import android.content.ComponentName
 import android.content.Context
 import java.util.Calendar
 import java.util.concurrent.Executors
@@ -13,19 +10,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Rebuilds the derived index incrementally, with bounded work and a persisted cursor. */
 internal object SemanticIndexJobs {
     private const val JOB_ID = 780433
-    private val running = AtomicBoolean(false)
+    private val wakeup = MemoryJobWakeup(JOB_ID, SemanticIndexJobService::class.java)
     private val executor = Executors.newSingleThreadExecutor()
 
     fun schedule(context: Context, delayMs: Long = 0L) {
         val app = context.applicationContext
         if (!SemanticControl(app).enabled) return
-        val job = JobInfo.Builder(JOB_ID, ComponentName(app, SemanticIndexJobService::class.java))
-            .setMinimumLatency(delayMs.coerceAtLeast(0))
-            .setPersisted(true).build()
-        check(app.getSystemService(JobScheduler::class.java)?.schedule(job) == JobScheduler.RESULT_SUCCESS)
+        wakeup.request(app, delayMs)
     }
 
-    fun cancel(context: Context) { context.getSystemService(JobScheduler::class.java)?.cancel(JOB_ID) }
+    fun cancel(context: Context) = wakeup.cancel(context)
+    fun stop(params: JobParameters) = wakeup.stop(params)
 
     private fun split(text: String): List<Pair<Int, String>> {
         val result = mutableListOf<Pair<Int, String>>()
@@ -112,7 +107,7 @@ internal object SemanticIndexJobs {
     }
 
     fun start(service: JobService, params: JobParameters, stopped: AtomicBoolean): Boolean {
-        if (!running.compareAndSet(false, true)) return false
+        wakeup.start(params)
         executor.execute {
             var delay: Long? = null
             try { delay = runBatch(service.applicationContext, stopped) }
@@ -122,11 +117,7 @@ internal object SemanticIndexJobs {
                 SemanticControl(service).setStatus("本地索引失败（${e.javaClass.simpleName}），将稍后重试")
                 delay = 30 * 60_000L
             } finally {
-                running.set(false)
-                if (!stopped.get()) {
-                    service.jobFinished(params, false)
-                    if (delay != null) runCatching { schedule(service, delay) }
-                }
+                if (!stopped.get()) wakeup.finish(service, params, delay)
             }
         }
         return true
@@ -139,5 +130,5 @@ class SemanticIndexJobService : JobService() {
         stopped = AtomicBoolean(false)
         return SemanticIndexJobs.start(this, params, stopped)
     }
-    override fun onStopJob(params: JobParameters): Boolean { stopped.set(true); return true }
+    override fun onStopJob(params: JobParameters): Boolean { stopped.set(true); SemanticIndexJobs.stop(params); return true }
 }

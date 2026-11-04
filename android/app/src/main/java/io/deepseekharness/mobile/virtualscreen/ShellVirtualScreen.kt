@@ -70,6 +70,15 @@ class ShellVirtualScreen {
     @Volatile private var autoFollow = VirtualScreenPolicy.AUTO_FOLLOW_OFF
 
     /**
+     * 自动跟随关闭时，`dumpsys activity activities` 的低频刷新时刻（毫秒，elapsedRealtime）。
+     *
+     * 关闭自动跟随不等于「不再需要副屏最前台读数」：`state()` 仍要显示它，只是不需要每 800 毫秒
+     * 起一次 `dumpsys`。开启任一种自动跟随策略时这个值每拍都刷新、行为与改造前完全一致；
+     * 关闭时降到 [AUTO_FOLLOW_OFF_REFRESH_MILLIS] 一次，第一次 tick 因为初值 0 必定会刷。
+     */
+    @Volatile private var lastForegroundRefreshAt = 0L
+
+    /**
      * 自动跟随的节流器（按「规则 + 目标」计时，默认两秒）。真机时钟传 `SystemClock.elapsedRealtime`，
      * 与单测共用同一份状态机逻辑。
      */
@@ -135,7 +144,10 @@ class ShellVirtualScreen {
                 // 延后读取最新缓冲区，既限帧又不丢弃界面静止前的最后一次更新；延迟取当前预览模式的采集间隔。
                 if (!scheduled) {
                     scheduled = true
-                    handler.postDelayed({ scheduled = false; collectFrame(source) }, VirtualScreenPolicy.frameInterval(frameMode).toLong())
+                    handler.postDelayed(
+                        { scheduled = false; collectFrame(source) },
+                        VirtualScreenPolicy.effectiveFrameInterval(frameMode, panelRefreshHz()).toLong(),
+                    )
                 }
             }, handler)
             val threadClass = Class.forName("android.app.ActivityThread")
@@ -721,6 +733,14 @@ class ShellVirtualScreen {
     private fun id(): Int = display?.display?.displayId ?: -1
 
     /**
+     * 副屏所在面板的实际刷新率（Hz）；读不到返回 0f。
+     *
+     * 采集间隔不能比面板刷新还密：60Hz 面板上「240fps 档」每 4 毫秒取一帧只是空转，
+     * 夹取规则由 [VirtualScreenPolicy.effectiveFrameInterval] 统一决定（0f 时按 17 毫秒兜底）。
+     */
+    private fun panelRefreshHz(): Float = display?.display?.refreshRate ?: 0f
+
+    /**
      * 会话校验：会话已切换（用户重新开始副屏）或显示已释放都是可重试的瞬时情形，
      * 必须抛 `VIRTUAL_SCREEN_STOPPED`，不能被上层统一映射成「副屏不可用」。
      */
@@ -1140,6 +1160,16 @@ class ShellVirtualScreen {
     private fun autoFollowTick(p: JSONObject): String {
         val policy = VirtualScreenPolicy.autoFollow(autoFollow)
         val selfPackage = p.optString(VirtualScreenPolicy.SELF_PACKAGE_FIELD, "")
+        // 自动跟随关闭时，最前台读数只用于展示，不需要每 800 毫秒起一次 dumpsys：
+        // 节流到 5 秒一次；未到期直接回执，连进程都不起。策略不是 off 时每拍都刷（与改造前一致）。
+        val nowMillis = SystemClock.elapsedRealtime()
+        val due = policy != VirtualScreenPolicy.AUTO_FOLLOW_OFF ||
+            nowMillis < lastForegroundRefreshAt ||
+            nowMillis - lastForegroundRefreshAt >= AUTO_FOLLOW_OFF_REFRESH_MILLIS
+        if (!due) {
+            return tickResult(policy, "", "自动跟随已关闭", applied = false)
+        }
+        lastForegroundRefreshAt = nowMillis
         // 健康循环低频刷新前台缓存；逐帧 state() 只读取缓存，不启动系统进程。
         val dump = command(listOf("/system/bin/dumpsys", "activity", "activities"))
         virtualForeground = VirtualScreenPolicy.resumedComponent(dump, id())
@@ -1292,6 +1322,14 @@ class ShellVirtualScreen {
     private companion object {
         /** 实测帧率使用的采样帧数：只统计最近这么多帧，避免很久以前的间隔拉扁当前帧率。 */
         const val FRAME_SAMPLE_COUNT = 24
+
+        /**
+         * 自动跟随关闭时，副屏最前台读数的刷新间隔。
+         *
+         * 关闭后这个读数只用于状态展示（`virtualForegroundPackage/Activity`），不需要跟着宿主
+         * 800 毫秒的健康循环起 `dumpsys activity activities`；5 秒一次足够让用户看到「副屏上现在是谁」。
+         */
+        const val AUTO_FOLLOW_OFF_REFRESH_MILLIS = 5_000L
 
         /**
          * `KeyEvent.KEYCODE_PASTE`（API 11 起就有）。Android 的 `input keyevent` 只接受数字键码，

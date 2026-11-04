@@ -157,6 +157,18 @@ it('资料详情只在已有解析标记时说明部分解析的具体范围', a
   fireEvent.click(detail.querySelector('summary')!)
   expect(within(detail).getByText('解析范围：仅提取前 500 页文字')).toBeInTheDocument()
 })
+it('从说明详情按本机确认的关联打开原件', async () => {
+  const note = { id: 'note', text: '三月设计评审', source: 'shared_text', attachmentLinks: { anchor: 'generation' } }
+  const anchor = { id: 'anchor', text: '原件', source: 'original', displayName: '评审录音.wav', originalId: '1'.repeat(64), revision: '2'.repeat(64) }
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(
+    request.operation === 'knowledgeList' ? { items: [note] } : { items: [anchor], nextOffset: null }))
+  render(<CompanionWorkspace initialPanel="knowledge" />)
+  fireEvent.click(await screen.findByRole('button', { name: '查看详情' }))
+  fireEvent.click(await screen.findByRole('button', { name: /评审录音.wav/ }))
+  expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeAttachments', id: 'note', expectedText: '三月设计评审', offset: 0 })
+  expect(bridge.openCompanionKnowledge).toHaveBeenCalledWith(anchor.id, anchor.revision)
+})
+
 it('资料可在全高详情页中阅读并带入对话草稿', async () => {
   const revision = 'a'.repeat(64)
   const originalId = 'b'.repeat(64)
@@ -319,4 +331,32 @@ it('按来源折叠记忆，展开卡片后才显示全文', async () => {
   expect(detail).not.toHaveAttribute('open')
   fireEvent.click(detail.querySelector('summary')!)
   expect(detail).toHaveAttribute('open')
+})
+
+it('解析失败的原件可以在详情里重试，提交详情的完整版本', async () => {
+  const row = { id: 'original-one', text: '原件状态', source: 'original', coverage: 'not_parsed', parseState: 'needs_retry', _review: 'revision-one' }
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList' ? { items: [row] } : { ok: true }))
+  render(<CompanionWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '资料' }))
+  fireEvent.click(await screen.findByRole('button', { name: '查看详情' }))
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '重新解析原件' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeRetryParse', id: row.id, expected: row._review }))
+})
+
+it('记忆首页在首屏打开笔记编辑器，取消时不写入，保存成功后收起', async () => {
+  bridge.companionDashboard.mockImplementation((r: { operation: string }) => Promise.resolve(r.operation === 'knowledgeList' ? { items: [] } : { ok: true }))
+  render(<CompanionWorkspace initialPanel="knowledge" library />)
+  await screen.findByRole('button', { name: '记一笔' })
+  fireEvent.click(screen.getByRole('button', { name: '记一笔' }))
+  const field = screen.getByLabelText('资料内容')
+  expect(field).toHaveFocus()
+  fireEvent.change(field, { target: { value: '未提交草稿' } })
+  fireEvent.click(screen.getByRole('button', { name: '取消编辑' }))
+  expect(screen.queryByLabelText('资料内容')).toBeNull()
+  expect(bridge.companionDashboard).not.toHaveBeenCalledWith(expect.objectContaining({ operation: 'knowledgeAdd' }))
+  fireEvent.click(screen.getByRole('button', { name: '记一笔' }))
+  fireEvent.change(screen.getByLabelText('资料内容'), { target: { value: '本地新笔记' } })
+  fireEvent.click(screen.getByRole('button', { name: '添加' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeAdd', text: '本地新笔记' }))
+  await waitFor(() => expect(screen.queryByLabelText('资料内容')).toBeNull())
 })

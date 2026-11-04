@@ -1,0 +1,344 @@
+package io.deepseekharness.mobile.companion
+
+import android.app.AlertDialog
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.EditText
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import org.json.JSONObject
+import java.util.concurrent.Executors
+
+/** The pet manages the same durable tasks as the app's background-work panel. */
+internal class CompanionWorkerPanel(private val context: Context, private val openSession: (String) -> Unit, private val onCounts: (Int, Int, Int) -> Unit = { _, _, _ -> }, private val onDraftOpened: () -> Unit = {}) {
+    private val handler = Handler(Looper.getMainLooper())
+    private val executor = Executors.newSingleThreadExecutor()
+    private val store = WorkerDashboardStore(context)
+    private val runtime = WorkerRuntimeWake(context)
+    private var submissions = emptyList<JSONObject>()
+    private var badge: TextView? = null
+    private var dialog: AlertDialog? = null
+    private var editDialog: AlertDialog? = null
+    private var inboxUi: PetUi? = null
+    private var cards: LinearLayout? = null
+    private var rows = emptyList<JSONObject>()
+    private var offset = 0
+    private var total = 0
+    private var lastPage = ""
+    private var lastCounts: Triple<Int,Int,Int>? = null
+    private var detailDialog: AlertDialog? = null
+    private var detailRequest = 0
+    private var expandedId: String? = null
+    private var showAll = false
+    private var disposed = false
+    private var scheduled = false
+    private var loading = false
+    private var loadAgain = false
+    private val refresh = Runnable { scheduled = false; load() }
+    private val listener: () -> Unit = { handler.post { schedule() } }
+    private val active = setOf("queued", "starting", "running", "waiting", "blocked", "interrupted", "cancelling")
+
+    init { WorkerDashboardStore.subscribe(listener); schedule() }
+    private fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
+    fun attach(view: TextView) { badge = view; schedule() }
+    fun refreshStatus() { schedule() }
+    fun detach() { badge = null; detailRequest++; detailDialog?.dismiss(); dialog?.dismiss(); editDialog?.dismiss() }
+    fun destroy() { disposed = true; WorkerDashboardStore.unsubscribe(listener); handler.removeCallbacks(refresh); detach(); executor.execute { runtime.close() }; executor.shutdown() }
+
+    private fun schedule() {
+        if (disposed || scheduled) return
+        scheduled = true; handler.postDelayed(refresh, 300)
+    }
+    private fun load() {
+        if (disposed) return
+        if (loading) { loadAgain = true; return }
+        loading = true
+        val opened = dialog
+        val all = showAll
+        val start = offset
+        executor.execute {
+            val result = runCatching { store.page(if (all) "all" else "open", offset = start, limit = if (opened == null) 0 else 20) }
+            handler.post {
+                loading = false
+                if (!disposed) result.onSuccess { page ->
+                    val counts = Triple(page.getInt("running"), page.getInt("attention"), page.getInt("asking"))
+                    if (counts != lastCounts) {
+                        lastCounts = counts
+                        onCounts(counts.first, counts.second, counts.third)
+                    }
+                    badge?.apply {
+                        val label = when { counts.second > 0 -> "待处理 ${counts.second}"; counts.first > 0 -> "运行中 ${counts.first}"; else -> "后台任务" }
+                        if (text != label) text = label
+                        val description = "后台任务：${counts.first}项运行中，${counts.second}项待处理"
+                        if (contentDescription != description) contentDescription = description
+                    }
+                    if (opened != null && opened === dialog && all == showAll && start == offset) {
+                        total = page.getInt("total")
+                        if (start >= total && start > 0) { offset = ((total - 1).coerceAtLeast(0) / 20) * 20; schedule() }
+                        else {
+                            val signature = page.toString()
+                            if (signature != lastPage) {
+                                lastPage = signature
+                                fun rows(key: String) = page.getJSONArray(key).let { items -> (0 until items.length()).map(items::getJSONObject) }
+                                rows = rows("items"); submissions = rows("submissions")
+                                render()
+                            }
+                        }
+                    }
+                }.onFailure { badge?.text = "任务 · 不可用" }
+                if (loadAgain) { loadAgain = false; schedule() }
+            }
+        }
+    }
+    fun open() {
+        if (disposed || dialog != null) return
+        val ui = PetUi(context)
+        inboxUi = ui
+        val body = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), dp(8)) }
+        val manual = ui.text(ui.string(io.deepseekharness.mobile.R.string.pet_manual_assign), 13f, ui.accent).apply {
+            minHeight = dp(44); gravity = android.view.Gravity.CENTER
+            setPadding(dp(6), 0, dp(6), 0); background = ui.action(ui.surface, 10); setOnClickListener { compose() }
+        }
+        val tabs = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(7), 0, dp(6)) }
+        fun styleTab(tab: Button) {
+            tab.isSelected = tab.tag == showAll
+            tab.setTextColor(if (tab.isSelected) ui.accent else ui.muted)
+            tab.background = ui.action(if (tab.isSelected) ui.soft else ui.surface, 10)
+        }
+        fun tab(text: String, all: Boolean) = Button(context).apply {
+            this.text = text; tag = all; isAllCaps = false; textSize = 14f; minHeight = dp(44); styleTab(this)
+            setOnClickListener {
+                if (showAll != all) {
+                    showAll = all; offset = 0; lastPage = ""; expandedId = null
+                    for (i in 0 until tabs.childCount) styleTab(tabs.getChildAt(i) as Button)
+                    schedule()
+                }
+            }
+        }
+        tabs.addView(tab("进行中与待处理", false), LinearLayout.LayoutParams(0, -2, 1f))
+        tabs.addView(tab("全部任务", true), LinearLayout.LayoutParams(0, -2, 1f))
+        body.addView(tabs)
+        cards = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        body.addView(ScrollView(context).apply { addView(cards) }, LinearLayout.LayoutParams(-1, minOf(dp(390), (context.resources.displayMetrics.heightPixels * 0.5f).toInt())))
+        dialog = ui.dialogBuilder("后台任务", null, io.deepseekharness.mobile.R.drawable.ic_whale_nav_tasks, manual).setView(body).setNegativeButton("关闭", null).create().apply {
+            window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+            setOnDismissListener { dialog = null; inboxUi = null; expandedId = null; cards = null; rows = emptyList(); submissions = emptyList(); lastPage = ""; offset = 0; total = 0 }
+            show(); ui.finishDialog(this, 390)
+        }
+        schedule()
+    }
+    private fun render() {
+        val container = cards ?: return
+        val ui = inboxUi ?: return
+        container.removeAllViews()
+        val shown = rows
+        submissions.forEach { pending -> container.addView(TextView(context).apply {
+            text = "等待接取 · ${pending.optString("task").take(90)}\n${pending.optString("notice")}"
+            setTextColor(ui.muted); setPadding(dp(8), dp(8), dp(8), dp(8))
+        }) }
+        if (shown.isEmpty() && submissions.isEmpty()) {
+            container.addView(TextView(context).apply { text = if (showAll) "暂无后台任务" else "没有进行中或待处理的任务"; setTextColor(ui.muted); setPadding(dp(8), dp(20), dp(8), dp(20)) })
+            return
+        }
+        for (row in shown) {
+            val id = row.optString("id"); val state = row.optString("state"); val missing = row.optBoolean("missingLedger")
+            val title = row.optString("title").ifBlank { "后台任务" }
+            val card = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = ui.shape(ui.canvas, 14, ui.line)
+                contentDescription = "任务管理：$title"
+            }
+            val states = mapOf("unreadable" to "记录待检查", "queued" to "排队中", "starting" to "启动中", "running" to "执行中", "waiting" to "等你回答", "blocked" to "遇到阻碍", "interrupted" to "中断待确认", "failed" to "未完成", "completed" to "已完成", "cancelled" to "已取消", "cancelling" to "正在取消")
+            card.addView(TextView(context).apply { text = title; textSize = 15f; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; setTextColor(ui.ink); setTypeface(typeface, android.graphics.Typeface.BOLD) })
+            card.addView(TextView(context).apply { text = if (row.optBoolean("recordUnreadable")) "原生任务记录无法读取" else if (missing) "历史任务记录缺失，无法继续" else if (row.optBoolean("blockedDependency")) "前置任务待处理" else states[state] ?: "状态待确认"; textSize = 12f; setTextColor(ui.muted) })
+            if (row.optBoolean("authorizationRevoked")) card.addView(TextView(context).apply { text = "任务授权已撤回"; textSize = 12f; setTextColor(ui.alert) })
+            if (expandedId == id) {
+                row.optString("group").takeIf { it.isNotBlank() }?.let { group ->
+                    card.addView(TextView(context).apply { text = "所属目标：$group"; textSize = 12f; setTextColor(ui.muted) })
+                }
+                val source = when (row.optString("source", "phone")) { "github" -> "GitHub"; "feishu" -> "飞书"; else -> "手机" }
+                val permission = when (row.optString("mode")) { "create" -> "创作本工单的工具"; "device" -> "设备操作"; else -> "只读" }
+                card.addView(TextView(context).apply { text = "来源：$source · 权限：$permission"; textSize = 12f; setTextColor(ui.muted) })
+                if (state == "queued") card.addView(TextView(context).apply { text = "优先级：${row.optInt("priority", 0)}"; textSize = 12f; setTextColor(ui.muted) })
+                if (source != "手机") row.optString("requester").takeIf { it.isNotBlank() }?.let { requester ->
+                    card.addView(TextView(context).apply { text = "发起人：$requester"; textSize = 12f; setTextColor(ui.muted) })
+                }
+                row.optString("decisionReason").takeIf { it.isNotBlank() }?.let { reason ->
+                    card.addView(TextView(context).apply { text = "接收原因：${reason.take(120)}"; textSize = 12f; setTextColor(ui.muted) })
+                }
+                row.optString("decisionEvidence").takeIf { it.isNotBlank() }?.let { evidence ->
+                    card.addView(TextView(context).apply { text = "判断依据：${evidence.take(120)}"; textSize = 12f; setTextColor(ui.muted) })
+                }
+                row.optString("scope").takeIf { it.isNotBlank() }?.let { scope ->
+                    card.addView(TextView(context).apply {
+                        text = "授权范围：${scope.take(100)}${if (scope.length > 100) "…" else ""}"
+                        textSize = 12f; setTextColor(ui.muted)
+                        if (scope.length > 100) setOnClickListener { showDetail(id, title, 0) }
+                    })
+                }
+            }
+            val dependencies = row.optJSONArray("dependsOn")
+            if (state == "queued" && dependencies != null && dependencies.length() > 0) {
+                val titles = row.optJSONArray("dependencyTitles") ?: org.json.JSONArray()
+                val blocked = row.optBoolean("blockedDependency")
+                card.addView(TextView(context).apply {
+                    text = if (blocked) "前置任务需要处理：" + (0 until titles.length()).joinToString("、") { titles.optString(it) }.ifBlank { "任务记录缺失" }
+                    else "等待 ${row.optInt("remainingDependencies")} 个前置任务完成"
+                    textSize = 12f; setTextColor(if (blocked) ui.alert else ui.muted)
+                })
+            }
+            val detail = when (state) {
+                "waiting" -> row.optString("question").ifBlank { row.optString("summary") }
+                "queued", "starting", "running" -> row.optString("waitReason").ifBlank { row.optString("progress").ifBlank { row.optString("summary") } }
+                else -> row.optString("summary").ifBlank { row.optString("question") }
+            }
+            if (detail.isNotBlank()) card.addView(TextView(context).apply {
+                text = CompanionRichText.render(detail, ui)
+                textSize = 13f; setPadding(0, dp(6), 0, dp(4)); setTextColor(ui.ink)
+                setOnClickListener { showDetail(id, title, 0) }
+            })
+            row.optString("uiError").takeIf { it.isNotBlank() }?.let { error -> card.addView(TextView(context).apply { text = error; setTextColor(ui.alert) }) }
+            val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            fun action(label: String, click: () -> Unit) { actions.addView(Button(context).apply { text = label; isAllCaps = false; textSize = 13f; minWidth = dp(52); minHeight = dp(44); setTextColor(ui.accent); background = ui.action(ui.canvas, 10); setOnClickListener { click() } }) }
+            if (!row.optBoolean("recordUnreadable")) action("任务详情") { showDetail(id, title, 0) }
+            row.optJSONObject("authoredDraft")?.let { draft ->
+                action("预览工具草稿") {
+                    executor.execute {
+                        val result = runCatching { store.previewDraft(id, draft.getString("revision")) }
+                        handler.post {
+                            if (!disposed) result.onSuccess { dialog?.dismiss(); onDraftOpened() }
+                                .onFailure { Toast.makeText(context, "草稿已变化，请刷新", Toast.LENGTH_SHORT).show() }
+                        }
+                    }
+                }
+            }
+            if (!missing) {
+                when (state) {
+                    "queued", "starting", "running", "completed" -> if (!row.optBoolean("authorizationRevoked")) action("追加") { input(id, title, "add", "追加任务信息") }
+                    "waiting" -> action("回答") { input(id, title, "reply", "回答任务问题") }
+                    "blocked", "interrupted", "failed" -> action("继续") { input(id, title, "resume", "确认现场后的继续说明") }
+                }
+                if (expandedId == id && state == "queued") action("优先级") { input(id, title, "priority", "输入 0 到 10，数字越大越优先") }
+                if (expandedId == id && ((state in active && state != "cancelling") || state == "failed" || (state == "completed" && !row.optBoolean("authorizationRevoked") && row.optString("domainTicketId").isNotBlank()))) action("撤销") { command(id, "cancel", "") }
+            }
+            if (expandedId == id) row.optString("sessionId").takeIf { it.isNotBlank() }?.let { session -> action("会话") { dialog?.dismiss(); openSession(session) } }
+            action(if (expandedId == id) "收起" else "管理") { expandedId = if (expandedId == id) null else id; render() }
+            card.addView(HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; addView(actions) })
+            container.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        }
+        if (offset > 0 || total > offset + shown.size) {
+            val nav = LinearLayout(context)
+            fun move(label: String, to: Int) = Button(context).apply {
+                text = label
+                setOnClickListener { offset = to; schedule() }
+            }
+            if (offset > 0) nav.addView(move("上一页", (offset-20).coerceAtLeast(0)))
+            if (offset + shown.size < total) nav.addView(move("下一页", offset+20))
+            container.addView(nav)
+        }
+    }
+
+    private fun showDetail(id: String, title: String, start: Int) {
+        val request = ++detailRequest
+        executor.execute {
+            val result = runCatching { store.detail(id, start) }
+            handler.post {
+                if (disposed || dialog == null || request != detailRequest) return@post
+                result.onFailure { Toast.makeText(context,"任务详情暂时不可用",Toast.LENGTH_SHORT).show() }.onSuccess { row ->
+                    val events = row.getJSONArray("events")
+                    val historyCount = row.getInt("historyCount")
+                    detailDialog?.dismiss()
+                    val heading = row.optJSONObject("authoredDraft")?.optString("title")?.takeIf(String::isNotBlank)
+                        ?: title.takeIf { it.length <= 38 } ?: "任务详情"
+                    val builder = AlertDialog.Builder(context).setTitle(heading).setView(WorkerDetailView(context,row)).setNegativeButton("关闭",null)
+                    if (start + events.length() < historyCount) builder.setNeutralButton("更早记录") { _,_ -> showDetail(id,title,start+12) }
+                    if (start > 0) builder.setPositiveButton("较新记录") { _,_ -> showDetail(id,title,(start-12).coerceAtLeast(0)) }
+                    detailDialog = builder.create().apply { window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY); show() }
+                }
+            }
+        }
+    }
+    private fun input(id: String, title: String, action: String, hint: String) {
+        if (editDialog != null) return
+        val field = EditText(context).apply { this.hint = hint; maxLines = 5 }
+        editDialog = AlertDialog.Builder(context).setTitle(title).setView(field).setNegativeButton("取消", null).setPositiveButton("提交", null).create().apply {
+            window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+            setOnDismissListener { editDialog = null }
+            show()
+            getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = field.text.toString().trim()
+                if (value.isBlank()) field.error = "请输入内容" else { command(id, action, value); dismiss() }
+            }
+        }
+    }
+    fun submit(task: String, mode: String, id: String = java.util.UUID.randomUUID().toString(), title: String? = null) =
+        WorkerRuntimeWake.submit(context, task, mode, runtime, id, title)
+
+    fun compose() {
+        if (disposed || editDialog != null) return
+        val ui = PetUi(context)
+        val field = ui.editor(EditText(context)).apply {
+            hint = "交给后台做什么？"; minLines = 2; maxLines = 4
+            filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
+        }
+        val choices = android.widget.RadioGroup(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            for ((index, label) in listOf("读取整理", "创作工具", "操作设备").withIndex()) {
+                addView(android.widget.RadioButton(context).apply {
+                    id = android.view.View.generateViewId(); text = label; tag = listOf("read", "create", "device")[index]
+                    buttonDrawable = null; gravity = android.view.Gravity.CENTER; textSize = 14f; minHeight = dp(46)
+                    fun style(selected: Boolean) {
+                        setTextColor(if (selected) ui.accent else ui.muted)
+                        background = ui.action(if (selected) ui.soft else ui.surface, 10, if (selected) ui.accent else ui.line)
+                    }
+                    isChecked = index == 0; style(isChecked)
+                    setOnCheckedChangeListener { _, checked -> style(checked) }
+                }, android.widget.RadioGroup.LayoutParams(0, -2, 1f).apply { if (index > 0) marginStart = dp(5) })
+            }
+        }
+        val form = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(4), dp(18), dp(6))
+            addView(field)
+            addView(ui.text(ui.string(io.deepseekharness.mobile.R.string.pet_ui_mode_label), 12f, ui.muted).apply { setPadding(0, dp(10), 0, dp(5)) })
+            addView(choices)
+        }
+        editDialog = ui.dialogBuilder("交办任务", ui.string(io.deepseekharness.mobile.R.string.pet_ui_task_hint), io.deepseekharness.mobile.R.drawable.ic_pet_assign)
+            .setView(ScrollView(context).apply { addView(form) })
+            .setNegativeButton("取消", null).setPositiveButton("交办", null).create().apply {
+                window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+                setOnDismissListener { editDialog = null }; show(); ui.finishDialog(this)
+                val submit = getButton(AlertDialog.BUTTON_POSITIVE)
+                submit.setOnClickListener {
+                    val task = field.text.toString().trim()
+                    if (task.isEmpty()) { field.error = "请输入任务"; return@setOnClickListener }
+                    submit.isEnabled = false
+                    val mode = choices.findViewById<android.widget.RadioButton>(choices.checkedRadioButtonId)?.tag as? String ?: "read"
+                    executor.execute {
+                        val result = runCatching { this@CompanionWorkerPanel.submit(task, mode) }
+                        handler.post {
+                            if (!disposed && isShowing) {
+                                if (result.isSuccess) dismiss() else { field.error = "任务未保存，请重试"; submit.isEnabled = true }
+                            }
+                        }
+                    }
+                }
+            }
+    }
+    private fun command(id: String, action: String, text: String) {
+        executor.execute {
+            val result = runCatching { store.command(JSONObject().put("id", id).put("action", action).put("task", text)) }
+            handler.post {
+                if (!disposed) {
+                    Toast.makeText(context, if (result.isSuccess) "操作已提交，等待后台处理" else "操作未提交，请重试", Toast.LENGTH_SHORT).show()
+                    schedule()
+                }
+            }
+        }
+    }
+}

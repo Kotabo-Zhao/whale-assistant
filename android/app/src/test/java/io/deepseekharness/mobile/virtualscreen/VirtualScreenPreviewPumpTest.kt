@@ -25,11 +25,15 @@ class VirtualScreenPreviewPumpTest {
         /** 一拍的动作；真实实现是 VirtualScreenPreview.tick，这里只数它被跑了几次。 */
         val beat = Runnable { beats++ }
 
+        /** 面板刷新率：默认 60Hz（真机主流值）；0f 用来覆盖「读不到」时的 17 毫秒兜底。 */
+        var panelHz = 60f
+
         val pump = VirtualScreenPreviewPump(
             now = { nowMillis },
             postDelayed = { delay, action -> delays.add(delay); pending.addLast(action) },
             removeCallbacks = { action -> pending.remove(action) },
             beat = beat,
+            panelRefreshHz = { panelHz },
         )
 
         /**
@@ -104,13 +108,36 @@ class VirtualScreenPreviewPumpTest {
     @Test fun `续排延迟不短于 1 毫秒`() {
         val main = FakeMain()
         main.pump.start()
-        // 240fps 档间隔 4 毫秒；本拍耗时再大也不能出现 0 或负数延迟（那就是忙等连发）。
+        // 240fps 档在 60Hz 面板上被夹到 17 毫秒；本拍耗时再大也不能出现 0 或负数延迟（那就是忙等连发）。
         for (cost in listOf(0L, 1L, 4L, 1_000L, 100_000L)) {
             main.runBeat("240fps", cost)
             assertTrue("延迟必须 >= 1 毫秒，实际 ${main.delays.last()}", main.delays.last() >= 1L)
             assertEquals(1, main.pending.size)
         }
-        assertEquals(listOf(0L, 4L, 3L, 1L, 1L, 1L), main.delays)
+        assertEquals(listOf(0L, 17L, 16L, 13L, 1L, 1L), main.delays)
+    }
+
+    @Test fun `续排间隔按面板刷新率夹取_未知面板按十七毫秒兜底`() {
+        val main = FakeMain()
+        main.pump.start()
+        // 60Hz 面板上 240fps 档被夹到 17 毫秒：不再按 4 毫秒空转。
+        main.runBeat("240fps", 0L)
+        assertEquals(17L, main.delays.last())
+        // 比面板慢的档位不受影响：30fps 仍是 33 毫秒。
+        main.runBeat("30fps", 0L)
+        assertEquals(33L, main.delays.last())
+
+        // 面板读数未知：同样按 17 毫秒兜底，而不是回到 4 毫秒。
+        val unknown = FakeMain().apply { panelHz = 0f }
+        unknown.pump.start()
+        unknown.runBeat("240fps", 0L)
+        assertEquals(17L, unknown.delays.last())
+
+        // 120Hz 面板上 60fps 档仍是 16 毫秒（16 比一帧 8.3 毫秒慢，不该被抬高）。
+        val fast = FakeMain().apply { panelHz = 120f }
+        fast.pump.start()
+        fast.runBeat("60fps", 0L)
+        assertEquals(16L, fast.delays.last())
     }
 
     @Test fun `尚未开始取帧时本拍耗时读数为零`() {

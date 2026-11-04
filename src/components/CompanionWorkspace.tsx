@@ -1,10 +1,24 @@
 import { companionRows, type CompanionRow, type CompanionRequest } from '../platform/companion'
 import { useEffect, useRef, useState } from 'react'
-import { Bell, BookOpen, Brain, Download, Upload, RefreshCw } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
+import { t } from '../i18n'
+import { Bell, BookOpen, Brain, Download, Upload, RefreshCw, Search, PenLine } from 'lucide-react'
 import { runtimeBridge } from '../platform/native'
+import { CaptureReader, CaptureShelf } from './KnowledgeCaptures'
 import './CompanionWorkspace.css'
 
 type Panel = 'reminders' | 'knowledge' | 'memory'
+function knowledgeHistoryEntry() {
+  const state: unknown = window.history.state
+  if (!state || typeof state !== 'object' || !('whaleKnowledgeView' in state)) return null
+  const value = state.whaleKnowledgeView
+  if (!value || typeof value !== 'object') return null
+  const { view, id, createdAt, generation, depth } = value as Record<string, unknown>
+  if ((view !== 'reader' && view !== 'detail') || typeof id !== 'string' || typeof createdAt !== 'number' ||
+      typeof generation !== 'string' || typeof depth !== 'number' || !Number.isSafeInteger(depth) || depth < 1) return null
+  return { view, id, createdAt, generation, depth }
+}
+
 type Row = CompanionRow
 type Preview = { token: string; items: Row[]; skipped: number }
 type KnowledgeSource = 'shared_text' | 'text_file' | 'original' | 'image_analysis'
@@ -15,8 +29,29 @@ const rows = companionRows
 const expected = (row: Row) => typeof row._review === 'string' ? row._review : ''
 const originalId = (row: Row) => typeof row.originalId === 'string' && /^[a-f0-9]{64}$/.test(row.originalId) ? row.originalId : null
 const knowledgeRevision = (row: Row) => typeof row.revision === 'string' && /^[a-f0-9]{64}$/.test(row.revision) ? row.revision : null
-const canPreviewKnowledgeImage = (row: Row) => originalId(row) !== null && (row.source === 'image_analysis' || (row.source === 'original' && typeof row.mime === 'string' && row.mime.startsWith('image/')))
-const knowledgeImageKey = (row: Row) => `${row.id}:${originalId(row) ?? ''}:${row.text}`
+const canPreviewKnowledgeImage = (row: Row) => originalId(row) !== null && (row.source === 'image_analysis' || row.mediaKind === 'image_ocr' || (row.source === 'original' && typeof row.mime === 'string' && row.mime.startsWith('image/')))
+function KnowledgeThumbnail({ row }: { row: Row }) {
+  const target = useRef<HTMLSpanElement>(null)
+  const [image, setImage] = useState('')
+  const original = originalId(row)
+  const { id, text } = row
+  useEffect(() => {
+    setImage('')
+    if (!original || !target.current) return
+    let live = true
+    function load() {
+      if (!original) return
+      void runtimeBridge.companionDashboard({ operation: 'knowledgeImagePreview', id, originalId: original, expectedText: text, thumbnail: true })
+        .then(result => { if (live && typeof result.imageBase64 === 'string' && result.imageBase64) setImage(`data:image/png;base64,${result.imageBase64}`) }).catch(() => {})
+    }
+    const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { observer?.disconnect(); load() }
+    }, { rootMargin: '100px' }) : null
+    if (observer) observer.observe(target.current); else load()
+    return () => { live = false; observer?.disconnect() }
+  }, [original, id, text])
+  return <span ref={target} style={{ display: 'inline-block', minHeight: 1 }}>{image && <img className="knowledge-list-thumbnail" src={image} alt={`图片缩略图：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : '资料图片'}`} />}</span>
+}
 const linkedKnowledge = (row: Row) => typeof row.sourceRecordId === 'string' && /^[a-f0-9-]{36}$/i.test(row.sourceRecordId) && typeof row.sourceRevision === 'string' && /^[a-f0-9]{64}$/i.test(row.sourceRevision) ? { id: row.sourceRecordId, revision: row.sourceRevision } : null
 const linkedKnowledgeReference = (row: Row) => linkedKnowledge(row) !== null ? '已关联资料（资料读取仍需当前对话授权）' : null
 const formatMinute = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
@@ -27,9 +62,15 @@ const memorySummaryMeta = (row: Row) => `${memorySourceLabel(row.source)}${typeo
 const memoryEvidenceLabel = (row: Row) => typeof row.evidenceSource === 'string' && row.evidenceSource.startsWith('notification:') && row.evidenceSource.length > 'notification:'.length ? `证据来源：${row.evidenceSource.slice('notification:'.length)}` : null
 const knowledgeSourceLabel = (source: unknown) => source === 'shared_text' ? '分享文本' : source === 'text_file' ? '文档/文本' : source === 'original' ? '已保存原件' : source === 'image_analysis' ? '图片描述' : '来源未知'
 const knowledgeCoverageLabel = (coverage: unknown) => coverage === 'not_parsed' ? '尚未解析' : coverage === 'partial' ? '部分解析' : coverage === 'extracted_text' ? '已提取文字' : coverage === 'model_description' ? '模型图片描述' : '覆盖范围未知'
+const knowledgeParseLabel = (row: Row) => row.parseState === 'queued' ? '等待后台解析'
+  : row.parseState === 'processing' ? '后台解析中'
+  : row.parseState === 'needs_retry' ? '未提取到内容'
+  : knowledgeCoverageLabel(row.coverage)
 const knowledgeFileTypeLabel = (row: Row) => {
   const name = typeof row.displayName === 'string' ? row.displayName.toLowerCase() : ''
-  if (row.source === 'image_analysis' || /\.(png|jpe?g|webp|gif|heic)$/.test(name)) return '图片'
+  if (row.mediaKind === 'web_article') return '网页'
+  if (row.source === 'image_analysis' || row.mediaKind === 'image_ocr' || /\.(png|jpe?g|webp|gif|heic)$/.test(name)) return '图片'
+  if (row.mediaKind === 'audio_transcript' || (typeof row.mime === 'string' && row.mime.startsWith('audio/')) || /\.(wav|m4a|mp3|ogg|opus|aac|flac|amr|silk)$/.test(name)) return '音频'
   if (/\.pdf$/.test(name)) return 'PDF'
   if (/\.(xlsx?|csv|tsv)$/.test(name)) return '表格'
   if (/\.(docx?|pptx?|odt|rtf)$/.test(name)) return '文档'
@@ -51,12 +92,46 @@ const knowledgeStoredLocation = (row: Row) => {
     ? `文档第 ${index + 1} / ${count} 段（保存的文本分段，不是页码）`
     : null
 }
-const knowledgeDetailMeta = (row: Row) => [knowledgeCoverageDetail(row), knowledgeStoredLocation(row), originalId(row) !== null ? '已关联本机原件' : null, typeof row.createdAt === 'number' && Number.isFinite(row.createdAt) && row.createdAt > 0 ? `保存于 ${new Date(row.createdAt).toLocaleString()}` : null].filter((value): value is string => value !== null).join(' · ')
+const knowledgeDetailMeta = (row: Row) => [typeof row.shareOrigin === 'string' ? row.shareOrigin : null,
+  typeof row.sourceUrl === 'string' ? row.sourceUrl : null, row.mediaKind === 'audio_transcript' ? '本机中文转写' : null,
+  knowledgeCoverageDetail(row), knowledgeStoredLocation(row), originalId(row) !== null ? '已关联本机原件' : null,
+  typeof row.createdAt === 'number' && Number.isFinite(row.createdAt) && row.createdAt > 0 ? `保存于 ${new Date(row.createdAt).toLocaleString()}` : null].filter((value): value is string => value !== null).join(' · ')
 const processingErrorLabel = (code: string | null) => code === 'credentials' ? '模型凭据不可用或被拒绝' : code === 'configuration' ? '后台模型尚未配置' : code === 'rate_limited' ? '模型服务限流' : code === 'service_unavailable' ? '模型服务暂不可用' : code === 'request_rejected' ? '模型服务拒绝请求，请检查模型兼容性' : code === 'timeout' ? '请求超时' : code === 'network' ? '网络不可用' : code === 'invalid_model_output' ? '模型返回的数据不符合要求' : code === 'processing_failed' ? '处理未完成' : null
 const processingDescription = (value: KnowledgeProcessing) => !value.memoryEnabled ? '记忆整理已关闭；重新开启后才能继续处理。' : value.state === 'queued' ? `等待或重试中；已重试 ${value.attempts} 次。下次：${value.nextAttemptAtMs !== null && value.nextAttemptAtMs > Date.now() ? new Date(value.nextAttemptAtMs).toLocaleString() : '等待系统调度'}。${processingErrorLabel(value.lastErrorCode) ? ` 上次原因：${processingErrorLabel(value.lastErrorCode)}。` : ''}` : value.state === 'running' ? '正在处理此版本；当前租约结束前不能重试。若不再需要，可停止整理，已在途的结果不会写入。' : value.state === 'failed' ? `已停止自动重试（共 ${value.attempts} 次）；可在修复问题后手动重试。${processingErrorLabel(value.lastErrorCode) ? ` 上次原因：${processingErrorLabel(value.lastErrorCode)}。` : ''}` : value.state === 'completed' ? '后台整理已结束；原文件的解析范围仍可能不完整。' : value.state === 'cancelled' ? '此版本的资料整理已停止；后台扫描不会自动重新建立。' : '没有此版本的后台整理任务；这不代表资料不存在。'
 const days = ['每天', '每周一', '每周二', '每周三', '每周四', '每周五', '每周六', '每周日']
 
-export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPanel?: Panel }) {
+function SharedOriginals({ note, open }: { note: Row; open: (row: Row) => void }) {
+  const [offset, setOffset] = useState(0)
+  const [page, setPage] = useState<{ items: Row[]; next: number | null } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [retry, setRetry] = useState(0)
+  useEffect(() => {
+    let current = true
+    setPage(null)
+    setFailed(false)
+    void runtimeBridge.companionDashboard({ operation: 'knowledgeAttachments', id: note.id, expectedText: note.text, offset })
+      .then(result => {
+        if (current) setPage({ items: rows(result.items), next: typeof result.nextOffset === 'number' ? result.nextOffset : null })
+      }).catch(() => { if (current) setFailed(true) })
+    return () => { current = false }
+  }, [note.id, note.text, offset, retry])
+  const next = page?.next
+  return <section className="knowledge-attachments" aria-label="随附原件">
+    <h5>随附原件</h5>
+    {failed ? <button type="button" onClick={() => setRetry(v => v + 1)}>未能读取，重试</button>
+      : !page ? <p role="status">正在读取原件记录…</p> : page.items.length === 0 ? <p>此页没有可用原件。</p>
+        : <ul>{page.items.map(item => <li key={item.id}><button type="button" onClick={() => open(item)}>
+          <span className="knowledge-type">{knowledgeFileTypeLabel(item)}</span>
+          <span>{typeof item.displayName === 'string' && item.displayName ? item.displayName : '查看原件'}</span>
+        </button></li>)}</ul>}
+    {(offset > 0 || next != null) && <div className="workspace-card-actions">
+      {offset > 0 && <button type="button" onClick={() => setOffset(Math.max(0, offset - 20))}>上一页原件</button>}
+      {next != null && <button type="button" onClick={() => setOffset(next)}>下一页原件</button>}
+    </div>}
+  </section>
+}
+
+export function CompanionWorkspace({ initialPanel = 'reminders', library = false }: { initialPanel?: Panel; library?: boolean }) {
   const [panel, setPanel] = useState<Panel>(initialPanel)
   const [items, setItems] = useState<Row[]>([])
   const [recurring, setRecurring] = useState<Row[]>([])
@@ -96,10 +171,53 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   const [knowledgeSelectionMode, setKnowledgeSelectionMode] = useState(false)
   const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<Set<string>>(() => new Set())
   const [knowledgeProcessing, setKnowledgeProcessing] = useState<KnowledgeProcessing | null>(null)
+  const [writing, setWriting] = useState(false)
+  const noteInput = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    if (library && (writing || editing)) noteInput.current?.focus()
+  }, [library, writing, editing])
+  const [captureReader, setCaptureReader] = useState<Row | null>(null)
   const [knowledgeDetail, setKnowledgeDetail] = useState<Row | null>(null)
   const [knowledgeImagePreview, setKnowledgeImagePreview] = useState<KnowledgeImagePreview | null>(null)
-  const [knowledgeImageThumbnails, setKnowledgeImageThumbnails] = useState<Map<string, string>>(() => new Map())
-  const thumbnailRequests = useRef(new Set<string>())
+  function showKnowledgeView(row: Row, view: 'reader' | 'detail') {
+    if (runtimeBridge.addKnowledgeCapturesListener && typeof row.createdAt === 'number') {
+      const prior = knowledgeHistoryEntry()
+      const generation = typeof row.generation === 'string' ? row.generation : typeof row.attachmentGeneration === 'string' ? row.attachmentGeneration : ''
+      if (prior?.view !== view || prior.id !== row.id || prior.createdAt !== row.createdAt || prior.generation !== generation) {
+        window.history.pushState({ ...window.history.state, whaleKnowledgeView: { view, id: row.id, createdAt: row.createdAt, generation, depth: (prior?.depth ?? 0) + 1 } }, '')
+      }
+    }
+    setKnowledgeImagePreview(null)
+    setCaptureReader(view === 'reader' ? row : null)
+    setKnowledgeDetail(view === 'detail' ? row : null)
+  }
+  function closeKnowledgeView(toList = false) {
+    const entry = knowledgeHistoryEntry()
+    if (entry) { window.history.go(toList ? -entry.depth : -1); return }
+    setCaptureReader(null); setKnowledgeDetail(null); setKnowledgeImagePreview(null)
+  }
+  useEffect(() => {
+    if (panel !== 'knowledge' || !runtimeBridge.addKnowledgeCapturesListener) return
+    let lookup = 0
+    const restore = () => {
+      const entry = knowledgeHistoryEntry()
+      const current = ++lookup
+      setKnowledgeImagePreview(null); setKnowledgeDetail(null); setCaptureReader(null)
+      if (!entry) return
+      if (entry.view === 'reader') {
+        setCaptureReader({ id: entry.id, text: '', createdAt: entry.createdAt, generation: entry.generation })
+      } else if (entry.view === 'detail') {
+        void runtimeBridge.companionDashboard({ operation: 'knowledgeCaptureRead', id: entry.id, createdAt: entry.createdAt, generation: entry.generation, offset: 0 })
+          .then(result => { if (current === lookup && knowledgeHistoryEntry()?.view === 'detail' && knowledgeHistoryEntry()?.id === entry.id) {
+            if (result.missing) setMessage('这份资料已删除或替换。')
+            else setKnowledgeDetail(rows([result.row])[0])
+          } }).catch(() => { if (current === lookup) setMessage('无法读取这份资料。') })
+      }
+    }
+    if (knowledgeHistoryEntry()) restore()
+    window.addEventListener('popstate', restore)
+    return () => { lookup++; window.removeEventListener('popstate', restore) }
+  }, [panel])
   const pending = useRef(false)
   const previousPanel = useRef(panel)
   const knowledgeQuery = panel === 'knowledge' ? query.trim() : ''
@@ -115,22 +233,14 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
   }, [knowledgeDetail])
   useEffect(() => {
     if (panel !== 'knowledge') return
-    let active = true
-    items.filter(canPreviewKnowledgeImage).forEach(row => {
-      const original = originalId(row)
-      const key = knowledgeImageKey(row)
-      if (original === null || thumbnailRequests.current.has(key)) return
-      thumbnailRequests.current.add(key)
-      void runtimeBridge.companionDashboard({ operation: 'knowledgeImagePreview', id: row.id, originalId: original, expectedText: row.text }).then(result => {
-        if (active && typeof result.imageBase64 === 'string' && result.imageBase64 !== '') setKnowledgeImageThumbnails(current => new Map(current).set(key, `data:image/png;base64,${result.imageBase64}`))
-      }).catch(() => undefined)
-    })
-    return () => { active = false }
-  }, [panel, items])
+    const refresh = () => { if (!document.hidden) setRevision(v => v + 1) }
+    document.addEventListener('visibilitychange', refresh)
+    return () => document.removeEventListener('visibilitychange', refresh)
+  }, [panel])
   useEffect(() => {
     let live = true
     if (previousPanel.current !== panel) {
-      setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setMemorySelectionMode(false); setSelectedMemoryIds(new Set()); setKnowledgeSource('all'); setKnowledgeCoverage('all'); setKnowledgeSelectionMode(false); setSelectedKnowledgeIds(new Set()); setKnowledgeProcessing(null)
+      setWriting(false); setItems([]); setRecurring([]); setSuggestions([]); setPreview(null); setReview(null); setEditing(null); setText(''); setMessage(''); setMemorySource('all'); setMemoryOrder('recent'); setMemorySelectionMode(false); setSelectedMemoryIds(new Set()); setKnowledgeSource('all'); setKnowledgeCoverage('all'); setKnowledgeSelectionMode(false); setSelectedKnowledgeIds(new Set()); setKnowledgeProcessing(null)
       previousPanel.current = panel
     }
     setLoading(true); setLoadFailed(false)
@@ -158,7 +268,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     if (pending.current) return null
     pending.current = true
     setBusy(true); setMessage('')
-    try { const result = await runtimeBridge.companionDashboard(request); if (result.result === 'STALE') { setMessage('记忆已变化，请重新核对。'); return null } if (result.ok === false || result.result === 'EXISTING_PENDING' || result.result === 'EXISTING_CONFIRMED') { setMessage('相同内容已存在或等待确认，未重复保存。'); return null } setText(''); setEditing(null); setReview(null); setPreview(null); setRevision(v => v + 1); setMessage(success); return result }
+    try { const result = await runtimeBridge.companionDashboard(request); if (result.result === 'STALE') { setMessage('记忆已变化，请重新核对。'); return null } if (result.ok === false || result.result === 'EXISTING_PENDING' || result.result === 'EXISTING_CONFIRMED') { setMessage('相同内容已存在或等待确认，未重复保存。'); return null } setWriting(false); setText(''); setEditing(null); setReview(null); setPreview(null); setRevision(v => v + 1); setMessage(success); return result }
     catch { setMessage('操作未完成，数据可能已变化或输入不符合要求；请刷新后重试。'); return null }
     finally { pending.current = false; setBusy(false) }
   }
@@ -214,6 +324,12 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     const revision = knowledgeRevision(row)
     if (!/^[a-f0-9-]{36}$/.test(row.id) || revision === null) { setMessage('资料版本无效，请刷新后重试。'); return }
     await askKnowledgeReference(row.id, revision)
+  }
+  const addCaptureTile = async (kind: 'clipboard' | 'screen') => {
+    try {
+      const response = await runtimeBridge.companionDashboard({ operation: 'addMemoryTile', kind })
+      setMessage(typeof response.message === 'string' ? response.message : '请在系统快捷设置中查看。')
+    } catch { setMessage('请在系统快捷设置的编辑页添加收藏入口。') }
   }
   const openKnowledgeOriginal = async (row: Row) => {
     const revision = knowledgeRevision(row)
@@ -330,17 +446,17 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
     const result = await run({ operation: 'memoryBatchDelete', entries: selected }, `已删除 ${selected.length} 条记忆，并保留删除抑制记录。`)
     if (result) { setSelectedMemoryIds(new Set()); setMemorySelectionMode(false) }
   }
-  return <section className="companion-workspace" aria-labelledby="companion-workspace-title">
-    <div className="workspace-heading"><div><span className="workspace-kicker">YOUR ASSISTANT</span><h3 id="companion-workspace-title">助手工作台</h3><p>提醒、资料与长期记忆集中管理，数据保存在手机本地。</p></div>
+  return <section className={library ? "companion-workspace memory-workspace" : "companion-workspace"} aria-labelledby="companion-workspace-title">
+    <div className="workspace-heading"><div>{library ? <h1 id="companion-workspace-title">{t("记忆")}</h1> : <><h3 id="companion-workspace-title">助手工作台</h3><p>管理本地资料、长期记忆和提醒。</p></>}</div>
       <button className="icon-button" type="button" aria-label="刷新助手数据" disabled={busy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></div>
     <div className="workspace-tabs" role="tablist" aria-label="助手工作台分类">
-      {([{ id: 'reminders', label: '提醒', icon: <Bell size={17} /> }, { id: 'knowledge', label: '资料', icon: <BookOpen size={17} /> }, { id: 'memory', label: '长期记忆', icon: <Brain size={17} /> }] as const).map(tab =>
-        <button key={tab.id} id={`companion-workspace-tab-${tab.id}`} role="tab" aria-selected={panel === tab.id} aria-controls={`companion-workspace-panel-${tab.id}`} tabIndex={panel === tab.id ? 0 : -1} type="button" disabled={busy} onClick={() => { setQuery(''); setPanel(tab.id) }}>{tab.icon}{tab.label}</button>)}
+      {([{ id: 'knowledge', label: '资料', icon: <BookOpen size={17} /> }, { id: 'memory', label: '长期记忆', icon: <Brain size={17} /> }, { id: 'reminders', label: '提醒', icon: <Bell size={17} /> }] as const).map(tab =>
+        <button key={tab.id} id={`companion-workspace-tab-${tab.id}`} role="tab" aria-selected={panel === tab.id} aria-controls={`companion-workspace-panel-${tab.id}`} tabIndex={panel === tab.id ? 0 : -1} type="button" disabled={busy} onClick={() => { setQuery(''); setPanel(tab.id) }}>{tab.icon}{t(tab.label)}</button>)}
     </div>
     {message && <p className="workspace-message" role="status" aria-live="polite">{message}</p>}
     {loading && <p className="workspace-hint" role="status">正在读取本地数据…</p>}
     {loadFailed && <button className="button button-secondary" onClick={() => setRevision(v => v + 1)}>重新读取数据</button>}
-    {!loading && !loadFailed && items.length === 0 && recurring.length === 0 && <p className="workspace-hint">当前分类还没有内容，可以在下方添加或导入。</p>}
+    {!loading && !loadFailed && !library && items.length === 0 && recurring.length === 0 && <p className="workspace-hint">当前分类还没有内容，可以在下方添加或导入。</p>}
     <fieldset id={`companion-workspace-panel-${panel}`} className="workspace-fields" role="tabpanel" aria-labelledby={`companion-workspace-tab-${panel}`} aria-busy={busy || loading} disabled={busy}>
     {panel === 'reminders' ? <>
       <p className="workspace-hint">提醒需要系统通知权限；省电和后台限制可能延迟送达。{notificationStatus && (notificationStatus === 'READY' ? '通知权限已就绪。' : '当前通知状态未就绪，请检查系统通知设置。')}</p>
@@ -361,31 +477,58 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
         {row.nextAt && row.state === 'failed' && <button type="button" onClick={() => { void run({ operation: 'recurringRetry', id: row.id }, '已重新安排。') }}>重试</button>}
         <button type="button" onClick={() => { if (window.confirm(`删除提醒“${row.text}”？`)) void run({ operation: row.nextAt ? 'recurringDelete' : 'reminderDelete', id: row.id, expected: expected(row) }, '提醒已删除。') }}>删除</button></div></article>)}</div>
     </> : <>
-      <div className="workspace-backup"><button type="button" className="button button-secondary" disabled={busy} onClick={() => { void exportFile(panel) }}><Download size={17} />导出备份</button>
-        <label className="button button-secondary"><Upload size={17} />导入备份<input type="file" accept="application/json,.json" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void readFile(file, panel); e.target.value = '' }} /></label>
-        {panel === 'knowledge' && <label className="button button-secondary"><Upload size={17} />导入文本<input type="file" accept="text/plain,.txt" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void readFile(file, 'text'); e.target.value = '' }} /></label>}</div>
-      <p className="workspace-hint">备份为未加密 JSON；导入只合并新增内容，确认前不会写入。</p>
-      {preview && <div className="workspace-review"><strong>核对导入内容</strong><p>新增 {preview.items.length} 条，跳过 {preview.skipped} 条已有内容。</p>{preview.items.map(row => <p key={row.id}>{row.text}</p>)}<div className="workspace-card-actions"><button type="button" onClick={() => setPreview(null)}>取消</button><button type="button" disabled={busy} onClick={() => { void run({ operation: 'applyImport', token: preview.token }, '已合并备份。') }}>确认合并</button></div></div>}
-      {panel === 'memory' && <details className="workspace-review"><summary><strong>通知中的记忆候选（{suggestions.length}）</strong></summary><p>候选来自通知，可能由他人发送或已经过时；只有你核对并保存后才会成为记忆。</p>
-        {suggestions.length === 0 && <p>暂无候选；可在上方开启从通知中寻找候选。</p>}
-        {suggestions.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>{row.source} · {typeof row.time === 'number' ? new Date(row.time).toLocaleString() : ''}</small></div><div className="workspace-card-actions"><button type="button" onClick={() => { setEditing(null); setText(row.text) }}>整理成记忆</button><button type="button" onClick={() => { void run({ operation: 'memorySuggestionDismiss', id: row.id }, '已忽略候选。') }}>忽略</button></div></article>)}
-        <button type="button" className="button button-secondary" onClick={() => { void run({ operation: 'memorySuggestionsReset' }, '已重置忽略记录。') }}>重置已忽略候选</button>
+      <div className="library-command-row">
+        <label className="library-search"><Search size={18} aria-hidden="true"/><span className="sr-only">搜索</span><input aria-label={t("搜索")} type="search" maxLength={panel === 'knowledge' ? 100 : undefined} value={query} onChange={e => setQuery(e.target.value)} placeholder={t(panel === 'memory' ? '搜索已确认及待确认的记忆' : '搜索正文、文件名或来源')} /></label>
+        {panel === 'knowledge' && (Capacitor.isNativePlatform()
+          ? <button type="button" className="button button-secondary" disabled={busy} onClick={() => {
+            void runtimeBridge.companionDashboard({ operation: 'knowledgePickFiles' }).catch(() => setMessage('无法打开系统文件选择器。'))
+          }}><Upload size={17} />{t("存入本地文件")}</button>
+          : <label className="button button-secondary"><Upload size={17} />{t("导入文本")}<input type="file" accept="text/plain,.txt" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void readFile(file, 'text'); e.target.value = '' }} /></label>)}
+        {library && !writing && !editing && <button type="button" className="button button-secondary" onClick={() => setWriting(true)}>
+          <PenLine size={16}/>{t(panel === 'memory' ? '写记忆' : '记一笔')}</button>}
+      </div>
+      {(!library || writing || editing) && <div className="library-editor">
+      <label>{panel === 'memory' ? '记忆内容' : '资料内容'}<textarea ref={noteInput} value={text} maxLength={panel === 'memory' ? 600 : 2000000} rows={3} onChange={e => setText(e.target.value)} placeholder={panel === 'memory' ? '写下希望助手记住的事实或偏好' : '输入或导入需要保存的资料（最长 200 万字，会自动分段）'} /></label>
+      <div className="workspace-card-actions"><button className="button button-primary" type="button" disabled={busy || !text.trim()} onClick={() => {
+        if (panel === 'memory') { void startMemoryReview(editing ? 'edit' : 'add', editing ?? undefined); return }
+        void run(editing ? { operation: 'knowledgeEdit', id: editing.id, expectedText: editing.text, text: text.trim() } : { operation: 'knowledgeAdd', text: text.trim() }, '资料已处理。')
+      }}>{editing ? '保存修改' : '添加'}</button>{(editing || library) && <button type="button" onClick={() => { setWriting(false); setEditing(null); setText(''); setReview(null) }}>取消编辑</button>}</div>
+      </div>}
+      {panel === 'knowledge' && runtimeBridge.addKnowledgeCapturesListener && !knowledgeQuery && knowledgeSource === 'all' && knowledgeCoverage === 'all' && <CaptureShelf revision={revision} active={!captureReader && !knowledgeDetail} open={row => showKnowledgeView(row, 'reader')} />}
+      <div className="library-options">
+      {panel === 'knowledge' && <details className="knowledge-attachments"><summary><strong>{t("从其他 App 投放")}</strong></summary>
+        <p>能拖动时，把文字、图片或文件拖到鲸鱼上松手。也可以在系统分享或选中文字的菜单里点「存入鲸鱼记忆」。</p>
+        <p>只有复制入口时，复制内容后下拉快捷设置，点「收藏剪贴板」。想保存眼前的页面，点「收藏这一屏」，按系统提示授权一次。</p>
+        {Capacitor.isNativePlatform() && <div className="workspace-card-actions">
+          <button type="button" onClick={() => { void addCaptureTile('clipboard') }}>添加「收藏剪贴板」</button>
+          <button type="button" onClick={() => { void addCaptureTile('screen') }}>添加「收藏这一屏」</button>
+        </div>}
       </details>}
-      <label>搜索<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={panel === 'memory' ? '搜索已确认及待确认的记忆' : '搜索本地资料'} /></label>
+      {panel === 'knowledge' && <details className="library-disclosure" open={!library || undefined}><summary>{t("筛选与管理")}{knowledgeSource !== 'all' || knowledgeCoverage !== 'all' ? ' · 已筛选' : ''}</summary>
       {panel === 'knowledge' && <div className="workspace-form-row knowledge-filter-row">
         <label>资料来源<select value={knowledgeSource} onChange={event => setKnowledgeSource(event.target.value as typeof knowledgeSource)}><option value="all">全部来源</option><option value="shared_text">分享文本</option><option value="text_file">文档/文本</option><option value="original">已保存原件</option><option value="image_analysis">图片描述</option></select></label>
         <label>解析覆盖<select value={knowledgeCoverage} onChange={event => setKnowledgeCoverage(event.target.value as typeof knowledgeCoverage)}><option value="all">全部状态</option><option value="not_parsed">尚未解析</option><option value="partial">部分解析</option><option value="extracted_text">已提取文字</option><option value="model_description">模型图片描述</option></select></label>
       </div>}
+      {panel === 'knowledge' && list.length > 0 && <div className="workspace-card-actions"><button type="button" disabled={busy} onClick={() => { setKnowledgeSelectionMode(value => !value); setSelectedKnowledgeIds(new Set()) }}>{knowledgeSelectionMode ? '结束批量管理' : '批量管理'}</button>{knowledgeSelectionMode && <button type="button" className="button-danger-quiet" disabled={busy || selectedKnowledgeIds.size === 0} onClick={() => { void deleteSelectedKnowledge() }}>删除所选（{selectedKnowledgeIds.size}）</button>}</div>}
+      </details>}
+      <details className="library-disclosure" open={!library || undefined}><summary>{t("备份与导入")}</summary>
+      <div className="workspace-backup"><button type="button" className="button button-secondary" disabled={busy} onClick={() => { void exportFile(panel) }}><Download size={17} />导出备份</button>
+        <label className="button button-secondary"><Upload size={17} />导入备份<input type="file" accept="application/json,.json" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void readFile(file, panel); e.target.value = '' }} /></label>
+</div>
+      <p className="workspace-hint">备份为未加密 JSON；导入只合并新增内容，确认前不会写入。</p>
+      </details></div>
+      {preview && <div className="workspace-review"><strong>核对导入内容</strong><p>新增 {preview.items.length} 条，跳过 {preview.skipped} 条已有内容。</p>{preview.items.map(row => <p key={row.id}>{row.text}</p>)}<div className="workspace-card-actions"><button type="button" onClick={() => setPreview(null)}>取消</button><button type="button" disabled={busy} onClick={() => { void run({ operation: 'applyImport', token: preview.token }, '已合并备份。') }}>确认合并</button></div></div>}
+      {panel === 'memory' && <details className="workspace-review"><summary><strong>通知中的记忆候选（{suggestions.length}）</strong></summary><p>候选来自通知，可能由他人发送或已经过时；只有你核对并保存后才会成为记忆。</p>
+        {suggestions.length === 0 && <p>暂无候选；可在上方开启从通知中寻找候选。</p>}
+        {suggestions.map(row => <article className="workspace-card" key={row.id}><div><strong>{row.text}</strong><small>{row.source} · {typeof row.time === 'number' ? new Date(row.time).toLocaleString() : ''}</small></div><div className="workspace-card-actions"><button type="button" onClick={() => { setEditing(null); setText(row.text); setWriting(true) }}>整理成记忆</button><button type="button" onClick={() => { void run({ operation: 'memorySuggestionDismiss', id: row.id }, '已忽略候选。') }}>忽略</button></div></article>)}
+        <button type="button" className="button button-secondary" onClick={() => { void run({ operation: 'memorySuggestionsReset' }, '已重置忽略记录。') }}>重置已忽略候选</button>
+      </details>}
       {panel === 'memory' && <div className="workspace-form-row memory-filter-row">
         <label>来源筛选<select value={memorySource} onChange={event => setMemorySource(event.target.value)}><option value="all">全部来源</option>{memorySources.map(source => <option key={source} value={source}>{source}</option>)}</select></label>
         <label>排序<select value={memoryOrder} onChange={event => setMemoryOrder(event.target.value as typeof memoryOrder)}><option value="recent">最近</option><option value="oldest">最早</option><option value="source">来源</option><option value="type">类型</option></select></label>
       </div>}
-      {panel === 'knowledge' && list.length > 0 && <div className="workspace-card-actions"><button type="button" disabled={busy} onClick={() => { setKnowledgeSelectionMode(value => !value); setSelectedKnowledgeIds(new Set()) }}>{knowledgeSelectionMode ? '结束批量管理' : '批量管理'}</button>{knowledgeSelectionMode && <button type="button" className="button-danger-quiet" disabled={busy || selectedKnowledgeIds.size === 0} onClick={() => { void deleteSelectedKnowledge() }}>删除所选（{selectedKnowledgeIds.size}）</button>}</div>}
-      <label>{panel === 'memory' ? '记忆内容' : '资料内容'}<textarea value={text} maxLength={panel === 'memory' ? 600 : 2000000} rows={3} onChange={e => setText(e.target.value)} placeholder={panel === 'memory' ? '写下希望助手记住的事实或偏好' : '输入或导入需要保存的资料（最长 200 万字，会自动分段）'} /></label>
-      <div className="workspace-card-actions"><button className="button button-primary" type="button" disabled={busy || !text.trim()} onClick={() => {
-        if (panel === 'memory') { void startMemoryReview(editing ? 'edit' : 'add', editing ?? undefined); return }
-        void run(editing ? { operation: 'knowledgeEdit', id: editing.id, expectedText: editing.text, text: text.trim() } : { operation: 'knowledgeAdd', text: text.trim() }, '资料已处理。')
-      }}>{editing ? '保存修改' : '添加'}</button>{editing && <button type="button" onClick={() => { setEditing(null); setText('') }}>取消编辑</button>}</div>
+      {panel === 'knowledge' && library && !loading && !loadFailed && list.length === 0 && <p className="workspace-hint">{query ? '没有找到匹配的资料。' : '当前没有资料，可以存入文件或记一笔。'}</p>}
+
       {review && <div className="workspace-review"><strong>核对相关记忆</strong><p>相关内容仅供参考，请确认是否重复、冲突或包含敏感信息。</p>{review.candidates.map((row, i) => <p key={i}>{row.status}：{row.text}</p>)}<div className="workspace-card-actions"><button type="button" onClick={() => setReview(null)}>取消</button><button type="button" disabled={busy} onClick={() => { void saveMemory() }}>确认保存</button></div></div>}
       {panel === 'memory' && memoryList.length > 0 && <div className="workspace-card-actions"><p className="workspace-hint">展开分类查看缩略卡片，点击卡片查看详情；左滑可删除。</p><button type="button" disabled={busy} onClick={() => { setMemorySelectionMode(value => !value); setSelectedMemoryIds(new Set()) }}>{memorySelectionMode ? '结束批量管理' : '批量管理'}</button>{memorySelectionMode && <button type="button" className="button-danger-quiet" disabled={busy || selectedMemoryIds.size === 0} onClick={() => { void deleteSelectedMemories() }}>删除所选（{selectedMemoryIds.size}）</button>}</div>}
       {panel === 'memory' ? <><div className="memory-groups">{groups.map(group => <details className="memory-group" key={group.name} open={query.trim() ? true : undefined}>
@@ -405,19 +548,26 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
           </details>
           {!memorySelectionMode && revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
-      </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}>{knowledgeSelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedKnowledgeIds.has(row.id)} onChange={() => toggleKnowledgeSelection(row.id)} aria-label={`选择资料：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}`} />选择</label>}<div className="knowledge-card-copy">{knowledgeImageThumbnails.get(knowledgeImageKey(row)) && <img className="knowledge-list-thumbnail" src={knowledgeImageThumbnails.get(knowledgeImageKey(row))} alt={`图片缩略图：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : '资料图片'}`} />}<details className="knowledge-card-detail"><summary><span className="knowledge-type" aria-label={`资料类型：${knowledgeFileTypeLabel(row)}`}>{knowledgeFileTypeLabel(row)}</span><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeCoverageLabel(row.coverage)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>
+</details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}>{knowledgeSelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedKnowledgeIds.has(row.id)} onChange={() => toggleKnowledgeSelection(row.id)} aria-label={`选择资料：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}`} />选择</label>}<div className="knowledge-card-copy">{canPreviewKnowledgeImage(row) && <KnowledgeThumbnail row={row} />}{library ? <button type="button" className="library-result" aria-pressed={knowledgeSelectionMode ? selectedKnowledgeIds.has(row.id) : undefined} onClick={() => knowledgeSelectionMode ? toggleKnowledgeSelection(row.id) : showKnowledgeView(row, row.source === 'original' || !!row.documentId ? 'reader' : 'detail')}>
+          <span className="result-kind">{knowledgeFileTypeLabel(row)}</span>
+          <span className="result-title">{typeof row.displayName === 'string' && row.displayName ? row.displayName : row.text}</span>
+          <small>{[typeof row.shareOrigin === 'string' ? row.shareOrigin : knowledgeSourceLabel(row.source), row.source === 'original' || row.coverage ? knowledgeParseLabel(row) : null].filter(Boolean).join(' · ')}</small>
+        </button> : <details className="knowledge-card-detail"><summary><span className="knowledge-type" aria-label={`资料类型：${knowledgeFileTypeLabel(row)}`}>{knowledgeFileTypeLabel(row)}</span><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeParseLabel(row)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>}
         {knowledgeProcessing?.id === row.id && <div className="workspace-review"><strong>资料处理状态</strong><p>{processingDescription(knowledgeProcessing)}</p><div className="workspace-card-actions">
           {(knowledgeProcessing.state === 'queued' || knowledgeProcessing.state === 'failed') && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingRetry', knowledgeProcessing) }}>重试</button>}
           {(knowledgeProcessing.state === 'queued' || knowledgeProcessing.state === 'running' || knowledgeProcessing.state === 'failed') && <button type="button" className="button-danger-quiet" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingCancel', knowledgeProcessing) }}>停止整理</button>}
           {knowledgeProcessing.state === 'cancelled' && knowledgeProcessing.memoryEnabled && <button type="button" onClick={() => { void changeKnowledgeProcessing('knowledgeProcessingResume', knowledgeProcessing) }}>重新整理</button>}
           <button type="button" onClick={() => setKnowledgeProcessing(null)}>收起</button>
         </div></div>}</div>{!knowledgeSelectionMode && <div className="workspace-card-actions">
-        <button type="button" onClick={() => { setKnowledgeDetail(row); setKnowledgeImagePreview(null) }}>查看详情</button>
+        <details className="library-row-more" open={!library || undefined}><summary>{t("更多操作")}</summary><div className="workspace-card-actions">
+        <button type="button" onClick={() => { showKnowledgeView(row, 'detail') }}>查看详情</button>
         {knowledgeRevision(row) !== null && <button type="button" onClick={() => { void askKnowledge(row) }}>用此资料提问</button>}
         <button type="button" onClick={() => { void readKnowledgeProcessing(row) }}>处理状态</button>
+
         {row.source !== 'original' && <button type="button" onClick={() => { setEditing(row); setText(row.text) }}>编辑</button>}
         <button type="button" onClick={() => { void deleteKnowledge(row) }}>删除</button>
         {originalId(row) !== null && <button type="button" className="button-danger-quiet" onClick={() => { void deleteKnowledgeOriginal(row) }}>永久删除整份原件</button>}
+        </div></details>
       </div>}</article>)}</div>{knowledgeNextOffset !== null && <button className="button button-secondary" type="button" disabled={busy || loadingMoreKnowledge} onClick={() => { void loadMoreKnowledge() }}>{loadingMoreKnowledge ? '正在加载资料…' : '加载更多资料'}</button>}</>}
       {panel === 'knowledge' && undoKnowledge !== null && <p className="workspace-hint" role="status">资料已删除，可在十分钟内撤销。 <button className="button button-quiet" type="button" disabled={busy} onClick={() => { void undoKnowledgeDelete() }}>撤销删除</button></p>}
       {panel === 'knowledge' && undoKnowledgeBatch.length > 0 && <p className="workspace-hint" role="status">已批量删除 {undoKnowledgeBatch.length} 条资料，可在十分钟内一起撤销。 <button className="button button-quiet" type="button" disabled={busy} onClick={() => { void undoKnowledgeBatchDelete() }}>撤销本批资料</button></p>}
@@ -425,12 +575,30 @@ export function CompanionWorkspace({ initialPanel = 'reminders' }: { initialPane
       {panel === 'memory' && items.length > 0 && <button className="button button-danger-quiet" type="button" onClick={() => { if (window.confirm('清空全部长期记忆并暂停通知和使用习惯的自动整理？此操作无法撤销。')) void run({ operation: 'memoryClear', confirmed: true }, '长期记忆已清空。') }}>清空全部长期记忆</button>}
     </>}
     </fieldset>
+    {captureReader && panel === 'knowledge' && <CaptureReader key={captureReader.id} reference={captureReader} onClose={() => closeKnowledgeView()} manage={row => showKnowledgeView(row, 'detail')} />}
     {knowledgeDetail && <div className="knowledge-detail-backdrop"><section className="knowledge-detail-page" role="dialog" aria-modal="true" aria-labelledby="knowledge-detail-title">
-      <header><div><span className="knowledge-type">{knowledgeFileTypeLabel(knowledgeDetail)}</span><h4 id="knowledge-detail-title">{typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料详情'}</h4><small>{knowledgeSourceLabel(knowledgeDetail.source)} · {knowledgeCoverageLabel(knowledgeDetail.coverage)}</small></div><button type="button" className="button button-secondary" onClick={() => { setKnowledgeDetail(null); setKnowledgeImagePreview(null) }}>关闭</button></header>
+      <header><div><span className="knowledge-type">{knowledgeFileTypeLabel(knowledgeDetail)}</span><h4 id="knowledge-detail-title">{typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料详情'}</h4><small>{knowledgeSourceLabel(knowledgeDetail.source)} · {knowledgeParseLabel(knowledgeDetail)}</small></div><button type="button" className="button button-secondary" onClick={() => closeKnowledgeView()}>关闭</button></header>
+      {runtimeBridge.addKnowledgeCapturesListener && typeof knowledgeDetail.createdAt === 'number' && (knowledgeDetail.source === 'original' || typeof knowledgeDetail.documentId === 'string') && <button type="button" className="button button-secondary" onClick={() => showKnowledgeView(knowledgeDetail, 'reader')}>阅读提取内容</button>}
       {knowledgeDetailMeta(knowledgeDetail) && <p className="knowledge-detail-meta">{knowledgeDetailMeta(knowledgeDetail)}</p>}
+      {typeof knowledgeDetail.sourceUrl === 'string' && /^https?:\/\//i.test(knowledgeDetail.sourceUrl) && knowledgeDetail.mediaKind !== 'web_article' &&
+        <button type="button" className="button button-secondary" disabled={busy} onClick={() => {
+          setBusy(true)
+          void runtimeBridge.companionDashboard({ operation: 'knowledgeReadLink', id: knowledgeDetail.id, expectedText: knowledgeDetail.text }).then(result => {
+            setMessage(result.ok === true ? '公开正文已存入资料库。' : '网页未提供可读取的公开正文。原分享已保留，可改存截图或导出文件。')
+            setRevision(v => v + 1); closeKnowledgeView(true)
+          }).catch(() => { setMessage('无法提取网页正文，原分享已保留。'); closeKnowledgeView(true) })
+            .finally(() => setBusy(false))
+        }}>提取公开网页正文</button>}
+      {knowledgeDetail.source === 'original' && knowledgeDetail.parseState === 'needs_retry' &&
+        <button type="button" className="button button-secondary" disabled={busy} onClick={() => {
+          if (typeof knowledgeDetail._review !== 'string') return
+          void run({ operation: 'knowledgeRetryParse', id: knowledgeDetail.id, expected: knowledgeDetail._review },
+            '已安排重新解析，完成后可在资料库检索。').then(ok => { if (ok) closeKnowledgeView(true) })
+        }}>重新解析原件</button>}
       {knowledgeImagePreview?.id === knowledgeDetail.id && <img className="knowledge-image-preview" src={knowledgeImagePreview.source} alt={`图片预览：${typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料图片'}`} />}
       <p className="knowledge-detail-content">{knowledgeDetail.text}</p>
-      <div className="workspace-card-actions">{canPreviewKnowledgeImage(knowledgeDetail) && <button type="button" disabled={busy} onClick={() => { void showKnowledgeImagePreview(knowledgeDetail) }}>{knowledgeImagePreview?.id === knowledgeDetail.id ? '隐藏图片预览' : '显示图片预览'}</button>}{originalId(knowledgeDetail) !== null && knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void openKnowledgeOriginal(knowledgeDetail) }}>在助手中查看原件</button>}{knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void askKnowledge(knowledgeDetail) }}>用此资料提问</button>}<button type="button" onClick={() => { setKnowledgeDetail(null); setKnowledgeImagePreview(null) }}>返回资料列表</button></div>
+      {knowledgeDetail.attachmentLinks != null && <SharedOriginals key={knowledgeDetail.id} note={knowledgeDetail} open={row => { if (runtimeBridge.addKnowledgeCapturesListener && typeof row.createdAt === "number") { showKnowledgeView(row, 'reader') } else { void openKnowledgeOriginal(row) } }} />}
+      <div className="workspace-card-actions">{canPreviewKnowledgeImage(knowledgeDetail) && <button type="button" disabled={busy} onClick={() => { void showKnowledgeImagePreview(knowledgeDetail) }}>{knowledgeImagePreview?.id === knowledgeDetail.id ? '隐藏图片预览' : '显示图片预览'}</button>}{originalId(knowledgeDetail) !== null && knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void openKnowledgeOriginal(knowledgeDetail) }}>在助手中查看原件</button>}{knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void askKnowledge(knowledgeDetail) }}>用此资料提问</button>}<button type="button" onClick={() => closeKnowledgeView(true)}>返回资料列表</button></div>
     </section></div>}
   </section>
 }

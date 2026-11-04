@@ -17,4 +17,27 @@
         android:importantForAccessibility="no"
         android:scaleType="fitCenter"
         android:src="@drawable/ic_overlay_ball" />
+    <TextView
+        android:id="@+id/companion_worker_badge"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_gravity="top|end"
+        android:gravity="center"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:importantForAccessibility="no" />
+    <TextView
+        android:id="@+id/companion_drop_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#E322526B"
+        android:gravity="center"
+        android:paddingVertical="3dp"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        android:visibility="gone"
+        android:importantForAccessibility="no" />
 </FrameLayout>

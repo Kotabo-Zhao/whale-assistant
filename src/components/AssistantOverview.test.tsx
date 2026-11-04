@@ -24,3 +24,13 @@ it('缺失的原生数据不能显示为零条事项', async () => {
   expect(await screen.findByRole('status')).toHaveTextContent('不会把读取失败当作没有事项')
   expect(screen.queryByText('当前没有已安排的未来提醒。')).not.toBeInTheDocument()
 })
+
+it('首页工具按已启用的修订直接打开', async () => {
+  const revision = 'a'.repeat(64)
+  bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(
+    request.operation === 'featureTools' ? { items: [{ id: 'reading-card', title: '阅读摘录卡', revision }] }
+      : { generatedAt: 1, captureEnabled: false, notificationCount: 0, memoryCount: 0, knowledgeCount: 0, categories: {}, tasks: [], reminders: [], recurring: [] }))
+  render(<AssistantOverview />)
+  fireEvent.click(await screen.findByRole('button', { name: '阅读摘录卡' }))
+  expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'featureOpen', id: 'reading-card', revision })
+})

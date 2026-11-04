@@ -18,7 +18,9 @@ it('保存新角色并允许启用，导入时不覆盖已有角色', async () =
   fireEvent.change(screen.getByLabelText('角色名'), { target: { value: '小鲸' } })
   fireEvent.change(screen.getByLabelText('性格与说话方式'), { target: { value: '自然温柔' } })
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith(expect.objectContaining({ operation: 'personaSave', card: expect.objectContaining({ name: '小鲸', personality: '自然温柔' }) })))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith(expect.objectContaining({
+    operation: 'personaSave', card: expect.objectContaining({ name: '小鲸', personality: '自然温柔' }) as unknown,
+  })))
   expect(await screen.findByRole('button', { name: '启用此角色' })).toBeInTheDocument()
 })
 
@@ -33,5 +35,8 @@ it('导入角色卡附加指引和世界书并保存', async () => {
   fireEvent.change(screen.getByPlaceholderText('粘贴角色卡 JSON'), { target: { value: JSON.stringify({ data: { name: '小鲸', system_prompt: '保持风格', post_history_instructions: '继续扮演', character_book: { entries: [{ keys: ['灯塔'], content: '海边' }] } } }) } })
   fireEvent.click(screen.getByRole('button', { name: '导入 JSON 草稿' }))
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith(expect.objectContaining({ operation: 'personaSave', card: expect.objectContaining({ name: '小鲸', systemPrompt: '保持风格', postHistory: '继续扮演', worldBook: expect.stringContaining('灯塔') }) })))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith(expect.objectContaining({
+    operation: 'personaSave', card: expect.objectContaining({ name: '小鲸', systemPrompt: '保持风格',
+      postHistory: '继续扮演', worldBook: expect.stringContaining('灯塔') as unknown }) as unknown,
+  })))
 })

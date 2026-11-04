@@ -114,6 +114,13 @@ and KaTeX 0.16.22 for offline Markdown and mathematical typesetting. These
 projects are distributed under the MIT license; their license texts are included
 in `assets/legal/licenses/` in the APK.
 
+## 本机资料解析组件
+
+- 中文语音识别使用 Vosk Android 0.3.75 及 `vosk-model-small-cn-0.22`。模型 ZIP 的 SHA-256 为 `3af8b0e7e0f835ae9d414ce5df580237a3cfb08d586c9fbbb0f7ff29ad5b14ba`。Vosk 与该模型使用 Apache License 2.0。[Vosk](https://github.com/alphacep/vosk-api) 和[官方模型表](https://alphacephei.com/vosk/models)。
+- Vosk 通过 JNA Android 5.18.1 调用原生识别器。JNA 提供 Apache License 2.0 与 LGPL 2.1 或更高版本的授权选项。[JNA 许可证](https://github.com/java-native-access/jna/blob/5.18.1/LICENSE)。
+- 图片文字识别使用随 APK 打包的 ML Kit 中文识别器 16.0.1。[ML Kit 中文 OCR](https://developers.google.com/ml-kit/vision/text-recognition/v2/android)。
+- 公开网页提取使用 jsoup 1.18.3，采用 MIT 许可证。[jsoup](https://jsoup.org/license)。
+
 ## dsh-see-now 核心
 
 来源：https://github.com/SAOS-3624/dsh-see-now ，提交 af33bbc750e267267a9cb2c35640c81f8ca1f2be。

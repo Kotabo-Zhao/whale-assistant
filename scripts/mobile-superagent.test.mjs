@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync, statSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { SuperagentDomain } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-domain.js'
@@ -8,7 +8,107 @@ import { SuperagentCoordinator } from './runtime-profile/plugins/dsh-mobile-shiz
 import { feishuTrigger, githubReviewTrigger } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-sources.js'
 import { installWorkers } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/workers.js'
 import { SuperagentSourceRunner } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-runner.js'
-import { relatedFeishuTickets } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-runtime.js'
+import { SuperagentChannels } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-channels.js'
+import { relatedFeishuTickets, hasEnabledSources } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-runtime.js'
+import { readSuperagentResource } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-resources.js'
+
+test('domain resource pages preserve ticket ownership and restrict worker reads', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-resources-')); t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const domain = new SuperagentDomain(directory)
+  for (const id of ['mine', 'other']) domain.repo.ticketRows.set(id, {
+    id, title: id, origin: { triggerId: id }, updatedAt: id === 'mine' ? '2026-11-04' : '2026-11-03',
+    inputs: [{ id: 'input', kind: 'note', text: id }], assignments: [{ id, state: 'ended', report: { state: 'ready', summary: id } }],
+  })
+  const worker = { domainTicketId: 'mine' }
+  assert.equal(readSuperagentResource(domain, { resource: 'tickets', limit: 1 }, null).nextOffset, 1)
+  assert.equal(readSuperagentResource(domain, { resource: 'tickets', offset: 1 }, null).items[0].id, 'other')
+  assert.equal(readSuperagentResource(domain, { resource: 'result', id: 'mine' }, worker).latest.report.summary, 'mine')
+  assert.equal(readSuperagentResource(domain, { resource: 'ticket' }, worker).id, 'mine')
+  for (const args of [{ resource: 'tickets' }, { resource: 'inputs', id: 'other' }, { resource: 'health' }])
+    assert.throws(() => readSuperagentResource(domain, args, worker), /本工单/)
+})
+
+test('failed outbox deliveries persist their retry time across restarts', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-outbox-retry-')); t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const domain = new SuperagentDomain(directory)
+  domain.repo.atomic(() => domain.messages.set('one', { id: 'one', status: 'pending', channel: { source: 'feishu', address: {} } }))
+  domain.failMessage('one', new Error('HTTP 503'), 1000)
+  let row = new SuperagentDomain(directory).pendingMessages()[0]
+  assert.equal(row.attempts, 1); assert.equal(row.nextAttemptAt, 6000); assert.match(row.lastError, /503/)
+  domain.failMessage('one', 'again', 6000)
+  row = new SuperagentDomain(directory).pendingMessages()[0]
+  assert.equal(row.attempts, 2); assert.equal(row.nextAttemptAt, 16000)
+})
+
+test('effect acknowledgements cannot remove a newer generation', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-effects-')); t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const domain = new SuperagentDomain(directory)
+  domain.repo.atomic(() => domain.effects.set('deliver:a', { id: 'deliver:a', generation: 'new' }))
+  domain.acknowledgeEffect('deliver:a', 'old')
+  assert.equal(new SuperagentDomain(directory).pendingEffects().length, 1)
+  domain.acknowledgeEffect('deliver:a', 'new')
+  assert.equal(new SuperagentDomain(directory).pendingEffects().length, 0)
+})
+
+test('failed effect backoff is durable and cannot alter a newer effect', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-effect-retry-')); t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const domain = new SuperagentDomain(directory)
+  domain.repo.atomic(() => domain.effects.set('start:a', { id: 'start:a', generation: 'new' }))
+  domain.failEffect('start:a', 'old', 'stale', 1000)
+  assert.equal(domain.pendingEffects()[0].attempts, undefined)
+  domain.failEffect('start:a', 'new', 'offline', 1000)
+  const row = new SuperagentDomain(directory).pendingEffects()[0]
+  assert.equal(row.attempts, 1); assert.equal(row.nextAttemptAt, 6000); assert.equal(row.lastError, 'offline')
+})
+
+test('failed replies wait for retry and hold later replies in the same thread only', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-outbox-order-')); t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const domain = new SuperagentDomain(directory)
+  const channel = thread => ({ source: 'feishu', thread, address: {} })
+  domain.repo.atomic(() => {
+    for (const [id, thread] of [['a', 'one'], ['b', 'one'], ['c', 'two']]) domain.messages.set(id, { id, status: 'pending', channel: channel(thread) })
+  })
+  const sent = []
+  const runner = new SuperagentSourceRunner(directory, domain, { send: async row => { sent.push(row.id); if (row.id === 'a') throw new Error('offline') } }, () => ({}))
+  await runner.poll()
+  assert.deepEqual(sent, ['a', 'c'])
+  assert.equal(domain.messages.get('a').attempts, 1)
+  assert.equal(domain.messages.get('b').status, 'pending')
+  await runner.poll()
+  assert.deepEqual(sent, ['a', 'c'])
+})
+
+test('GitHub checks are non-human facts on the subscribed PR thread', async () => {
+  const sha = 'a'.repeat(40)
+  const channels = new SuperagentChannels({ configuration: () => ({ github: { enabled: true, repo: 'owner/project' } }), credentials: async () => 'test',
+    fetch: async url => ({ ok: true, json: async () => url.includes('check-runs')
+      ? { check_runs: [{ id: 7, name: 'unit', status: 'completed', conclusion: 'failure', completed_at: '2026-11-04T00:00:00Z' }] }
+      : { head: { sha } } }) })
+  const [check] = await channels.githubChecks(42)
+  assert.equal(check.human, false); assert.equal(check.threads[0].id, 'owner/project#42')
+  assert.match(check.text, /failure/); assert.match(check.id, /check:7/)
+})
+
+test('GitHub review state is attached as context rather than granting authority', async () => {
+  const channels = new SuperagentChannels({ configuration: () => ({ github: { enabled: true, repo: 'owner/project' } }), credentials: async () => 'test',
+    fetch: async () => ({ ok: true, json: async () => [{ id: 9, state: 'CHANGES_REQUESTED', user: { login: 'reviewer' }, body: '缺少测试', submitted_at: '2026-11-04T00:00:00Z' }] }) })
+  const [review] = await channels.githubReviews(42)
+  assert.equal(review.human, false); assert.equal(review.threads[0].id, 'owner/project#42')
+  assert.match(review.text, /CHANGES_REQUESTED/)
+})
+
+test('hasEnabledSources only counts sources whose polling fields are complete', () => {
+  assert.equal(hasEnabledSources(), false)
+  assert.equal(hasEnabledSources({}), false)
+  assert.equal(hasEnabledSources({ github: { enabled: false, repo: 'owner/project', botLogin: 'helper' } }), false)
+  assert.equal(hasEnabledSources({ github: { enabled: true, repo: '', botLogin: 'helper' } }), false)
+  assert.equal(hasEnabledSources({ github: { enabled: true, repo: 'owner/project' } }), false)
+  assert.equal(hasEnabledSources({ github: { enabled: true, repo: 'owner/project', botLogin: 'helper' } }), true)
+  assert.equal(hasEnabledSources({ feishu: { enabled: true, chats: [], botOpenId: 'ou_bot' } }), false)
+  assert.equal(hasEnabledSources({ feishu: { enabled: true, chats: ['oc_test'] } }), false)
+  assert.equal(hasEnabledSources({ feishu: { enabled: true, chats: ['oc_test'], botOpenId: 'ou_bot' } }), true)
+  assert.equal(hasEnabledSources({ github: { enabled: true, repo: 'a/b', botLogin: 'c' }, feishu: { enabled: false } }), true)
+})
 
 test('related Feishu tickets only expose same sender and chat context', () => {
   const origins = new Map([
@@ -59,6 +159,84 @@ test('source identities are approved separately and a ticket survives followup a
   assert.equal(new SuperagentDomain(directory).pendingMessages().length, 0)
 })
 
+test('nested domain writes stay private until the outer commit and restore policy on rollback', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-nested-'))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const domain = new SuperagentDomain(directory)
+  domain.repo.atomic(() => domain.messages.set('base', { id: 'base', status: 'pending' }))
+  const before = readFileSync(domain.path)
+  assert.throws(() => domain.repo.atomic(() => {
+    domain.repo.atomic(() => domain.effects.set('pending', { id: 'pending' }))
+    domain.configure({ version: 'aborted', sources: {} })
+    assert.deepEqual(readFileSync(domain.path), before)
+    throw Error('injected outer failure')
+  }), /injected outer failure/)
+  assert.deepEqual(readFileSync(domain.path), before)
+  assert.equal(domain.policyConfig.version, 'phone-v1')
+  assert.equal(domain.pendingEffects().length, 0)
+  domain.repo.atomic(() => {
+    domain.messages.set('survives', { id: 'survives', status: 'pending' })
+    assert.throws(() => domain.repo.atomic(() => {
+      domain.effects.set('discarded', { id: 'discarded' })
+      throw Error('inner')
+    }), /inner/)
+  })
+  const restored = new SuperagentDomain(directory)
+  assert.ok(restored.messages.has('survives'))
+  assert.equal(restored.pendingEffects().length, 0)
+})
+
+test('an unchanged heartbeat or obsolete acknowledgement leaves the snapshot untouched', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-idle-'))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const domain = new SuperagentDomain(directory)
+  domain.repo.atomic(() => domain.effects.set('start:one', { id: 'start:one', generation: 'latest' }))
+  utimesSync(domain.path, new Date(10000), new Date(10000))
+  for (let i = 0; i < 12; i++) domain.acknowledgeEffect('start:one', 'obsolete')
+  assert.equal(statSync(domain.path).mtimeMs, 10000)
+  domain.acknowledgeEffect('start:one', 'latest')
+  assert.equal(new SuperagentDomain(directory).pendingEffects().length, 0)
+})
+
+test('a failed result receipt keeps the worker report retryable after restart', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-report-commit-'))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const domain = new SuperagentDomain(directory, { version: 'v1', sources: { feishu: { enabled: true, chats: ['oc_test'], allowedActors: ['ou_person'] } } })
+  const trigger = event('om_atomic', 'ou_person', '取结果')
+  domain.receive(trigger)
+  const { ticketId } = domain.decide(trigger.id, { kind: 'accept', title: '查询', scope: '只读', reason: '用户请求' })
+  domain.engine.assignmentStarted(ticketId, domain.repo.tickets.get(ticketId).assignments[0].id)
+  const coordinator = new SuperagentCoordinator(domain, {})
+  const before = readFileSync(domain.path)
+  domain.engine.reply = () => { throw new Error('injected receipt failure') }
+  assert.throws(() => coordinator.report(ticketId, { state: 'ready', summary: '已找到' }), /injected receipt failure/)
+  assert.deepEqual(readFileSync(domain.path), before)
+  const restarted = new SuperagentDomain(directory)
+  assert.equal(restarted.repo.tickets.get(ticketId).ended, undefined)
+  new SuperagentCoordinator(restarted, {}).report(ticketId, { state: 'ready', summary: '已找到' })
+  const restored = new SuperagentDomain(directory)
+  assert.equal(restored.repo.tickets.get(ticketId).ended.outcome, 'completed')
+  assert.equal(restored.pendingMessages().filter(row => row.text === '已找到').length, 1)
+})
+
+test('revoking a completed ticket keeps its outcome but prevents reopening and drops unsent replies', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-revoke-')); t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const domain = new SuperagentDomain(directory, { version: 'v1', sources: { feishu: { enabled: true, chats: ['oc_test'], allowedActors: ['ou_person'] } } })
+  const first = event('om_revoke', 'ou_person', '查询'); domain.receive(first)
+  const decision = domain.decide(first.id, { kind: 'accept', title: '查询', scope: '只读', reason: '用户请求' })
+  const ticket = domain.repo.tickets.get(decision.ticketId), assignment = ticket.assignments[0]
+  domain.engine.assignmentStarted(ticket.id, assignment.id)
+  domain.engine.report(ticket.id, { state: 'ready', summary: '完成' })
+  domain.engine.reply({ purpose: 'result', ticketId: ticket.id, text: '完成' })
+  domain.revokeTicket(ticket.id)
+  const restored = new SuperagentDomain(directory)
+  assert.equal(restored.repo.tickets.get(ticket.id).previousEnd.outcome, 'completed')
+  assert.equal(restored.repo.tickets.get(ticket.id).ended.by, 'human')
+  assert.equal(restored.pendingMessages().length, 0)
+  restored.receive(event('om_after', 'ou_person', '继续', 'om_first'))
+  assert.equal(restored.repo.tickets.get(ticket.id).ended.by, 'human')
+})
+
 test('review comments preserve their source thread and reject the bot itself', () => {
   const comment = { id: 15, user: { login: 'Alice', type: 'User' }, body: '@helper please inspect', created_at: '2026-11-02T00:00:00Z', in_reply_to_id: 12 }
   const trigger = githubReviewTrigger('owner/project', 3, comment, 'helper')
@@ -102,6 +280,10 @@ test('a Feishu event is evaluated by the parent and executed by the existing Wor
   await installed.syncDomainReports()
   const pending = installed.superagent.domain.pendingMessages()
   assert.equal(pending.length, 1); assert.equal(pending[0].channel.source, 'feishu'); assert.equal(pending[0].text, '已找到资料')
+  assert.equal(await installed.superagent.controlPhone(row, 'add', '继续核对来源', 'mobile-followup'), true)
+  assert.ok(installed.superagent.domain.repo.tickets.get(row.domainTicketId).inputs.some(input => input.triggerId?.includes('mobile-followup')))
+  assert.equal(await installed.superagent.controlPhone(row, 'cancel', '', 'mobile-cancel'), true)
+  assert.equal(installed.superagent.domain.repo.tickets.get(row.domainTicketId).ended.by, 'human')
   events.get('dispose')()
   const restarted = installWorkers(ctx, { directory, defineTool: tool => tool, bridge: async () => ({ output: '[]' }) })
   const second = event('om_second', 'ou_person', '另一个请求', 'om_second')

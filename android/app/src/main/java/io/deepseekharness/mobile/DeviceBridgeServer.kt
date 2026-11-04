@@ -230,18 +230,42 @@ class DeviceBridgeServer(
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
                         return
                     }
-                    if (commandName in setOf("workerRecord", "workerRecordChunk", "workerUi", "superagentSettings", "superagentActors", "screenWatch", "screenWatchFrame")) {
+                    if (commandName in setOf("workerRecord", "workerRecordChunk", "workerUi", "superagentSettings", "superagentActors", "screenWatch", "screenWatchFrame", "featureAuthor", "featureWorkerAuthor")) {
                         val context = appContext ?: throw RuntimeFailure("DEVICE_BRIDGE_UNAVAILABLE", "服务不可用")
                         val request = JSONObject(param)
                         val value = when (commandName) {
+                            "featureWorkerAuthor" -> io.deepseekharness.mobile.companion.WorkerDashboardStore(context).author(request).toString()
+                            "featureAuthor" -> {
+                                val features = io.deepseekharness.mobile.features.WhaleFeatureStore(context)
+                                when (request.getString("action")) {
+                                    "list" -> org.json.JSONArray(features.list()).toString()
+                                    "read" -> {
+                                        val row = requireNotNull(features.read(request.getString("id")))
+                                        val revision = row.getString("latest")
+                                        JSONObject(row.getJSONObject("versions").getJSONObject(revision).toString()).put("revision", revision).toString()
+                                    }
+                                    "draft" -> features.draft(request).toString()
+                                    else -> throw IllegalArgumentException("无效的创作操作")
+                                }
+                            }
                             "workerRecord" -> { io.deepseekharness.mobile.companion.WorkerDashboardStore(context).put(request); "{}" }
                             "workerRecordChunk" -> { io.deepseekharness.mobile.companion.WorkerDashboardStore(context).putChunk(request); "{}" }
                             "superagentSettings" -> io.deepseekharness.mobile.companion.SuperagentSettings(context).runtime().toString()
                             "superagentActors" -> { io.deepseekharness.mobile.companion.SuperagentSettings(context).setUnapproved(request); "{}" }
                             "workerUi" -> {
                                 val store = io.deepseekharness.mobile.companion.WorkerDashboardStore(context)
-                                if (request.has("ack")) store.acknowledge(request.getString("ack"))
-                                store.pending().toString()
+                                when {
+                                    request.optBoolean("hostCapacity") -> {
+                                        val power = context.getSystemService(android.os.PowerManager::class.java)
+                                        val thermal = if (android.os.Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else 0
+                                        val memory = android.app.ActivityManager.MemoryInfo()
+                                        context.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(memory)
+                                        JSONObject().put("thermal", thermal).put("conserve", power.isPowerSaveMode || memory.lowMemory).toString()
+                                    }
+                                    request.has("ack") -> { store.acknowledge(request.getString("ack"), request.optString("authorWorkerId").ifBlank { null }); "[]" }
+                                    request.has("deferred") -> { store.dispatchUnavailable(request.getString("deferred"), true); "[]" }
+                                    else -> store.batch(request.optInt("skip", 0)).toString()
+                                }
                             }
                             "screenWatch" -> {
                                 val watch = io.deepseekharness.mobile.companion.ScreenWatchAccess(context)
@@ -365,7 +389,7 @@ class DeviceBridgeServer(
                             respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
                             return
                         }
-                        val result = io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, param, knowledge::findById, knowledge::recent) {
+                        val result = io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, param, knowledge::findById, knowledge::recent, knowledge::exactPage, knowledge::attachmentPage) {
                             knowledge.search(it)
                         }
                         access.requireKnowledge()
@@ -400,7 +424,7 @@ class DeviceBridgeServer(
                             if (request.has("fromMs")) child.put("fromMs", request.get("fromMs"))
                             if (request.has("toMs")) child.put("toMs", request.get("toMs"))
                             val knowledge = io.deepseekharness.mobile.companion.CompanionKnowledgeStore(context)
-                            result.put("knowledge", JSONObject(io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, child.toString(), knowledge::findById, knowledge::recent) { knowledge.search(it) }))
+                            result.put("knowledge", JSONObject(io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, child.toString(), knowledge::findById, knowledge::recent, knowledge::exactPage) { knowledge.search(it) }))
                         }
                         if ("tasks" in kinds) {
                             access.requireTasks()

@@ -12,7 +12,8 @@ class WhaleSharedTextTest {
         assertNull(WhaleSharedText.accept(send, "image/png", "text"))
         assertNull(WhaleSharedText.accept(send, "text/plain", "   "))
         assertNull(WhaleSharedText.accept(send, "text/plain", "a\u0000b"))
-        assertNull(WhaleSharedText.accept(send, "text/plain", "x".repeat(8001)))
+        assertEquals(8001, WhaleSharedText.accept(send, "text/plain", "x".repeat(8001))?.length)
+        assertNull(WhaleSharedText.accept(send, "text/plain", "x".repeat(CompanionKnowledgeData.MAX_DOCUMENT_TEXT + 1)))
         assertEquals(8000, WhaleSharedText.accept(send, "text/plain", "x".repeat(8000))?.length)
     }
 
@@ -23,7 +24,7 @@ class WhaleSharedTextTest {
             WhaleSharedText.readFile(byteArrayOf(0xc3.toByte(), 0x28).inputStream())
         }
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
-            WhaleSharedText.readFile(ByteArray(32001) { 65 }.inputStream())
+            WhaleSharedText.readFile(ByteArray(CompanionKnowledgeTextFile.MAX_FILE_BYTES + 1) { 65 }.inputStream())
         }
     }
 }

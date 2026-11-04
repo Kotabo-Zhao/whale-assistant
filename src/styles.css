@@ -281,7 +281,7 @@ html,
 body,
 #root {
   width: 100%;
-  min-width: 320px;
+  min-width: 0;
   height: 100%;
   margin: 0;
 }
@@ -3550,13 +3550,7 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
 }
 
 /* 分类完整换行，窄屏和放大字体时不隐藏入口，也不依赖横向滑动发现分类。 */
-.settings-categories { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
-/* 收起时容器常驻但隐藏（aria-controls 约定）；display:flex 会盖掉 UA 的 hidden 样式，需显式补回。 */
-.settings-categories[hidden] { display: none; }
-/* 分类芯片与同页的卡片共用同一套卡片令牌（`--card-*` 由 src/appearance.ts 写在根元素上）：
-   用户改「卡片颜色/不透明度/模糊」时芯片跟着一起变，不会再出现「卡片换了色、芯片还是老底色」。
-   令牌没设过时回落到主题基础色（--surface/--ink），所以没自定义卡片配色的环境下外观与从前一致。 */
-.settings-categories button {
+.account-group-toggle {
   /* 胶囊形 + 收紧左右内边距：保持 44px 触控高度，同一行能放下更多分类。 */
   max-width: 100%; min-height: 44px; padding: 6px 10px;
   border: 1px solid var(--line); border-radius: 999px;
@@ -3565,7 +3559,7 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
   color: var(--card-ink, var(--ink)); font: inherit;
   font-size: 0.8125rem; line-height: 1.5; overflow-wrap: anywhere; cursor: pointer;
 }
-.settings-categories button[aria-selected="true"] { background: var(--blue-soft); color: var(--blue); border-color: var(--blue); }
+.account-group-toggle[aria-expanded="true"] { background: var(--blue-soft); color: var(--blue); border-color: var(--blue); }
 .settings-screen .screen-heading > div, .settings-screen .section-title > div { min-width: 0; }
 .settings-screen :is(h1, h2, h3, .button, .status-chip) { overflow-wrap: anywhere; }
 .settings-screen .button { white-space: normal; }

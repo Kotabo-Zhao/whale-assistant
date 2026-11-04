@@ -1,3 +1,4 @@
+import { expandSettingsGroup } from './__tests__/appTestHarness'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DiagnosticLogState, KeepAliveState, MailboxState, RuntimeSettings, RuntimeSettingsUpdate, RuntimeState, ShizukuState, StorageAccessState } from './platform/types'
@@ -303,6 +304,7 @@ describe('返回键与视图历史', () => {
     const pushState = vi.spyOn(window.history, 'pushState')
     // 设置页的「打开 Harness」在启动成功后还会再切到 settings（同一视图）：
     // 这属于同视图重复导航，不应再压一条历史记录。
+    expandSettingsGroup('运行与存储')
     fireEvent.click(screen.getByRole('button', { name: '打开 Harness' }))
     await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
 
@@ -312,6 +314,28 @@ describe('返回键与视图历史', () => {
     // 收尾：回到栈底，避免把历史位置留给下一个用例。
     await pressBack()
     expect(await screen.findByRole('heading', { name: '对话已就绪' })).toBeVisible()
+  })
+
+  it('系统返回时保留当前视图内的资料阅读位置', async () => {
+    await renderAtMainView()
+    const state = { dshView: 'assistant-memory', whaleKnowledgeView: { view: 'reader', id: 'fixture', depth: 1 } }
+    act(() => {
+      window.history.pushState(state, '', '#assistant-memory')
+      window.dispatchEvent(new PopStateEvent('popstate', { state }))
+    })
+    expect(window.history.state).toEqual(state)
+  })
+
+  it('原生对话的一次导航直接打开资料，工具里的插件页返回同一工具中心', async () => {
+    await renderAtMainView()
+    act(() => { window.dispatchEvent(new CustomEvent('dsh-native-tab', { detail: 'assistant-memory' })) })
+    expect(await screen.findByRole('tab', { name: '资料' })).toHaveAttribute('aria-selected', 'true')
+    const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
+    fireEvent.click(nav.getByRole('button', { name: '工具' }))
+    fireEvent.click(await screen.findByRole('button', { name: /插件管理.*Harness/ }))
+    expect(await screen.findByRole('heading', { name: '插件管理' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '返回工具' }))
+    expect(await screen.findByRole('heading', { name: '工具' })).toBeVisible()
   })
 
   it('屏幕内返回按钮回退历史，不留下会被返回键重新进入的二级页记录', async () => {
@@ -365,12 +389,12 @@ describe('返回键与视图历史', () => {
     expect(window.location.hash).toBe('')
   })
 
-  it('底部四个标签切换页面并保持唯一选中项与返回历史', async () => {
+  it('底部标签切换页面并保持唯一选中项与返回历史', async () => {
     await renderAtMainView()
     const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
-    expect(nav.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['对话', '记忆', '事项', '我的'])
-    expect(nav.getAllByRole('button').map(button => button.textContent)).toEqual(['对话', '记忆', '事项', '我的'])
-    for (const [name, hash] of [['对话', '#harness'], ['记忆', '#assistant-memory'], ['事项', '#assistant-tasks'], ['我的', '#settings']]) {
+    expect(nav.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['对话', '记忆', '事项', '工具', '我的'])
+    expect(nav.getAllByRole('button').map(button => button.textContent)).toEqual(['对话', '记忆', '事项', '工具', '我的'])
+    for (const [name, hash] of [['对话', '#harness'], ['记忆', '#assistant-memory'], ['事项', '#assistant-tasks'], ['工具', '#tools'], ['我的', '#settings']]) {
       fireEvent.click(nav.getByRole('button', { name: new RegExp(`^${name}$`) }))
       await waitFor(() => expect(window.location.hash).toBe(hash))
       expect(nav.getAllByRole('button', { current: 'page' })).toHaveLength(1)

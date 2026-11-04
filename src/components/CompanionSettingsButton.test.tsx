@@ -33,4 +33,11 @@ describe('助手设置', () => {
     fireEvent.click(toggle)
     await waitFor(() => expect(bridge.setCompanionQuickSetting).toHaveBeenCalledWith('automaticNotificationMemory', true))
   })
+  it('全部助手偏好打开原生分组目录', async () => {
+    bridge.openCompanionSettings.mockResolvedValue(undefined)
+    render(<CompanionSettingsButton disabled={false} />)
+    fireEvent.click(screen.getByRole('button', { name: '全部助手偏好' }))
+    await waitFor(() => expect(bridge.openCompanionSettings).toHaveBeenCalledOnce())
+  })
+
 })

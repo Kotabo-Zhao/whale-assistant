@@ -19,6 +19,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
             try {
                 db.execSQL("CREATE TABLE IF NOT EXISTS knowledge_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS knowledge_records (id TEXT PRIMARY KEY, position INTEGER NOT NULL UNIQUE, body TEXT NOT NULL)")
+                KnowledgeTextIndex.install(db)
                 val imported = db.rawQuery("SELECT value FROM knowledge_meta WHERE key='legacy_imported'", null).use { it.moveToFirst() && it.getString(0) == "1" }
                 if (!imported) {
                     check(!prefs.getBoolean("knowledge_sqlite_active", false)) { "资料迁移标记缺失" }
@@ -38,6 +39,35 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         db.rawQuery("SELECT body FROM knowledge_records ORDER BY position", null).use { cursor ->
             while (cursor.moveToNext()) rows.put(JSONObject(cursor.getString(0)))
         }
+    }
+    fun count(): Long = android.database.DatabaseUtils.queryNumEntries(db, "knowledge_records")
+    fun exactPage(query: String, offset: Int, limit: Int, accepts: (JSONObject) -> Boolean): CompanionMemorySearch.Result? {
+        var count = 0
+        val items = mutableListOf<JSONObject>()
+        KnowledgeTextIndex.candidates(db, query).use { cursor ->
+            while (cursor.moveToNext()) {
+                val row = JSONObject(cursor.getString(0))
+                if (!accepts(row) || !row.getString("text").contains(query, ignoreCase = true)) continue
+                count++
+                if (count <= offset) continue
+                if (items.size == limit) break
+                items.add(row)
+            }
+        }
+        if (count > 0) return CompanionMemorySearch.Result(items, "exact", count)
+        val keywords = CompanionMemorySearch.terms(query)
+        if (keywords.isEmpty()) return CompanionMemorySearch.Result(emptyList(), "none", 0)
+        // Keep record IDs and scores only. Load full records for the requested page.
+        val ranked = mutableListOf<Pair<String, Int>>()
+        KnowledgeTextIndex.related(db, keywords).use { cursor ->
+            while (cursor.moveToNext()) {
+                val row = JSONObject(cursor.getString(0))
+                if (!accepts(row)) continue
+                CompanionMemorySearch.relatedScore(row.getString("text"), keywords)?.let { ranked.add(row.getString("id") to it) }
+            }
+        }
+        val page = ranked.sortedByDescending { it.second }.drop(offset).take(limit).mapNotNull { findById(it.first) }
+        return CompanionMemorySearch.Result(page, if (ranked.isEmpty()) "none" else "related", ranked.size)
     }
     /** Newest first; position is indexed by the UNIQUE constraint. Fetch one extra for pagination. */
     fun recent(offset: Int, limit: Int): JSONArray {
@@ -59,10 +89,12 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         val normalized = query.trim()
         val result = JSONArray()
         var matched = 0
-        db.rawQuery("SELECT body FROM knowledge_records ORDER BY position DESC", null).use { cursor ->
+        KnowledgeTextIndex.candidates(db, normalized).use { cursor ->
             while (cursor.moveToNext()) {
                 val row = JSONObject(cursor.getString(0))
-                if (normalized.isNotEmpty() && !row.getString("text").contains(normalized, ignoreCase = true)) continue
+                if (normalized.isNotEmpty() && !row.getString("text").contains(normalized, ignoreCase = true) &&
+                    !row.optString("displayName").contains(normalized, ignoreCase = true) &&
+                    !WhaleShareSource.labels(row).contains(normalized, ignoreCase = true)) continue
                 if (source != null && row.optString("source") != source) continue
                 if (coverage != null && row.optString("coverage", "unknown") != coverage) continue
                 if (matched++ < offset) continue
@@ -83,17 +115,23 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         require(query.isNotEmpty() && query.length <= 100 && limit in 1..100)
         data class Candidate(val row: JSONObject, val score: Int, val order: Long)
         val exact = mutableListOf<JSONObject>()
+        KnowledgeTextIndex.candidates(db, query).use { cursor ->
+            while (cursor.moveToNext()) {
+                val row = JSONObject(cursor.getString(0))
+                if (row.getString("text").contains(query, ignoreCase = true)) exact.add(row)
+                if (exact.size == limit) break
+            }
+        }
+        if (exact.isNotEmpty()) return exact
         val related = java.util.PriorityQueue<Candidate>(compareBy<Candidate> { it.score }.thenByDescending { it.order })
         val keywords = CompanionMemorySearch.terms(query)
         var order = 0L
-        db.rawQuery("SELECT body FROM knowledge_records ORDER BY position DESC", null).use { cursor ->
+        if (keywords.isEmpty()) return emptyList()
+        KnowledgeTextIndex.related(db, keywords).use { cursor ->
             while (cursor.moveToNext()) {
                 val row = JSONObject(cursor.getString(0))
                 val text = row.getString("text")
-                if (text.contains(query, ignoreCase = true)) {
-                    exact.add(row)
-                    if (exact.size == limit) break
-                } else if (exact.isEmpty() && keywords.isNotEmpty()) {
+                if (keywords.isNotEmpty()) {
                     val score = CompanionMemorySearch.relatedScore(text, keywords)
                     if (score != null) {
                         related.add(Candidate(row, score, order))
@@ -103,7 +141,6 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
                 order++
             }
         }
-        if (exact.isNotEmpty()) return exact
         return related.sortedWith(compareByDescending<Candidate> { it.score }.thenBy { it.order }).map { it.row }
     }
     /** Hash rows incrementally so session scope checks do not construct the entire collection. */
@@ -118,39 +155,48 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         }
         return digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
     }
+    val captures get() = KnowledgeCaptureFeed(db, ::findById)
     fun findById(id: String): JSONObject? = db.rawQuery("SELECT body FROM knowledge_records WHERE id = ?", arrayOf(id)).use { cursor ->
         if (cursor.moveToFirst()) JSONObject(cursor.getString(0)) else null
     }
     /** Append without materializing or rewriting the existing collection. */
-    fun appendUniqueText(text: String, source: String, now: Long): Boolean {
+    fun appendUniqueText(text: String, source: String, now: Long, origin: WhaleShareSource? = null): CompanionKnowledgeStore.SavedText {
         val row = JSONArray()
         CompanionKnowledgeData.add(row, text, now, source, legacyLimit = false)
         val item = row.getJSONObject(0)
+        origin?.annotate(item)
         db.beginTransaction()
         try {
-            val duplicate = db.rawQuery("SELECT body FROM knowledge_records", null).use { cursor ->
-                var found = false
-                while (cursor.moveToNext()) if (JSONObject(cursor.getString(0)).getString("text") == text) { found = true; break }
-                found
+            val duplicate = KnowledgeTextIndex.candidates(db, text.take(100)).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val candidate = JSONObject(cursor.getString(0))
+                    if (candidate.getString("text") == text) return@use candidate
+                }
+                null
             }
-            if (duplicate) { db.setTransactionSuccessful(); return false }
+            if (duplicate != null) {
+                if (origin != null) { origin.annotate(duplicate); updateRecord(duplicate.getString("id"), duplicate); captures.record(duplicate, now) }
+                db.setTransactionSuccessful(); return CompanionKnowledgeStore.SavedText(false, listOf(duplicate.getString("id")))
+            }
             val position = nextPosition()
             db.insertOrThrow("knowledge_records", null, ContentValues().apply {
                 put("id", item.getString("id")); put("position", position); put("body", item.toString())
             })
+            if (origin != null) captures.record(item, now)
             db.setTransactionSuccessful()
-            return true
+            return CompanionKnowledgeStore.SavedText(true, listOf(item.getString("id")))
         } finally { db.endTransaction() }
     }
 
-    fun appendDocument(documentId: String, chunks: List<String>, displayName: String, coverage: String, requireOriginal: Boolean): JSONArray {
+    fun appendDocument(documentId: String, chunks: List<String>, displayName: String, coverage: String, requireOriginal: Boolean,
+        origin: WhaleShareSource? = null, mediaKind: String? = null, capture: Boolean = false): JSONArray {
         val added = JSONArray()
         db.beginTransaction()
         try {
             if (requireOriginal) check(originalExists(documentId)) { "原件已删除，请重新导入" }
             var position = nextPosition()
             for ((index, chunk) in chunks.withIndex()) {
-                val id = java.util.UUID.nameUUIDFromBytes("$documentId:$index".toByteArray(Charsets.UTF_8)).toString()
+                val id = KnowledgeChunks.recordId(documentId, index)
                 check(!isDeleted(id)) { "资料曾被删除，请先恢复或明确重新导入" }
                 val existing = findById(id)
                 if (existing != null) {
@@ -163,6 +209,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
                         existing.put("originalId", documentId).put("displayName", displayName).put("coverage", coverage)
                         updateRecord(id, existing)
                     }
+                    if (origin != null) { origin.annotate(existing); updateRecord(id, existing) }
                     continue
                 }
                 val item = JSONObject().put("id", id).put("text", chunk).put("source", "text_file")
@@ -170,41 +217,204 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
                     .put("chunkIndex", index).put("chunkCount", chunks.size)
                     .put("displayName", displayName).put("coverage", coverage)
                     .apply { if (requireOriginal) put("originalId", documentId) }
+                origin?.annotate(item)
+                if (mediaKind != null) item.put("mediaKind", mediaKind)
                 CompanionKnowledgeData.validateRows(JSONArray().put(item), false)
                 db.insertOrThrow("knowledge_records", null, ContentValues().apply {
                     put("id", id); put("position", position++); put("body", item.toString())
                 })
                 added.put(item)
             }
+            if (capture) captures.record(requireNotNull(findById(KnowledgeChunks.recordId(documentId, 0))))
             db.setTransactionSuccessful()
             return added
         } finally { db.endTransaction() }
     }
 
     /** A stable ID never silently replaces an existing record. */
-    fun appendRecordIfAbsent(item: JSONObject, explicitReimport: Boolean = false): JSONObject {
+    fun appendRecordIfAbsent(item: JSONObject, explicitReimport: Boolean = false, captionIds: List<String> = emptyList(), reserveParse: (() -> Unit)? = null): JSONObject {
         CompanionKnowledgeData.validateRows(JSONArray().put(item), false)
         val id = item.getString("id")
         db.beginTransaction()
         try {
-            if (explicitReimport) {
+            val restoring = if (explicitReimport) {
                 check(item.optString("source") == "original")
                 allowExplicitReimport(item.getString("originalId"))
-            }
+            } else false
             if (item.optString("source") == "image_analysis") check(originalExists(item.optString("originalId"))) { "原件已删除，请重新导入" }
             check(!isDeleted(id)) { "资料曾被删除，请先恢复或明确重新导入" }
             val existing = findById(id)
             if (existing != null) {
                 check(existing.optString("originalId") == item.optString("originalId") && existing.optString("source") == item.optString("source"))
+                if (item.has("shareOrigin")) {
+                    val origin = WhaleShareSource(item.getString("shareOrigin"), item.optString("sourceUrl").ifEmpty { null })
+                    origin.annotate(existing)
+                    if (reserveParse != null && existing.optString("coverage") != "not_parsed")
+                        addOriginToParsed(existing.getString("originalId"), origin)
+                    updateRecord(id, existing)
+                }
+                if (restoring && reserveParse != null) existing.put("coverage", "not_parsed")
+                if (reserveParse != null && existing.optString("parseState") == "needs_retry") {
+                    // An explicit share may have better MIME or filename information than an old one.
+                    for (field in listOf("mime", "displayName")) if (item.optString(field).isNotBlank()) existing.put(field, item.getString(field))
+                }
+                if (explicitReimport && item.has("shareOrigin")) recordOriginalCapture(existing)
+                linkToCaptions(existing, captionIds)
+                if (reserveParse != null) enqueueParse(existing, reserveParse)
                 db.setTransactionSuccessful()
                 return existing
             }
             db.insertOrThrow("knowledge_records", null, ContentValues().apply {
                 put("id", id); put("position", nextPosition()); put("body", item.toString())
             })
+            if (explicitReimport && item.has("shareOrigin")) recordOriginalCapture(item)
+            linkToCaptions(item, captionIds)
+            if (reserveParse != null) enqueueParse(item, reserveParse)
             db.setTransactionSuccessful()
             return item
         } finally { db.endTransaction() }
+    }
+
+    private fun recordOriginalCapture(original: JSONObject) {
+        if (original.optString("attachmentGeneration").isEmpty()) {
+            original.put("attachmentGeneration", java.util.UUID.randomUUID().toString())
+            updateRecord(original.getString("id"), original)
+        }
+        captures.record(original)
+    }
+
+    private fun addOriginToParsed(hash: String, origin: WhaleShareSource) {
+        val first = findById(KnowledgeChunks.recordId(hash, 0))
+        for (index in 0 until (first?.optInt("chunkCount", 0) ?: 0).coerceIn(0, CompanionKnowledgeData.MAX_DOCUMENT_TEXT / CompanionKnowledgeData.MAX_RECORD_TEXT + 2)) {
+            val row = if (index == 0) first!! else findById(KnowledgeChunks.recordId(hash, index)) ?: continue
+            if (row.optString("originalId") == hash) { origin.annotate(row); updateRecord(row.getString("id"), row) }
+        }
+        val id = java.util.UUID.nameUUIDFromBytes("image-analysis:$hash".toByteArray(Charsets.UTF_8)).toString()
+        findById(id)?.let { origin.annotate(it); updateRecord(id, it) }
+    }
+
+    private fun enqueueParse(anchor: JSONObject, reserve: () -> Unit) {
+        if (anchor.optString("coverage") != "not_parsed") return
+        // Reserve the OS wakeup before committing. The service reads under the same store lock.
+        reserve()
+        if (anchor.has("parseTicket") && ticketAnchor(anchor.getString("parseTicket")) != null) return
+        val ticket = "parse:${System.currentTimeMillis()}:${java.util.UUID.randomUUID()}"
+        db.execSQL("INSERT INTO knowledge_meta(key,value) VALUES (?,?)", arrayOf(ticket, anchor.getString("id")))
+        anchor.put("parseTicket", ticket).put("parseState", "queued").put("parseAttempts", 0)
+        updateRecord(anchor.getString("id"), anchor)
+    }
+
+    fun retryParse(id: String, expectedRow: String, reserve: () -> Unit): Boolean {
+        db.beginTransaction()
+        try {
+            val row = findById(id) ?: return false
+            if (row.toString() != expectedRow || row.optString("source") != "original" ||
+                row.optString("coverage") != "not_parsed" || row.optString("parseState") != "needs_retry") return false
+            enqueueParse(row, reserve)
+            db.setTransactionSuccessful()
+            return true
+        } finally { db.endTransaction() }
+    }
+
+    fun hasPendingParse(): Boolean = db.rawQuery("SELECT 1 FROM knowledge_meta WHERE key GLOB 'parse:*' LIMIT 1", null).use { it.moveToFirst() }
+
+    private fun ticketAnchor(ticket: String): JSONObject? {
+        val id = db.rawQuery("SELECT value FROM knowledge_meta WHERE key=?", arrayOf(ticket)).use { if (it.moveToFirst()) it.getString(0) else null }
+        return id?.let(::findById)?.takeIf { it.optString("source") == "original" && it.optString("parseTicket") == ticket }
+    }
+
+    fun claimParse(): JSONObject? {
+        while (true) {
+            val ticket = db.rawQuery("SELECT key FROM knowledge_meta WHERE key GLOB 'parse:*' ORDER BY key LIMIT 1", null).use {
+                if (it.moveToFirst()) it.getString(0) else null
+            } ?: return null
+            val anchor = ticketAnchor(ticket)
+            if (anchor == null) { db.delete("knowledge_meta", "key=?", arrayOf(ticket)); continue }
+            val attempts = anchor.optInt("parseAttempts")
+            if (attempts >= 3) { finishParse(ticket, null); continue }
+            anchor.put("parseState", "processing").put("parseAttempts", attempts + 1)
+            updateRecord(anchor.getString("id"), anchor)
+            return anchor
+        }
+    }
+
+    /** Chunks, coverage and ticket removal share a transaction. A deleted/reimported anchor has a new ticket. */
+    fun finishParse(ticket: String, parsed: WhaleParsedContent?): JSONArray {
+        val rows = JSONArray()
+        db.beginTransaction()
+        try {
+            val anchor = ticketAnchor(ticket) ?: return rows
+            val hash = anchor.getString("originalId")
+            val origin = anchor.optString("shareOrigin").ifEmpty { null }?.let { WhaleShareSource(it, anchor.optString("sourceUrl").ifEmpty { null }) }
+            if (parsed != null) {
+                if (parsed.description) {
+                    require(parsed.text.isNotBlank() && parsed.text.length <= CompanionKnowledgeData.MAX_RECORD_TEXT && '\u0000' !in parsed.text)
+                    val id = java.util.UUID.nameUUIDFromBytes("image-analysis:$hash".toByteArray(Charsets.UTF_8)).toString()
+                    val row = JSONObject().put("id", id).put("source", "image_analysis").put("text", parsed.text).put("createdAt", System.currentTimeMillis())
+                        .put("originalId", hash).put("coverage", "model_description")
+                    origin?.annotate(row)
+                    rows.put(appendRecordIfAbsent(row))
+                } else {
+                    val added = appendDocument(hash, KnowledgeChunks.split(parsed.text), anchor.optString("displayName"), parsed.coverage,
+                        requireOriginal = true, origin = origin, mediaKind = parsed.mediaKind)
+                    for (i in 0 until added.length()) rows.put(added.getJSONObject(i))
+                }
+                val origins = anchor.optJSONArray("shareOrigins")
+                if (origins != null && origins.length() > 1) {
+                    for (i in 0 until rows.length()) {
+                        val row = rows.getJSONObject(i).put("shareOrigins", origins)
+                        updateRecord(row.getString("id"), row)
+                    }
+                }
+                anchor.put("coverage", parsed.coverage)
+            }
+            anchor.remove("parseTicket")
+            anchor.remove("parseAttempts")
+            anchor.put("parseState", if (parsed == null) "needs_retry" else "complete")
+            updateRecord(anchor.getString("id"), anchor)
+            db.delete("knowledge_meta", "key=?", arrayOf(ticket))
+            db.setTransactionSuccessful()
+            return rows
+        } finally { db.endTransaction() }
+    }
+
+    /** The links commit with the original, before OCR or transcription can fail. */
+    private fun linkToCaptions(original: JSONObject, ids: List<String>) {
+        if (ids.isEmpty()) return
+        check(original.getString("source") == "original")
+        val anchor = original.getString("id")
+        val generation = original.optString("attachmentGeneration").ifBlank {
+            java.util.UUID.randomUUID().toString().also {
+                original.put("attachmentGeneration", it)
+                updateRecord(anchor, original)
+            }
+        }
+        for (id in ids) {
+            if (id == anchor) continue
+            val note = findById(id) ?: continue
+            val links = note.optJSONObject("attachmentLinks") ?: JSONObject()
+            if (links.optString(anchor) == generation) continue
+            links.put(anchor, generation)
+            note.put("attachmentLinks", links)
+            updateRecord(id, note)
+        }
+    }
+
+    fun attachmentPage(id: String, expectedText: String, offset: Int, limit: Int): Pair<JSONArray, Int?> {
+        require(offset >= 0 && limit in 1..50)
+        val note = findById(id)
+        check(note != null && note.getString("text") == expectedText) { "说明已修改或删除，请重新检索。" }
+        val result = JSONArray()
+        val links = note.optJSONObject("attachmentLinks") ?: return result to null
+        var matched = 0
+        for (anchor in links.keys()) {
+            val original = findById(anchor) ?: continue
+            if (original.optString("source") != "original" || original.optString("attachmentGeneration") != links.getString(anchor)) continue
+            if (matched++ < offset) continue
+            if (result.length() == limit) return result to (offset + limit)
+            result.put(original)
+        }
+        return result to null
     }
 
     private fun nextPosition(): Long = db.rawQuery("SELECT COALESCE(MAX(position), -1) + 1 FROM knowledge_records", null).use {
@@ -230,12 +440,12 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
     }
 
     /** Only called when the user explicitly imports the same original again. */
-    private fun allowExplicitReimport(originalId: String) {
+    private fun allowExplicitReimport(originalId: String): Boolean {
             val updates = mutableListOf<Pair<String, String>>()
             db.rawQuery("SELECT key,value FROM knowledge_meta WHERE key LIKE 'deleted:%'", null).use { cursor ->
                 while (cursor.moveToNext()) {
                     val decision = JSONObject(cursor.getString(1))
-                    if (decision.optString("originalId") == originalId) {
+                    if (decision.optString("originalId") == originalId && !decision.optBoolean("restored")) {
                         decision.remove("row")
                         decision.put("restored", true)
                         updates.add(cursor.getString(0) to decision.toString())
@@ -243,6 +453,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
                 }
             }
             for ((key, value) in updates) db.execSQL("UPDATE knowledge_meta SET value=? WHERE key=?", arrayOf(value, key))
+            return updates.isNotEmpty()
     }
 
     private fun pruneExpiredTrash(now: Long) {
@@ -266,11 +477,18 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
     }
 
     /** Trash and deletion marker commit together; old snapshots cannot silently resurrect the row. */
+    private fun cancelPendingParse(row: JSONObject) {
+        if (row.optString("source") != "original" || !row.has("parseTicket")) return
+        db.delete("knowledge_meta", "key=? AND value=?", arrayOf(row.getString("parseTicket"), row.getString("id")))
+        CompanionKnowledgeBackup.clearPendingParse(row)
+    }
+
     fun trashRecord(id: String, expectedText: String, now: Long): Boolean {
         db.beginTransaction()
         try {
             val row = findById(id) ?: return false
             if (row.getString("text") != expectedText) return false
+            cancelPendingParse(row)
             val trash = JSONObject().put("row", row).put("deletedAt", now)
             row.optString("originalId").takeIf { it.matches(Regex("[a-f0-9]{64}")) }?.let { trash.put("originalId", it) }
             db.execSQL("INSERT OR REPLACE INTO knowledge_meta(key,value) VALUES (?,?)", arrayOf("deleted:$id", trash.toString()))
@@ -293,6 +511,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
             }
             rows.forEach { row ->
                 val id = row.getString("id")
+                cancelPendingParse(row)
                 val trash = JSONObject().put("row", row).put("deletedAt", now)
                 row.optString("originalId").takeIf { it.matches(Regex("[a-f0-9]{64}")) }?.let { trash.put("originalId", it) }
                 db.execSQL("INSERT OR REPLACE INTO knowledge_meta(key,value) VALUES (?,?)", arrayOf("deleted:$id", trash.toString()))
@@ -320,6 +539,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
             if (removed.length() == 0) return removed
             for (index in 0 until removed.length()) {
                 val row = removed.getJSONObject(index)
+                cancelPendingParse(row)
                 val tombstone = JSONObject().put("deletedAt", now).put("originalId", originalId).put("scope", "original")
                 db.execSQL("INSERT OR REPLACE INTO knowledge_meta(key,value) VALUES (?,?)", arrayOf("deleted:${row.getString("id")}", tombstone.toString()))
                 check(db.delete("knowledge_records", "id=?", arrayOf(row.getString("id"))) == 1)

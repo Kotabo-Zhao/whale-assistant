@@ -227,6 +227,32 @@ class VirtualScreenPolicyTest {
         }
     }
 
+    @Test fun `采集间隔按面板刷新率夹取而档位表保持原值`() {
+        // 面板 60Hz：一帧 16.67 毫秒，比它更密的档位没有意义，统一夹到 17 毫秒。
+        assertEquals(17, VirtualScreenPolicy.effectiveFrameInterval("240fps", 60f))
+        assertEquals(17, VirtualScreenPolicy.effectiveFrameInterval("185fps", 60f))
+        // 60fps 档的 16 毫秒仍比 60Hz 的一帧（16.67）密，同样夹到 17；档位名不变，只是采集节奏不再超过面板。
+        assertEquals(17, VirtualScreenPolicy.effectiveFrameInterval("60fps", 60f))
+        // 比面板慢的档位原值保留：夹取只能变慢，不能把 30fps 抬成别的东西。
+        assertEquals(33, VirtualScreenPolicy.effectiveFrameInterval("30fps", 60f))
+        assertEquals(180, VirtualScreenPolicy.effectiveFrameInterval("limited", 60f))
+        // 120Hz 面板：60fps 的 16 毫秒仍比一帧 8.3 毫秒慢，原值保留；240fps 被夹到 9 毫秒。
+        assertEquals(16, VirtualScreenPolicy.effectiveFrameInterval("60fps", 120f))
+        assertEquals(9, VirtualScreenPolicy.effectiveFrameInterval("240fps", 120f))
+        // 面板刷新率读不到（0 / 负数 / NaN）时按 17 毫秒兜底，而不是退回 4 毫秒空转。
+        assertEquals(17, VirtualScreenPolicy.effectiveFrameInterval("240fps", 0f))
+        assertEquals(17, VirtualScreenPolicy.effectiveFrameInterval("240fps", -1f))
+        assertEquals(17, VirtualScreenPolicy.effectiveFrameInterval("240fps", Float.NaN))
+        assertEquals(180, VirtualScreenPolicy.effectiveFrameInterval("limited", 0f))
+        // 未知档位仍然走 frameInterval 的严格契约：多了面板读数也不许悄悄回落。
+        assertThrows(IllegalArgumentException::class.java) { VirtualScreenPolicy.effectiveFrameInterval("unknown", 60f) }
+        // 续排延迟与采集间隔同一份夹取：240fps@60Hz 的间隔是 17 毫秒。
+        assertEquals(17L, VirtualScreenPolicy.previewPullDelay("240fps", 0L, 60f))
+        assertEquals(16L, VirtualScreenPolicy.previewPullDelay("240fps", 1L, 60f))
+        assertEquals(1L, VirtualScreenPolicy.previewPullDelay("240fps", 100L, 60f))
+        assertEquals(9L, VirtualScreenPolicy.previewPullDelay("240fps", 0L, 120f))
+    }
+
     @Test fun `刷新失败后降频重试而不是一次就停摆`() {
         // 正常节奏 700ms；失败后拉长到 2s，避免「一直在抛异常」把主线程刷成失败循环。
         assertEquals(700L, VirtualScreenPolicy.PREVIEW_REFRESH_INTERVAL_MILLIS)

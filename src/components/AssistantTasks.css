@@ -1,4 +1,7 @@
 .assistant-tasks { display: grid; gap: 14px; box-sizing: border-box; width: 100%; max-width: 920px; margin: 0 auto; padding: 12px; }
+.task-destinations { display: flex; gap: .25rem; padding: .25rem; background: var(--surface-muted); border-radius: .9rem; }
+.task-destinations button { flex: 1; min-height: 44px; border: 0; border-radius: .7rem; background: transparent; color: var(--muted); font: inherit; }
+.task-destinations button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: 0 1px 4px rgb(25 48 62 / .12); }
 .assistant-tasks > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .assistant-tasks h2 { margin: 3px 0; font-size: 1.35rem; }
 .assistant-tasks header p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.6; }
@@ -19,3 +22,16 @@
 @media (max-width: 520px) { .assistant-task-card { align-items: stretch; flex-direction: column; } .assistant-task-actions button { min-height: 44px; } }
 
 .assistant-task-evidence blockquote { margin: 6px 0; padding: 8px 12px; border-left: 3px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.worker-catalog-controls, .worker-page-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 14px 0; }
+.worker-catalog-controls label { display: flex; align-items: center; gap: 8px; }
+.worker-catalog-controls select, .worker-page-nav button, .worker-catalog-controls button { min-height: 40px; }
+.worker-page-nav span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.worker-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.worker-card { align-items: flex-start; }
+.worker-card > div:first-child { flex: 1; }
+.worker-card .assistant-task-actions { flex-shrink: 0; }
+.worker-card summary { padding: 6px 0; color: var(--accent, var(--blue)); cursor: pointer; }
+.worker-result-preview { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin: 3px 0; line-height: 1.5; }
+@media (max-width: 640px) { .worker-card { align-items: stretch; flex-direction: column; } }
