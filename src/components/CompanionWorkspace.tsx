@@ -95,6 +95,20 @@ const knowledgeStoredLocation = (row: Row) => {
     ? `文档第 ${index + 1} / ${count} 段（保存的文本分段，不是页码）`
     : null
 }
+function KnowledgeOrigins({history}: {history: unknown}) {
+  if (!Array.isArray(history)) return null
+  const origins = (history as unknown[]).flatMap(value => {
+    if (!value || typeof value !== 'object' || !('label' in value) || typeof value.label !== 'string') return []
+    const url = 'url' in value && typeof value.url === 'string' ? value.url : ''
+    return [{label:value.label, url}]
+  }).reverse()
+  if (origins.length < 2) return null
+  return <details className="knowledge-origins"><summary>投放来源 · {origins.length}</summary>
+    <ul>{origins.map(({label,url}) => <li key={JSON.stringify([label,url])}><strong>{label}</strong>
+      {url && <span>{url}</span>}</li>)}</ul>
+  </details>
+}
+
 const knowledgeDetailMeta = (row: Row) => [typeof row.shareOrigin === 'string' ? row.shareOrigin : null,
   typeof row.sourceUrl === 'string' ? row.sourceUrl : null, row.mediaKind === 'audio_transcript' ? '本机中文转写' : null,
   knowledgeCoverageDetail(row), knowledgeStoredLocation(row), originalId(row) !== null ? '已关联本机原件' : null,
@@ -583,6 +597,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
       <header><div><span className="knowledge-type">{knowledgeFileTypeLabel(knowledgeDetail)}</span><h4 id="knowledge-detail-title">{typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料详情'}</h4><small>{knowledgeSourceLabel(knowledgeDetail.source)} · {knowledgeParseLabel(knowledgeDetail)}</small></div><button type="button" className="button button-secondary" onClick={() => closeKnowledgeView()}>关闭</button></header>
       {runtimeBridge.addKnowledgeCapturesListener && typeof knowledgeDetail.createdAt === 'number' && (knowledgeDetail.source === 'original' || typeof knowledgeDetail.documentId === 'string') && <button type="button" className="button button-secondary" onClick={() => showKnowledgeView(knowledgeDetail, 'reader')}>阅读提取内容</button>}
       {knowledgeDetailMeta(knowledgeDetail) && <p className="knowledge-detail-meta">{knowledgeDetailMeta(knowledgeDetail)}</p>}
+      <KnowledgeOrigins history={knowledgeDetail.shareOrigins} />
       {typeof knowledgeDetail.sourceUrl === 'string' && /^https?:\/\//i.test(knowledgeDetail.sourceUrl) && knowledgeDetail.mediaKind !== 'web_article' &&
         <button type="button" className="button button-secondary" disabled={busy} onClick={() => {
           setBusy(true)

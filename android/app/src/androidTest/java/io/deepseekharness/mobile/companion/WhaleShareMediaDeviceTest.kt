@@ -90,6 +90,26 @@ class WhaleShareMediaDeviceTest {
         }
     }
 
+    /** Verifies the file actually selected in the external DocumentsUI share sheet. */
+    @Test fun externallySharedFileIsIndexedAndReadable() {
+        val tag = InstrumentationRegistry.getArguments().getString("externalShareTag")
+        org.junit.Assume.assumeTrue(tag?.matches(Regex("[a-f0-9]{32}")) == true)
+        val body = "外部文件投放验收 $tag"
+        val hash = MessageDigest.getInstance("SHA-256").digest(body.toByteArray()).joinToString("") { "%02x".format(it) }
+        val store = CompanionKnowledgeStore(InstrumentationRegistry.getInstrumentation().targetContext)
+        val end = SystemClock.elapsedRealtime() + 30000
+        try {
+            while (SystemClock.elapsedRealtime() < end && store.searchPage(body, 0, 2).first.length() == 0) Thread.sleep(200)
+            val original = requireNotNull(store.originalInfo(hash)) { "未收到系统文件管理器分享的原件" }
+            assertEquals("Whale-$tag.txt", original.getString("displayName"))
+            val extracted = store.searchPage(body, 0, 2).first.getJSONObject(0)
+            assertEquals(hash, extracted.getString("originalId"))
+            assertEquals(body, extracted.getString("text"))
+        } finally {
+            store.originalInfo(hash)?.let { store.removeOriginal(hash, it.getString("id"), it.getString("text")) }
+        }
+    }
+
     @Test fun pickedFileKeepsBothItsOriginalAndThePetNote() {
         val inst = InstrumentationRegistry.getInstrumentation()
         val app = inst.targetContext

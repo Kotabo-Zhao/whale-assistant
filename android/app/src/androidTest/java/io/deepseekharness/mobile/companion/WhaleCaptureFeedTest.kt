@@ -44,6 +44,9 @@ class WhaleCaptureFeedTest {
         assertEquals(second.recordIds.single(), top.getString("id"))
         assertEquals("小红书分享", top.getString("shareOrigin"))
         assertEquals("投放样例 2", read(top).getJSONObject("row").getString("text"))
+        assertFalse(store.saveText("投放样例 2", "shared_text", wx).added)
+        val history = read(top).getJSONObject("row").getJSONArray("shareOrigins")
+        assertEquals(listOf("小红书分享","微信分享"), (0 until history.length()).map { history.getJSONObject(it).getString("label") })
         val body = (1..7).joinToString("") { ("段落" + it).repeat(2700) }
         val long = store.saveText(body, "shared_text", wx)
         val capture = cards().getJSONObject(0)

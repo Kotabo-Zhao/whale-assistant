@@ -363,3 +363,16 @@ it('记忆首页在首屏打开笔记编辑器，取消时不写入，保存成�
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeAdd', text: '本地新笔记' }))
   await waitFor(() => expect(screen.queryByLabelText('资料内容')).toBeNull())
 })
+
+it('在资料详情聚合重复投放的来源，并保留早先的链接', async () => {
+  const row = {id:'sample',text:'项目摘录',source:'shared_text',shareOrigin:'系统分享',
+    shareOrigins:[{label:'微信链接',url:'https://mp.weixin.qq.com/s/sample'},{label:'系统分享',url:''}]}
+  bridge.companionDashboard.mockResolvedValue({items:[row]})
+  render(<CompanionWorkspace initialPanel="knowledge" />)
+  fireEvent.click(await screen.findByRole('button',{name:'查看详情'}))
+  fireEvent.click(within(screen.getByRole('dialog')).getByText('投放来源 · 2'))
+  const list = within(screen.getByRole('dialog')).getAllByRole('listitem')
+  expect(list[0]).toHaveTextContent('系统分享')
+  expect(list[1]).toHaveTextContent('微信链接')
+  expect(list[1]).toHaveTextContent('https://mp.weixin.qq.com/s/sample')
+})

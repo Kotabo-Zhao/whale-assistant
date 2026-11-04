@@ -10,10 +10,12 @@ internal data class WhaleShareSource(val label: String, val url: String?) {
             val previous = row.optString("shareOrigin")
             if (previous.isNotEmpty()) it.put(JSONObject().put("label", previous).put("url", row.optString("sourceUrl")))
         }
-        if ((0 until origins.length()).none { index -> origins.getJSONObject(index).let { it.optString("label") == label && it.optString("url") == url.orEmpty() } }) {
-            if (origins.length() >= 12) origins.remove(0)
-            origins.put(JSONObject().put("label", label).put("url", url.orEmpty()))
+        val existing = (0 until origins.length()).firstOrNull { index ->
+            origins.getJSONObject(index).let { it.optString("label") == label && it.optString("url") == url.orEmpty() }
         }
+        if (existing != null) origins.remove(existing)
+        if (origins.length() >= 12) origins.remove(0)
+        origins.put(JSONObject().put("label", label).put("url", url.orEmpty()))
         row.put("shareOrigins", origins)
         row.put("shareOrigin", label)
         if (url != null) row.put("sourceUrl", url) else row.remove("sourceUrl")
