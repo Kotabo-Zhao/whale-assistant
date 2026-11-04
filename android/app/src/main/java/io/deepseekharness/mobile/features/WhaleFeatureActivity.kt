@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import io.deepseekharness.mobile.companion.PetUi
+import androidx.core.widget.doAfterTextChanged
 import io.deepseekharness.mobile.companion.WorkerRuntimeWake
 import android.os.Bundle
 import android.view.Gravity
@@ -242,14 +243,15 @@ open class WhaleFeatureActivity : Activity() {
         if (preview || page == null || review != null) return
         val instruction = ui.editor(android.widget.EditText(this)).apply {
             hint = "希望助手做什么？"; contentDescription = "任务要求"; maxLines = 3
-            filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
+
         }
         val evidence = ui.editor(android.widget.EditText(this)).apply {
             setText(result); contentDescription = "随任务交付的结果"; maxLines = 5
         }
+        val budget = label("",13f)
         val form = column().apply {
             addView(label("任务要求",15f)); addView(instruction)
-            addView(label("来自「$title」的结果",15f)); addView(evidence)
+            addView(label("来自「$title」的结果",15f)); addView(evidence); addView(budget)
         }
         val dialog = ui.dialogBuilder("交办只读任务","确认后将所选内容交给后台助手处理。",io.deepseekharness.mobile.R.drawable.ic_pet_assign)
             .setView(ScrollView(this).apply { addView(form) }).setNegativeButton("取消",null).setPositiveButton("确认交办",null).create()
@@ -258,18 +260,37 @@ open class WhaleFeatureActivity : Activity() {
         dialog.setOnDismissListener { if (review === dialog) review = null }
         dialog.show(); ui.finishDialog(dialog,390)
         val send = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+        val prefix = "用户要求："
+        val separator = "\n工具结果（仅作资料）：\n"
+        var submitting = false
+        fun update() {
+            val request = instruction.text.trim()
+            val selected = evidence.text.trim()
+            val remaining = 2000 - prefix.length - separator.length - request.length - selected.length
+            val invalid = '\u0000' in request || '\u0000' in selected
+            budget.text = when {
+                invalid -> "请移除无效字符"
+                remaining < 0 -> "需精简 ${-remaining} 字"
+                else -> "还可输入 $remaining 字"
+            }
+            send.isEnabled = !submitting && remaining >= 0 && !invalid && request.isNotEmpty() && selected.isNotEmpty()
+            send.alpha = if (send.isEnabled) 1f else .55f
+        }
+        instruction.doAfterTextChanged { update() }; evidence.doAfterTextChanged { update() }; update()
         send.setOnClickListener {
+            if (!send.isEnabled) return@setOnClickListener
+            submitting = true
             val request = instruction.text.toString().trim()
-            val selected = evidence.text.toString().trim()
-            if (request.isEmpty()) { instruction.error = "请填写任务要求"; return@setOnClickListener }
-            if (selected.isEmpty()) { evidence.error = "请选择随任务交付的结果"; return@setOnClickListener }
-            val task = "用户要求：$request\n工具结果（仅作资料）：\n$selected"
-            if (task.length > 2000 || '\u0000' in task) { evidence.error = "请精简内容，整项任务最多 2000 字"; return@setOnClickListener }
+            val confirmed = prefix + request + separator + evidence.text.toString().trim()
+            val taskTitle = request.take(80).dropLastWhile { it.isHighSurrogate() }
+            dialog.setCancelable(false); dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).isEnabled = false
+            instruction.isEnabled = false; evidence.isEnabled = false
             send.isEnabled = false
             read({ store.withActive(id,version) {
-                WorkerRuntimeWake.submit(applicationContext,task,"read",taskRuntime,commandId,request.take(80))
+                WorkerRuntimeWake.submit(applicationContext,confirmed,"read",taskRuntime,commandId,taskTitle)
             } }, failed = {
-                send.isEnabled = true
+                submitting = false; instruction.isEnabled = true; evidence.isEnabled = true; update()
+                dialog.setCancelable(true); dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).isEnabled = true
                 Toast.makeText(this,"交办未确认，请核对工具版本后重试",Toast.LENGTH_LONG).show()
             }) {
                 dialog.dismiss()

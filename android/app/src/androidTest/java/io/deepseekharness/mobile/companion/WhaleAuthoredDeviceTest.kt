@@ -120,8 +120,22 @@ class WhaleAuthoredDeviceTest {
             click(activity,"使用结果"); tap("交给后台…")
             fun taskField() = find(inst.uiAutomation.rootInActiveWindow) { it.isEditable && it.contentDescription == "任务要求" }
             waitFor("缺少交办编辑器") { taskField() != null }
-            tap("确认交办")
+            assertFalse(requireNotNull(labelled("确认交办")).isEnabled)
+            fun fill(node: AccessibilityNodeInfo, value: String) = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,value)
+            })
+            assertTrue(fill(requireNotNull(taskField()),request))
+            val extra = "长".repeat(2100)
+            val selected = requireNotNull(labelled("随任务交付的结果"))
+            assertTrue(fill(selected,extra))
+            waitFor("长文本未提示精简或被截断") { labelled("随任务交付的结果")?.text?.length == extra.length &&
+                labelled("确认交办")?.isEnabled == false && find(inst.uiAutomation.rootInActiveWindow) { it.text?.startsWith("需精简") == true } != null }
+            tap("取消")
+            waitFor("取消后表单未关闭") { labelled("确认交办") == null }
             assertTrue(jobs().isEmpty())
+            assertFalse(desk.pending().let { rows -> (0 until rows.length()).any { rows.getJSONObject(it).optString("task").contains(title) } })
+            click(activity,"使用结果"); tap("交给后台…")
+            waitFor("再次打开未恢复工具原始结果") { labelled("随任务交付的结果")?.text?.toString() == sample }
             store.activate(id,"",rev)
             waitFor("停用后交办窗口仍然可用") { labelled("确认交办") == null && labelled("此工具已停用") != null }
             assertTrue(jobs().isEmpty())
@@ -166,14 +180,28 @@ class WhaleAuthoredDeviceTest {
             WhaleFeatureActivity.openTool(app,tool.id,tool.revision,pet=true)
             activity = requireNotNull(inst.waitForMonitorWithTimeout(monitor,10000) as? WhaleFeatureActivity)
             val page = web(activity)
+            fun capture(window: android.view.Window, name: String) {
+                if (InstrumentationRegistry.getArguments().getString("captureProof") != "true") return
+                inst.waitForIdleSync()
+                val view = window.decorView
+                val image = android.graphics.Bitmap.createBitmap(view.width,view.height,android.graphics.Bitmap.Config.ARGB_8888)
+                val done = CountDownLatch(1); var status = -1
+                android.view.PixelCopy.request(window,image,{ status=it; done.countDown() },android.os.Handler(android.os.Looper.getMainLooper()))
+                assertTrue(done.await(4,TimeUnit.SECONDS)); assertEquals(android.view.PixelCopy.SUCCESS,status)
+                File(app.getExternalFilesDir(null),name).outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+                image.recycle()
+            }
             waitFor("工时换算器未加载") { js(page,"!!document.querySelector('#hours')") == "true" }
             js(page,"const h=document.querySelector('#hours'); h.value='20'; h.dispatchEvent(new Event('input',{bubbles:true}));")
             waitFor("已发布工具没有计算出天数") { js(page,"document.querySelector('output[data-whale-result]').value").contains("2.5") }
+            capture(activity.window,"whale-hours-tool.png")
             click(activity,"使用结果"); tap("交给后台…")
             waitFor("未填入任务要求") { find(inst.uiAutomation.rootInActiveWindow) { it.isEditable && it.contentDescription == "任务要求" }
                 ?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,Bundle().apply {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,"$tag：用一句话说明所附工具结果中的工作日数，保留数字。")
                 }) == true }
+            val review = WhaleFeatureActivity::class.java.getDeclaredField("review").apply { isAccessible = true }.get(activity) as android.app.AlertDialog
+            capture(requireNotNull(review.window),"whale-hours-handoff.png")
             tap("确认交办")
             waitFor("确认后没有退出交办表单") { labelled("确认交办") == null }
             shell("input keyevent KEYCODE_HOME")
