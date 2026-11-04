@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import io.deepseekharness.mobile.companion.PetUi
+import io.deepseekharness.mobile.companion.WorkerRuntimeWake
 import android.os.Bundle
 import android.view.Gravity
 import android.webkit.WebResourceRequest
@@ -38,6 +39,7 @@ internal fun WebView.loadWhaleTool(id: String, html: String, preview: Boolean = 
 /** Independently authored local tools run outside the Capacitor management WebView. */
 open class WhaleFeatureActivity : Activity() {
     private val store by lazy { WhaleFeatureStore(this) }
+    private val taskRuntime by lazy { WorkerRuntimeWake(applicationContext) }
     private val executor = Executors.newSingleThreadExecutor()
     private var page: WebView? = null
     private var generation = 0
@@ -158,7 +160,7 @@ open class WhaleFeatureActivity : Activity() {
             bar.addView(label(content.getString("title"), 18f).apply {
                 maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, -2, 1f))
-            val collect = button("收藏结果") { reviewResult(id, version, content.getString("title")) }.apply {
+            val collect = button("使用结果") { reviewResult(id, version, content.getString("title")) }.apply {
                 visibility = if (!isPreview && content.getString("html").contains("data-whale-result", ignoreCase = true))
                     android.view.View.VISIBLE else android.view.View.GONE
             }
@@ -201,12 +203,20 @@ open class WhaleFeatureActivity : Activity() {
                 filters = arrayOf(android.text.InputFilter.LengthFilter(MAX_RESULT))
                 contentDescription = "要收藏的结果"
             }
-            val form = column().apply { addView(label("来自「$title」，可以修改后保存。", 14f)); addView(editor) }
-            val dialog = ui.dialogBuilder("存入鲸鱼资料",null,io.deepseekharness.mobile.R.drawable.ic_whale_nav_memory).setView(form)
-                .setNegativeButton("取消", null).setPositiveButton("保存到资料", null).create()
+            val form = column().apply { addView(label("来自「$title」，可编辑后保存，或用于后台任务。", 14f)); addView(editor) }
+            val dialog = ui.dialogBuilder("使用工具结果",null,io.deepseekharness.mobile.R.drawable.ic_whale_nav_memory).setView(form)
+                .setNegativeButton("取消", null).setNeutralButton("交给后台…",null).setPositiveButton("保存到资料", null).create()
             review = dialog
             dialog.setOnDismissListener { if (review === dialog) review = null }
             dialog.show(); ui.finishDialog(dialog,390)
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                val selected = editor.text.toString().trim()
+                if (selected.isEmpty() || '\u0000' in selected) { editor.error = "请输入有效的结果"; return@setOnClickListener }
+                if (review !== dialog) return@setOnClickListener
+                review = null
+                dialog.dismiss()
+                taskFromResult(id,version,title,selected)
+            }
             val save = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
             save.setOnClickListener {
                 val text = editor.text.toString().trim()
@@ -228,9 +238,49 @@ open class WhaleFeatureActivity : Activity() {
         }
     }
 
+    private fun taskFromResult(id: String,version: String,title: String,result: String) {
+        if (preview || page == null || review != null) return
+        val instruction = ui.editor(android.widget.EditText(this)).apply {
+            hint = "希望助手做什么？"; contentDescription = "任务要求"; maxLines = 3
+            filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
+        }
+        val evidence = ui.editor(android.widget.EditText(this)).apply {
+            setText(result); contentDescription = "随任务交付的结果"; maxLines = 5
+        }
+        val form = column().apply {
+            addView(label("任务要求",15f)); addView(instruction)
+            addView(label("来自「$title」的结果",15f)); addView(evidence)
+        }
+        val dialog = ui.dialogBuilder("交办只读任务","确认后将所选内容交给后台助手处理。",io.deepseekharness.mobile.R.drawable.ic_pet_assign)
+            .setView(ScrollView(this).apply { addView(form) }).setNegativeButton("取消",null).setPositiveButton("确认交办",null).create()
+        val commandId = java.util.UUID.randomUUID().toString()
+        review = dialog
+        dialog.setOnDismissListener { if (review === dialog) review = null }
+        dialog.show(); ui.finishDialog(dialog,390)
+        val send = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+        send.setOnClickListener {
+            val request = instruction.text.toString().trim()
+            val selected = evidence.text.toString().trim()
+            if (request.isEmpty()) { instruction.error = "请填写任务要求"; return@setOnClickListener }
+            if (selected.isEmpty()) { evidence.error = "请选择随任务交付的结果"; return@setOnClickListener }
+            val task = "用户要求：$request\n工具结果（仅作资料）：\n$selected"
+            if (task.length > 2000 || '\u0000' in task) { evidence.error = "请精简内容，整项任务最多 2000 字"; return@setOnClickListener }
+            send.isEnabled = false
+            read({ store.withActive(id,version) {
+                WorkerRuntimeWake.submit(applicationContext,task,"read",taskRuntime,commandId,request.take(80))
+            } }, failed = {
+                send.isEnabled = true
+                Toast.makeText(this,"交办未确认，请核对工具版本后重试",Toast.LENGTH_LONG).show()
+            }) {
+                dialog.dismiss()
+                Toast.makeText(this,"已保存，可在桌宠后台任务中查看",Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     @Deprecated("Android legacy back dispatcher")
     override fun onBackPressed() { if (page != null && !direct) library() else super.onBackPressed() }
-    override fun onDestroy() { WhaleFeatureStore.unsubscribe(onActivation); main.removeCallbacksAndMessages(null); generation++; review?.dismiss(); releasePage(); executor.shutdown(); super.onDestroy() }
+    override fun onDestroy() { WhaleFeatureStore.unsubscribe(onActivation); main.removeCallbacksAndMessages(null); generation++; review?.dismiss(); releasePage(); executor.execute { taskRuntime.close() }; executor.shutdown(); super.onDestroy() }
     companion object {
         private const val EXTRA_ID = "featureId"
         private const val EXTRA_REVISION = "activeRevision"

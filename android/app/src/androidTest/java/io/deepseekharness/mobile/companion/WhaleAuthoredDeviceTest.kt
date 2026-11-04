@@ -98,6 +98,101 @@ class WhaleAuthoredDeviceTest {
         waitFor("真实页面未生成阅读卡") { js(page, "document.querySelector('output[data-whale-result]')?.value || ''").contains(passage) }
     }
 
+    @Test fun publishedPetResultStartsOneReviewedReadWorker() {
+        val id = "task-proof-" + UUID.randomUUID().toString().take(12)
+        val store = WhaleFeatureStore(app)
+        val desk = WorkerDashboardStore(app)
+        val title = "核对试算 " + UUID.randomUUID().toString().take(8)
+        val sample = "输入为 21 和 24"
+        val result = store.draft(JSONObject().put("id",id).put("title",title)
+            .put("html","<output data-whale-result>$sample</output>"))
+        val rev = result.getString("latest")
+        val request = "$title。请仅根据所选结果求和，完成时报告数字。"
+        fun jobs() = desk.list().getJSONArray("items").let { rows -> (0 until rows.length()).map(rows::getJSONObject)
+            .filter { it.optString("title").contains(title) || it.optString("scope").contains(title) } }
+        val monitor = inst.addMonitor(io.deepseekharness.mobile.features.WhalePetFeatureActivity::class.java.name,null,false)
+        var activity: WhaleFeatureActivity? = null
+        try {
+            store.activate(id,rev,"")
+            WhaleFeatureActivity.openTool(app,id,rev,pet=true)
+            activity = requireNotNull(inst.waitForMonitorWithTimeout(monitor,10000) as? WhaleFeatureActivity)
+            waitFor("工具结果尚未生成") { js(web(activity),"document.querySelector('output')?.value") == JSONObject.quote(sample) }
+            click(activity,"使用结果"); tap("交给后台…")
+            fun taskField() = find(inst.uiAutomation.rootInActiveWindow) { it.isEditable && it.contentDescription == "任务要求" }
+            waitFor("缺少交办编辑器") { taskField() != null }
+            tap("确认交办")
+            assertTrue(jobs().isEmpty())
+            store.activate(id,"",rev)
+            waitFor("停用后交办窗口仍然可用") { labelled("确认交办") == null && labelled("此工具已停用") != null }
+            assertTrue(jobs().isEmpty())
+            store.activate(id,rev,""); tap("打开当前版本")
+            waitFor("重新启用后未加载结果") { js(web(activity),"document.querySelector('output')?.value") == JSONObject.quote(sample) }
+            click(activity,"使用结果"); tap("交给后台…")
+            waitFor("任务要求不能填写") { taskField()?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,request)
+            }) == true }
+            tap("确认交办")
+            val deadline = SystemClock.elapsedRealtime()+180000
+            var row: JSONObject? = null
+            while (SystemClock.elapsedRealtime()<deadline) {
+                row = jobs().singleOrNull()
+                if (row?.optString("state") in listOf("completed","failed","blocked")) break
+                Thread.sleep(500)
+            }
+            val done = requireNotNull(row)
+            assertEquals(1,jobs().size); assertEquals("read",done.getString("mode")); assertEquals("completed",done.getString("state"))
+            assertTrue(done.getString("summary").contains("45"))
+            inst.sendStatus(0,Bundle().apply { putString("petResultTask","revocation cancelled the open form; one reviewed read worker reported 45") })
+        } finally {
+            activity?.let { inst.runOnMainSync { it.finish() } }; inst.removeMonitor(monitor)
+            store.read(id)?.optString("active")?.takeIf(String::isNotBlank)?.let { store.activate(id,"",it) }
+            android.util.AtomicFile(File(app.noBackupFilesDir,"whale-features-v1/$id.json")).delete()
+        }
+    }
+
+    @Test fun previouslyAuthoredHoursToolHandsOffItsCalculatedResult() {
+        val features = WhaleFeatureStore(app)
+        val tool = features.activeTools().first { item ->
+            item.id.startsWith("task-") && features.withActive(item.id,item.revision) { version ->
+                val html = version.getString("html")
+                html.contains("hours") && html.contains("data-whale-result")
+            }
+        }
+        val monitor = inst.addMonitor(io.deepseekharness.mobile.features.WhalePetFeatureActivity::class.java.name,null,false)
+        val desk = WorkerDashboardStore(app)
+        val tag = "工时验收-" + UUID.randomUUID().toString().take(8)
+        var activity: WhaleFeatureActivity? = null
+        try {
+            WhaleFeatureActivity.openTool(app,tool.id,tool.revision,pet=true)
+            activity = requireNotNull(inst.waitForMonitorWithTimeout(monitor,10000) as? WhaleFeatureActivity)
+            val page = web(activity)
+            waitFor("工时换算器未加载") { js(page,"!!document.querySelector('#hours')") == "true" }
+            js(page,"const h=document.querySelector('#hours'); h.value='20'; h.dispatchEvent(new Event('input',{bubbles:true}));")
+            waitFor("已发布工具没有计算出天数") { js(page,"document.querySelector('output[data-whale-result]').value").contains("2.5") }
+            click(activity,"使用结果"); tap("交给后台…")
+            waitFor("未填入任务要求") { find(inst.uiAutomation.rootInActiveWindow) { it.isEditable && it.contentDescription == "任务要求" }
+                ?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,"$tag：用一句话说明所附工具结果中的工作日数，保留数字。")
+                }) == true }
+            tap("确认交办")
+            waitFor("确认后没有退出交办表单") { labelled("确认交办") == null }
+            shell("input keyevent KEYCODE_HOME")
+            val deadline = SystemClock.elapsedRealtime()+180000
+            var jobs = emptyList<JSONObject>()
+            while (SystemClock.elapsedRealtime()<deadline) {
+                jobs = desk.list().getJSONArray("items").let { rows -> (0 until rows.length()).map(rows::getJSONObject)
+                    .filter { it.optString("scope").contains(tag) || it.optString("title").contains(tag) } }
+                if (jobs.singleOrNull()?.optString("state") in listOf("completed","failed","blocked")) break
+                Thread.sleep(500)
+            }
+            val row = jobs.single()
+            assertEquals("read",row.getString("mode")); assertEquals("completed",row.getString("state"))
+            assertTrue(row.getString("summary").contains("2.5"))
+            assertEquals(tool.revision,features.read(tool.id)!!.getString("active"))
+            inst.sendStatus(0,Bundle().apply { putString("authoredTask","existing worker-created tool calculated 2.5 days; read worker reported it after Home") })
+        } finally { activity?.let { inst.runOnMainSync { it.finish() } }; inst.removeMonitor(monitor) }
+    }
+
     @Test fun oldShortcutFollowsPublicationAndRevokedVersionCannotCollect() {
         val feature = "qa-" + UUID.randomUUID()
         val tag = "版本保护 " + UUID.randomUUID()
@@ -117,7 +212,7 @@ class WhaleAuthoredDeviceTest {
             active = launch(first)
             val page = web(active)
             waitFor("陈旧入口未解析到新启用版本") { js(page, "document.querySelector('h2')?.innerText") == "\"第二版\"" }
-            click(active, "收藏结果")
+            click(active, "使用结果")
             waitFor("核对框没有打开") { labelled("要收藏的结果") != null }
             store.activate(feature, first, next)
             waitFor("回滚后旧收藏窗口没有关闭") { labelled("要收藏的结果") == null && labelled("打开当前版本") != null }
@@ -178,7 +273,7 @@ class WhaleAuthoredDeviceTest {
             waitFor("未打开真实生成的换算器") { js(page, "!!document.querySelector('#hours')") == "true" }
             js(page, """const h = document.querySelector('#hours'); h.value='20'; h.dispatchEvent(new Event('input',{bubbles:true}));""")
             waitFor("20 小时未换算为 2.5 天") { js(page,"document.querySelector('output[data-whale-result]')?.value || ''").contains("2.5") }
-            assertNull(labelled("收藏结果"))
+            assertNull(labelled("使用结果"))
             assertEquals("true", js(page, "location.hostname.endsWith('.preview.whale.invalid')"))
             click(opened, "启用草稿")
             waitFor("用户启用未落盘") { store.activeTools().any { it.id == feature && it.revision == version } }
@@ -283,7 +378,7 @@ class WhaleAuthoredDeviceTest {
             click(activity, "预览新版本", title)
             val page = web(activity)
             enter(page, "预览验收，草稿中的内容只在预览中显示。")
-            assertNull(labelled("收藏结果"))
+            assertNull(labelled("使用结果"))
             assertEquals("true", js(page, "location.hostname.endsWith('.preview.whale.invalid') && typeof window.Android === 'undefined'"))
             inst.runOnMainSync { activity.onBackPressed() }
             click(activity, "启用此版本", title)
@@ -334,7 +429,7 @@ class WhaleAuthoredDeviceTest {
         try {
             val page = web(activity)
             enter(page, note)
-            click(activity, "收藏结果")
+            click(activity, "使用结果")
             waitFor("未打开收藏核对框") { labelled("要收藏的结果") != null }
             val preview = requireNotNull(labelled("要收藏的结果"))
             assertTrue(preview.text.toString().contains(note))
@@ -342,7 +437,7 @@ class WhaleAuthoredDeviceTest {
             waitFor("取消后核对框未关闭") { labelled("要收藏的结果") == null }
             inst.uiAutomation.waitForIdle(200, 1500)
             assertEquals(0, knowledge.searchPage(note, 0, 4).first.length())
-            click(activity, "收藏结果")
+            click(activity, "使用结果")
             waitFor("第二次核对框未打开") { labelled("要收藏的结果")?.isEditable == true }
             waitFor("不能编辑要收藏的内容") {
                 labelled("要收藏的结果")?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
