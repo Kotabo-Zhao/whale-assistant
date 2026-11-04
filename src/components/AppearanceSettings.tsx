@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { readInterfaceStyle, saveInterfaceStyle } from '../theme'
 import { Moon, Palette, Sun, SunMoon, RotateCcw } from 'lucide-react'
 import { t } from '../i18n'
 import { applyTextColor, applyTheme, clearCustomAccentColor, clearCustomTextColor, effectiveAccentColor, readCustomAccentColor, readCustomTextColor, readThemeMode, saveAccentMode, saveAccentSource, saveCustomAccentColor, saveCustomTextColor, saveThemeMode, useAccentMode, useAccentSource, useResolvedTheme, useThemeMode } from '../theme'
@@ -40,6 +41,7 @@ export type AppearanceScope = 'all' | 'appearance' | 'background' | 'dsh'
  * 组件只负责展示与转发，主题的解析与落地全在 src/theme.ts 里（可单独测试）。
  */
 export function AppearanceSettings({ scope = 'all', loadBackground = readBackground }: { scope?: AppearanceScope; loadBackground?: () => Promise<Blob | null> }) {
+  const [style, setStyle] = useState(readInterfaceStyle)
   const showAppearance = scope === 'all' || scope === 'appearance'
   const showBackground = scope === 'all' || scope === 'background'
   // DSH 的主题与背景在同一页：两者都改的是另一个页面，分开只会让人来回找。
@@ -263,6 +265,10 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
           <Palette size={28} aria-hidden="true" />
           <h2 id="appearance-title">{t('界面主题')}</h2>
           <p>{t('立即生效，下次打开仍使用此主题。')}</p>
+          <div className="appearance-options" role="group" aria-label={t('界面风格')}>
+            {(['simple', 'cute'] as const).map(value => <button type="button" key={value} aria-pressed={style === value}
+              onClick={() => { saveInterfaceStyle(value); setStyle(value) }}>{t(value === 'simple' ? '简约' : '可爱')}</button>)}
+          </div>
           <div className="appearance-options" role="radiogroup" aria-labelledby="appearance-title">
             {OPTIONS.map(({ value, label, Icon }) => (
               <label key={value} className={mode === value ? 'appearance-option active' : 'appearance-option'}>

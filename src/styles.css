@@ -213,6 +213,13 @@
 }
 
 /* 强调色主题：只覆盖语义色令牌，背景与文本对比度仍由明暗主题统一管理。 */
+:root[data-style='simple'] { --radius-control: 6px; --radius-card: 8px; --shadow-card: none; }
+:root[data-style='cute'] { --radius-control: 16px; --radius-card: 22px; --bg: #f6f2fa; --surface-muted: #f0eaf7; }
+:root[data-style='cute'][data-theme='dark'] { --bg: #191724; --surface-muted: #302b3d; }
+.appearance-options button[aria-pressed] { min-height: 44px; min-width: 6em; background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius-control); }
+.appearance-options button[aria-pressed='true'] { color: var(--accent); border-color: currentColor; font-weight: var(--weight-bold); }
+:root[data-style='cute'] .worker-card { border-radius: var(--radius-card); }
+:root[data-style='simple'] .worker-card { border-radius: var(--radius-card); box-shadow: none; }
 :root[data-accent='mint'] {
   --blue: #087f73;
   --blue-hover: #06665d;

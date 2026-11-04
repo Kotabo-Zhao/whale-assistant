@@ -35,6 +35,18 @@ const pick = (name: string) => fireEvent.click(screen.getByRole('radio', { name 
 const appearance = () => document.querySelector('section.appearance-settings')
 
 describe('外观设置', () => {
+  it('切换界面风格后重新打开设置，保留选择和原有明暗模式', () => {
+    const first = render(<AppearanceSettings />)
+    const mode = document.documentElement.dataset.theme
+    fireEvent.click(screen.getByRole('button', { name: '简约' }))
+    expect(document.documentElement.dataset.style).toBe('simple')
+    first.unmount()
+    render(<AppearanceSettings />)
+    expect(screen.getByRole('button', { name: '简约' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: '可爱' }))
+    expect(document.documentElement.dataset.style).toBe('cute')
+    expect(document.documentElement.dataset.theme).toBe(mode)
+  })
   beforeEach(() => {
     window.localStorage.clear()
     document.documentElement.removeAttribute('data-theme')

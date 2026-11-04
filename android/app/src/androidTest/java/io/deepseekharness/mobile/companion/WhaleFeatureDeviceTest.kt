@@ -68,6 +68,39 @@ class WhaleFeatureDeviceTest {
             })
         } finally { dir.deleteRecursively() }
     }
+    @Test fun enabledToolOpensInPetWindow() {
+        val tool = WhaleFeatureStore(base).activeTools().firstOrNull { it.id == "whale-temperature" }
+            ?: WhaleFeatureStore(base).activeTools().first { it.title == "工时换算" || it.title == "阅读摘录卡" }
+        val monitor = inst.addMonitor(io.deepseekharness.mobile.features.WhalePetFeatureActivity::class.java.name, null, false)
+        try {
+            WhaleFeatureActivity.openTool(base, tool.id, tool.revision, pet = true)
+            val activity = requireNotNull(inst.waitForMonitorWithTimeout(monitor, 8000))
+            try {
+                val end = SystemClock.elapsedRealtime() + 12000
+                var ready = false
+                fun web(view: View): WebView? = when (view) {
+                    is WebView -> view
+                    is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { web(view.getChildAt(it)) }
+                    else -> null
+                }
+                while (!ready && SystemClock.elapsedRealtime() < end) {
+                    inst.runOnMainSync {
+                        val page = web(activity.window.decorView)
+                        page?.evaluateJavascript("document.readyState + ' ' + location.hostname") { result ->
+                            ready = result == "\"" + "complete " + tool.id + ".features.whale.invalid\""
+                        }
+                    }
+                    if (!ready) Thread.sleep(100)
+                }
+                assertTrue("已启用工具需在隔离的工具域内完成加载", ready)
+                inst.runOnMainSync {
+                    assertTrue(activity.window.isFloating)
+                    assertTrue(activity.window.decorView.width < activity.resources.displayMetrics.widthPixels)
+                }
+            } finally { inst.runOnMainSync { activity.finish() } }
+        } finally { inst.removeMonitor(monitor) }
+    }
+
     @Test fun generatedToolRunsInApp() {
         val store = WhaleFeatureStore(base)
         val row = requireNotNull(store.read("whale-temperature"))

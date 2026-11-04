@@ -24,7 +24,7 @@ test('heartbeat tier: active rows/pending deliveries 5 s, channels 15 s, idle 60
   assert.equal(heartbeatTier({ tasks: 1, settingsReady: false }), HEARTBEAT_ACTIVE_MS)
   // History rows are settled: completed/failed/cancelled/interrupted do not keep the 5 s tier.
   assert.equal(activeRowCount([{ state: 'completed' }, { state: 'failed' }, { state: 'cancelled' }, { state: 'interrupted' }]), 0)
-  assert.equal(activeRowCount([{ state: 'queued' }, { state: 'starting' }, { state: 'running' }, { state: 'cancelling' }, { state: 'waiting' }, { state: 'blocked' }]), 6)
+  assert.equal(activeRowCount([{ state: 'queued' }, { state: 'starting' }, { state: 'running' }, { state: 'cancelling' }, { state: 'waiting' }, { state: 'blocked' }]), 4)
   assert.equal(heartbeatTier({ tasks: activeRowCount([{ state: 'completed' }]) }), HEARTBEAT_IDLE_MS)
   // A report whose outbox receipt is still pending keeps the 5 s tier.
   assert.equal(heartbeatTier({ pendingDeliveries: 1 }), HEARTBEAT_ACTIVE_MS)

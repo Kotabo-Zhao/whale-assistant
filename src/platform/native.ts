@@ -130,7 +130,7 @@ interface NativeRuntimePlugin {
   marketProposal(options: { operation: 'get' | 'dismiss'; id?: string }): Promise<unknown>
   setAppLanguage(options: { language: 'zh-CN' | 'en' }): Promise<void>
   /** 同步主题模式给原生，由原生把它落到状态栏（登记册 5.4）。 */
-  setAppTheme(options: { mode: AppThemeMode }): Promise<void>
+  setAppTheme(options: { mode: AppThemeMode; style?: 'simple' | 'cute' }): Promise<void>
   /** 同步主题给 DSH 页面；原生侧只接受固定字段。 */
   applyHarnessTheme(options: { theme: unknown }): Promise<void>
   clearHarnessTheme(): Promise<void>
@@ -352,12 +352,12 @@ function createNativeBridge(): RuntimeBridge {
       if (language !== 'zh-CN' && language !== 'en') return Promise.reject(new Error('不支持的应用语言'))
       return NativeRuntime.setAppLanguage({ language })
     },
-    setAppTheme: mode => {
+    setAppTheme: (mode, style) => {
       // 与原生侧的校验保持同一组取值：非法值在过桥之前就拒绝，不让原生去猜。
       if (mode !== 'system' && mode !== 'light' && mode !== 'dark') {
         return Promise.reject(new Error('不支持的主题模式'))
       }
-      return NativeRuntime.setAppTheme({ mode })
+      return NativeRuntime.setAppTheme(style ? { mode, style } : { mode })
     },
     applyHarnessTheme: theme => {
       // 与原生侧同一套校验：非法配置在过桥之前就拒掉，原生不负责猜测。

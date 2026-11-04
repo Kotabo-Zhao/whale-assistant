@@ -121,6 +121,39 @@ class WhaleConversationalTaskTest {
         }
     }
 
+    @Test fun queueFollowupWhileReplyIsInFlight() {
+        val tmp = File(app.cacheDir, "pet-inflight-" + UUID.randomUUID()).apply { mkdirs() }
+        val transcript = CompanionBubbleHistory(storage(tmp))
+        lateinit var window: CompanionBubbleWindow
+        val first = "蓝鲸是哺乳动物吗？请简短回答。"
+        val second = "它用什么呼吸？"
+        try {
+            inst.runOnMainSync {
+                window = CompanionBubbleWindow(app, app.getSystemService(WindowManager::class.java), autoOpenOnDelivery = false, historyStore = transcript) { intArrayOf(52,260,128,128) }
+                window.show()
+                val panel = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible = true }.get(window) as View
+                val nodes = views(panel).toList()
+                val input = nodes.filterIsInstance<EditText>().single()
+                val send = nodes.filterIsInstance<TextView>().single { it.text == "发送" }
+                input.setText(first); send.performClick()
+                assertTrue(send.isEnabled)
+                input.setText(second); send.performClick()
+                assertEquals("已排 1", send.text.toString())
+                input.setText("下一条还没写完")
+            }
+            await("第二条消息未按顺序处理", 150_000) {
+                transcript.load()?.messages?.filter { it.role == "user" }?.map { it.text } == listOf(first, second)
+            }
+            inst.runOnMainSync {
+                val panel = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible = true }.get(window) as View
+                assertEquals("下一条还没写完", views(panel).filterIsInstance<EditText>().single().text.toString())
+            }
+        } finally {
+            inst.runOnMainSync { window.destroy() }
+            check(tmp.parentFile == app.cacheDir); tmp.walkBottomUp().forEach { it.delete() }
+        }
+    }
+
     @Test fun ordinaryPetMessagesChooseWorkWithoutTheManualComposer() {
         val token = UUID.randomUUID().toString().take(8)
         val tmp = File(app.cacheDir,"pet-conversation-"+token).apply { mkdirs() }

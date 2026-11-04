@@ -73,7 +73,12 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                         onCounts(counts.first, counts.second, counts.third)
                     }
                     badge?.apply {
-                        val label = when { counts.second > 0 -> "待处理 ${counts.second}"; counts.first > 0 -> "运行中 ${counts.first}"; else -> "后台任务" }
+                        val label = when {
+                            counts.first > 0 && counts.second > 0 -> "运行 ${counts.first} · 待办 ${counts.second}"
+                            counts.second > 0 -> "待处理 ${counts.second}"
+                            counts.first > 0 -> "运行中 ${counts.first}"
+                            else -> "后台任务"
+                        }
                         if (text != label) text = label
                         val description = "后台任务：${counts.first}项运行中，${counts.second}项待处理"
                         if (contentDescription != description) contentDescription = description

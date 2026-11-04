@@ -22,6 +22,7 @@ import kotlin.math.roundToInt
 /** Shared typography, surfaces and controls for the pet's small windows. */
 internal class PetUi(private val context: Context) {
     val palette = AppLanguage.localizedContext(AppThemePreference.palette(context))
+    private val simple = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") == "simple"
     val surface = palette.getColor(R.color.pet_surface)
     val canvas = palette.getColor(R.color.pet_canvas)
     val ink = palette.getColor(R.color.pet_ink)
@@ -38,7 +39,7 @@ internal class PetUi(private val context: Context) {
     fun dp(n: Int) = (n * context.resources.displayMetrics.density).roundToInt()
     fun string(id: Int): String = palette.getString(id)
     fun shape(fill: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply {
-        setColor(fill); cornerRadius = dp(radius).toFloat()
+        setColor(fill); cornerRadius = dp(if (simple) minOf(7, radius) else radius).toFloat()
         if (stroke != null) setStroke(dp(1), stroke)
     }
     fun action(fill: Int, radius: Int, stroke: Int? = null) =
@@ -59,8 +60,8 @@ internal class PetUi(private val context: Context) {
             gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(8), dp(10), dp(8))
         }
         val tint = when (icon) { R.drawable.ic_whale_nav_memory -> rose; R.drawable.ic_pet_assign -> honey; else -> soft }
-        row.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(tint, surface, surface)).apply {
-            val r = dp(20).toFloat()
+        row.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(if (simple) surface else tint, surface, surface)).apply {
+            val r = dp(if (simple) 7 else 20).toFloat()
             cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f)
         }
         row.addView(PetPortrait(context, this, icon), LinearLayout.LayoutParams(dp(52), dp(52)))

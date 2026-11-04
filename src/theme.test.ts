@@ -304,11 +304,11 @@ describe('主题模式同步给原生', () => {
     const spy = vi.spyOn(runtimeBridge, 'setAppTheme').mockResolvedValue(undefined)
     try {
       applyTheme('dark')
-      expect(spy).toHaveBeenCalledWith('dark')
+      expect(spy).toHaveBeenCalledWith('dark', 'cute')
       // 关键：`system` 要原样传过去，让原生自己按系统深色现算。
       // 若这里传的是解析后的 light/dark，系统之后再切换深色，状态栏就不会跟随了。
       applyTheme('system')
-      expect(spy).toHaveBeenLastCalledWith('system')
+      expect(spy).toHaveBeenLastCalledWith('system', 'cute')
     } finally {
       spy.mockRestore()
     }

@@ -59,10 +59,10 @@ export const HEARTBEAT_ACTIVE_MS = 5000
 export const HEARTBEAT_CHANNEL_MS = 15000
 export const HEARTBEAT_IDLE_MS = 60000
 /**
- * Worker states that no longer need the active heartbeat. `waiting`/`blocked` stay active
- * because the host still polls UI commands and the Worker report may need delivery.
+ * Parked workers wait for a command. The directory watcher wakes the scheduler;
+ * outstanding deliveries still keep their own fast heartbeat.
  */
-const SETTLED_WORKER_STATES = new Set(['completed', 'failed', 'cancelled', 'interrupted'])
+const SETTLED_WORKER_STATES = new Set(['completed', 'failed', 'cancelled', 'interrupted', 'waiting', 'blocked'])
 /** Rows that still need the active 5 s heartbeat; exported for the tier unit test. */
 export function activeRowCount(rows) {
   let count = 0

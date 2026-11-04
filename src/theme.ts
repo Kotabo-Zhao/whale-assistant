@@ -230,17 +230,27 @@ export function clearCustomAccentColor(): void {
  * 而 `meta[name=theme-color]` 只有 Chrome for Android 认、Android WebView 不认。
  * 传模式而非「深/浅」，是为了让原生在 system 模式下自己跟着系统切换。
  */
+export type InterfaceStyle = 'simple' | 'cute'
+export function readInterfaceStyle(): InterfaceStyle {
+  try { return localStorage.getItem('whale-interface-style') === 'simple' ? 'simple' : 'cute' } catch { return 'cute' }
+}
+export function saveInterfaceStyle(value: InterfaceStyle) {
+  localStorage.setItem('whale-interface-style', value)
+  applyTheme(readThemeMode())
+}
+
 export function applyTheme(mode: ThemeMode): ResolvedTheme {
   const theme = resolveTheme(mode, systemPrefersDark())
   const root = document.documentElement
   root.dataset.theme = theme
+  root.dataset.style = readInterfaceStyle()
   applyAccent(readAccentMode())
   applyTextColor()
   root.style.setProperty('color-scheme', theme)
   syncThemeColorMeta(theme)
   // 失败只影响状态栏配色，主题本身已经落地：因此不让它抛出、也不弹错——
   // 在这里把异常冒出去会让「切换主题」看起来失败了，而实际界面已经切好了。
-  void runtimeBridge.setAppTheme(mode).catch(() => undefined)
+  void runtimeBridge.setAppTheme(mode, readInterfaceStyle()).catch(() => undefined)
   return theme
 }
 

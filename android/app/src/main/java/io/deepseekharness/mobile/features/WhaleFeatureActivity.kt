@@ -17,8 +17,26 @@ import android.widget.TextView
 import android.widget.Toast
 import java.util.concurrent.Executors
 
+internal fun WebView.loadWhaleTool(id: String, html: String, preview: Boolean = false, ready: (WebView) -> Unit = {}, gone: () -> Unit) {
+    settings.apply {
+        javaScriptEnabled = true; allowFileAccess = false; allowContentAccess = false
+        blockNetworkLoads = true; javaScriptCanOpenWindowsAutomatically = false
+        setSupportMultipleWindows(true); domStorageEnabled = true
+    }
+    webViewClient = object : WebViewClient() {
+        override fun onPageFinished(view: WebView, url: String?) = ready(view)
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest) =
+            WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
+        override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean { gone(); return true }
+    }
+    val policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-src 'none'"
+    val origin = if (!preview) "https://$id.features.whale.invalid/" else "https://$id.preview.whale.invalid/"
+    loadDataWithBaseURL(origin, "<meta charset=utf-8><meta http-equiv=\"Content-Security-Policy\" content=\"$policy\"><meta name=viewport content=\"width=device-width,initial-scale=1\">" + html, "text/html", "utf-8", null)
+}
+
 /** Independently authored local tools run outside the Capacitor management WebView. */
-class WhaleFeatureActivity : Activity() {
+open class WhaleFeatureActivity : Activity() {
     private val store by lazy { WhaleFeatureStore(this) }
     private val executor = Executors.newSingleThreadExecutor()
     private var page: WebView? = null
@@ -133,30 +151,12 @@ class WhaleFeatureActivity : Activity() {
             body.addView(bar); setContentView(body)
             val web = WebView(this)
             page = web
-            web.settings.apply {
-                javaScriptEnabled = true; allowFileAccess = false; allowContentAccess = false
-                blockNetworkLoads = true; javaScriptCanOpenWindowsAutomatically = false
-                setSupportMultipleWindows(true); domStorageEnabled = true
-            }
-            web.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView, url: String?) {
-                    if (!isPreview && view === page) view.evaluateJavascript("!!document.querySelector('output[data-whale-result]')") {
-                        if (view === page && it == "true") collect.visibility = android.view.View.VISIBLE
-                    }
-                }
-                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
-                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse =
-                    WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
-                override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
-                    library(); return true
-                }
-            }
             body.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
-            val policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-src 'none'"
-            // Each tool owns one local-storage origin. Preview cannot mutate enabled-tool data.
-            val origin = if (!isPreview) "https://$id.features.whale.invalid/" else "https://$id.preview.whale.invalid/"
-            web.loadDataWithBaseURL(origin, "<meta charset=utf-8><meta http-equiv=\"Content-Security-Policy\" content=\"$policy\"><meta name=viewport content=\"width=device-width,initial-scale=1\">" +
-                content.getString("html"), "text/html", "utf-8", null)
+            web.loadWhaleTool(id, content.getString("html"), isPreview, ready = { view ->
+                if (!isPreview && view === page) view.evaluateJavascript("!!document.querySelector('output[data-whale-result]')") {
+                    if (view === page && it == "true") collect.visibility = android.view.View.VISIBLE
+                }
+            }, gone = { library() })
         }
     }
     private fun reviewResult(id: String, version: String, title: String) {
@@ -212,9 +212,10 @@ class WhaleFeatureActivity : Activity() {
         private const val EXTRA_ID = "featureId"
         private const val EXTRA_REVISION = "activeRevision"
         private const val MAX_RESULT = 8000
-        fun openTool(context: Context, id: String, revision: String, preview: Boolean = false) {
+        fun openTool(context: Context, id: String, revision: String, preview: Boolean = false, pet: Boolean = false) {
             require(id.matches(Regex("[a-z][a-z0-9-]{0,47}")) && revision.matches(Regex("[a-f0-9]{64}")))
-            context.startActivity(Intent(context, WhaleFeatureActivity::class.java).putExtra(EXTRA_ID, id)
+            val target = if (pet) WhalePetFeatureActivity::class.java else WhaleFeatureActivity::class.java
+            context.startActivity(Intent(context, target).putExtra(EXTRA_ID, id)
                 .putExtra(EXTRA_REVISION, revision).putExtra("draftPreview", preview).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS))
         }
         fun openLibrary(context: Context) = context.startActivity(Intent(context, WhaleFeatureActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

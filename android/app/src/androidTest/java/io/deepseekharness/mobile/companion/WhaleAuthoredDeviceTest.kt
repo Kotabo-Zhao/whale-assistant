@@ -299,8 +299,21 @@ class WhaleAuthoredDeviceTest {
                 false
             }
         }
-        tap(requireNotNull(labelled("工具")))
-        waitFor("工具页未显示已启用的工具") { labelled("去对话创作") != null && labelled(title) != null }
+        waitFor("工具页未显示已启用的工具") {
+            if (labelled("去对话创作") != null) {
+                if (labelled(title) != null) true else {
+                    find(inst.uiAutomation.rootInActiveWindow) { it.text?.toString()?.startsWith("显示其余 ") == true }?.let(::tap)
+                    false
+                }
+            } else {
+                val tab = find(inst.uiAutomation.rootInActiveWindow) { it.viewIdResourceName?.endsWith(":id/harness_tab_plugins") == true } ?: labelled("工具")
+                tab?.let { node ->
+                    val bounds = Rect().also(node::getBoundsInScreen)
+                    if (!bounds.isEmpty) shell("input tap ${bounds.centerX()} ${bounds.centerY()}")
+                }
+                false
+            }
+        }
         inst.uiAutomation.waitForIdle(300, 3000)
         val activity = openedFrom {
             val chip = requireNotNull(labelled(title))
@@ -351,7 +364,8 @@ class WhaleAuthoredDeviceTest {
         waitFor("Chrome 没有在前台") { inst.uiAutomation.rootInActiveWindow?.packageName == "com.android.chrome" }
         var pet: CompanionBubbleWindow? = null
         try {
-            val fromPet = openedFrom {
+            lateinit var inline: WebView
+            run {
                 inst.runOnMainSync {
                     pet = CompanionBubbleWindow(app, app.getSystemService(android.view.WindowManager::class.java), autoOpenOnDelivery = false) { intArrayOf(36,140,120,120) }
                     pet!!.show()
@@ -368,9 +382,18 @@ class WhaleAuthoredDeviceTest {
                     clicked
                 }
             }
-            val page = web(fromPet)
-            enter(page, "桌宠直接打开同一份启用版本")
-            inst.runOnMainSync { fromPet.onBackPressed() }
+            waitFor("桌宠没有挂载工具页面") {
+                var found = false
+                inst.runOnMainSync {
+                    val root = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible = true }.get(pet) as View
+                    val shelf = views(root).filterIsInstance<WhalePetToolShelf>().firstOrNull()
+                    shelf?.let(::views)?.filterIsInstance<WebView>()?.firstOrNull()?.let { inline = it; found = true }
+                }
+                found
+            }
+            enter(inline, "桌宠直接打开同一份启用版本")
+            assertEquals("true", js(inline, "typeof window.Android === 'undefined' && typeof window.Capacitor === 'undefined'"))
+            inst.runOnMainSync { pet!!.hide() }
             waitFor("桌宠工具关闭后没有返回原浏览器") { inst.uiAutomation.rootInActiveWindow?.packageName == "com.android.chrome" }
             inst.sendStatus(0, Bundle().apply { putString("entryPoints", "main management, pet above Chrome, Chrome resumed"); putString("savedSource", "自建功能 · $title") })
         } finally { inst.runOnMainSync { pet?.destroy() } }
