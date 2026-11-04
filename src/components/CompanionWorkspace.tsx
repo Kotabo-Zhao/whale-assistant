@@ -62,7 +62,10 @@ const memorySummaryMeta = (row: Row) => `${memorySourceLabel(row.source)}${typeo
 const memoryEvidenceLabel = (row: Row) => typeof row.evidenceSource === 'string' && row.evidenceSource.startsWith('notification:') && row.evidenceSource.length > 'notification:'.length ? `证据来源：${row.evidenceSource.slice('notification:'.length)}` : null
 const knowledgeSourceLabel = (source: unknown) => source === 'shared_text' ? '分享文本' : source === 'text_file' ? '文档/文本' : source === 'original' ? '已保存原件' : source === 'image_analysis' ? '图片描述' : '来源未知'
 const knowledgeCoverageLabel = (coverage: unknown) => coverage === 'not_parsed' ? '尚未解析' : coverage === 'partial' ? '部分解析' : coverage === 'extracted_text' ? '已提取文字' : coverage === 'model_description' ? '模型图片描述' : '覆盖范围未知'
-const knowledgeParseLabel = (row: Row) => row.parseState === 'queued' ? '等待后台解析'
+const knowledgeParseLabel = (row: Row) => row.audioFromSeconds === 600 || row.canContinueAudio === true
+  ? row.parseState === 'processing' || row.parseState === 'queued' ? '前十分钟可检索，后续转写中'
+    : row.parseState === 'needs_retry' ? '前十分钟可检索，后续待重试' : '已转写前十分钟'
+  : row.parseState === 'queued' ? '等待后台解析'
   : row.parseState === 'processing' ? '后台解析中'
   : row.parseState === 'needs_retry' ? '未提取到内容'
   : knowledgeCoverageLabel(row.coverage)
@@ -589,12 +592,13 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
           }).catch(() => { setMessage('无法提取网页正文，原分享已保留。'); closeKnowledgeView(true) })
             .finally(() => setBusy(false))
         }}>提取公开网页正文</button>}
-      {knowledgeDetail.source === 'original' && knowledgeDetail.parseState === 'needs_retry' &&
+      {knowledgeDetail.source === 'original' && (knowledgeDetail.canContinueAudio === true ||
+        (knowledgeDetail.parseState === 'needs_retry' && knowledgeDetail.coverage !== 'partial')) &&
         <button type="button" className="button button-secondary" disabled={busy} onClick={() => {
           if (typeof knowledgeDetail._review !== 'string') return
           void run({ operation: 'knowledgeRetryParse', id: knowledgeDetail.id, expected: knowledgeDetail._review },
             '已安排重新解析，完成后可在资料库检索。').then(ok => { if (ok) closeKnowledgeView(true) })
-        }}>重新解析原件</button>}
+        }}>{knowledgeDetail.canContinueAudio === true ? '继续转写后续录音' : '重新解析原件'}</button>}
       {knowledgeImagePreview?.id === knowledgeDetail.id && <img className="knowledge-image-preview" src={knowledgeImagePreview.source} alt={`图片预览：${typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料图片'}`} />}
       <p className="knowledge-detail-content">{knowledgeDetail.text}</p>
       {knowledgeDetail.attachmentLinks != null && <SharedOriginals key={knowledgeDetail.id} note={knowledgeDetail} open={row => { if (runtimeBridge.addKnowledgeCapturesListener && typeof row.createdAt === "number") { showKnowledgeView(row, 'reader') } else { void openKnowledgeOriginal(row) } }} />}

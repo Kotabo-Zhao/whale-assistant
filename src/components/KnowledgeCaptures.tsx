@@ -112,7 +112,8 @@ export function CaptureReader({ reference, onClose, manage }: { reference: Row; 
           {page.parts.length ? page.parts.map(part => <article key={part.id} className="capture-part">
             {typeof part.chunkCount === 'number' && part.chunkCount > 1 && <small>第 {Number(part.chunkIndex) + 1} / {part.chunkCount} 段</small>}
             {part.mediaKind === 'audio_transcript' ? <Transcript value={part.text} /> : <p className="knowledge-detail-content">{part.text}</p>}</article>)
-            : row.source === 'original' ? <p>{row.parseState === 'needs_retry' ? '本次未提取到正文，可在资料详情中重新解析。'
+            : row.source === 'original' ? <p>{row.audioFromSeconds === 600 || row.canContinueAudio === true ? '前十分钟的已有转写仍可检索，后续进度可在原件详情查看。'
+              : row.parseState === 'needs_retry' ? '本次未提取到正文，可在资料详情中重新解析。'
               : row.parseState === 'queued' || row.parseState === 'processing' ? '原件已保存。后台解析完成后，正文会显示在这里。'
                 : '这份原件还没有可阅读的文字。'}</p> : <p className="knowledge-detail-content">{row.text}</p>}
           {(pages.length > 1 || page.next !== null) && <nav aria-label="正文分页" className="workspace-card-actions">

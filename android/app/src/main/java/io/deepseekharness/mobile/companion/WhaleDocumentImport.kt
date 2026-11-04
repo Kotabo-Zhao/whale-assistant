@@ -5,10 +5,12 @@ import io.deepseekharness.mobile.runtime.RuntimeStore
 import java.io.File
 
 internal object WhaleDocumentImport {
-    fun parse(app: Context, file: File, ext: String, mime: String): WhaleParsedContent? {
+    fun parse(app: Context, file: File, ext: String, mime: String, fromSeconds: Int = 0, stopped: () -> Boolean = { false }): WhaleParsedContent? {
         val audio = WhaleAudioTranscript.supports(ext, mime)
-        val text = if (audio) WhaleAudioTranscript.recognize(app, file) else WhaleDocumentText.extract(file, ext, mime)
-        if (!text.isNullOrBlank()) return WhaleParsedContent.document(text, if (audio) "audio_transcript" else null)
+        if (audio) return WhaleParsedContent.document(WhaleAudioTranscript.recognize(app, file, fromSeconds, stopped), "audio_transcript")
+        require(fromSeconds == 0)
+        val text = WhaleDocumentText.extract(file, ext, mime)
+        if (!text.isNullOrBlank()) return WhaleParsedContent.document(text, null)
         if (ext != "pdf" && mime != "application/pdf") return null
         val key = RuntimeStore(app).readModelCredential("deepseek")?.takeIf { it.isNotBlank() } ?: return null
         val (pages, total) = WhaleDocumentText.renderPdfPages(file)

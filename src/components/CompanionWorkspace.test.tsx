@@ -333,13 +333,16 @@ it('按来源折叠记忆，展开卡片后才显示全文', async () => {
   expect(detail).toHaveAttribute('open')
 })
 
-it('解析失败的原件可以在详情里重试，提交详情的完整版本', async () => {
-  const row = { id: 'original-one', text: '原件状态', source: 'original', coverage: 'not_parsed', parseState: 'needs_retry', _review: 'revision-one' }
+it.each([
+  ['not_parsed', 'needs_retry', false, '重新解析原件'],
+  ['partial', 'complete', true, '继续转写后续录音'],
+] as const)('原件 %s 的操作只提交当前详情的完整版本', async (coverage, parseState, canContinueAudio, label) => {
+  const row = { id: 'original-one', text: '原件状态', source: 'original', coverage, parseState, canContinueAudio, _review: 'revision-one' }
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'knowledgeList' ? { items: [row] } : { ok: true }))
   render(<CompanionWorkspace />)
   fireEvent.click(screen.getByRole('tab', { name: '资料' }))
   fireEvent.click(await screen.findByRole('button', { name: '查看详情' }))
-  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '重新解析原件' }))
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: label }))
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeRetryParse', id: row.id, expected: row._review }))
 })
 

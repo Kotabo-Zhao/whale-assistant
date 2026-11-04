@@ -18,26 +18,29 @@ import java.util.zip.ZipInputStream
 internal object WhaleAudioTranscript {
     private const val MODEL = "vosk-model-small-cn-0.22"
     private const val RATE = 16_000
-    private const val MAX_US = 10L * 60 * 1_000_000
+    private const val STALL_MS = 60_000L
+    private val hanSpacing = Regex("(?<=[\\p{IsHan}])\\s+(?=[\\p{IsHan}])")
     fun supports(ext: String, mime: String?) = mime?.startsWith("audio/") == true ||
         ext in setOf("mp3", "wav", "ogg", "opus", "m4a", "aac", "amr", "flac", "3gp", "silk")
 
-    @Synchronized fun recognize(context: Context, file: File): String {
+    @Synchronized fun recognize(context: Context, file: File, fromSeconds: Int = 0, stopped: () -> Boolean = { false }): String {
+        require(fromSeconds >= 0)
+        check(!stopped()) { "音频解析已中断" }
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(file.absolutePath)
             val index = (0 until extractor.trackCount).first { extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
             extractor.selectTrack(index)
+            val firstUs = extractor.sampleTime.coerceAtLeast(0)
+            val cutoffUs = firstUs + fromSeconds * 1_000_000L
+            if (fromSeconds > 0) extractor.seekTo(cutoffUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             val format = extractor.getTrackFormat(index)
             val codec = MediaCodec.createDecoderByType(requireNotNull(format.getString(MediaFormat.KEY_MIME)))
             try {
                 codec.configure(format, null, null, 0)
                 codec.start()
                 return Model(modelPath(context).absolutePath).use { model ->
-                    Recognizer(model, RATE.toFloat()).use { recognizer ->
-                        recognizer.setWords(true)
-                        decode(extractor, codec, recognizer)
-                    }
+                    Transcript(model).use { transcript -> decode(extractor, codec, transcript, firstUs, cutoffUs, stopped) }
                 }
             } finally { codec.release() }
         } finally { extractor.release() }
@@ -68,53 +71,116 @@ internal object WhaleAudioTranscript {
         } finally { staging.deleteRecursively() }
     }
 
-    private fun decode(extractor: MediaExtractor, codec: MediaCodec, recognizer: Recognizer): String {
+    private fun decode(extractor: MediaExtractor, codec: MediaCodec, transcript: Transcript, firstUs: Long, cutoffUs: Long, stopped: () -> Boolean): String {
         val info = MediaCodec.BufferInfo()
-        val result = StringBuilder()
         var inputEnded = false
-        var partial = false
         var resampler: MonoPcm? = null
-        val start = SystemClock.elapsedRealtime()
-        fun append(json: String) {
-            val segment = JSONObject(json)
-            val text = segment.optString("text").trim()
-            if (text.isBlank()) return
-            val seconds = segment.optJSONArray("result")?.optJSONObject(0)?.optDouble("start", 0.0)?.toInt() ?: 0
-            result.append(String.format(Locale.ROOT, "[%02d:%02d] ", seconds / 60, seconds % 60))
-                .append(text.replace(Regex("(?<=[\\p{IsHan}])\\s+(?=[\\p{IsHan}])"), "")).append('\n')
-        }
-        while (true) {
-            check(SystemClock.elapsedRealtime() - start < 12 * 60_000) { "音频解码超时" }
+        var lastProgress = SystemClock.elapsedRealtime()
+        while (!transcript.full) {
+            check(!stopped() && !Thread.currentThread().isInterrupted) { "音频解析已中断" }
+            check(SystemClock.elapsedRealtime() - lastProgress < STALL_MS) { "音频解码长时间没有进展" }
             if (!inputEnded) {
-                val slot = codec.dequeueInputBuffer(10_000)
-                if (slot >= 0) {
+                val input = codec.dequeueInputBuffer(10_000)
+                if (input >= 0) {
                     val time = extractor.sampleTime
-                    val bytes = if (time < 0 || time >= MAX_US) -1 else extractor.readSampleData(checkNotNull(codec.getInputBuffer(slot)), 0)
-                    if (bytes < 0) {
-                        partial = time >= MAX_US
-                        codec.queueInputBuffer(slot, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM); inputEnded = true
+                    val size = if (time < 0) -1 else extractor.readSampleData(checkNotNull(codec.getInputBuffer(input)), 0)
+                    if (size < 0) {
+                        codec.queueInputBuffer(input, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                        inputEnded = true
                     } else {
-                        codec.queueInputBuffer(slot, 0, bytes, time, 0); extractor.advance()
+                        codec.queueInputBuffer(input, 0, size, time, 0)
+                        extractor.advance()
                     }
+                    lastProgress = SystemClock.elapsedRealtime()
                 }
             }
-            val slot = codec.dequeueOutputBuffer(info, 10_000)
-            if (slot == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) resampler = MonoPcm(codec.outputFormat)
-            if (slot < 0) continue
+            val output = codec.dequeueOutputBuffer(info, 10_000)
+            if (output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) resampler = MonoPcm(codec.outputFormat)
+            if (output < 0) continue
             try {
                 if (info.size > 0) {
                     val pcm = resampler ?: MonoPcm(codec.outputFormat).also { resampler = it }
-                    val bytes = checkNotNull(codec.getOutputBuffer(slot)).order(ByteOrder.LITTLE_ENDIAN)
+                    val bytes = checkNotNull(codec.getOutputBuffer(output)).order(ByteOrder.LITTLE_ENDIAN)
                     bytes.position(info.offset); bytes.limit(info.offset + info.size)
-                    pcm.accept(bytes.asShortBuffer(), recognizer) { append(recognizer.result) }
+                    val input = bytes.asShortBuffer()
+                    val skippedUs = pcm.skipBefore(input, cutoffUs - info.presentationTimeUs)
+                    if (input.hasRemaining()) {
+                        transcript.begin(info.presentationTimeUs + skippedUs - firstUs)
+                        pcm.accept(input, transcript)
+                    }
                 }
-            } finally { codec.releaseOutputBuffer(slot, false) }
+                lastProgress = SystemClock.elapsedRealtime()
+            } finally { codec.releaseOutputBuffer(output, false) }
             if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
         }
-        append(recognizer.finalResult)
-        check(result.isNotBlank()) { "没有识别到语音" }
-        if (partial) result.append("[仅提取前 10 分钟语音]")
-        return result.toString().trim()
+        return transcript.finish(allowEmpty = cutoffUs > firstUs)
+    }
+
+    /** Offsets count decoded samples, including digital silence skipped by the recognizer. */
+    private class Transcript(private val model: Model) : AutoCloseable {
+        private var recognizer: Recognizer? = null
+        private var position = -1L
+        fun begin(timeUs: Long) {
+            val sample = timeUs.coerceAtLeast(0) * RATE / 1_000_000
+            if (position < 0) position = sample
+            else if (sample > position + RATE / 4) {
+                // Some containers represent a pause as a forward PTS jump rather than PCM samples.
+                endUtterance()
+                position = sample
+            }
+        }
+        private var origin = 0L
+        private var silence = 0
+        private val text = StringBuilder()
+        var full = false
+            private set
+
+        fun accept(pcm: ShortArray, size: Int) {
+            if (full || size == 0) return
+            val silent = (0 until size).all { pcm[it].toInt() == 0 }
+            var rec = recognizer
+            if (!silent && rec == null) {
+                origin = position
+                rec = Recognizer(model, RATE.toFloat()).also { recognizer = it; it.setWords(true) }
+            }
+            if (rec != null) {
+                // Let ASR resolve trailing words before closing an utterance. Quiet nonzero signals are kept.
+                val count = if (silent) minOf(size, 2 * RATE - silence) else size
+                if (count > 0 && rec.acceptWaveForm(pcm, count)) append(rec.result)
+                silence = if (silent) silence + count else 0
+                if (silent && silence == 2 * RATE) endUtterance()
+            }
+            position += size
+        }
+
+        private fun append(json: String) {
+            if (full) return
+            val segment = JSONObject(json)
+            val words = segment.optString("text").trim()
+            if (words.isEmpty()) return
+            val start = segment.optJSONArray("result")?.optJSONObject(0)?.optDouble("start", 0.0) ?: 0.0
+            val seconds = (origin.toDouble() / RATE + start).toLong()
+            val line = String.format(Locale.ROOT, "[%02d:%02d] ", seconds / 60, seconds % 60) + words.replace(hanSpacing,"") + "\n"
+            val marker = "[内容过长，已截取]"
+            val room = CompanionKnowledgeData.MAX_DOCUMENT_TEXT - marker.length - text.length
+            if (line.length > room) {
+                text.append(line.take(room.coerceAtLeast(0)).dropLastWhile { it.isHighSurrogate() }).append(marker)
+                full = true
+            } else text.append(line)
+        }
+
+        private fun endUtterance() {
+            val rec = recognizer ?: return
+            try { if (!full) append(rec.finalResult) } finally { close() }
+        }
+
+        fun finish(allowEmpty: Boolean): String {
+            endUtterance()
+            check(allowEmpty || text.isNotBlank()) { "没有识别到语音" }
+            return text.toString().trim()
+        }
+
+        override fun close() { recognizer?.close(); recognizer = null; silence = 0 }
     }
 
     private class MonoPcm(format: MediaFormat) {
@@ -127,7 +193,13 @@ internal object WhaleAudioTranscript {
             require(rate in 8000..192000 && channels in 1..16)
             require(!format.containsKey(MediaFormat.KEY_PCM_ENCODING) || format.getInteger(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_16BIT)
         }
-        fun accept(input: java.nio.ShortBuffer, recognizer: Recognizer, onSegment: () -> Unit) {
+        fun skipBefore(input: java.nio.ShortBuffer, deltaUs: Long): Long {
+            if (deltaUs <= 0) return 0
+            val frames = minOf((deltaUs * rate + 999_999) / 1_000_000, (input.remaining() / channels).toLong()).toInt()
+            input.position(input.position() + frames * channels)
+            return frames * 1_000_000L / rate
+        }
+        fun accept(input: java.nio.ShortBuffer, transcript: Transcript) {
             var count = 0
             while (input.remaining() >= channels) {
                 var sum = 0
@@ -140,12 +212,12 @@ internal object WhaleAudioTranscript {
                     phase -= rate
                     buffer[count++] = (sample + (last - sample) * phase.toLong() / RATE).toShort()
                     if (count == buffer.size) {
-                        if (recognizer.acceptWaveForm(buffer, count)) onSegment()
+                        transcript.accept(buffer, count)
                         count = 0
                     }
                 }
             }
-            if (count > 0 && recognizer.acceptWaveForm(buffer, count)) onSegment()
+            if (count > 0) transcript.accept(buffer, count)
         }
     }
 }

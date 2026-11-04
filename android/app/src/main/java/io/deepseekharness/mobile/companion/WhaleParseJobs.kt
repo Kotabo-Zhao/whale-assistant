@@ -51,7 +51,8 @@ internal object WhaleParseJobs {
             val file = KnowledgeObjects(app).getVerified(anchor.getString("originalId"))
             val mime = anchor.optString("mime")
             if (mime.startsWith("image/")) WhaleImageImport.parse(app, file)
-            else WhaleDocumentImport.parse(app, file, WhaleOriginalImport.extension(anchor.optString("displayName"), mime), mime)
+            else WhaleDocumentImport.parse(app, file, WhaleOriginalImport.extension(anchor.optString("displayName"), mime),
+                mime, anchor.optInt("audioFromSeconds",0), stopped::get)
         }.getOrNull()
         synchronized(CompanionKnowledgeStore.lock) {
             if (stopped.get()) return

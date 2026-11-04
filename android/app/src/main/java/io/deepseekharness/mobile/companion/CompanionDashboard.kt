@@ -23,8 +23,15 @@ internal class CompanionDashboard(private val context: Context) {
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i)
             val original = row.toString()
-            put(JSONObject(original).put("_review", original)
-                .put("revision", CompanionMemorySuppression.digest(row.getString("text"))))
+            val view = JSONObject(original).put("_review", original)
+                .put("revision", CompanionMemorySuppression.digest(row.getString("text")))
+            if (row.optString("source") == "original" && row.optString("coverage") == "partial" && !row.has("audioTranscriptionVersion")) {
+                val mime = row.optString("mime")
+                if (WhaleAudioTranscript.supports(WhaleOriginalImport.extension(row.optString("displayName"),mime),mime)) {
+                    view.put("canContinueAudio",knowledge.withParseDatabase { it.canContinueAudio(row) })
+                }
+            }
+            put(view)
         }
     }
 

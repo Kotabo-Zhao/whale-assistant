@@ -189,19 +189,27 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
     }
 
     fun appendDocument(documentId: String, chunks: List<String>, displayName: String, coverage: String, requireOriginal: Boolean,
-        origin: WhaleShareSource? = null, mediaKind: String? = null, capture: Boolean = false): JSONArray {
+        origin: WhaleShareSource? = null, mediaKind: String? = null, capture: Boolean = false, prefixCount: Int = 0): JSONArray {
         val added = JSONArray()
         db.beginTransaction()
         try {
             if (requireOriginal) check(originalExists(documentId)) { "原件已删除，请重新导入" }
             var position = nextPosition()
-            for ((index, chunk) in chunks.withIndex()) {
+            val totalChunks = prefixCount + chunks.size
+            for (index in 0 until prefixCount) {
+                val id = KnowledgeChunks.recordId(documentId,index)
+                val row = findById(id) ?: continue // Never restore a removed transcript fragment.
+                check(row.optString("documentId") == documentId && row.optString("mediaKind") == "audio_transcript")
+                if (row.optInt("chunkCount") != totalChunks) updateRecord(id,row.put("chunkCount",totalChunks))
+            }
+            for ((localIndex, chunk) in chunks.withIndex()) {
+                val index = prefixCount + localIndex
                 val id = KnowledgeChunks.recordId(documentId, index)
                 check(!isDeleted(id)) { "资料曾被删除，请先恢复或明确重新导入" }
                 val existing = findById(id)
                 if (existing != null) {
                     check(existing.optString("documentId") == documentId && existing.optInt("chunkIndex", -1) == index &&
-                        existing.optInt("chunkCount", -1) == chunks.size && existing.optString("text") == chunk) {
+                        existing.optInt("chunkCount", -1) == totalChunks && existing.optString("text") == chunk) {
                         "文档已保存为不同分段版本，原资料已保留"
                     }
                     // An explicit reimport can attach the newly preserved original to matching legacy chunks.
@@ -214,7 +222,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
                 }
                 val item = JSONObject().put("id", id).put("text", chunk).put("source", "text_file")
                     .put("createdAt", System.currentTimeMillis()).put("documentId", documentId)
-                    .put("chunkIndex", index).put("chunkCount", chunks.size)
+                    .put("chunkIndex", index).put("chunkCount", totalChunks)
                     .put("displayName", displayName).put("coverage", coverage)
                     .apply { if (requireOriginal) put("originalId", documentId) }
                 origin?.annotate(item)
@@ -294,7 +302,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
     }
 
     private fun enqueueParse(anchor: JSONObject, reserve: () -> Unit) {
-        if (anchor.optString("coverage") != "not_parsed") return
+        if (anchor.optString("coverage") != "not_parsed" && !anchor.has("audioPrefixChunks")) return
         // Reserve the OS wakeup before committing. The service reads under the same store lock.
         reserve()
         if (anchor.has("parseTicket") && ticketAnchor(anchor.getString("parseTicket")) != null) return
@@ -304,12 +312,30 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         updateRecord(anchor.getString("id"), anchor)
     }
 
+    /** The old decoder only wrote this marker after it had reached the ten-minute cutoff. */
+    private fun legacyAudioPrefix(anchor: JSONObject): Int? {
+        if (anchor.has("audioTranscriptionVersion") || anchor.optString("coverage") != "partial") return null
+        val hash = anchor.getString("originalId")
+        val count = findById(KnowledgeChunks.recordId(hash,0))?.optInt("chunkCount",0) ?: return null
+        if (count !in 1..CompanionKnowledgeData.MAX_DOCUMENT_TEXT / CompanionKnowledgeData.MAX_RECORD_TEXT + 2) return null
+        val last = findById(KnowledgeChunks.recordId(hash,count-1)) ?: return null
+        return count.takeIf { last.optString("originalId") == hash && last.optString("mediaKind") == "audio_transcript" &&
+            last.optString("text").trimEnd().endsWith("[仅提取前 10 分钟语音]") }
+    }
+
+    fun canContinueAudio(row: JSONObject): Boolean = row.optString("source") == "original" &&
+        !row.has("parseTicket") && row.optString("parseState") in setOf("complete","needs_retry") && legacyAudioPrefix(row) != null
+
     fun retryParse(id: String, expectedRow: String, reserve: () -> Unit): Boolean {
         db.beginTransaction()
         try {
             val row = findById(id) ?: return false
-            if (row.toString() != expectedRow || row.optString("source") != "original" ||
-                row.optString("coverage") != "not_parsed" || row.optString("parseState") != "needs_retry") return false
+            if (row.toString() != expectedRow || row.optString("source") != "original" || row.has("parseTicket")) return false
+            if (row.optString("coverage") == "partial") {
+                val prefix = legacyAudioPrefix(row) ?: return false
+                if (row.optString("parseState") !in setOf("complete","needs_retry")) return false
+                row.put("audioFromSeconds",600).put("audioPrefixChunks",prefix)
+            } else if (row.optString("coverage") != "not_parsed" || row.optString("parseState") != "needs_retry") return false
             enqueueParse(row, reserve)
             db.setTransactionSuccessful()
             return true
@@ -355,8 +381,11 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
                     origin?.annotate(row)
                     rows.put(appendRecordIfAbsent(row))
                 } else {
-                    val added = appendDocument(hash, KnowledgeChunks.split(parsed.text), anchor.optString("displayName"), parsed.coverage,
-                        requireOriginal = true, origin = origin, mediaKind = parsed.mediaKind)
+                    val prefix = anchor.optInt("audioPrefixChunks",0)
+                    if (prefix != 0) check(parsed.mediaKind == "audio_transcript" && legacyAudioPrefix(anchor) == prefix) { "已有转写发生变化，请重新打开原件" }
+                    val chunks = if (prefix > 0 && parsed.text.isBlank()) emptyList() else KnowledgeChunks.split(parsed.text)
+                    val added = appendDocument(hash, chunks, anchor.optString("displayName"), parsed.coverage,
+                        requireOriginal = true, origin = origin, mediaKind = parsed.mediaKind, prefixCount = prefix)
                     for (i in 0 until added.length()) rows.put(added.getJSONObject(i))
                 }
                 val origins = anchor.optJSONArray("shareOrigins")
@@ -367,6 +396,10 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
                     }
                 }
                 anchor.put("coverage", parsed.coverage)
+                if (parsed.mediaKind == "audio_transcript") {
+                    anchor.put("audioTranscriptionVersion",2)
+                    anchor.remove("audioFromSeconds"); anchor.remove("audioPrefixChunks")
+                }
             }
             anchor.remove("parseTicket")
             anchor.remove("parseAttempts")
