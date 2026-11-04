@@ -162,7 +162,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val accent = ui.accent
         fun bar() = ui.shape(ui.surface, 12)
         val metrics = context.resources.displayMetrics
-        val width = minOf(dp(340), (metrics.widthPixels - dp(16)).coerceAtLeast(1))
+        val fontScale = context.resources.configuration.fontScale
+        val width = minOf(dp((340 * fontScale.coerceIn(1f,1.4f)).toInt()), (metrics.widthPixels - dp(16)).coerceAtLeast(1))
         val pet = petBounds()
         var petOnRight = pet[0] + pet[2] / 2 >= metrics.widthPixels / 2
         // This estimate only selects the order before measuring; the final coordinates use actual height.
@@ -191,13 +192,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             background = bar(); addView(accessBadge)
         }
         val workerBadge = ui.text("后台任务", 12f, accent, true).apply {
-            gravity = Gravity.CENTER; minHeight = dp(44); maxWidth = dp(134)
-            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER; minHeight = dp(44)
+            maxWidth = minOf((width * 0.43f).toInt(),dp((134 * fontScale.coerceAtLeast(1f)).toInt()))
+            maxLines = if (fontScale >= 1.4f) 2 else 1; ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(dp(9), 0, dp(9), 0); contentDescription = "后台任务"
             background = ui.action(ui.soft, 12); setOnClickListener { workerPanel.open() }
         }
         val headingEnd = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL; addView(workerBadge); addView(ui.close(::hide)) }
-        panel.addView(ui.header(ui.string(R.string.pet_ui_name), ui.string(R.string.pet_ui_chat_title), headingEnd))
+        val subtitle = ui.string(R.string.pet_ui_chat_title).takeIf { fontScale < 1.4f }
+        panel.addView(ui.header(ui.string(R.string.pet_ui_name), subtitle, headingEnd))
         val shortcuts = LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(2), dp(8), 0)
         }

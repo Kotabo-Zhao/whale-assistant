@@ -21,6 +21,11 @@ class PetChatLayoutDeviceTest {
         val inst = InstrumentationRegistry.getInstrumentation()
         val app = inst.targetContext
         val key = "chat-layout-" + UUID.randomUUID()
+        val config = app.resources.configuration
+        if (InstrumentationRegistry.getArguments().getString("checkPortrait") == "true") {
+            assertTrue("未使用竖向显示区域",config.screenHeightDp > config.screenWidthDp)
+            assertEquals(1.6f,config.fontScale,0.01f)
+        }
         val dir = File(app.cacheDir,key).apply { check(mkdirs()) }
         val ctx = object : ContextWrapper(app) {
             override fun getApplicationContext(): Context = this
@@ -29,6 +34,11 @@ class PetChatLayoutDeviceTest {
         }
         fun all(v: View): List<View> = listOf(v) + if (v is ViewGroup) (0 until v.childCount).flatMap { all(v.getChildAt(it)) } else emptyList()
         try {
+            val store = WorkerDashboardStore(ctx)
+            for (state in listOf("running","waiting")) {
+                store.put(org.json.JSONObject().put("id",UUID.randomUUID().toString()).put("state",state)
+                    .put("title","显示验证").put("writeSeq",1))
+            }
             for (theme in listOf("simple","cute")) {
                 ctx.getSharedPreferences("whale-interface",0).edit().putString("style",theme).commit()
                 lateinit var window: CompanionBubbleWindow
@@ -40,6 +50,17 @@ class PetChatLayoutDeviceTest {
                 }
                 try {
                     inst.waitForIdleSync()
+                    val countsEnd = android.os.SystemClock.elapsedRealtime()+5000
+                    var readable = false
+                    while (!readable && android.os.SystemClock.elapsedRealtime()<countsEnd) {
+                        inst.runOnMainSync {
+                            val badge = all(panel).filterIsInstance<TextView>().singleOrNull { it.text == "运行 1 · 待办 1" }
+                            val layout = badge?.layout
+                            readable = layout != null && layout.lineCount > 0 && (0 until layout.lineCount).all { layout.getEllipsisCount(it) == 0 }
+                        }
+                        if (!readable) Thread.sleep(80)
+                    }
+                    assertTrue("运行与待办数量未完整显示",readable)
                     inst.runOnMainSync {
                         val nodes = all(panel).filterIsInstance<TextView>()
                         val input = nodes.filterIsInstance<EditText>().single()
@@ -79,6 +100,7 @@ class PetChatLayoutDeviceTest {
                     }
                     val deadline = android.os.SystemClock.elapsedRealtime()+5000
                     var visible = false
+                    var geometry = ""
                     while (!visible && android.os.SystemClock.elapsedRealtime()<deadline) {
                         inst.runOnMainSync {
                             val inset = panel.rootWindowInsets
@@ -86,12 +108,13 @@ class PetChatLayoutDeviceTest {
                                 val composer = all(panel).filterIsInstance<EditText>().single().parent as View
                                 val pos = IntArray(2).also(composer::getLocationOnScreen)
                                 val frame = android.graphics.Rect().also(panel::getWindowVisibleDisplayFrame)
+                                geometry = "composerY=" + pos[1] + " height=" + composer.height + " frame=" + frame
                                 visible = pos[1] >= frame.top && pos[1] + composer.height <= frame.bottom
                             }
                         }
                         if (!visible) Thread.sleep(80)
                     }
-                    if (android.os.Build.VERSION.SDK_INT >= 30) assertTrue("键盘展开后输入区未完整可见",visible)
+                    if (android.os.Build.VERSION.SDK_INT >= 30) assertTrue("键盘展开后输入区未完整可见 $geometry",visible)
                     inst.runOnMainSync { ime.hideSoftInputFromWindow(panel.windowToken,0) }
                 } finally { inst.runOnMainSync { window.destroy() } }
             }
