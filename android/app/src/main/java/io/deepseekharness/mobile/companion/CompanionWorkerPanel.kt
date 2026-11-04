@@ -31,6 +31,8 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
     private var offset = 0
     private var total = 0
     private var lastPage = ""
+    private var selectedGroup = ""
+    private var groupReport: JSONObject? = null
     private var lastCounts: Triple<Int,Int,Int>? = null
     private var detailDialog: AlertDialog? = null
     private var detailRequest = 0
@@ -62,8 +64,9 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
         val opened = dialog
         val all = showAll
         val start = offset
+        val group = selectedGroup
         executor.execute {
-            val result = runCatching { store.page(if (all) "all" else "open", offset = start, limit = if (opened == null) 0 else 20) }
+            val result = runCatching { store.page(if (all) "all" else "open", group = group, offset = start, limit = if (opened == null) 0 else 20) }
             handler.post {
                 loading = false
                 if (!disposed) result.onSuccess { page ->
@@ -83,7 +86,7 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                         val description = "后台任务：${counts.first}项运行中，${counts.second}项待处理"
                         if (contentDescription != description) contentDescription = description
                     }
-                    if (opened != null && opened === dialog && all == showAll && start == offset) {
+                    if (opened != null && opened === dialog && all == showAll && start == offset && group == selectedGroup) {
                         total = page.getInt("total")
                         if (start >= total && start > 0) { offset = ((total - 1).coerceAtLeast(0) / 20) * 20; schedule() }
                         else {
@@ -91,7 +94,8 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                             if (signature != lastPage) {
                                 lastPage = signature
                                 fun rows(key: String) = page.getJSONArray(key).let { items -> (0 until items.length()).map(items::getJSONObject) }
-                                rows = rows("items"); submissions = rows("submissions")
+                                rows = rows("items"); submissions = if (group.isEmpty()) rows("submissions") else emptyList()
+                                groupReport = page.optJSONObject("groupReport")
                                 render()
                             }
                         }
@@ -133,7 +137,7 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
         body.addView(ScrollView(context).apply { addView(cards) }, LinearLayout.LayoutParams(-1, minOf(dp(390), (context.resources.displayMetrics.heightPixels * 0.5f).toInt())))
         dialog = ui.dialogBuilder("后台任务", null, io.deepseekharness.mobile.R.drawable.ic_whale_nav_tasks, manual).setView(body).setNegativeButton("关闭", null).create().apply {
             window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
-            setOnDismissListener { dialog = null; inboxUi = null; expandedId = null; cards = null; rows = emptyList(); submissions = emptyList(); lastPage = ""; offset = 0; total = 0 }
+            setOnDismissListener { dialog = null; inboxUi = null; expandedId = null; selectedGroup = ""; groupReport = null; cards = null; rows = emptyList(); submissions = emptyList(); lastPage = ""; offset = 0; total = 0 }
             show(); ui.finishDialog(this, 390)
         }
         schedule()
@@ -143,6 +147,7 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
         val ui = inboxUi ?: return
         container.removeAllViews()
         val shown = rows
+        if (selectedGroup.isNotEmpty()) renderGroup(container,ui)
         submissions.forEach { pending ->
             val held = pending.optBoolean("held")
             val state = if (held) "待授权" else "等待接取"
@@ -239,6 +244,8 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
             val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
             fun action(label: String, click: () -> Unit) { actions.addView(Button(context).apply { text = label; isAllCaps = false; textSize = 13f; minWidth = dp(52); minHeight = dp(44); setTextColor(ui.accent); background = ui.action(ui.canvas, 10); setOnClickListener { click() } }) }
             if (!row.optBoolean("recordUnreadable")) action("任务详情") { showDetail(id, title, 0) }
+            val taskGroup = row.optString("group")
+            if (selectedGroup.isEmpty() && taskGroup.isNotBlank()) action("目标汇总") { selectGroup(taskGroup) }
             row.optJSONObject("authoredDraft")?.let { draft ->
                 action("预览工具草稿") {
                     executor.execute {
@@ -285,6 +292,31 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
         }
     }
 
+    private fun selectGroup(group: String) {
+        selectedGroup = group; groupReport = null; offset = 0; expandedId = null; lastPage = ""
+        schedule()
+    }
+    private fun renderGroup(container: LinearLayout, ui: PetUi) {
+        container.addView(ui.text("$selectedGroup · 目标汇总",16f,ui.ink,true))
+        container.addView(ui.text("返回全部目标",14f,ui.accent).apply {
+            minHeight = dp(44); gravity = android.view.Gravity.CENTER_VERTICAL; setOnClickListener { selectGroup("") }
+        })
+        val report = groupReport ?: return
+        for ((key,label) in listOf("done" to "已完成","attention" to "需处理","working" to "执行与排队","cancelled" to "已取消")) {
+            val bucket = report.optJSONObject(key) ?: continue
+            val items = bucket.getJSONArray("items")
+            container.addView(ui.text("$label · ${bucket.getInt("count")}",14f,ui.ink,true))
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                val title = item.getString("title")
+                container.addView(ui.text(title + "\n" + item.optString("note").ifBlank { "暂无摘要" },13f,ui.muted).apply {
+                    setPadding(dp(8),dp(4),dp(8),dp(4)); minHeight = dp(44)
+                    setOnClickListener { showDetail(item.getString("id"),title,0) }
+                })
+            }
+            if (bucket.getInt("count") > items.length()) container.addView(ui.text("显示最近 ${items.length()} 项",12f,ui.muted))
+        }
+    }
     private fun showDetail(id: String, title: String, start: Int) {
         val request = ++detailRequest
         executor.execute {

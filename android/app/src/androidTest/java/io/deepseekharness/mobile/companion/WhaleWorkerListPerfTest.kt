@@ -32,6 +32,33 @@ class WhaleWorkerListPerfTest {
             .put("state",if (i%30==0) "waiting" else "completed").put("summary","结果 $i").put("inputs",inputs)
             .put("reports",reports).put("writeSeq",1).put("createdAt",1000L+i).put("updatedAt",1000L+i)
     }
+    @Test fun groupReportIncludesResultsOutsideTheSelectedPage() {
+        val root = File(inst.targetContext.cacheDir, "worker-group-" + UUID.randomUUID()).apply { check(mkdirs()) }
+        val context = object : ContextWrapper(inst.targetContext) {
+            override fun getNoBackupFilesDir() = root
+            override fun getApplicationContext(): Context = this
+        }
+        try {
+            val store = WorkerDashboardStore(context)
+            val states = List(7) { "completed" } + listOf("waiting", "failed", "running", "cancelled")
+            states.forEachIndexed { i, state -> store.put(fixture(i).put("group", "同一目标").put("state", state)) }
+            store.put(fixture(90).put("group", "其他目标"))
+            val page = store.page("attention", "同一目标", limit = 1)
+            assertEquals(1, page.getJSONArray("items").length())
+            val report = page.getJSONObject("groupReport")
+            assertEquals(2, report.getJSONObject("attention").getInt("count"))
+            assertEquals(1, report.getJSONObject("working").getInt("count"))
+            assertEquals(1, report.getJSONObject("cancelled").getInt("count"))
+            val done = report.getJSONObject("done")
+            assertEquals(7, done.getInt("count"))
+            val samples = done.getJSONArray("items")
+            assertEquals(4, samples.length())
+            val source = samples.getJSONObject(0)
+            assertEquals(source.getString("note"), store.detail(source.getString("id")).getString("summary"))
+            assertFalse(store.page(limit = 0).has("groupReport"))
+        } finally { root.deleteRecursively() }
+    }
+
     @Test fun mixedFormatsPageAndDetailKeepHistoryControlAndDependencies() {
         val root = File(inst.targetContext.cacheDir,"worker-page-" + UUID.randomUUID()).apply { check(mkdirs()) }
         val context = object : ContextWrapper(inst.targetContext) {
@@ -277,6 +304,44 @@ class WhaleWorkerListPerfTest {
 
         } finally { inst.runOnMainSync { main.finish() } }
     }
+    @Test fun petOpensCompletedSourceWhileViewingOpenWork() {
+        val app = inst.targetContext
+        val root = File(app.cacheDir, "group-window-" + UUID.randomUUID()).apply { check(mkdirs()) }
+        val ctx = object : ContextWrapper(app) {
+            override fun getNoBackupFilesDir() = root
+            override fun getApplicationContext(): Context = this
+        }
+        val store = WorkerDashboardStore(ctx)
+        val group = "联调目标"
+        store.put(fixture(1).put("group",group).put("state","waiting"))
+        store.put(fixture(2).put("group",group).put("state","completed"))
+        lateinit var panel: CompanionWorkerPanel
+        fun views(v: android.view.View): List<android.view.View> = listOf(v) + if (v is android.view.ViewGroup)
+            (0 until v.childCount).flatMap { views(v.getChildAt(it)) } else emptyList()
+        fun until(field: String, check: (List<android.widget.TextView>) -> Boolean) {
+            val end = SystemClock.elapsedRealtime() + 8000
+            do {
+                var ok = false
+                inst.runOnMainSync {
+                    val window = CompanionWorkerPanel::class.java.getDeclaredField(field).apply { isAccessible=true }.get(panel) as? android.app.AlertDialog
+                    ok = window?.window?.decorView?.let { check(views(it).filterIsInstance<android.widget.TextView>()) } == true
+                }
+                if (ok) return
+                Thread.sleep(80)
+            } while (SystemClock.elapsedRealtime() < end)
+            fail("桌宠窗口未呈现预期内容 " + field)
+        }
+        try {
+            inst.runOnMainSync { panel = CompanionWorkerPanel(ctx, {}); panel.open() }
+            until("dialog") { labels -> labels.singleOrNull { it.text == "目标汇总" }?.performClick() == true }
+            until("dialog") { labels ->
+                labels.any { it.text == "已完成 · 1" } && labels.any { it.text == "需处理 · 1" } &&
+                    labels.singleOrNull { it.text.toString() == "测试任务 2\n结果 2" }?.performClick() == true
+            }
+            until("detailDialog") { labels -> labels.any { it.text.contains("结果 2") } }
+        } finally { inst.runOnMainSync { panel.destroy() }; root.deleteRecursively() }
+    }
+
     @Test fun petPanelPagesAndOpensSelectedTaskHistory() {
         val app = inst.targetContext
         val id = requireNotNull(InstrumentationRegistry.getArguments().getString("authorWorker"))

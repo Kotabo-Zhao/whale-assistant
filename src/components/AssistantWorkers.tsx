@@ -1,4 +1,5 @@
 import { WorkerDependencyDetail, WorkerTaskDetail } from './WorkerTaskDetail'
+import { WorkerGroupReport } from './WorkerGroupReport'
 import { useEffect, useRef, useState } from 'react'
 import { runtimeBridge } from '../platform/native'
 import { pollWhileVisible } from '../pollWhileVisible'
@@ -18,6 +19,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
   const [submitting, setSubmitting] = useState(false)
   const [pending, setPending] = useState<{id: string; task: string; notice: string; held: boolean}[]>([])
   const [group, setGroup] = useState('')
+  const [report, setReport] = useState<Record<string, unknown> | null>(null)
   const [offset, setOffset] = useState(0)
   const [total, setTotal] = useState(0)
   const [groupsOpen, setGroupsOpen] = useState(false)
@@ -33,7 +35,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
     const queryKey = JSON.stringify([filter, group, offset])
     if (lastQuery.current !== queryKey) {
       lastQuery.current = queryKey
-      setRows([]); setTotal(0); setListState('loading')
+      setRows([]); setReport(null); setTotal(0); setListState('loading')
     }
     let active = true
     let inFlight = false
@@ -49,6 +51,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
           const count = Number.isSafeInteger(tasks.total) && Number(tasks.total) >= 0 ? Number(tasks.total) : items.length
           if (offset > 0 && offset >= count) { setOffset(Math.floor(Math.max(0,count-1)/20)*20); return }
           setRows(items); setTotal(count); setListState('ready')
+          setReport(tasks.groupReport && typeof tasks.groupReport === 'object' ? tasks.groupReport as Record<string, unknown> : null)
           const submissions: unknown[] = Array.isArray(tasks.submissions) ? tasks.submissions : []
           setPending(submissions.flatMap(row => row && typeof row === 'object' && 'task' in row && typeof row.task === 'string'
             ? [{id: 'commandId' in row && typeof row.commandId === 'string' ? row.commandId : row.task,
@@ -148,6 +151,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
       </select></label>}
       <button type="button" onClick={() => setRevision(value => value + 1)}>刷新任务</button>
     </div>
+    {group && report && listState === 'ready' && <WorkerGroupReport group={group} report={report} />}
     {listState === 'loading' && <p>正在读取任务…</p>}
     {listState === 'failed' && <p role="status">暂时无法读取任务，请刷新重试。</p>}
     {listState === 'ready' && total === 0 && <p>当前筛选下没有任务。</p>}

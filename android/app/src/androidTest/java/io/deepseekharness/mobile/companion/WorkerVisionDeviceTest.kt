@@ -279,7 +279,9 @@ class WorkerVisionDeviceTest {
             val parent = child?.let { dep -> items.singleOrNull { it.optString("id") == dep.getJSONArray("dependsOn").getString(0) } }
             if (!answered && child != null && parent?.optString("state") == "waiting") {
                 assertEquals("queued",child.getString("state"))
-                val page = store.page("attention",group=tag).getJSONArray("items")
+                val target = store.page("attention",group=tag)
+                assertEquals(2,target.getJSONObject("groupReport").getJSONObject("attention").getInt("count"))
+                val page = target.getJSONArray("items")
                 val card = (0 until page.length()).map(page::getJSONObject).single { it.getString("id") == child.getString("id") }
                 assertEquals(parent.getString("id"),card.getJSONObject("dependencyTarget").getString("id"))
                 store.command(JSONObject().put("id",parent.getString("id")).put("action","reply").put("task","本次交接口令为 $code，请在完成报告中保留完整口令。"))
@@ -287,6 +289,12 @@ class WorkerVisionDeviceTest {
             }
             if (answered && child?.optString("state") == "completed" && parent?.optString("state") == "completed") {
                 assertTrue(child.getString("summary"),child.getString("summary").contains(code))
+                val target = store.page("attention",group=tag)
+                assertEquals(0,target.getInt("total"))
+                val done = target.getJSONObject("groupReport").getJSONObject("done")
+                assertEquals(2,done.getInt("count"))
+                val summaries = done.getJSONArray("items")
+                assertTrue((0 until summaries.length()).any { summaries.getJSONObject(it).getString("note").contains(code) })
                 assertEquals(2,items.size)
                 InstrumentationRegistry.getInstrumentation().sendStatus(0,android.os.Bundle().apply { putString("dependency","child queued until parent received fresh code; both completed and child reported it") })
                 return@withClient

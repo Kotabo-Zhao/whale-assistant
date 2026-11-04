@@ -119,6 +119,7 @@ internal class WorkerCardCatalog(private val dir: File) {
         }
         var running = pendingCount; var waiting = 0; var asking = 0; var total = 0
         val items = JSONArray()
+        val report = if (group.isNotEmpty() && limit > 0) JSONObject() else null
         for (entry in order) {
             val absent = missing(entry.id)
             val blocked = entry.state == "queued" && dependencyBlocked(entry)
@@ -128,6 +129,31 @@ internal class WorkerCardCatalog(private val dir: File) {
             if (attention) waiting++
             if (!absent && entry.state == "waiting") asking++
             if (group.isNotEmpty() && group != entry.group) continue
+            if (report != null) {
+                val category = when {
+                    absent || attention -> "attention"
+                    work -> "working"
+                    entry.state == "completed" -> "done"
+                    entry.state == "cancelled" -> "cancelled"
+                    else -> "attention"
+                }
+                val bucket = report.optJSONObject(category) ?: JSONObject().put("count",0).put("items",JSONArray()).also { report.put(category,it) }
+                bucket.put("count",bucket.getInt("count")+1)
+                val samples = bucket.getJSONArray("items")
+                if (samples.length() < 4) {
+                    val source = card(entry.id)
+                    val note = when {
+                        absent -> "执行记录缺失，请核对原工单"
+                        blocked -> "等待前置任务处理"
+                        entry.state == "waiting" -> source.optString("question").ifBlank { source.optString("summary") }
+                        work -> source.optString("waitReason").ifBlank { source.optString("progress") }
+                        else -> source.optString("summary")
+                    }
+                    val excerpt = if (note.length > 320) note.take(319).dropLastWhile { it.isHighSurrogate() } + "…" else note
+                    samples.put(JSONObject().put("id",entry.id).put("title",entry.title).put("state",entry.state)
+                        .put("revision",source.optLong("writeSeq")).put("note",excerpt))
+                }
+            }
             val matches = when (filter) {
                 "open" -> work || attention
                 "running" -> work
@@ -162,7 +188,8 @@ internal class WorkerCardCatalog(private val dir: File) {
             items.put(row)
         }
         return JSONObject().put("items",items).put("total",total).put("offset",offset)
-            .put("submissions",pending).put("running",running).put("attention",waiting).put("asking",asking)
+            .put("submissions",if (group.isEmpty()) pending else JSONArray()).put("running",running).put("attention",waiting).put("asking",asking)
+            .apply { if (report != null) put("groupReport",report) }
     }
 
     private fun readCard(file: File, ownerOnly: Boolean = false): JSONObject {
