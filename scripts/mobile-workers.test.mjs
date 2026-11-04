@@ -10,6 +10,50 @@ function fixture(t) {
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   return { queue: new WorkerQueue(dir), dir }
 }
+
+test('bound phone submissions inherit their existing parent and never recreate a missing parent', async t => {
+  const { dir } = fixture(t)
+  const events = new Map(), agents = new Map(), inherited = new Map(), created = []
+  const makeAgent = id => {
+    const agent = { id, options: { provider: 'test', model: 'test' },
+      session: { id, requestHeader: () => ({ config: { provider: 'test', model: 'test' } }), snapshotEvents: () => [] },
+      ctx: { tools: { guard() {} }, systemPrompt: { section() {} } },
+      inbox: { nextTurn: [], nextStep: [] }, followup: message => agent.inbox.nextTurn.push(message), cancel() {}, steer() {} }
+    agents.set(id, agent); return agent
+  }
+  makeAgent('session-bound')
+  const commands = [
+    { commandId: 'bound-command', action: 'start', task: 'Compare two supplied tables', mode: 'read', sourceSession: 'session-bound' },
+    { commandId: 'missing-command', action: 'start', task: 'Missing parent', mode: 'read', sourceSession: 'session-missing' },
+  ]
+  const deferred = [], acked = [], protocols = []
+  const ctx = { on: (name, fn) => events.set(name, fn), tools: { register() {}, guard() {} }, systemPrompt: { section() {} },
+    sessionController: { resolveAgent: async id => agents.has(id) ? { agent: agents.get(id) } : { error: {} },
+      create: async ({ sessionId }) => { created.push(sessionId); makeAgent(sessionId) } },
+    sessionPersistence: { flush: async () => {} },
+    permissionPresets: { current: session => { assert.equal(session.id, 'session-bound'); return 'read-only' },
+      set: (session, permission) => inherited.set(session.id, permission) } }
+  const installed = installWorkers(ctx, { directory: dir, defineTool: tool => tool, bridge: async (name, input) => {
+    const req = JSON.parse(input || '{}')
+    if (name !== 'workerUi') return { output: '[]' }
+    if (req.hostCapacity) return { output: '{}' }
+    if (req.ack) { acked.push(req.ack); return { output: '{}' } }
+    if (req.deferred) { deferred.push(req.deferred); return { output: '{}' } }
+    protocols.push(req.sourceSessionProtocol)
+    return { output: JSON.stringify(commands.filter(command => !acked.includes(command.commandId))) }
+  } })
+  t.after(() => events.get('dispose')())
+  const until = Date.now() + 3000
+  while ((!deferred.length || !inherited.size) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10))
+  assert.deepEqual(protocols, [1])
+  assert.deepEqual(acked, ['bound-command'])
+  assert.deepEqual(deferred, ['missing-command'])
+  assert.equal(installed.queue.rows.size, 1)
+  const row = [...installed.queue.rows.values()][0]
+  assert.equal(row.owner, 'session-bound')
+  assert.equal(inherited.get(row.sessionId), 'read-only')
+  assert.deepEqual(created, [row.sessionId])
+})
 test('heartbeat tier: active rows/pending deliveries 5 s, channels 15 s, idle 60 s', () => {
   assert.equal(HEARTBEAT_ACTIVE_MS, 5000)
   assert.equal(HEARTBEAT_CHANNEL_MS, 15000)

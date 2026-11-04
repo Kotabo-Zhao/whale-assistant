@@ -196,13 +196,15 @@ internal class WorkerDashboardStore(private val context: Context) {
             }
         })
     }
-    fun submit(task: String, mode: String, commandId: String = UUID.randomUUID().toString(), title: String? = null, needs: String = "none"): JSONObject {
+    fun submit(task: String, mode: String, commandId: String = UUID.randomUUID().toString(), title: String? = null, needs: String = "none", sourceSession: String? = null): JSONObject {
         val text = task.trim()
         require(text.isNotEmpty() && text.length <= 2000 && mode in setOf("read", "device", "create"))
         require(UUID.fromString(commandId).toString() == commandId && needs in setOf("none","library","memory","both"))
+        require(sourceSession == null || (mode == "read" && sourceSession.startsWith("session-") && BubbleSessionRegistry.valid(sourceSession) && BubbleSessionRegistry(context).contains(sourceSession)))
         val command = JSONObject().put("commandId", commandId).put("action", "start")
             .put("task", text).put("mode", mode).put("needs",needs).put("createdAt", System.currentTimeMillis())
             .apply { title?.takeIf(String::isNotBlank)?.let { put("title", it.take(120)) } }
+            .apply { sourceSession?.let { put("sourceSession",it) } }
         if (enqueue(command)) {
             acceptedListeners.forEach { it() }
             listeners.forEach { it() }
@@ -218,15 +220,18 @@ internal class WorkerDashboardStore(private val context: Context) {
 
     fun isHeld(id: String): Boolean = synchronized(lock) { heldRequests().has(id) }
 
-    fun hold(id: String, task: String, mode: String, needs: String, title: String, reason: String): String = synchronized(lock) {
+    fun hold(id: String, task: String, mode: String, needs: String, title: String, reason: String, sourceSession: String? = null): String = synchronized(lock) {
         require(UUID.fromString(id).toString() == id && task.length in 1..2000 && mode in setOf("read","create"))
         require(needs in setOf("none","library","memory","both"))
+        require(sourceSession == null || (mode == "read" && sourceSession.startsWith("session-") && BubbleSessionRegistry.valid(sourceSession) && BubbleSessionRegistry(context).contains(sourceSession)))
         val all = heldRequests()
         val previous = all.optJSONObject(id)
         if (previous != null) {
             check(previous.getString("task") == task && previous.getString("mode") == mode && previous.getString("needs") == needs)
+            check(previous.optString("sourceSession") == sourceSession.orEmpty())
         } else {
-            all.put(id,JSONObject().put("task",task).put("title",title.take(120)).put("mode",mode).put("needs",needs))
+            all.put(id,JSONObject().put("task",task).put("title",title.take(120)).put("mode",mode).put("needs",needs)
+                .apply { sourceSession?.let { put("sourceSession",it) } })
             write(heldFile,all.toString())
             listeners.forEach { it() }
         }
@@ -258,7 +263,8 @@ internal class WorkerDashboardStore(private val context: Context) {
         }
         if (action == "resume") {
             if (reason != null) return@synchronized JSONObject().put("message",reason)
-            WorkerRuntimeWake.submit(context,row.getString("task"),mode,overlay,commandId=id,title=row.getString("title"),needs=needs)
+            WorkerRuntimeWake.submit(context,row.getString("task"),mode,overlay,commandId=id,title=row.getString("title"),needs=needs,
+                sourceSession=row.optString("sourceSession").takeIf { it.isNotBlank() })
         } else synchronized(commandLock) {
             // Recovery after interruption between parking a request and removing its queue entry.
             val commands = pending()
@@ -281,6 +287,7 @@ internal class WorkerDashboardStore(private val context: Context) {
         if (existing != null) {
             check(existing.optString("action") == command.optString("action") &&
                 existing.optString("task") == command.optString("task") && existing.optString("mode") == command.optString("mode"))
+            check(existing.optString("sourceSession") == command.optString("sourceSession"))
             if (existing.has("needs")) check(existing.getString("needs") == command.optString("needs","none"))
             else if (command.optString("needs","none") != "none") {
                 existing.put("needs",command.getString("needs"))
@@ -329,7 +336,7 @@ internal class WorkerDashboardStore(private val context: Context) {
         try { JSONArray(file.openRead().bufferedReader().use { it.readText() }) }
         catch (_: java.io.FileNotFoundException) { JSONArray() }
     }
-    fun batch(skip: Int): JSONArray = synchronized(lock) { synchronized(commandLock) {
+    fun batch(skip: Int, sourceSessionSupported: Boolean = false): JSONArray = synchronized(lock) { synchronized(commandLock) {
         require(skip >= 0)
         val all = pending()
         val ready = JSONArray()
@@ -337,6 +344,12 @@ internal class WorkerDashboardStore(private val context: Context) {
         var changed = false
         while (index < all.length() && ready.length() < 4) {
             val cmd = all.getJSONObject(index)
+            // Older plugins ignore unknown fields; never hand them a session-bound task.
+            if (cmd.has("sourceSession") && !sourceSessionSupported) {
+                val notice = "请更新对话运行环境以接取此会话的任务，原请求已保留"
+                if (cmd.optString("notice") != notice) { cmd.put("notice",notice); changed = true }
+                index++; continue
+            }
             val mode = cmd.optString("mode")
             val needs = cmd.optString("needs","none")
             if (cmd.optString("action") == "start" && (mode == "create" || needs != "none")) {
@@ -345,7 +358,8 @@ internal class WorkerDashboardStore(private val context: Context) {
                     settings.knowledgeModelAccess,settings.bubblePermissionPreset)
                 val id = cmd.getString("commandId")
                 if (reason != null || isHeld(id)) {
-                    if (reason != null) hold(id,cmd.getString("task"),mode,needs,cmd.optString("title",cmd.getString("task")),reason)
+                    if (reason != null) hold(id,cmd.getString("task"),mode,needs,cmd.optString("title",cmd.getString("task")),reason,
+                        cmd.optString("sourceSession").takeIf { it.isNotBlank() })
                     all.remove(index)
                     changed = true
                     continue

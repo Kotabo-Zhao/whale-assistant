@@ -170,6 +170,49 @@ class WhaleConversationalTaskTest {
     }
 
     /** Run twice with one fixture UUID in separate instrumentation processes. No device-wide grant is changed. */
+    @Test fun boundSubmissionPreservesOwnerAcrossPermissionRecoveryAndOldReaders() {
+        val root = File(app.cacheDir,"bound-queue-"+UUID.randomUUID()).apply { check(mkdirs()) }
+        val names = mutableSetOf<String>()
+        val ctx = object : ContextWrapper(app) {
+            override fun getApplicationContext(): Context = this
+            override fun getNoBackupFilesDir() = root
+            override fun getSharedPreferences(name: String,mode: Int) = app.getSharedPreferences((root.name+name).also { names.add(it) },mode)
+        }
+        try {
+            val source = "session-"+UUID.randomUUID()
+            BubbleSessionRegistry(ctx).record(source)
+            val desk = WorkerDashboardStore(ctx)
+            val id = UUID.randomUUID().toString()
+            CompanionStore(ctx).knowledgeModelAccess = true
+            desk.submit("核对资料","read",id,needs="library",sourceSession=source)
+            desk.submit("核对资料","read",id,needs="library",sourceSession=source)
+            assertEquals(1,desk.pending().length())
+            assertThrows(IllegalStateException::class.java) { desk.submit("核对资料","read",id,needs="library") }
+            assertThrows(IllegalArgumentException::class.java) { desk.submit("制作工具","create",sourceSession=source) }
+            assertThrows(IllegalArgumentException::class.java) { desk.submit("核对资料","read",sourceSession="session-unregistered") }
+            val other = desk.submit("普通任务","read").getString("commandId")
+            assertEquals(other,desk.batch(0).getJSONObject(0).getString("commandId"))
+            assertEquals(2,desk.pending().length())
+            assertTrue(desk.pending().getJSONObject(0).getString("notice").contains("更新"))
+            CompanionStore(ctx).knowledgeModelAccess = false
+            assertEquals(other,desk.batch(0,true).getJSONObject(0).getString("commandId"))
+            assertTrue(desk.isHeld(id))
+            CompanionStore(ctx).knowledgeModelAccess = true
+            val restored = WorkerDashboardStore(ctx)
+            restored.heldAction(id,"resume")
+            restored.heldAction(id,"resume")
+            val rows = restored.batch(0,true)
+            assertEquals(2,rows.length())
+            val bound = (0 until rows.length()).map(rows::getJSONObject).single { it.optString("commandId") == id }
+            assertEquals(source,bound.getString("sourceSession"))
+            assertEquals("library",bound.getString("needs"))
+            assertEquals(1,restored.batch(0).length())
+        } finally {
+            names.forEach { app.deleteSharedPreferences(it) }
+            root.walkBottomUp().forEach { it.delete() }
+        }
+    }
+
     @Test fun pickupRechecksRevokedAccessWithoutBlockingIndependentCommands() {
         val root = File(app.cacheDir,"pickup-permission-"+UUID.randomUUID()).apply { check(mkdirs()) }
         val names = mutableSetOf<String>()
@@ -462,6 +505,7 @@ class WhaleConversationalTaskTest {
         val transcript = CompanionBubbleHistory(storage(tmp))
         val desk = WorkerDashboardStore(app)
         val boundSession = InstrumentationRegistry.getArguments().getString("boundSession") == "true"
+        var boundOwner: String? = null
         val sink = object : io.deepseekharness.mobile.runtime.RuntimeEventSink {
             override fun onProgress(snapshot: io.deepseekharness.mobile.runtime.RuntimeStateSnapshot) = Unit
             override fun onTerminalOutput(sessionId: String, dataBase64: String, suppressPublicOutput: Boolean) = Unit
@@ -489,6 +533,7 @@ class WhaleConversationalTaskTest {
                     io.deepseekharness.mobile.runtime.RuntimeHost.startHarness(controller)
                 val client = HarnessBubbleClient(controller.openHarnessAccess())
                 val session = client.call("session/create",JSONObject()).getString("sessionId")
+                boundOwner = session
                 client.command(session,"/permission read-only")
                 CompanionBubbleChat(app,historyStore=transcript).resumeSession(session)
             }
@@ -538,6 +583,7 @@ class WhaleConversationalTaskTest {
                 messages.size == 4 && messages[2].text == next && messages[3].text.contains("已交给后台处理")
             }
             await("后台报告没有完成",180_000) { work().singleOrNull()?.optString("state") == "completed" }
+            if (boundSession) assertEquals("独立工单必须保留绑定会话归属",boundOwner,work().single().getString("owner"))
             if (screenCycle) {
                 assertFalse("收件回执不应主动点亮设备",power.isInteractive)
                 val asleepMs = SystemClock.elapsedRealtime() - offAt

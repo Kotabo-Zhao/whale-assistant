@@ -85,6 +85,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
 
     /** Classify independently from the foreground transcript and its pending request. */
     private fun classifyFollowup(item: Followup, messages: List<CompanionBubbleChat.Message>) {
+        val sourceSession = chat.handoffSessionId()
         item.deciding = true
         intake.execute {
             var receipt: String? = null
@@ -100,7 +101,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     PetIntentRouter.Intent.BACKGROUND_CREATE -> "create"
                     else -> return@runCatching
                 }
-                if (closed || !decision.independent || chat.handoffSessionId() != null) return@runCatching
+                if (closed || !decision.independent || sourceSession != chat.handoffSessionId() ||
+                    (sourceSession != null && mode != "read")) return@runCatching
+                sourceSession?.let { BubbleSessionRegistry(context).record(it) }
                 val prefs = CompanionStore(context)
                 val denial = chat.deniedBackground(mode, decision.needs,
                     prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled, prefs.knowledgeModelAccess)
@@ -109,11 +112,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 journal.advance(id,"handoff")
                 receipt = "「$title」的接取状态尚未确认，请在后台任务中核对。"
                 if (denial != null) {
-                    receipt = WorkerDashboardStore(context).hold(id,item.text,mode,decision.needs,title,denial)
+                    receipt = WorkerDashboardStore(context).hold(id,item.text,mode,decision.needs,title,denial,sourceSession)
                     return@runCatching
                 }
                 // An uncertain acknowledgement must not send the same instruction to a second router.
-                if (dispatchTask(item.text, mode, id, title, decision.needs).getString("commandId") == id)
+                val accepted = if (sourceSession == null) dispatchTask(item.text, mode, id, title, decision.needs)
+                    else WorkerRuntimeWake.submit(context,item.text,mode,commandId=id,title=title,needs=decision.needs,sourceSession=sourceSession)
+                if (accepted.getString("commandId") == id)
                     receipt = "「$title」已交给后台处理，进度可在后台任务中查看。"
             }.onFailure { android.util.Log.d("whale-intake", "intake unavailable: ${it.javaClass.simpleName}") }
             if (receipt != null) runCatching { journal.advance(item.id,"handoff",receipt.orEmpty()) }
@@ -632,7 +637,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     return@setOnClickListener
                 }
                 val item = Followup(next,id)
-                if (pendingTurn != null && chat.handoffSessionId() == null) {
+                if (pendingTurn != null) {
                     val outstanding = (listOf(pendingTurn) + followups.map { it.text } + next).takeLast(6)
                     classifyFollowup(item, outstanding.map { CompanionBubbleChat.Message("user", it) })
                 }

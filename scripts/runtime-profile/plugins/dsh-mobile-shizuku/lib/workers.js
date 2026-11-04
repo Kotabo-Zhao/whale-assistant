@@ -475,9 +475,15 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
   // The durable command ID is also the domain trigger ID on every replay.
   const dispatchOwner = 'session-whale-task-desk'
   async function acceptSubmission(command) {
-    const found = await ctx.sessionController.resolveAgent(dispatchOwner)
-    if (found.error) await ctx.sessionController.create({ sessionId: dispatchOwner })
-    const ticket = await superagent.acceptPhone(dispatchOwner, command.commandId, command, command.mode === 'create' ? command.commandId : undefined)
+    const owner = command.sourceSession ?? dispatchOwner
+    if (command.sourceSession != null && (command.mode !== 'read' || typeof owner !== 'string' || !/^session-[a-zA-Z0-9._-]{1,192}$/.test(owner)))
+      throw new Error('来源会话或交办模式无效')
+    const found = await ctx.sessionController.resolveAgent(owner)
+    if (found.error) {
+      if (command.sourceSession != null) throw new Error('来源会话不可用，原任务已保留')
+      await ctx.sessionController.create({ sessionId: owner })
+    }
+    const ticket = await superagent.acceptPhone(owner, command.commandId, command, command.mode === 'create' ? command.commandId : undefined)
     if (command.mode !== 'create') return null
     const row = [...queue.rows.values()].find(item => item.domainTicketId === ticket)
     if (!row || row.creationCommandId !== command.commandId) throw new Error('创作工单尚未绑定')
@@ -490,7 +496,7 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
     if (polling) { pollAgain = true; return }
     polling = true
     try {
-      const commands = JSON.parse((await bridge('workerUi', JSON.stringify({ skip: deferredSkip }))).output)
+      const commands = JSON.parse((await bridge('workerUi', JSON.stringify({ skip: deferredSkip, sourceSessionProtocol: 1 }))).output)
       if (commands.length < 4) deferredSkip = 0
       for (const command of commands) {
         if (command.action === 'start') {
