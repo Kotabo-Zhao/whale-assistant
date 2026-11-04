@@ -32,6 +32,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var mainQuestion: String? = null
     private var liveText = ""
     private var renderLive: ((String) -> Unit)? = null
+    @Volatile private var showLivePartials = false
+    private var flushPartial: (() -> Unit)? = null
     private var request = 0L
     private var busy = false
     private class Followup(val text: String, val id: String, var deciding: Boolean = false, var receipt: String? = null)
@@ -168,7 +170,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         var petOnRight = pet[0] + pet[2] / 2 >= metrics.widthPixels / 2
         // This estimate only selects the order before measuring; the final coordinates use actual height.
         var showAbove = pet[1] >= dp(175) || pet[1] + pet[3] + dp(175) > metrics.heightPixels
-        val panel = LinearLayout(context).apply {
+        val panel = object : LinearLayout(context) {
+            override fun onScreenStateChanged(screenState: Int) {
+                super.onScreenStateChanged(screenState)
+                if (root === this) {
+                    showLivePartials = screenState == android.view.View.SCREEN_STATE_ON
+                    if (showLivePartials) flushPartial?.invoke()
+                }
+            }
+        }.apply {
             orientation = LinearLayout.VERTICAL
             background = ui.shape(ui.surface, 20, ui.line)
             clipToOutline = true
@@ -697,23 +707,25 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val latestPartial = java.util.concurrent.atomic.AtomicReference<String?>(null)
             val partialScheduled = java.util.concurrent.atomic.AtomicBoolean(false)
             val acceptingPartials = java.util.concurrent.atomic.AtomicBoolean(true)
-            var renderedPartial = false
             fun renderPartial() {
+                partialScheduled.set(false)
+                if (!showLivePartials || closed || request != generation || !acceptingPartials.get()) return
                 val partial = latestPartial.getAndSet(null)
-                if (partial != null && !closed && request == generation && acceptingPartials.get()) {
+                if (partial != null) {
                     liveText = partial
                     renderLive?.invoke(partial)
                     if (root === panel) {
                         if (pendingQuestion == null) status.text = "正在流式输出…"
                         if (atBottom()) scroll.fullScroll(android.view.View.FOCUS_DOWN)
                     }
-                    renderedPartial = true
-                }
-                partialScheduled.set(false)
-                if (latestPartial.get() != null && acceptingPartials.get() && partialScheduled.compareAndSet(false, true)) {
-                    handler.postDelayed({ renderPartial() }, if (renderedPartial) 32 else 0)
                 }
             }
+            fun schedulePartial() {
+                if (showLivePartials && latestPartial.get() != null && acceptingPartials.get() && partialScheduled.compareAndSet(false,true)) {
+                    handler.postDelayed({ renderPartial() },32)
+                }
+            }
+            flushPartial = ::schedulePartial
             executor.execute {
                 val result = runCatching {
                     val settings = CompanionStore(context)
@@ -729,7 +741,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     val onPartial: (String) -> Unit = { partial ->
                         if (acceptingPartials.get()) {
                             latestPartial.set(partial)
-                            if (partialScheduled.compareAndSet(false, true)) handler.post { renderPartial() }
+                            schedulePartial()
                         }
                     }
                     val answer = item?.receipt?.let { receipt ->
@@ -744,6 +756,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 handler.post {
                     if (closed || request != generation) return@post
                     acceptingPartials.set(false); latestPartial.set(null)
+                    flushPartial = null
                     val samePanel = root === panel
                     mainQuestion = null; inFlightUser = null; busy = false; send.isEnabled = true; input.isEnabled = true
                     result.onSuccess { answer ->
@@ -848,6 +861,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         updatePosition()
         if (runCatching { wm.addView(panel, params) }.isSuccess) {
             root = panel; positionUpdater = updatePosition
+            showLivePartials = context.getSystemService(android.os.PowerManager::class.java).isInteractive
+            if (showLivePartials) flushPartial?.invoke()
             workerInbox.markSeen(unseenReports.map { it.optString("id") })
             deliveryInbox.markSeen(deliveries)
             workerPanel.attach(workerBadge)
@@ -998,6 +1013,6 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     }
 
     fun followPet() { positionUpdater?.invoke() }
-    fun hide() { recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { closed = true; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
+    fun hide() { showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
+    fun destroy() { closed = true; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
 }

@@ -398,6 +398,14 @@ class WhaleConversationalTaskTest {
         val first = "请直接用中文给我讲一篇完整的长童话，主角是小鲸鱼和海猫，分十五段写，每段都写出场景、对白和细节。"
         val next = "另一件独立的事：明早交接要用「蓝港差异报告 $token」。甲表写周四交付九箱，乙表写周五交付六箱，整理成一份列出差异和待确认事项的交接报告。"
         lateinit var window: CompanionBubbleWindow
+        val screenCycle = InstrumentationRegistry.getArguments().getString("screenCycle") == "true"
+        val power = app.getSystemService(android.os.PowerManager::class.java)
+        var sleepRequested = false
+        fun setScreen(on: Boolean) {
+            val command = if (on) "input keyevent KEYCODE_WAKEUP" else "input keyevent KEYCODE_SLEEP"
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(inst.uiAutomation.executeShellCommand(command)).use { it.readBytes() }
+            await("屏幕未切换状态",8000) { power.isInteractive == on }
+        }
         fun work() = desk.list().getJSONArray("items").let { rows -> (0 until rows.length()).map(rows::getJSONObject)
             .filter { it.optString("title").contains(token) || it.optString("scope").contains(token) } }
         try {
@@ -427,6 +435,14 @@ class WhaleConversationalTaskTest {
                 }
                 seen
             }
+            val offAt = SystemClock.elapsedRealtime()
+            if (screenCycle) {
+                check(power.isInteractive)
+                sleepRequested = true
+                setScreen(false)
+                val streaming = CompanionBubbleWindow::class.java.getDeclaredField("showLivePartials").apply { isAccessible = true }
+                await("息屏后仍在刷新流式气泡",8000) { !streaming.getBoolean(window) }
+            }
             await("独立交办回执未按对话顺序保存",180_000) {
                 var error: String? = null
                 inst.runOnMainSync {
@@ -437,8 +453,21 @@ class WhaleConversationalTaskTest {
                 messages.size == 4 && messages[2].text == next && messages[3].text.contains("已交给后台处理")
             }
             await("后台报告没有完成",180_000) { work().singleOrNull()?.optString("state") == "completed" }
+            if (screenCycle) {
+                assertFalse("收件回执不应主动点亮设备",power.isInteractive)
+                val asleepMs = SystemClock.elapsedRealtime() - offAt
+                setScreen(true)
+                sleepRequested = false
+                inst.runOnMainSync {
+                    val panel = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible=true }.get(window) as View
+                    assertEquals("还没发的第三句",views(panel).filterIsInstance<EditText>().single().text.toString())
+                    assertTrue(views(panel).filterIsInstance<TextView>().any { it.isShown && it.text.contains("已交给后台处理") })
+                }
+                inst.sendStatus(0,Bundle().apply { putLong("screenOffThroughCompletionMs",asleepMs) })
+            }
             inst.sendStatus(0, Bundle().apply { putString("overlap", "worker accepted while first reply outstanding; one report completed") })
         } finally {
+            if (sleepRequested) setScreen(true)
             inst.runOnMainSync { window.destroy() }
             check(tmp.parentFile == app.cacheDir); tmp.walkBottomUp().forEach { it.delete() }
         }
