@@ -45,7 +45,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var renderFollowups: (() -> Unit)? = null
     @Volatile private var closed = false
     private var draft = chat.pendingUser.orEmpty()
-    private var lastError: String? = null
+    private var lastError: String? = if (chat.pendingDirect) "上次回复中断，点此重新生成。" else null
     private var inFlightUser: String? = null
     private var failedUser: String? = null
     private var captureDialog: android.app.AlertDialog? = null
@@ -632,6 +632,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 status.visibility = android.view.View.VISIBLE
                 return@setOnClickListener
             }
+            if (item?.receipt == null && runCatching { chat.preserveDirectInput(history,message) }.isFailure) {
+                if (fromQueue && item != null) { followups.addFirst(item); renderFollowups?.invoke() }
+                status.text = "无法保存这条消息，输入已保留。"
+                status.visibility = android.view.View.VISIBLE
+                return@setOnClickListener
+            }
             inFlightUser = message; failedUser = null; failedFollowup = null
             if (!fromQueue && input.text.toString().trim() == message) input.text.clear()
             failedMessage?.let { content.removeView(it) }; failedMessage = null
@@ -709,8 +715,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                             if (partialScheduled.compareAndSet(false, true)) handler.post { renderPartial() }
                         }
                     }
-                    item?.receipt?.let { CompanionBubbleChat.Reply(it, emptyList(), emptyList()) }
-                        ?: chat.fusedReply(prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
+                    val answer = item?.receipt?.let { receipt ->
+                        val finished = requireNotNull(chat.snapshot((prior + CompanionBubbleChat.Message("assistant",receipt)).takeLast(18)))
+                        historyStore.save(finished,requireWritable=true)
+                        CompanionBubbleChat.Reply(receipt, emptyList(), emptyList())
+                    } ?: chat.fusedReply(prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
+                    // A failed cleanup leaves a reviewable entry. The completed turn must not be retried.
+                    if (item != null) runCatching { journal.remove(item.id) }
+                    answer
                 }
                 handler.post {
                     if (closed || request != generation) return@post
@@ -724,8 +736,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         while (history.size > 18) { history.removeAt(0); history.removeAt(0) }
                         chat.snapshot(history)?.let { snapshot -> executor.execute {
                             runCatching {
-                                historyStore.save(snapshot, requireWritable = item != null)
-                                if (item != null) journal.remove(item.id)
+                                // The reply was persisted before the input became available for another turn.
                                 // The anchor is intentionally lossy and is never sent back into Harness automatically.
                                 fun summary(value: String) = value.replace(Regex("\\s+"), " ").trim().take(160)
                                 anchorStore.append(snapshot.sessionId, "user", System.currentTimeMillis(), summary(message))
@@ -823,7 +834,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             workerPanel.attach(workerBadge)
             executor.execute { chat.prewarm() }
             armDeliveryWatcherIfNeeded()
-            if (!busy && chat.pendingUser != null) handler.post { if (root === panel && !busy) { retryText = chat.pendingUser; send.performClick() } }
+            if (!busy && !chat.pendingDirect && chat.pendingUser != null) handler.post { if (root === panel && !busy) { retryText = chat.pendingUser; send.performClick() } }
         }
     }
     /** Reply to the original tool call, without another chat prompt. */

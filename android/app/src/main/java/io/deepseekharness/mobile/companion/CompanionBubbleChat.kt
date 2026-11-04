@@ -128,6 +128,7 @@ internal class CompanionBubbleChat(
     private var client: HarnessBubbleClient? = null
     private var pending: JSONObject? = restored?.pending?.let(::JSONObject)
     val pendingUser: String? get() = pending?.optString("user")?.takeIf { it.isNotBlank() }
+    val pendingDirect: Boolean get() = pending?.optString("kind") == "direct"
     private var continuedMainSession = restored?.continuedMain ?: false
     var onInteractionNeeded: (String) -> Unit = {}
     var onQuestion: (JSONObject) -> Unit = {}
@@ -221,6 +222,16 @@ internal class CompanionBubbleChat(
         sessionScope = CompanionBubbleChatPolicy.memoryDigest("pet-direct")
     }
 
+    fun preserveDirectInput(previous: List<Message>, text: String) {
+        if (handoffSessionId() != null || pending != null) return
+        val user = CompanionBubbleChatPolicy.validateMessage(text)
+        directSession()
+        val request = JSONObject().put("kind","direct").put("requestId",java.util.UUID.randomUUID().toString())
+            .put("user",user).put("prompt",user)
+        historyStore.save(requireNotNull(snapshot(previous.takeLast(18))).copy(pending=request.toString()), requireWritable=true)
+        pending = request
+    }
+
     internal fun deniedBackground(mode: String, needs: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean): String? =
         WorkerAccess.denial(mode, needs, memoryAllowed, knowledgeAllowed, CompanionStore(context).bubblePermissionPreset)
 
@@ -272,11 +283,15 @@ internal class CompanionBubbleChat(
         }
         // Once tools enter the conversation, keep the role and subsequent answers in that same Session.
         if (handoffSessionId() != null || io.deepseekharness.mobile.runtime.RuntimeStore(context).readModelCredential("deepseek").isNullOrBlank()) return harness()
+        val user = CompanionBubbleChatPolicy.validateMessage(history.last().text)
+        check(pending == null || (pendingDirect && pendingUser == user)) { "请先恢复上一次桌宠消息。" }
+        preserveDirectInput(history.dropLast(1),user)
+        val direct = requireNotNull(pending)
         var delegated: Reply? = null
         val result = PetDirectChat(context).reply(CompanionPersonaStore(context).active(), history, onPartial, background = { decision ->
             val mode = if (decision.intent == PetIntentRouter.Intent.BACKGROUND_CREATE) "create" else "read"
             directSession()
-            pending = JSONObject().put("kind","worker").put("requestId",java.util.UUID.randomUUID().toString())
+            pending = JSONObject().put("kind","worker").put("requestId",direct.getString("requestId"))
                 .put("mode",mode).put("needs",decision.needs).put("user",history.last().text)
                 .put("title",decision.title(history.last().text)).put("prompt",decision.workerTask(history.last().text))
             sendPendingWorker(history, memoryAllowed, knowledgeAllowed).also { delegated = it }.text
@@ -285,7 +300,10 @@ internal class CompanionBubbleChat(
             else harness().also { delegated = it }.text
         }
         delegated?.let { return it }
-        directSession()
+        check(pendingDirect) { "原请求已转入主对话，请核对原会话。" }
+        val finished = requireNotNull(snapshot((history + Message("assistant",result)).takeLast(18))).copy(pending=null)
+        historyStore.save(finished, requireWritable=true)
+        pending = null
         return Reply(result, emptyList(), emptyList())
     }
 
@@ -300,7 +318,7 @@ internal class CompanionBubbleChat(
         val preset = CompanionStore(context).bubblePermissionPreset
         val effectiveScope = if (continuedMainSession) scope else CompanionBubbleChatPolicy.memoryDigest("$scope|permission=$preset")
         val existing = sessionId?.takeIf { it.startsWith("session-") && (continuedMainSession || sessionScope == null || sessionScope == effectiveScope) }
-        check(pending == null || existing != null) { "对话权限已变更，请到主对话处理原任务后再开启新话题。" }
+        check(pending == null || pendingDirect || existing != null) { "对话权限已变更，请到主对话处理原任务后再开启新话题。" }
         val currentSession = existing ?: client.call("session/create", JSONObject()).getString("sessionId").also {
             sessionId = it
             sessionAccess = access
@@ -333,11 +351,13 @@ internal class CompanionBubbleChat(
             append("用户当前请求：").append(CompanionBubbleChatPolicy.validateMessage(history.last().text)).append('\n').append(postHistory)
         } else "$persona\n${CompanionBubbleChatPolicy.clarificationGuidance()}\n${CompanionBubbleChatPolicy.workerGuidance()}\n用户：${CompanionBubbleChatPolicy.validateMessage(history.last().text)}\n$postHistory\n请回复。"
         check(pending == null || pendingUser == history.last().text) { "对话还有待恢复的请求，请先恢复原请求或开启新话题。" }
-        val submission = pending ?: JSONObject().put("requestId", java.util.UUID.randomUUID().toString())
-            .put("user", history.last().text).put("prompt", prompt).also { pending = it }
+        val submission = if (pending == null || pendingDirect) {
+            JSONObject().put("requestId", pending?.getString("requestId") ?: java.util.UUID.randomUUID().toString())
+                .put("user",history.last().text).put("prompt",prompt).also { pending = it }
+        } else requireNotNull(pending)
         // Persist before sending, including on the very first turn. A retry uses the same Host-deduplicated request ID.
         val store = historyStore
-        snapshot(history.dropLast(1).takeLast(18))?.let(store::save)
+        store.save(requireNotNull(snapshot(history.dropLast(1).takeLast(18))), requireWritable=true)
         val executions = PetExecutionStore(context)
         fun state(value: String) = executions.update(submission.getString("requestId"), currentSession, submission.getString("user"), value)
         state("running")
@@ -350,8 +370,9 @@ internal class CompanionBubbleChat(
         }
         } catch (error: Exception) { state(if (error is BubbleTurnFailed) "failed" else "interrupted"); throw error }
         state("completed")
+        val finished = requireNotNull(snapshot((history + Message("assistant",answer.text,answer.images,answer.citations)).takeLast(18))).copy(pending=null)
+        store.save(finished,requireWritable=true)
         pending = null
-        snapshot((history + Message("assistant", answer.text, answer.images, answer.citations)).takeLast(18))?.let(store::save)
         return answer
 
     }

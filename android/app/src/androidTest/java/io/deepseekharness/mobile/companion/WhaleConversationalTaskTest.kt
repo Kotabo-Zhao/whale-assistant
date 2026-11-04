@@ -35,6 +35,31 @@ class WhaleConversationalTaskTest {
         while (!check()) { if (SystemClock.elapsedRealtime() >= until) fail(message); Thread.sleep(100) }
     }
 
+    @Test fun interruptedFirstInputReusesItsIdWhenItBecomesAWorker() {
+        val tmp = File(app.cacheDir,"direct-worker-"+UUID.randomUUID()).apply { check(mkdirs()) }
+        val storage = storage(tmp)
+        val desk = WorkerDashboardStore(storage)
+        val history = CompanionBubbleHistory(storage)
+        val user = "请在后台独立整理两份排期的差异成报告：甲为周三九箱，乙为周五六箱，列出交接需要确认的事项，我还要继续聊天。"
+        val turn = listOf(CompanionBubbleChat.Message("user",user))
+        try {
+            CompanionBubbleChat(app,historyStore=history).preserveDirectInput(emptyList(),user)
+            val checkpoint = requireNotNull(history.load())
+            val id = JSONObject(requireNotNull(checkpoint.pending)).getString("requestId")
+            val first = CompanionBubbleChat(app,checkpoint,history) { task,mode,key,title ->
+                assertEquals(id,key); desk.submit(task,mode,key,title); error("simulated lost acknowledgement")
+            }
+            assertThrows(IllegalStateException::class.java) { first.fusedReply(turn,"a".repeat(64),false,false) {} }
+            val parked = requireNotNull(history.load())
+            assertEquals("worker",JSONObject(requireNotNull(parked.pending)).getString("kind"))
+            val resumed = CompanionBubbleChat(app,parked,history) { task,mode,key,title -> desk.submit(task,mode,key,title) }
+            resumed.fusedReply(turn,"a".repeat(64),false,false) {}
+            assertEquals(1,desk.pending().length())
+            assertEquals(id,desk.pending().getJSONObject(0).getString("commandId"))
+            assertNull(history.load()!!.pending)
+        } finally { tmp.deleteRecursively() }
+    }
+
     @Test fun recoversOneSubmissionAfterUncertainAcknowledgement() {
         val tmp = File(app.cacheDir,"pet-worker-retry-"+UUID.randomUUID()).apply { mkdirs() }
         val ctx = storage(tmp)
@@ -238,6 +263,9 @@ class WhaleConversationalTaskTest {
                     val input = nodes().filterIsInstance<EditText>().single()
                     val send = nodes().single { it.text == "发送" }
                     input.setText("用两句话介绍蓝鲸。"); send.performClick()
+                    val firstCheckpoint = JSONObject(requireNotNull(transcript.load()?.pending))
+                    assertEquals("direct",firstCheckpoint.getString("kind"))
+                    assertEquals("用两句话介绍蓝鲸。",firstCheckpoint.getString("user"))
                     input.setText(second); send.performClick()
                     assertEquals(second,transcript.followups.entries().single().text)
                     val uncertain = transcript.followups.accept("交办状态待核对")
@@ -245,6 +273,9 @@ class WhaleConversationalTaskTest {
                     marker.writeText(android.os.Process.myPid().toString())
                 } else {
                     assertNotEquals(marker.readText().toInt(),android.os.Process.myPid())
+                    assertEquals(false,field("busy"))
+                    assertEquals("用两句话介绍蓝鲸。",nodes().filterIsInstance<EditText>().single().text.toString())
+                    nodes().single { it.text == "上次回复中断，点此重新生成。" }.performClick()
                     nodes().single { it.text.toString().startsWith("上次退出时的消息 ·") }.performClick()
                     val dialog = field("recoveryDialog") as android.app.AlertDialog
                     assertEquals("继续这条消息",dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).text)
@@ -254,7 +285,9 @@ class WhaleConversationalTaskTest {
             if (!save) {
                 await("恢复的消息没有完成或日志未核销") { transcript.followups.entries().size == 1 &&
                     transcript.load()?.messages?.count { it.role == "user" && it.text == second } == 1 }
-                assertTrue(transcript.load()!!.messages.last().text.contains("16"))
+                val messages = requireNotNull(transcript.load()).messages
+                assertEquals(listOf("用两句话介绍蓝鲸。",second),messages.filter { it.role == "user" }.map { it.text })
+                assertTrue(messages.last().text.contains("16"))
                 assertEquals("handoff",transcript.followups.entries().single().stage)
                 inst.runOnMainSync {
                     nodes().single { it.text.toString().startsWith("上次退出时的消息 ·") }.performClick()
