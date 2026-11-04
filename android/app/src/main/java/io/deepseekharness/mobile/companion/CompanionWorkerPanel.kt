@@ -271,6 +271,15 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                 "waiting" -> action("回答",true) { input(id,title,"reply","回答任务问题",row.optString("question")) }
                 "blocked","interrupted","failed" -> action("继续",true) { input(id,title,"resume","确认现场后的继续说明",row.optString("summary")) }
             }
+            if (row.optBoolean("hasPermissionSettings")) action("权限设置") {
+                executor.execute {
+                    runCatching { store.openBlockedSettings(id) }.onSuccess {
+                        handler.post { if (!disposed) { dialog?.dismiss(); onDraftOpened() } }
+                    }.onFailure {
+                        handler.post { if (!disposed) Toast.makeText(context,"任务状态已变化，请刷新查看",Toast.LENGTH_SHORT).show() }
+                    }
+                }
+            }
             if (!row.optBoolean("recordUnreadable")) action("任务详情") { showDetail(id, title, 0) }
             val taskGroup = row.optString("group")
             if (selectedGroup.isEmpty() && taskGroup.isNotBlank()) action("目标汇总") { selectGroup(taskGroup) }

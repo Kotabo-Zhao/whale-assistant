@@ -363,6 +363,86 @@ class WorkerVisionDeviceTest {
             putString("groupAnalysis","new session cited both workers and conflicting dates; same outcomes and history counts, no new analytic-session jobs")
         })
     }
+    @Test fun runningWorkerResumesSameRecordAfterKnowledgeAccessReturns() = withClient { client ->
+        val inst = InstrumentationRegistry.getInstrumentation()
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("revokeLive") == "true")
+        val app = inst.targetContext
+        val settings = CompanionStore(app)
+        check(settings.knowledgeModelAccess) { "此测试仅在已有资料访问授权时运行" }
+        // Toggle only the model-read gate in this fixture; preserve the user's semantic index.
+        val prefs = app.getSharedPreferences("companion_private_v1",android.content.Context.MODE_PRIVATE)
+        val library = CompanionKnowledgeStore(app)
+        val code = "海灯-" + UUID.randomUUID().toString().take(12)
+        val body = "本次验收口令为 $code"
+        val id = library.saveText(body,"shared_text",WhaleShareSource("验收资料",null)).recordIds.single()
+        val rev = CompanionMemorySuppression.digest(body)
+        val store = WorkerDashboardStore(app)
+        val owner = client.call("session/create",JSONObject()).getString("sessionId")
+        fun waitState(expected: String): JSONObject {
+            val until = android.os.SystemClock.elapsedRealtime()+150000
+            var last = ""
+            while (android.os.SystemClock.elapsedRealtime()<until) {
+                val rows = store.list().getJSONArray("items")
+                val owned = (0 until rows.length()).map(rows::getJSONObject).filter { it.optString("owner")==owner }
+                check(owned.size <= 1) { "原会话出现重复工单" }
+                val row = owned.firstOrNull()
+                last = row?.optString("state").orEmpty()
+                if (last == expected) return requireNotNull(row)
+                check(last !in setOf("completed","failed","cancelled")) { "等待 $expected 时工单已 $last" }
+                Thread.sleep(350)
+            }
+            error("等待 $expected 超时，最后状态 $last")
+        }
+        fun control(worker: String, action: String, text: String) =
+            store.command(JSONObject().put("id",worker).put("action",action).put("task",text))
+        var revoked = false
+        try {
+            client.command(owner,"/permission read-only")
+            send(client,owner,"用 mobile_workers 只创建一张 read 工单。任务是核对一份指定的验收资料，先用 mobile_worker_report waiting 请用户提供资料 ID 与版本。收到后仅调用 mobile_knowledge_read 按该 ID 和版本读取，不搜索、不读任何其他资料。如果读取权限被关闭，调用 mobile_worker_report blocked 在摘要保留原错误代码并结束；用户确认恢复授权后再读同一资料，最后 completed 报告原文口令。发完工单就结束本轮。")
+            val worker = waitState("waiting").getString("id")
+            revoked = true
+            check(prefs.edit().putBoolean("knowledge_model_access",false).commit())
+            control(worker,"reply","指定资料 ID 为 $id，revision 为 $rev。请按任务要求核对。")
+            val blocked = waitState("blocked")
+            assertEquals(worker,blocked.getString("id"))
+            assertFalse(blocked.optString("summary").contains(code))
+            assertTrue(blocked.optString("summary"),blocked.optString("summary").contains("KNOWLEDGE_MODEL_DISABLED"))
+            val page = store.page("attention",limit=100).getJSONArray("items")
+            assertTrue((0 until page.length()).map(page::getJSONObject).single { it.getString("id")==worker }.getBoolean("hasPermissionSettings"))
+            val monitor = inst.addMonitor(CompanionActivity::class.java.name,null,false)
+            try {
+                CompanionDashboard(app).execute(JSONObject().put("operation","workerBlockedSettings").put("id",worker))
+                val screen = requireNotNull(inst.waitForMonitorWithTimeout(monitor,8000))
+                try {
+                    fun views(v: android.view.View): List<android.view.View> = listOf(v) + if (v is android.view.ViewGroup)
+                        (0 until v.childCount).flatMap { views(v.getChildAt(it)) } else emptyList()
+                    inst.runOnMainSync {
+                        val toggle = views(screen.window.decorView).filterIsInstance<android.widget.Switch>()
+                            .single { it.text == "允许助手对话访问本地资料" }
+                        assertFalse(toggle.isChecked)
+                        toggle.performClick()
+                    }
+                    val deadline = android.os.SystemClock.elapsedRealtime()+8000
+                    while (!settings.knowledgeModelAccess && android.os.SystemClock.elapsedRealtime()<deadline) {
+                        inst.uiAutomation.rootInActiveWindow?.findAccessibilityNodeInfosByText("允许")
+                            ?.firstOrNull { it.text == "允许" && it.isClickable }?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                        Thread.sleep(100)
+                    }
+                    assertTrue(settings.knowledgeModelAccess)
+                } finally { inst.runOnMainSync { screen.finish() } }
+            } finally { inst.removeMonitor(monitor) }
+            revoked = false
+            control(worker,"resume","资料权限已恢复，请调用 mobile_knowledge_read 读取刚才同一 ID 和 revision，汇报口令。")
+            val done = waitState("completed")
+            assertEquals(worker,done.getString("id"))
+            assertTrue(done.getString("summary").contains(code))
+            inst.sendStatus(0,android.os.Bundle().apply { putString("permission","one worker: waiting, denied, blocked, resumed, verified fresh record") })
+        } finally {
+            if (revoked) check(prefs.edit().putBoolean("knowledge_model_access",true).commit())
+            library.remove(id,body)
+        }
+    }
+
     @Test fun dependentWorkerUsesTheAnsweredPredecessorResult() = withClient { client ->
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val session = client.call("session/create",JSONObject()).getString("sessionId")

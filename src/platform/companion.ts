@@ -9,6 +9,7 @@ export type CompanionRequest =
   | { operation: 'knowledgePickFiles' }
   | { operation: 'workerSubmit'; task: string; mode: 'read' | 'device' | 'create' }
   | { operation: 'workerPermission'; id: string; action: 'settings' | 'resume' | 'remove' }
+  | { operation: 'workerBlockedSettings'; id: string }
   | { operation: 'workerPreviewDraft'; id: string; revision: string }
   | { operation: 'workerList' | 'workerGroups' | 'screenWatchStatus' | 'screenWatchStop' }
   | { operation: 'workerPage'; filter: string; group: string; offset: number; limit: number }

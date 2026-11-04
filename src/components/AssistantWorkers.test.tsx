@@ -14,6 +14,15 @@ it('resumes the saved permission request without resubmitting its task text', as
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({operation:'workerPermission',id:'held-id',action:'resume'}))
   expect(await screen.findByText('已提交原任务')).toBeInTheDocument()
 })
+it('opens permission settings for the blocked record without resuming it', async () => {
+  bridge.companionDashboard.mockClear()
+  bridge.companionDashboard.mockImplementation(({operation}: {operation:string}) => Promise.resolve(operation === 'workerPage'
+    ? {items:[{id:'blocked-id',text:'核对口令',state:'blocked',hasPermissionSettings:true}],total:1} : {ok:true}))
+  render(<AssistantWorkers onOpenSession={vi.fn()} />)
+  fireEvent.click(await screen.findByRole('button',{name:'权限设置'}))
+  expect(bridge.companionDashboard).toHaveBeenCalledWith({operation:'workerBlockedSettings',id:'blocked-id'})
+  expect(bridge.companionDashboard).not.toHaveBeenCalledWith(expect.objectContaining({operation:'workerControl'}))
+})
 it('suspends visible settings reads without overwriting the draft when the task tab returns', async () => {
   vi.useFakeTimers()
   const interval = vi.spyOn(window, 'setInterval')

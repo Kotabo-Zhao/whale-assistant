@@ -110,7 +110,22 @@ internal class WorkerDashboardStore(private val context: Context) {
         }
         catalog().page(guestDir,submissions,queued,filter,group,offset,limit,withCounts).apply {
             if (withCounts) put("attention",optInt("attention") + held.length())
+            val items = getJSONArray("items")
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                if (WorkerAccess.settingsForReport(item) != null) item.put("hasPermissionSettings",true)
+            }
         }
+    }
+
+    fun openBlockedSettings(id: String) {
+        val page = synchronized(lock) {
+            check(!guestDir.isDirectory || workerFile(id).let { File(guestDir,it.name).isFile })
+            requireNotNull(WorkerAccess.settingsForReport(worker(id)))
+        }
+        context.startActivity(android.content.Intent(context,CompanionActivity::class.java)
+            .putExtra(CompanionActivity.OPEN_PAGE,page.name)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
     }
 
     /** Page backwards from the newest revision; even a single revision with many progress reports is bounded. */
