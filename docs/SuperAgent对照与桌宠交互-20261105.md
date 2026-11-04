@@ -28,3 +28,11 @@ DeepSeek 公开仓库说明，它是围绕单个 GitHub 仓库的研究原型，
 上游以来源、发送人、线程和当前策略决定事件如何进入工单，并在原渠道回复。鲸鱼将设置编辑和执行策略分开：手机保存渠道配置时校验读取时的版本；如果另一个窗口已修改配置，旧窗口不能覆盖发送人名单或凭据。渠道运行时一次读取一致的配置和凭据；运行时已有的策略同步、工单撤回、未发送回执处置仍由领域层负责。
 
 在 AYANEO 隔离配置与本地主机领域用例中核对并发保存、身份分离、手机追加与撤回。尚未以真实 GitHub、飞书账号验证接收、回传及撤权传播延迟。[公开原型架构](https://github.com/deepseek-ai/dsh-superagent-prototype/blob/main/docs/007-architecture.md)
+
+## 原生创造模式的第一条实机路径
+
+Harness 只读会话生成一个 Kotlin 页面。开发者审查它只处理手动输入的文字后，在电脑执行以下命令。设置 JAVA_HOME 和 ANDROID_HOME，并准备本项目 Android 离线构建依赖。
+```sh
+python scripts/build-native-feature-preview.py examples/native-checklist/Feature.kt --title 清单去重 --out build/checklist-preview
+```
+输出目录必须是新目录。脚本从受控模板编译，核对独立包名和零请求权限，并输出源码、APK 和含 SHA-256 的清单。每次构建使用新签名。新签名不能直接覆盖同包名旧安装。当前安装由开发者完成，桌宠内审核、启用、撤销、版本回滚与手机端构建仍待实现。

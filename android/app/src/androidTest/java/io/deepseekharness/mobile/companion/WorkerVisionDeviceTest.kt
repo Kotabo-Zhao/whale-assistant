@@ -297,6 +297,20 @@ class WorkerVisionDeviceTest {
                 .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", text))))
         }
     }
+    @Test fun harnessGeneratesPortableNativeScreenForReview() = withClient { client ->
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("nativeCandidate") == "true")
+        val session = client.call("session/create",JSONObject()).getString("sessionId")
+        client.command(session,"/permission read-only")
+        val reply = send(client,session,"请为鲸鱼助手生成一个原生安卓功能候选「清单去重」。只输出一个 Kotlin 代码块，无需工具调用。包名 io.deepseekharness.candidate，object Feature 提供 fun create(context: android.content.Context): android.view.View。仅用 Android SDK 和 Kotlin 标准库，以原生控件显示多行文本框（contentDescription 为 原始清单）、按钮「整理清单」、结果 TextView（contentDescription 为 整理结果）。逐行去首尾空白、跳过空行、按首次出现顺序去重，换行输出。只处理用户输入，不使用文件、网络、Intent、权限、反射或外部库。适配小屏竖屏与横屏。")
+        val code = Regex("(?s)```(?:kotlin|kt)\\s*\\n(.*?)```",RegexOption.IGNORE_CASE)
+            .find(reply.text)?.groupValues?.get(1)?.trim() ?: reply.text.trim()
+        assertTrue(code.startsWith("package io.deepseekharness.candidate"))
+        assertTrue(code.contains("object Feature") && code.contains("整理清单"))
+        val file = java.io.File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null),"whale-native-review.kt")
+        file.writeText(code + "\n")
+        InstrumentationRegistry.getInstrumentation().sendStatus(0,android.os.Bundle().apply { putString("nativeSource","generated for developer review") })
+    }
+
     @Test fun freshSessionSynthesizesConflictingGroupReports() = withClient { client ->
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = WorkerDashboardStore(context)
