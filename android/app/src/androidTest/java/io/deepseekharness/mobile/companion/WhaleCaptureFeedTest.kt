@@ -28,6 +28,42 @@ class WhaleCaptureFeedTest {
         } finally { root.deleteRecursively() }
     }
 
+    @Test fun modelSearchRecoversPreviousOriginsAndFilenamesWithLiteralExcerpts() = withLibrary { isolated ->
+        val store = CompanionKnowledgeStore(isolated)
+        val body = "评审安排在周六上午"
+        val wx = WhaleShareSource.from("com.tencent.mm",null,false)
+        val xhs = WhaleShareSource.from("com.xingin.xhs",null,false)
+        val id = store.saveText(body,"shared_text",wx).recordIds.single()
+        store.saveText(body,"shared_text",xhs)
+        store.saveText("其他平台的旅行清单","shared_text",xhs)
+        val hash = "b".repeat(64)
+        store.registerOriginal(hash,"蓝港简报.txt","text/plain",WhaleShareSource("本地文件",null))
+        val part = store.addDocument("正文只有潮汐记录",hash,"蓝港简报.txt",true).getJSONObject(0)
+        fun search(request: JSONObject) = JSONObject(CompanionKnowledgeModel.execute(true,request.toString(),store::findById,
+            exact=store::exactPage) { error("不应扫描全库") })
+        val query = JSONObject().put("query","微信").put("limit",1)
+        repeat(2) {
+            val result = search(query)
+            assertEquals("exact",result.getString("matchMode"))
+            val hit = result.getJSONArray("items").getJSONObject(0)
+            assertEquals(id,hit.getString("id"))
+            assertEquals(body,hit.getString("excerpt"))
+            assertEquals("小红书分享",hit.getString("shareOrigin"))
+            assertEquals(listOf("微信分享","小红书分享"),hit.getJSONArray("shareOriginLabels").let { a -> (0 until a.length()).map(a::getString) })
+            assertEquals(id,store.lexicalCandidates("微信",10).single().getString("id"))
+        }
+        assertEquals(0,search(JSONObject(query.toString()).put("source","original")).getJSONArray("items").length())
+        val related = search(JSONObject().put("query","微信 评审"))
+        assertEquals("related",related.getString("matchMode"))
+        assertEquals(id,related.getJSONArray("items").getJSONObject(0).getString("id"))
+        assertTrue(store.lexicalCandidates("蓝港简报",10).any { it.getString("id") == part.getString("id") })
+        val reread = search(JSONObject().put("id",id).put("query",""))
+        assertEquals(body,reread.getString("text"))
+        assertEquals(2,reread.getJSONArray("shareOriginLabels").length())
+        assertTrue(store.remove(id,body))
+        assertEquals(0,search(query).getJSONArray("items").length())
+    }
+
     @Test fun repeatIntakePaginationDeletionAndRestoreUseCurrentRows() = withLibrary { isolated ->
         val store = CompanionKnowledgeStore(isolated)
         val dashboard = CompanionDashboard(isolated)

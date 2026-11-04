@@ -22,8 +22,11 @@ internal data class WhaleShareSource(val label: String, val url: String?) {
     }
     companion object {
         fun labels(row: JSONObject): String {
-            val origins = row.optJSONArray("shareOrigins") ?: return row.optString("shareOrigin")
-            return (0 until minOf(origins.length(), 12)).mapNotNull { origins.optJSONObject(it)?.optString("label") }.distinct().joinToString(" ")
+            return allLabels(row).joinToString(" ")
+        }
+        fun allLabels(row: JSONObject): List<String> {
+            val origins = row.optJSONArray("shareOrigins") ?: return listOf(row.optString("shareOrigin")).filter(String::isNotBlank)
+            return (0 until minOf(origins.length(),12)).mapNotNull { origins.optJSONObject(it)?.optString("label")?.takeIf(String::isNotBlank) }.distinct()
         }
         private val links = Regex("""https?://[^\s<>"，。！？【】（）]+""", RegexOption.IGNORE_CASE)
         fun forPet(text: CharSequence?): WhaleShareSource {

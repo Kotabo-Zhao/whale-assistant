@@ -42,6 +42,11 @@ internal object KnowledgeTextIndex {
         db.execSQL("INSERT INTO knowledge_meta VALUES ('text_pairs_origins','1')")
     }
 
+    fun searchableText(row: JSONObject): String = row.getString("text") + "\n" + row.optString("displayName") + "\n" + WhaleShareSource.labels(row)
+
+    fun contains(row: JSONObject, query: String): Boolean = row.getString("text").contains(query,ignoreCase=true) ||
+        row.optString("displayName").contains(query,ignoreCase=true) || WhaleShareSource.labels(row).contains(query,ignoreCase=true)
+
     private fun pairs(text: String): Set<String> {
         val result = LinkedHashSet<String>()
         var previous = -1
@@ -70,7 +75,7 @@ internal object KnowledgeTextIndex {
                 // Materialize one bounded batch before modifying the table being traversed.
                 val batch = buildList { while (cursor.moveToNext()) add(cursor.getLong(0) to JSONObject(cursor.getString(1))) }
                 for ((rowId, row) in batch) {
-                    val text = row.getString("text") + "\n" + row.optString("displayName") + "\n" + WhaleShareSource.labels(row)
+                    val text = searchableText(row)
                     db.execSQL("INSERT OR REPLACE INTO knowledge_pairs(docid,tokens) VALUES (?,?)", arrayOf(rowId, pairs(text).joinToString(" ")))
                     db.execSQL("DELETE FROM knowledge_dirty WHERE rid=?", arrayOf(rowId))
                 }

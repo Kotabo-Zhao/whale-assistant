@@ -12,6 +12,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -286,6 +287,18 @@ class WhaleShareMediaDeviceTest {
             assertTrue("分享音频转写缺失", found("笔记本", "audio_transcript", hashes[1]))
             assertTrue("分享图片 OCR 缺失", found("会议", "image_ocr", hashes[0]))
             val indexed = SystemClock.elapsedRealtime()
+            fun model(request: JSONObject) = JSONObject(CompanionKnowledgeModel.execute(true,request.toString(),store::findById,
+                exact=store::exactPage) { error("查询指定原件不应扫描全库") })
+            for ((index,kind,needle) in listOf(Triple(0,"image_ocr","会议"),Triple(1,"audio_transcript","笔记本"))) {
+                val result = model(JSONObject().put("query","小红书").put("originalId",hashes[index]).put("limit",3))
+                val rows = result.getJSONArray("items")
+                val hit = (0 until rows.length()).map(rows::getJSONObject).first { it.optString("mediaKind") == kind }
+                assertEquals("exact",result.getString("matchMode"))
+                val read = model(JSONObject().put("id",hit.getString("id")).put("revision",hit.getString("revision")).put("query",""))
+                assertTrue(read.getString("text").contains(needle))
+                assertEquals(hashes[index],read.getString("originalId"))
+                assertTrue(read.getJSONArray("shareOriginLabels").toString().contains("小红书链接"))
+            }
             while (closed.get() == 0L && SystemClock.elapsedRealtime() < end) Thread.sleep(20)
             assertTrue("投放页未退出", closed.get() >= began)
             inst.sendStatus(0, android.os.Bundle().apply {

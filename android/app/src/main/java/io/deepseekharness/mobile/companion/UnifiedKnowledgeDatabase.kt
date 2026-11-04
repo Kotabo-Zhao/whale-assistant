@@ -47,7 +47,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         KnowledgeTextIndex.candidates(db, query).use { cursor ->
             while (cursor.moveToNext()) {
                 val row = JSONObject(cursor.getString(0))
-                if (!accepts(row) || !row.getString("text").contains(query, ignoreCase = true)) continue
+                if (!accepts(row) || !KnowledgeTextIndex.contains(row,query)) continue
                 count++
                 if (count <= offset) continue
                 if (items.size == limit) break
@@ -63,7 +63,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
             while (cursor.moveToNext()) {
                 val row = JSONObject(cursor.getString(0))
                 if (!accepts(row)) continue
-                CompanionMemorySearch.relatedScore(row.getString("text"), keywords)?.let { ranked.add(row.getString("id") to it) }
+                CompanionMemorySearch.relatedScore(KnowledgeTextIndex.searchableText(row), keywords)?.let { ranked.add(row.getString("id") to it) }
             }
         }
         val page = ranked.sortedByDescending { it.second }.drop(offset).take(limit).mapNotNull { findById(it.first) }
@@ -92,9 +92,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         KnowledgeTextIndex.candidates(db, normalized).use { cursor ->
             while (cursor.moveToNext()) {
                 val row = JSONObject(cursor.getString(0))
-                if (normalized.isNotEmpty() && !row.getString("text").contains(normalized, ignoreCase = true) &&
-                    !row.optString("displayName").contains(normalized, ignoreCase = true) &&
-                    !WhaleShareSource.labels(row).contains(normalized, ignoreCase = true)) continue
+                if (normalized.isNotEmpty() && !KnowledgeTextIndex.contains(row,normalized)) continue
                 if (source != null && row.optString("source") != source) continue
                 if (coverage != null && row.optString("coverage", "unknown") != coverage) continue
                 if (matched++ < offset) continue
@@ -118,7 +116,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         KnowledgeTextIndex.candidates(db, query).use { cursor ->
             while (cursor.moveToNext()) {
                 val row = JSONObject(cursor.getString(0))
-                if (row.getString("text").contains(query, ignoreCase = true)) exact.add(row)
+                if (KnowledgeTextIndex.contains(row,query)) exact.add(row)
                 if (exact.size == limit) break
             }
         }
@@ -130,13 +128,10 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         KnowledgeTextIndex.related(db, keywords).use { cursor ->
             while (cursor.moveToNext()) {
                 val row = JSONObject(cursor.getString(0))
-                val text = row.getString("text")
-                if (keywords.isNotEmpty()) {
-                    val score = CompanionMemorySearch.relatedScore(text, keywords)
-                    if (score != null) {
-                        related.add(Candidate(row, score, order))
-                        if (related.size > limit) related.poll()
-                    }
+                val score = CompanionMemorySearch.relatedScore(KnowledgeTextIndex.searchableText(row),keywords)
+                if (score != null) {
+                    related.add(Candidate(row,score,order))
+                    if (related.size > limit) related.poll()
                 }
                 order++
             }

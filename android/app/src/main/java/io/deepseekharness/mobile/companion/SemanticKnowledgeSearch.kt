@@ -71,7 +71,7 @@ internal object SemanticKnowledgeSearch {
             output.put(JSONObject().put("id", candidate.id).put("revision", CompanionMemorySuppression.digest(text))
                 .put("originalId", row.optString("originalId")).put("documentId", row.optString("documentId"))
                 .put("displayName", row.optString("displayName")).put("source", row.getString("source"))
-                .put("shareOrigin", row.optString("shareOrigin")).put("sourceUrl", row.optString("sourceUrl")).put("mediaKind", row.optString("mediaKind"))
+                .put("shareOrigin", row.optString("shareOrigin")).put("shareOriginLabels", org.json.JSONArray(WhaleShareSource.allLabels(row))).put("sourceUrl", row.optString("sourceUrl")).put("mediaKind", row.optString("mediaKind"))
                 .put("createdAtMs", row.getLong("createdAt")).put("excerpt", text.substring(start, end))
                 .put("excerptTruncated", start > 0 || end < text.length).put("parsingCoverage", row.optString("coverage", "unknown")))
         }

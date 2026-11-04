@@ -772,16 +772,16 @@ internal object CompanionMemorySearch {
         }
         return best
     }
-    fun find(rows: List<JSONObject>, query: String, offset: Int = 0): Result {
+    fun find(rows: List<JSONObject>, query: String, offset: Int = 0, searchText: (JSONObject) -> String = { it.getString("text") }): Result {
         require(offset >= 0)
         val newestFirst = rows.asReversed()
         if (query.isEmpty()) return Result(newestFirst.drop(offset).take(10), "recent", newestFirst.size)
-        val exact = newestFirst.filter { it.getString("text").contains(query, ignoreCase = true) }
+        val exact = newestFirst.filter { searchText(it).contains(query, ignoreCase = true) }
         if (exact.isNotEmpty()) return Result(exact.drop(offset).take(10), "exact", exact.size)
         val keywords = terms(query)
         if (keywords.isEmpty()) return Result(emptyList(), "none", 0)
         val matches = newestFirst.mapIndexedNotNull { index, row ->
-            val score = relatedScore(row.getString("text"), keywords)
+            val score = relatedScore(searchText(row), keywords)
             if (score == null) null else Triple(row, score, index)
         }.sortedWith(compareByDescending<Triple<JSONObject, Int, Int>> { it.second }.thenBy { it.third })
         return Result(matches.drop(offset).take(10).map { it.first }, if (matches.isEmpty()) "none" else "related", matches.size)
