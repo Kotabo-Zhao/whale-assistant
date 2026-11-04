@@ -90,7 +90,7 @@ internal class WhalePetTools(context: Context, private val resized: () -> Unit, 
     private val strip = LinearLayout(context)
     private val store = WhaleFeatureStore(context)
     private var generation = 0
-    private val change: () -> Unit = { post { if (isAttachedToWindow) refresh() }; Unit }
+    private val change: (String,String) -> Unit = { _,_ -> post { if (isAttachedToWindow) refresh() }; Unit }
     private fun dp(value: Int) = (value * resources.displayMetrics.density + .5f).toInt()
 
     init {

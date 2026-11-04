@@ -101,6 +101,56 @@ class WhaleFeatureDeviceTest {
         } finally { inst.removeMonitor(monitor) }
     }
 
+    @Test fun openPetToolReleasesReplacedRolledBackAndDisabledRevisions() {
+        val store = WhaleFeatureStore(base)
+        val id = "proof-" + UUID.randomUUID().toString().take(12)
+        val other = "$id-b"
+        val monitor = inst.addMonitor(io.deepseekharness.mobile.features.WhalePetFeatureActivity::class.java.name,null,false)
+        var window: android.app.Activity? = null
+        fun draft(key: String, title: String, previous: String = "") = store.draft(JSONObject()
+            .put("id",key).put("title",title).put("html","<output data-whale-result>$title</output>")
+            .put("baseRevision",previous)).getString("latest")
+        fun views(v: View): List<View> = listOf(v) + if (v is ViewGroup) (0 until v.childCount).flatMap { views(v.getChildAt(it)) } else emptyList()
+        fun await(check: (List<View>) -> Boolean) {
+            val until = SystemClock.elapsedRealtime()+8000
+            do {
+                var ok = false
+                inst.runOnMainSync { ok = check(views(requireNotNull(window).window.decorView)) }
+                if (ok) return
+                Thread.sleep(60)
+            } while (SystemClock.elapsedRealtime() < until)
+            fail("工具窗口状态未更新")
+        }
+        fun click(label: String) = await { it.filterIsInstance<Button>().singleOrNull { b -> b.text == label }?.performClick() == true }
+        fun closed(label: String) = await { it.none { v -> v is WebView } && it.filterIsInstance<android.widget.TextView>().any { v -> v.text == label } }
+        try {
+            val first = draft(id,"工具一")
+            store.activate(id,first,"")
+            WhaleFeatureActivity.openTool(base,id,first,pet=true)
+            window = requireNotNull(inst.waitForMonitorWithTimeout(monitor,8000))
+            lateinit var old: WebView
+            await { nodes -> nodes.filterIsInstance<WebView>().singleOrNull()?.let { old = it; true } == true }
+            val second = draft(id,"工具二",first)
+            store.activate(other,draft(other,"其他工具"),"")
+            await { nodes -> nodes.any { it === old } }
+            store.activate(id,second,first)
+            closed("工具版本已变更"); click("打开当前版本")
+            await { nodes -> nodes.any { it is WebView && it !== old } && nodes.filterIsInstance<android.widget.TextView>().any { it.text == "工具二" } }
+            store.activate(id,first,second)
+            closed("工具版本已变更"); click("打开当前版本")
+            await { nodes -> nodes.any { it is WebView } && nodes.filterIsInstance<android.widget.TextView>().any { it.text == "工具一" } }
+            store.activate(id,"",first)
+            closed("此工具已停用")
+        } finally {
+            inst.runOnMainSync { window?.finish() }
+            inst.removeMonitor(monitor)
+            for (key in listOf(id,other)) {
+                store.read(key)?.optString("active")?.takeIf(String::isNotBlank)?.let { store.activate(key,"",it) }
+                android.util.AtomicFile(File(base.noBackupFilesDir,"whale-features-v1/$key.json")).delete()
+            }
+        }
+    }
+
     @Test fun generatedToolRunsInApp() {
         val store = WhaleFeatureStore(base)
         val row = requireNotNull(store.read("whale-temperature"))

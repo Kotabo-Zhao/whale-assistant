@@ -352,7 +352,7 @@ class MobileRuntimePlugin : Plugin() {
     private val onCaptureChange: () -> Unit = {
         if (!destroying.get() && captureChangeQueued.compareAndSet(false, true)) workerEvents.postDelayed(captureChange, 120)
     }
-    private val onFeatureChange: () -> Unit = {
+    private val onFeatureChange: (String,String) -> Unit = { _,_ ->
         workerEvents.post { if (!destroying.get()) notifyListeners("featureToolsChanged", JSObject()) }
         Unit
     }

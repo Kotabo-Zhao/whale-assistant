@@ -3,7 +3,7 @@ package io.deepseekharness.mobile.features
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
+import io.deepseekharness.mobile.companion.PetUi
 import android.os.Bundle
 import android.view.Gravity
 import android.webkit.WebResourceRequest
@@ -45,33 +45,43 @@ open class WhaleFeatureActivity : Activity() {
     private var openedId: String? = null
     private var openedRevision = ""
     private var preview = false
+    private var replacement: String? = null
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val onActivation: (String,String) -> Unit = { id,active ->
+        main.post {
+            if (!isDestroyed && !isFinishing && openedId == id && !preview &&
+                (replacement != null || openedRevision != active)) showReplacement(id,active)
+        }
+    }
     private var review: android.app.AlertDialog? = null
-    private val dark get() = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
-    private val surface get() = if (dark) Color.rgb(23, 34, 47) else Color.rgb(246, 249, 252)
-    private val ink get() = if (dark) Color.rgb(234, 241, 249) else Color.rgb(32, 51, 66)
-    private val accent get() = if (dark) Color.rgb(182, 216, 255) else Color.rgb(33, 82, 132)
-    private fun rounded(color: Int, radius: Int) = android.graphics.drawable.GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
+    private val ui by lazy { PetUi(this) }
     private fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        direct = intent.hasExtra(EXTRA_ID)
+        WhaleFeatureStore.subscribe(onActivation)
+        direct = savedInstanceState?.getBoolean("direct") ?: intent.hasExtra(EXTRA_ID)
         val id = savedInstanceState?.getString("featureId") ?: intent.getStringExtra(EXTRA_ID)
         val revision = savedInstanceState?.getString("revision") ?: intent.getStringExtra(EXTRA_REVISION)
-        if (id == null || revision == null) library() else open(id, revision, savedInstanceState?.getBoolean("preview") ?: intent.getBooleanExtra("draftPreview", false))
+        if (id == null || revision == null) library()
+        else if (savedInstanceState?.containsKey("replacement") == true) {
+            openedId = id; openedRevision = revision
+            read({ store.read(id)?.optString("active").orEmpty() }) { showReplacement(id,it) }
+        } else open(id,revision,savedInstanceState?.getBoolean("preview") ?: intent.getBooleanExtra("draftPreview",false))
     }
 
     override fun onSaveInstanceState(state: Bundle) {
         super.onSaveInstanceState(state)
         state.putString("featureId", openedId); state.putString("revision", openedRevision); state.putBoolean("preview", preview)
+        state.putBoolean("direct",direct); replacement?.let { state.putString("replacement",it) }
     }
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(10), dp(16), dp(10)) }
     private fun label(value: String, size: Float) = TextView(this).apply {
-        text = value; textSize = size; setTextColor(ink); setPadding(dp(4), dp(5), dp(4), dp(5))
+        text = value; textSize = size; setTextColor(ui.ink); setPadding(dp(4), dp(5), dp(4), dp(5))
         if (size >= 18f) setTypeface(typeface, android.graphics.Typeface.BOLD)
     }
     private fun button(value: String, action: () -> Unit) = Button(this).apply {
-        text = value; isAllCaps = false; minHeight = dp(44); setTextColor(accent)
-        backgroundTintList = android.content.res.ColorStateList.valueOf(if (dark) Color.rgb(42, 63, 87) else Color.rgb(224, 237, 249))
+        text = value; isAllCaps = false; minHeight = dp(44); setTextColor(ui.accent)
+        background = ui.action(ui.soft,12)
         setOnClickListener { action() }
     }
     private fun <T> read(action: () -> T, failed: () -> Unit = {
@@ -85,15 +95,16 @@ open class WhaleFeatureActivity : Activity() {
         }
     }
     private fun releasePage() {
-        page?.let { (it.parent as? android.view.ViewGroup)?.removeView(it); it.stopLoading(); it.destroy() }
+        val previous = page
         page = null
+        previous?.let { (it.parent as? android.view.ViewGroup)?.removeView(it); it.stopLoading(); it.destroy() }
     }
     private fun library() {
         releasePage()
-        openedId = null; direct = false
+        openedId = null; replacement = null; direct = false
         val body = column()
-        setContentView(ScrollView(this).apply { addView(body); setBackgroundColor(surface) })
-        body.addView(label("功能工坊", 26f))
+        setContentView(ScrollView(this).apply { addView(body); setBackgroundColor(ui.surface) })
+        body.addView(ui.header("功能工坊",icon=io.deepseekharness.mobile.R.drawable.ic_pet_assign))
         body.addView(label("在 Harness 对话中说「为鲸鱼助手创建一个……」。生成的工具会出现在这里，可预览、启用或恢复上一版。", 15f))
         body.addView(button("刷新功能库") { library() })
         read(store::list) { items ->
@@ -101,7 +112,7 @@ open class WhaleFeatureActivity : Activity() {
             for (item in items) {
                 val id = item.getString("id")
                 val active = item.getString("active"); val latest = item.getString("latest"); val previous = item.getString("previous")
-                val card = column().apply { background = rounded(if (dark) Color.rgb(30, 45, 60) else Color.WHITE, 16) }
+                val card = column().apply { background = ui.shape(ui.canvas,16,ui.line) }
                 body.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }); card.addView(label(item.getString("title"), 20f))
                 if (active.isNotEmpty()) {
                     if (active != latest) card.addView(label("当前启用 · " + item.getString("activeTitle"), 14f))
@@ -116,7 +127,19 @@ open class WhaleFeatureActivity : Activity() {
             }
         }
     }
+    private fun showReplacement(id: String, active: String) {
+        generation++
+        review?.dismiss()
+        releasePage()
+        replacement = active
+        val body = column().apply { setBackgroundColor(ui.surface) }
+        setContentView(body)
+        body.addView(label(if (active.isEmpty()) "此工具已停用" else "工具版本已变更",20f))
+        if (active.isNotEmpty()) body.addView(button("打开当前版本") { open(id,active,false) })
+        body.addView(button(if (direct) "返回" else "返回工坊") { if (direct) finish() else library() })
+    }
     private fun open(id: String, requested: String, isPreview: Boolean) {
+        openedId = id; openedRevision = requested; preview = isPreview; replacement = null
         read({
             val row = requireNotNull(store.read(id))
             val revision = if (isPreview) requested else row.optString("active")
@@ -129,7 +152,7 @@ open class WhaleFeatureActivity : Activity() {
             openedId = id; openedRevision = version; preview = isPreview
             if (requested != version) Toast.makeText(this, "已打开当前启用的版本", Toast.LENGTH_SHORT).show()
             releasePage()
-            val body = column().apply { setBackgroundColor(surface) }
+            val body = column().apply { setBackgroundColor(ui.surface) }
             val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, dp(6)) }
             bar.addView(button(if (direct) "返回" else "返回工坊") { if (direct) finish() else library() })
             bar.addView(label(content.getString("title"), 18f).apply {
@@ -156,7 +179,7 @@ open class WhaleFeatureActivity : Activity() {
                 if (!isPreview && view === page) view.evaluateJavascript("!!document.querySelector('output[data-whale-result]')") {
                     if (view === page && it == "true") collect.visibility = android.view.View.VISIBLE
                 }
-            }, gone = { library() })
+            }, gone = { if (page === web) library() })
         }
     }
     private fun reviewResult(id: String, version: String, title: String) {
@@ -173,17 +196,17 @@ open class WhaleFeatureActivity : Activity() {
                 Toast.makeText(this, "请先生成一份不超过 $MAX_RESULT 字的结果", Toast.LENGTH_SHORT).show()
                 return@evaluateJavascript
             }
-            val editor = android.widget.EditText(this).apply {
+            val editor = ui.editor(android.widget.EditText(this)).apply {
                 setText(result); minLines = 2; maxLines = 6; gravity = Gravity.TOP
                 filters = arrayOf(android.text.InputFilter.LengthFilter(MAX_RESULT))
                 contentDescription = "要收藏的结果"
             }
             val form = column().apply { addView(label("来自「$title」，可以修改后保存。", 14f)); addView(editor) }
-            val dialog = android.app.AlertDialog.Builder(this).setTitle("存入鲸鱼资料").setView(form)
+            val dialog = ui.dialogBuilder("存入鲸鱼资料",null,io.deepseekharness.mobile.R.drawable.ic_whale_nav_memory).setView(form)
                 .setNegativeButton("取消", null).setPositiveButton("保存到资料", null).create()
             review = dialog
             dialog.setOnDismissListener { if (review === dialog) review = null }
-            dialog.show()
+            dialog.show(); ui.finishDialog(dialog,390)
             val save = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
             save.setOnClickListener {
                 val text = editor.text.toString().trim()
@@ -207,7 +230,7 @@ open class WhaleFeatureActivity : Activity() {
 
     @Deprecated("Android legacy back dispatcher")
     override fun onBackPressed() { if (page != null && !direct) library() else super.onBackPressed() }
-    override fun onDestroy() { generation++; review?.dismiss(); releasePage(); executor.shutdown(); super.onDestroy() }
+    override fun onDestroy() { WhaleFeatureStore.unsubscribe(onActivation); main.removeCallbacksAndMessages(null); generation++; review?.dismiss(); releasePage(); executor.shutdown(); super.onDestroy() }
     companion object {
         private const val EXTRA_ID = "featureId"
         private const val EXTRA_REVISION = "activeRevision"

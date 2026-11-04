@@ -120,8 +120,8 @@ class WhaleAuthoredDeviceTest {
             click(active, "收藏结果")
             waitFor("核对框没有打开") { labelled("要收藏的结果") != null }
             store.activate(feature, first, next)
-            tap("保存到资料")
-            waitFor("旧版核对框仍在等待") { labelled("要收藏的结果") == null }
+            waitFor("回滚后旧收藏窗口没有关闭") { labelled("要收藏的结果") == null && labelled("打开当前版本") != null }
+            assertNull(labelled("保存到资料"))
             assertEquals(0, knowledge.searchPage(tag,0,2).first.length())
             val shown = active
             inst.runOnMainSync { shown.finish() }

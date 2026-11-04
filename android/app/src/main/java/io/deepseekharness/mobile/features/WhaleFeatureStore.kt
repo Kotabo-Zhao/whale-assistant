@@ -86,7 +86,7 @@ internal class WhaleFeatureStore(context: Context) {
             row.put("previous", expectedActive.ifEmpty { row.optString("previous") }).put("active", target)
             row.put("activatedAt", System.currentTimeMillis())
             save(row)
-            listeners.forEach { runCatching(it) }
+            listeners.forEach { listener -> runCatching { listener(id,target) } }
         }
         summary(row)
     }
@@ -101,8 +101,8 @@ internal class WhaleFeatureStore(context: Context) {
         private val lock = Any()
         private var cachedRoot: File? = null
         private var cachedTools: List<Tool>? = null
-        private val listeners = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
-        fun subscribe(listener: () -> Unit) { listeners.add(listener) }
-        fun unsubscribe(listener: () -> Unit) { listeners.remove(listener) }
+        private val listeners = java.util.concurrent.CopyOnWriteArraySet<(String,String) -> Unit>()
+        fun subscribe(listener: (String,String) -> Unit) { listeners.add(listener) }
+        fun unsubscribe(listener: (String,String) -> Unit) { listeners.remove(listener) }
     }
 }
