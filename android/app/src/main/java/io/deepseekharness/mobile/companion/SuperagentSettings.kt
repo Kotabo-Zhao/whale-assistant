@@ -16,13 +16,15 @@ internal class SuperagentSettings(context: Context) {
         val encrypted = prefs.getString("credentials", null) ?: return JSONObject()
         return JSONObject(String(cipher.decrypt(encrypted), Charsets.UTF_8))
     }
-    fun status(): JSONObject {
+    fun status(): JSONObject = synchronized(settingsLock) {
         val secrets = credentials()
-        return JSONObject().put("config", config()).put("unapproved", JSONArray(prefs.getString("unapproved", "[]") ?: "[]")).put("diagnostics", JSONObject(prefs.getString("diagnostics", "{}") ?: "{}")).put("credentials", JSONObject().apply {
+        JSONObject().put("revision",revision()).put("config", config()).put("unapproved", JSONArray(prefs.getString("unapproved", "[]") ?: "[]")).put("diagnostics", JSONObject(prefs.getString("diagnostics", "{}") ?: "{}")).put("credentials", JSONObject().apply {
             credentialNames.forEach { put(it, secrets.optString(it).isNotBlank()) }
         })
     }
-    fun save(request: JSONObject): JSONObject {
+    private fun revision() = prefs.getString("revision","initial")
+    fun save(request: JSONObject): JSONObject = synchronized(settingsLock) {
+        if (request.getString("expectedRevision") != revision()) return@synchronized status().put("conflict",true)
         val next = request.getJSONObject("config")
         require(next.toString().length <= 32000)
         val secrets = credentials()
@@ -34,8 +36,9 @@ internal class SuperagentSettings(context: Context) {
             }
         }
         val encrypted = cipher.encrypt(secrets.toString().toByteArray(Charsets.UTF_8))
-        check(prefs.edit().putString("config", next.toString()).putString("credentials", encrypted).commit())
-        return status()
+        check(prefs.edit().putString("config", next.toString()).putString("credentials", encrypted)
+            .putString("revision",java.util.UUID.randomUUID().toString()).commit())
+        status()
     }
     fun setUnapproved(request: JSONObject) {
         val actors = request.getJSONArray("actors")
@@ -58,5 +61,6 @@ internal class SuperagentSettings(context: Context) {
         prefs.edit().putString("unapproved", nextActors).putString("diagnostics", nextDiagnostics).apply()
     }
     /** Only the token-authenticated loopback device bridge uses this result. */
-    fun runtime(): JSONObject = JSONObject().put("config", config()).put("credentials", credentials())
+    fun runtime(): JSONObject = synchronized(settingsLock) { JSONObject().put("config", config()).put("credentials", credentials()) }
+    private companion object { val settingsLock = Any() }
 }

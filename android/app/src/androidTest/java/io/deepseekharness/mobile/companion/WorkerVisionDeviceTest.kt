@@ -154,11 +154,43 @@ class WorkerVisionDeviceTest {
             assertThrows(IllegalStateException::class.java) { watch.requireOwner("session-acceptance") }
         } finally { image.recycle(); watch.stop(); watch.enabled(false) }
     }
+    @Test fun staleChannelEditorCannotRestoreRemovedSenderOrCredential() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = "policy-test-" + UUID.randomUUID()
+        val context = object : android.content.ContextWrapper(app) {
+            override fun getSharedPreferences(name: String, mode: Int) = app.getSharedPreferences(file,mode)
+        }
+        fun policy(allowed: Boolean) = JSONObject().put("github",JSONObject().put("enabled",true)
+            .put("allowedActors",if (allowed) JSONArray().put("fixture-actor") else JSONArray()))
+        fun request(rev: String, allowed: Boolean, token: String) = JSONObject().put("expectedRevision",rev)
+            .put("config",policy(allowed)).put("credentials",JSONObject().put("githubToken",token))
+        val executor = java.util.concurrent.Executors.newFixedThreadPool(2)
+        try {
+            val desk = SuperagentSettings(context)
+            val first = desk.save(request(desk.status().getString("revision"),true,"fixture-only"))
+            val revision = first.getString("revision")
+            val start = java.util.concurrent.CountDownLatch(1)
+            val saves = (0..1).map { executor.submit<JSONObject> {
+                start.await(); SuperagentSettings(context).save(request(revision,false,""))
+            } }
+            start.countDown()
+            val results = saves.map { it.get(5,java.util.concurrent.TimeUnit.SECONDS) }
+            assertEquals(1,results.count { it.optBoolean("conflict") })
+            val stale = SuperagentSettings(context).save(request(revision,true,"obsolete-fixture"))
+            assertTrue(stale.getBoolean("conflict"))
+            assertFalse(stale.getJSONObject("credentials").getBoolean("githubToken"))
+            val effective = desk.runtime()
+            assertEquals(0,effective.getJSONObject("config").getJSONObject("github").getJSONArray("allowedActors").length())
+            assertFalse(effective.getJSONObject("credentials").has("githubToken"))
+        } finally { executor.shutdownNow(); app.deleteSharedPreferences(file) }
+    }
+
     @Test fun configureSuperagentForAcceptance() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val file = java.io.File(context.filesDir, "superagent-acceptance-setup.json")
         val request = JSONObject(file.readText(Charsets.UTF_8))
-        SuperagentSettings(context).save(request)
+        val settings = SuperagentSettings(context)
+        check(!settings.save(request.put("expectedRevision",settings.status().getString("revision"))).optBoolean("conflict"))
         check(file.delete())
         assertTrue(SuperagentSettings(context).status().getJSONObject("config").getJSONObject("feishu").getBoolean("enabled"))
     }
