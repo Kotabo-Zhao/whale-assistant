@@ -27,6 +27,8 @@ enum class DiagnosticEvent {
     /** Harness 启动与停止的结果码。 */
     HARNESS_START,
     HARNESS_STOP,
+    /** Pet foreground stages: fixed phase/result codes and duration, no dialogue content. */
+    PET_REPLY_STAGE,
 
     /** 设备桥建立结果。 */
     DEVICE_BRIDGE,
