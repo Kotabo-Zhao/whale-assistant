@@ -66,7 +66,9 @@ const SETTLED_WORKER_STATES = new Set(['completed', 'failed', 'cancelled', 'inte
 /** Rows that still need the active 5 s heartbeat; exported for the tier unit test. */
 export function activeRowCount(rows) {
   let count = 0
-  for (const row of rows) if (!SETTLED_WORKER_STATES.has(row.state)) count += 1
+  for (const row of rows) {
+    if (!SETTLED_WORKER_STATES.has(row.state) && !(row.state === 'queued' && row.dependencyWait)) count += 1
+  }
   return count
 }
 // Unlimited tasks may be created; only delay new read jobs when the host is overloaded.
@@ -147,12 +149,30 @@ export class WorkerQueue {
     this.rows.set(row.id, row)
     ownerBySession.set(row.sessionId, row.owner)
   }
-  runnable() {
+  dependencyWait(row) {
+    const reasons = []
+    for (const id of row.dependsOn ?? []) {
+      const prior = this.rows.get(id)
+      if (prior?.state === 'completed') continue
+      const title = String(prior?.title || id).slice(0, 64)
+      const status = { failed: '失败，需重试', blocked: '受阻，需处理', interrupted: '中断，需确认', cancelled: '已取消',
+        waiting: '正在等回答', queued: '排队中', running: '执行中', starting: '启动中', cancelling: '正在取消' }[prior?.state]
+      reasons.push('「' + title + '」' + (status ?? (prior ? '尚未完成' : '记录缺失')))
+    }
+    return reasons.length ? '等待前置任务：' + reasons.slice(0, 3).join('、') + (reasons.length > 3 ? ' 等 ' + reasons.length + ' 项' : '') : ''
+  }
+  runnable(onChange = row => this.save(row)) {
     const active = [...this.rows.values()].filter(row => ['starting', 'running', 'cancelling'].includes(row.state))
     let screen = active.some(row => row.mode === 'device')
     return [...this.rows.values()].sort((a, b) => (b.priority || 0) - (a.priority || 0) || (a.createdAt || 0) - (b.createdAt || 0)).filter(row => {
-      if (row.state !== 'queued' || (screen && row.mode === 'device')) return false
-      if ((row.dependsOn ?? []).some(id => this.rows.get(id)?.state !== 'completed')) return false
+      if (row.state !== 'queued') return false
+      const reason = this.dependencyWait(row)
+      if (reason !== (row.dependencyWait || '')) {
+        if (reason) { row.dependencyWait = reason; row.waitReason = reason }
+        else { delete row.dependencyWait; delete row.waitReason }
+        onChange(row)
+      }
+      if (reason || (screen && row.mode === 'device')) return false
       if (row.mode === 'device') screen = true
       return true
     })
@@ -292,7 +312,7 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
     if (pumping || disposed) return
     pumping = true
     try {
-      const runnable = queue.runnable()
+      const runnable = queue.runnable(save)
       if (!runnable.length) return
       if (Date.now() - capacityCheckedAt >= 15_000) {
         capacityCheckedAt = Date.now()
@@ -326,6 +346,11 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
           ctx.permissionPresets.set(found.agent.session, permission)
           bind(found.agent)
           if (row.state === 'cancelling') { row.state = 'cancelled'; save(row); continue }
+          const dependency = queue.dependencyWait(row)
+          if (dependency) {
+            row.state = 'queued'; row.dependencyWait = dependency; row.waitReason = dependency; save(row)
+            continue
+          }
           delete row.finishedAt; delete row.endReason; delete row.toolEvidence
           row.startedAt = Date.now(); row.activeAtStart = [...queue.rows.values()].filter(item => ['running', 'starting'].includes(item.state)).length;
           traces.set(row.sessionId, { calls: new Map(), totals: {} })
@@ -521,7 +546,7 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
           const group = groups.get(row.group) ?? { group: row.group, counts: {}, tasks: [] }
           group.counts[row.state] = (group.counts[row.state] || 0) + 1
           group.tasks.push({ id: row.id, title: row.title, state: row.state, dependsOn: row.dependsOn || [],
-            summary: (row.summary || '').slice(0, 1000), question: row.question || '' })
+            summary: (row.summary || '').slice(0, 1000), question: row.question || '', waitReason: row.waitReason || '' })
           groups.set(row.group, group)
         }
         return result([...groups.values()])
@@ -534,7 +559,7 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
         }
         return result([...queue.rows.values()].filter(row => !args.group || row.group === args.group).map(row => ({ id: row.id, owner: row.owner, title: row.title,
           state: row.state, mode: row.mode, group: row.group || '', source: row.source || 'phone', dependsOn: row.dependsOn || [], priority: row.priority || 0, authorizationRevoked: !!row.authorizationRevoked, updatedAt: row.updatedAt, question: row.question || '',
-          summary: (row.summary || '').slice(0, 1000), progress: (row.progress || '').slice(0, 1000) })))
+          summary: (row.summary || '').slice(0, 1000), progress: (row.progress || '').slice(0, 1000), waitReason: row.waitReason || '' })))
       }
       if (args.action === 'start') {
         if (!args.task?.trim() || args.task.length > 16000) throw new Error('请提供具体任务，最多 16000 字')

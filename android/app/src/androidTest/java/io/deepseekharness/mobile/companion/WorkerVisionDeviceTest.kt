@@ -262,6 +262,40 @@ class WorkerVisionDeviceTest {
                 .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", text))))
         }
     }
+    @Test fun dependentWorkerUsesTheAnsweredPredecessorResult() = withClient { client ->
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val session = client.call("session/create",JSONObject()).getString("sessionId")
+        client.command(session,"/permission read-only")
+        val store = WorkerDashboardStore(context)
+        val tag = UUID.randomUUID().toString().take(8)
+        val code = "海星-" + UUID.randomUUID().toString().take(8)
+        fun rows() = store.list().getJSONArray("items").let { all -> (0 until all.length()).map(all::getJSONObject).filter { it.optString("owner") == session } }
+        send(client,session,"请调用 mobile_workers 创建两个只读工单，group 用 $tag。第一张名为“核对交接口令”，让它调用 mobile_worker_report waiting 向用户询问交接口令，收到用户回答后报告完整口令。拿到第一张返回的 id 后立刻创建第二张“汇总交接口令”，dependsOn 数组必须填第一张的真实 id，令它从前置工单完成报告摘录口令。不要等用户回答才创建第二张，不要代答，不要轮询。派完即结束本轮。")
+        var answered = false
+        val until = android.os.SystemClock.elapsedRealtime() + 240000
+        while (android.os.SystemClock.elapsedRealtime() < until) {
+            val items = rows()
+            val child = items.singleOrNull { it.optJSONArray("dependsOn")?.length() == 1 }
+            val parent = child?.let { dep -> items.singleOrNull { it.optString("id") == dep.getJSONArray("dependsOn").getString(0) } }
+            if (!answered && child != null && parent?.optString("state") == "waiting") {
+                assertEquals("queued",child.getString("state"))
+                val page = store.page("attention",group=tag).getJSONArray("items")
+                val card = (0 until page.length()).map(page::getJSONObject).single { it.getString("id") == child.getString("id") }
+                assertEquals(parent.getString("id"),card.getJSONObject("dependencyTarget").getString("id"))
+                store.command(JSONObject().put("id",parent.getString("id")).put("action","reply").put("task","本次交接口令为 $code，请在完成报告中保留完整口令。"))
+                answered = true
+            }
+            if (answered && child?.optString("state") == "completed" && parent?.optString("state") == "completed") {
+                assertTrue(child.getString("summary"),child.getString("summary").contains(code))
+                assertEquals(2,items.size)
+                InstrumentationRegistry.getInstrumentation().sendStatus(0,android.os.Bundle().apply { putString("dependency","child queued until parent received fresh code; both completed and child reported it") })
+                return@withClient
+            }
+            Thread.sleep(500)
+        }
+        error("前置与后续工单未完成；状态=" + rows().map { it.optString("state") + "/" + (it.optJSONArray("dependsOn")?.length() ?: 0) })
+    }
+
     @Test fun twoWorkersReportAndUserAnswerContinuesOnlyItsTask() = withClient { client ->
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val session = client.call("session/create", JSONObject()).getString("sessionId")

@@ -1,4 +1,4 @@
-import { WorkerTaskDetail } from './WorkerTaskDetail'
+import { WorkerDependencyDetail, WorkerTaskDetail } from './WorkerTaskDetail'
 import { useEffect, useRef, useState } from 'react'
 import { runtimeBridge } from '../platform/native'
 import { pollWhileVisible } from '../pollWhileVisible'
@@ -93,6 +93,10 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
     } catch { setMessage('未能提交，请刷新后重试。') }
     finally { setBusy(null) }
   }
+  const resumeForm = (row: CompanionRow) => row.missingLedger !== true && row.authorizationRevoked !== true &&
+    ['waiting','blocked','interrupted','failed'].includes(String(row.state)) && <label>{row.state === 'waiting' ? '你的回答' : '确认现场后的继续说明'}
+      <textarea value={answers[row.id] || ''} onChange={event => setAnswers(old => ({ ...old, [row.id]: event.target.value }))} />
+      <button type="button" disabled={busy !== null || !answers[row.id]?.trim()} onClick={() => { void control(row, row.state === 'waiting' ? 'reply' : 'resume') }}>提交并继续</button></label>
   const screenControl = async (enabled?: boolean): Promise<void> => {
     try {
       await runtimeBridge.companionDashboard(enabled === undefined ? { operation: 'screenWatchStop' } : { operation: 'screenWatchSet', enabled })
@@ -161,13 +165,12 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
         {typeof row.question === 'string' && row.question && <p>{row.question}</p>}
         {typeof row.summary === 'string' && row.summary !== '' && <p className="worker-text worker-result-preview">{row.summary}</p>}
         {row.recordUnreadable !== true && <WorkerTaskDetail row={row} />}
+        <WorkerDependencyDetail target={row.dependencyTarget} action={resumeForm} />
         {typeof row.uiError === 'string' && row.uiError && <p>{row.uiError}</p>}
         {addingTo === row.id && row.missingLedger !== true && row.authorizationRevoked !== true && ['queued', 'starting', 'running', 'completed'].includes(String(row.state)) && <label>追加任务信息（当前轮结束后处理）
           <textarea value={answers[row.id] || ''} onChange={event => setAnswers(old => ({ ...old, [row.id]: event.target.value }))} />
           <button type="button" disabled={busy !== null || !answers[row.id]?.trim()} onClick={() => { void control(row, 'add') }}>提交补充</button></label>}
-        {row.missingLedger !== true && ['waiting', 'blocked', 'interrupted', 'failed'].includes(String(row.state)) && <label>{row.state === 'waiting' ? '你的回答' : '确认现场后的继续说明'}
-          <textarea value={answers[row.id] || ''} onChange={event => setAnswers(old => ({ ...old, [row.id]: event.target.value }))} />
-          <button type="button" disabled={busy !== null || !answers[row.id]?.trim()} onClick={() => { void control(row, row.state === 'waiting' ? 'reply' : 'resume') }}>提交并继续</button></label>}
+        {resumeForm(row)}
       </div>
       <div className="assistant-task-actions">
         {row.missingLedger !== true && row.authorizationRevoked !== true && ['queued','starting','running','completed'].includes(String(row.state)) &&

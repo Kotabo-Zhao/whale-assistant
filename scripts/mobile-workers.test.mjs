@@ -30,15 +30,30 @@ test('heartbeat tier: active rows/pending deliveries 5 s, channels 15 s, idle 60
   assert.equal(heartbeatTier({ pendingDeliveries: 1 }), HEARTBEAT_ACTIVE_MS)
 })
 
-test('dependent work waits for all successful predecessors', t => {
+test('dependent work explains its blocker across restart and releases only after success', t => {
   const { queue } = fixture(t)
-  queue.save({ id: 'first', mode: 'read', state: 'running', owner: 'p', sessionId: 'first' })
+  queue.save({ id: 'first', title: '核对交接表', mode: 'read', state: 'running', owner: 'p', sessionId: 'first' })
   queue.save({ id: 'second', mode: 'read', state: 'queued', owner: 'p', sessionId: 'second', dependsOn: ['first'] })
-  assert.deepEqual(queue.runnable().map(row => row.id), [])
+  queue.save({ id: 'other', mode: 'read', state: 'queued', owner: 'p', sessionId: 'other' })
+  assert.deepEqual(queue.runnable().map(row => row.id), ['other'])
+  assert.match(queue.rows.get('second').waitReason, /核对交接表.*执行中/)
   queue.save({ ...queue.rows.get('first'), state: 'failed' })
-  assert.deepEqual(queue.runnable().map(row => row.id), [])
-  queue.save({ ...queue.rows.get('first'), state: 'completed' })
-  assert.deepEqual(queue.runnable().map(row => row.id), ['second'])
+  assert.deepEqual(queue.runnable().map(row => row.id), ['other'])
+  const copy = new WorkerQueue(queue.directory)
+  assert.match(copy.rows.get('second').waitReason, /核对交接表.*失败，需重试/)
+  assert.equal(activeRowCount([copy.rows.get('first'), copy.rows.get('second')]), 0)
+  const seq = copy.rows.get('second').writeSeq
+  copy.runnable()
+  assert.equal(copy.rows.get('second').writeSeq, seq)
+  for (const [state, label] of [['cancelled','已取消'], ['interrupted','中断'], ['queued','排队中']]) {
+    copy.save({ ...copy.rows.get('first'), state })
+    assert.ok(!copy.runnable().some(row => row.id === 'second'))
+    assert.ok(copy.rows.get('second').waitReason.includes(label))
+  }
+  copy.save({ ...copy.rows.get('first'), state: 'completed' })
+  assert.ok(copy.runnable().some(row => row.id === 'second'))
+  assert.equal(copy.rows.get('second').waitReason, undefined)
+  assert.equal(activeRowCount([copy.rows.get('second')]), 1)
 })
 
 test('load pressure delays starts without limiting task creation', () => {

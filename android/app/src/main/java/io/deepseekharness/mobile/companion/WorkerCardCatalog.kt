@@ -115,7 +115,7 @@ internal class WorkerCardCatalog(private val dir: File) {
         fun missing(id: String) = guestPresent && (files?.contains("$id.json") ?: File(guestDir,"$id.json").isFile) == false
         fun dependencyBlocked(row: Entry) = row.dependencies.any { id ->
             val parent = entries[id]
-            parent == null || missing(id) || parent.state in setOf("failed", "blocked", "cancelled")
+            parent == null || missing(id) || parent.state in DEPENDENCY_ATTENTION
         }
         var running = pendingCount; var waiting = 0; var asking = 0; var total = 0
         val items = JSONArray()
@@ -140,9 +140,24 @@ internal class WorkerCardCatalog(private val dir: File) {
             val row = card(entry.id)
             if (absent) markMissing(row)
             if (entry.dependencies.isNotEmpty()) {
-                val remaining = entry.dependencies.filter { entries[it]?.state != "completed" }
+                val remaining = entry.dependencies.filter { missing(it) || entries[it]?.state != "completed" }
                 row.put("blockedDependency", blocked).put("remainingDependencies",remaining.size)
                     .put("dependencyTitles", JSONArray(remaining.mapNotNull { entries[it]?.title }.take(10)))
+                if (entry.state == "queued" && remaining.isNotEmpty()) {
+                    val id = remaining.firstOrNull { dep -> !missing(dep) && entries[dep]?.state in DEPENDENCY_ATTENTION } ?: remaining.first()
+                    val parent = entries[id]
+                    val action = JSONObject().put("id",id).put("title",parent?.title ?: id).put("updatedAt",parent?.order ?: 0L)
+                        .put("state",if (parent == null || missing(id)) "missing" else parent.state)
+                    val label = when (action.getString("state")) {
+                        "failed" -> "失败，需重试"; "blocked" -> "受阻"; "interrupted" -> "中断，需确认"; "cancelled" -> "已取消"
+                        "waiting" -> "正在等回答"; "missing" -> "记录缺失"; "queued" -> "排队中"; else -> "正在处理"
+                    }
+                    val more = if (remaining.size > 1) "，另有 ${remaining.size - 1} 项" else ""
+                    row.put("waitReason","等待前置任务「${action.getString("title")}」· $label$more")
+                    if (action.getString("state") != "missing") row.put("dependencyTarget",action)
+                } else if (remaining.isEmpty() && row.optString("waitReason").startsWith("等待前置任务")) {
+                    row.remove("waitReason")
+                }
             }
             items.put(row)
         }
@@ -191,6 +206,7 @@ internal class WorkerCardCatalog(private val dir: File) {
         private const val MAX_HEADER = 64 * 1024
         private val RUNNING = setOf("queued","starting","running","cancelling")
         private val ATTENTION = setOf("waiting","failed","interrupted","blocked")
+        private val DEPENDENCY_ATTENTION = ATTENTION + "cancelled"
         private val OWNER_ACTIVE = setOf("queued","starting","running","waiting","blocked")
         private val fields = listOf("id","owner","title","sessionId","state","mode","group","source","priority","authorizationRevoked",
             "authoredDraft","dependsOn","writeSeq","updatedAt","createdAt","requester")

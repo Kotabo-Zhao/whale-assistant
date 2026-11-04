@@ -216,7 +216,7 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                 }
             }
             val dependencies = row.optJSONArray("dependsOn")
-            if (state == "queued" && dependencies != null && dependencies.length() > 0) {
+            if (state == "queued" && dependencies != null && row.optInt("remainingDependencies") > 0 && row.optString("waitReason").isBlank()) {
                 val titles = row.optJSONArray("dependencyTitles") ?: org.json.JSONArray()
                 val blocked = row.optBoolean("blockedDependency")
                 card.addView(TextView(context).apply {
@@ -248,6 +248,15 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                                 .onFailure { Toast.makeText(context, "草稿已变化，请刷新", Toast.LENGTH_SHORT).show() }
                         }
                     }
+                }
+            }
+            row.optJSONObject("dependencyTarget")?.let { parent ->
+                val parentId = parent.getString("id")
+                val parentTitle = parent.getString("title")
+                action("查看前置任务") { showDetail(parentId,parentTitle,0) }
+                if (expandedId == id) when (parent.getString("state")) {
+                    "waiting" -> action("回答前置任务") { input(parentId,parentTitle,"reply","回答前置任务的问题") }
+                    "failed","interrupted","blocked" -> action("继续前置任务") { input(parentId,parentTitle,"resume","确认现场后的继续说明") }
                 }
             }
             if (!missing) {

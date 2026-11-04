@@ -42,7 +42,21 @@ it('suspends visible settings reads without overwriting the draft when the task 
     expect(interval.mock.calls.some(([,delay]) => delay === 5000 || delay === 15000)).toBe(false)
   } finally { app.unmount(); interval.mockRestore(); bridge.addWorkerDashboardListener.mockReset(); vi.useRealTimers() }
 })
+it('opens the blocking predecessor from the dependent task card', async () => {
+  bridge.companionDashboard.mockImplementation((request: {operation:string; id?:string}) => Promise.resolve(
+    request.operation === 'workerPage' ? {items:[{id:'child',text:'汇总',state:'queued',waitReason:'等待前置任务「核对」· 失败，需重试',
+      dependencyTarget:{id:'parent',title:'核对',state:'failed'}}],total:1} :
+    {id:request.id,events:[],summary:'核对未完成',historyCount:0}))
+  render(<AssistantWorkers onOpenSession={vi.fn()} />)
+  fireEvent.click(await screen.findByText('查看前置任务 · 核对'))
+  expect(await screen.findByText('核对未完成')).toBeInTheDocument()
+  expect(bridge.companionDashboard).toHaveBeenCalledWith({operation:'workerDetail',id:'parent',offset:0})
+  fireEvent.change(screen.getByRole('textbox',{name:/确认现场后的继续说明/}),{target:{value:'材料已补齐'}})
+  fireEvent.click(screen.getByRole('button',{name:'提交并继续'}))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({operation:'workerControl',id:'parent',action:'resume',task:'材料已补齐'}))
+})
 it('answers only the selected worker and leaves screen capture opt-in', async () => {
+  bridge.companionDashboard.mockClear()
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerPage'
     ? { items: [{ id: 'task-one', text: '验收任务', state: 'waiting', question: '请选择颜色', sessionId: 'session-one', inputs: [{ id: 'i1', revision: 1, kind: 'request', text: '选择颜色', delivery: 'delivered', readAt: 1 }], reports: [{ revision: 1, summary: '请选择颜色' }] }] }
     : request.operation === 'workerDetail' ? { id: 'task-one', events: [{ type: 'input', id: 'i1', revision: 1, text: '选择颜色', delivery: 'delivered', readAt: 1 }], historyCount: 1 }
