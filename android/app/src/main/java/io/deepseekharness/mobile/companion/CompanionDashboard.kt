@@ -113,9 +113,12 @@ internal class CompanionDashboard(private val context: Context) {
             "knowledgeCaptureRead" -> knowledge.withParseDatabase { db ->
                 val row = db.captures.current(text("id"), request.getLong("createdAt"), request.optString("generation"))
                     ?: return@withParseDatabase JSONObject().put("missing", true)
-                val (parts, next) = db.captures.contents(row, request.optInt("offset", 0))
+                // Slot zero holds an image analysis; document chunks start at slot one.
+                val index = row.optInt("chunkIndex",0)
+                val offset = if (!request.has("offset") && index > 0) index + 1 else request.optInt("offset",0)
+                val (parts, next) = db.captures.contents(row, offset)
                 JSONObject().put("row", reviewedKnowledgeRows(JSONArray().put(row)).getJSONObject(0))
-                    .put("items", parts).put("nextOffset", next ?: JSONObject.NULL)
+                    .put("items", parts).put("offset",offset).put("nextOffset", next ?: JSONObject.NULL)
             }
             "knowledgeList" -> {
                 val rawQuery = request.opt("query")

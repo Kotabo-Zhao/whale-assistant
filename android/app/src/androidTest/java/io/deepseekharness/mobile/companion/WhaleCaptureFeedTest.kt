@@ -64,6 +64,30 @@ class WhaleCaptureFeedTest {
         assertEquals(0,search(query).getJSONArray("items").length())
     }
 
+    @Test fun openingALateTranscriptHitStartsAtItsMatchingPassage() = withLibrary { isolated ->
+        val hash = "c".repeat(64)
+        val store = CompanionKnowledgeStore(isolated)
+        val source = WhaleShareSource("本地文件",null)
+        val anchor = store.registerOriginal(hash,"交接会议.wav","audio/wav",source)
+        val parts = List(8) { i -> if (i == 7) "[13:24] 靛蓝交接日期" else "[0$i:00] 会议第${i}段" }
+        store.withParseDatabase { it.appendDocument(hash,parts,"交接会议.wav","extracted_text",true,source,"audio_transcript") }
+        val hit = store.searchPage("靛蓝交接日期",0,10).first.getJSONObject(0)
+        val dashboard = CompanionDashboard(isolated)
+        fun read(row: JSONObject,offset: Int? = null): JSONObject {
+            val req = JSONObject().put("operation","knowledgeCaptureRead").put("id",row.getString("id")).put("createdAt",row.getLong("createdAt"))
+            offset?.let { req.put("offset",it) }
+            return dashboard.execute(req)
+        }
+        val match = read(hit)
+        assertEquals(8,match.getInt("offset"))
+        assertEquals(hit.getString("id"),match.getJSONArray("items").getJSONObject(0).getString("id"))
+        assertEquals(parts.last(),match.getJSONArray("items").getJSONObject(0).getString("text"))
+        assertEquals(parts.first(),read(hit,0).getJSONArray("items").getJSONObject(0).getString("text"))
+        assertEquals(0,read(anchor).getInt("offset"))
+        store.remove(hit.getString("id"),hit.getString("text"))
+        assertTrue(read(hit).getBoolean("missing"))
+    }
+
     @Test fun repeatIntakePaginationDeletionAndRestoreUseCurrentRows() = withLibrary { isolated ->
         val store = CompanionKnowledgeStore(isolated)
         val dashboard = CompanionDashboard(isolated)

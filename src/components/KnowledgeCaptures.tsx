@@ -65,9 +65,9 @@ function Transcript({ value }: { value: string }) {
 
 export function CaptureReader({ reference, onClose, manage }: { reference: Row; onClose: () => void; manage: (row: Row) => void }) {
   const change = useCaptureUpdates()
-  const [pages, setPages] = useState([0])
+  const [pages, setPages] = useState<Array<number | undefined>>([undefined])
   const offset = pages[pages.length - 1]
-  const [result, setResult] = useState<{ row: Row; parts: Row[]; next: number | null; offset: number } | null>(null)
+  const [result, setResult] = useState<{ row: Row; parts: Row[]; next: number | null; offset?: number; start: number } | null>(null)
   const [problem, setProblem] = useState('')
   const [reload, setReload] = useState(0)
   const closeButton = useRef<HTMLButtonElement>(null)
@@ -86,7 +86,8 @@ export function CaptureReader({ reference, onClose, manage }: { reference: Row; 
       if (!live) return
       if (response.missing) { setResult(null); setProblem('这份资料已删除或替换。'); return }
       const row = companionRows([response.row])[0]
-      setResult({ row, parts: companionRows(response.items), next: typeof response.nextOffset === 'number' ? response.nextOffset : null, offset })
+      setResult({ row, parts: companionRows(response.items), next: typeof response.nextOffset === 'number' ? response.nextOffset : null,
+        offset, start: typeof response.offset === 'number' ? response.offset : 0 })
       setProblem('')
     }).catch(() => { if (live) { setResult(null); setProblem('读取未完成，可以重试。') } })
     return () => { live = false }
@@ -116,7 +117,8 @@ export function CaptureReader({ reference, onClose, manage }: { reference: Row; 
               : row.parseState === 'needs_retry' ? '本次未提取到正文，可在资料详情中重新解析。'
               : row.parseState === 'queued' || row.parseState === 'processing' ? '原件已保存。后台解析完成后，正文会显示在这里。'
                 : '这份原件还没有可阅读的文字。'}</p> : <p className="knowledge-detail-content">{row.text}</p>}
-          {(pages.length > 1 || page.next !== null) && <nav aria-label="正文分页" className="workspace-card-actions">
+          {(pages.length > 1 || page.next !== null || page.start > 0) && <nav aria-label="正文分页" className="workspace-card-actions">
+            {pages.length === 1 && page.start > 0 && <button type="button" onClick={() => setPages([0])}>从头阅读</button>}
             {pages.length > 1 && <button type="button" onClick={() => setPages(p => p.slice(0, -1))}>上一页正文</button>}
             {page.next !== null && <button type="button" onClick={() => setPages(p => [...p, page.next!])}>下一页正文</button>}
           </nav>}

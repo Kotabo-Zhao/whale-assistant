@@ -24,7 +24,7 @@ export type CompanionRequest =
   | { operation: 'taskDelete'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string }
   | { operation: 'memoryPage'; before: number; revision: number }
   | { operation: 'knowledgeRecentCaptures' }
-  | { operation: 'knowledgeCaptureRead'; id: string; createdAt: number; generation?: string; offset: number }
+  | { operation: 'knowledgeCaptureRead'; id: string; createdAt: number; generation?: string; offset?: number }
   | { operation: 'knowledgeList'; query?: string; offset?: number; source?: 'shared_text' | 'text_file' | 'original' | 'image_analysis'; coverage?: 'not_parsed' | 'partial' | 'extracted_text' | 'model_description' }
   | { operation: 'overview' | 'memorySuggestionsReset' | 'memoryResumeAutomatic' }
   | { operation: 'memoryReview'; text: string; id?: string }
