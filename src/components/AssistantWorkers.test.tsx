@@ -3,6 +3,16 @@ import { expect, it, vi } from 'vitest'
 const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn(), addWorkerDashboardListener: vi.fn() }))
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { AssistantWorkers } from './AssistantWorkers'
+it('resumes the saved permission request without resubmitting its task text', async () => {
+  bridge.companionDashboard.mockImplementation((request: {operation:string}) => Promise.resolve(request.operation === 'workerPage'
+    ? {items:[], total:0, submissions:[{commandId:'held-id',task:'交接报告',notice:'需要本地资料',held:true}]}
+    : {message:'已提交原任务'}))
+  render(<AssistantWorkers onOpenSession={vi.fn()} />)
+  expect(await screen.findByText(/待授权 · 交接报告/)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'继续原任务'}))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({operation:'workerPermission',id:'held-id',action:'resume'}))
+  expect(await screen.findByText('已提交原任务')).toBeInTheDocument()
+})
 it('answers only the selected worker and leaves screen capture opt-in', async () => {
   bridge.companionDashboard.mockImplementation((request: { operation: string }) => Promise.resolve(request.operation === 'workerPage'
     ? { items: [{ id: 'task-one', text: '验收任务', state: 'waiting', question: '请选择颜色', sessionId: 'session-one', inputs: [{ id: 'i1', revision: 1, kind: 'request', text: '选择颜色', delivery: 'delivered', readAt: 1 }], reports: [{ revision: 1, summary: '请选择颜色' }] }] }

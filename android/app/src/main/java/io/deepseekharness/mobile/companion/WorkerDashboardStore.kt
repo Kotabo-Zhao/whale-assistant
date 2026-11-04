@@ -83,7 +83,22 @@ internal class WorkerDashboardStore(private val context: Context) {
             if (limit > 0) submissions.put(JSONObject().put("task",item.optString("task").take(120))
                 .put("notice",item.optString("notice")).put("commandId",item.optString("commandId")))
         }
-        catalog().page(guestDir,submissions,queued,filter,group,offset,limit,withCounts)
+        val held = if (group.isEmpty() && filter in setOf("all", "open", "attention")) heldRequests() else JSONObject()
+        if (limit > 0 && offset == 0 && held.length() > 0) {
+            val prefs = CompanionStore(context)
+            val memory = prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled
+            val library = prefs.knowledgeModelAccess
+            val preset = prefs.bubblePermissionPreset
+            for (id in held.keys()) {
+                val row = held.getJSONObject(id)
+                val reason = WorkerAccess.denial(row.getString("mode"),row.getString("needs"),memory,library,preset)
+                submissions.put(JSONObject().put("commandId",id).put("task",row.getString("title"))
+                    .put("held",true).put("notice",reason ?: "权限已满足，可以继续原任务"))
+            }
+        }
+        catalog().page(guestDir,submissions,queued,filter,group,offset,limit,withCounts).apply {
+            if (withCounts) put("attention",optInt("attention") + held.length())
+        }
     }
 
     /** Page backwards from the newest revision; even a single revision with many progress reports is bounded. */
@@ -145,6 +160,63 @@ internal class WorkerDashboardStore(private val context: Context) {
         }
         return JSONObject().put("commandId", command.getString("commandId"))
     }
+    // This journal is outside the guest command queue, including for older runtimes.
+    private val heldFile = File(dir, "permission-requests.v1")
+    private fun heldRequests(): JSONObject {
+        if (!heldFile.exists() && !File(heldFile.path + ".bak").exists()) return JSONObject()
+        return JSONObject(AtomicFile(heldFile).openRead().bufferedReader().use { it.readText() })
+    }
+
+    fun isHeld(id: String): Boolean = synchronized(lock) { heldRequests().has(id) }
+
+    fun hold(id: String, task: String, mode: String, needs: String, title: String, reason: String): String = synchronized(lock) {
+        require(UUID.fromString(id).toString() == id && task.length in 1..2000 && mode in setOf("read","create"))
+        require(needs in setOf("none","library","memory","both"))
+        val all = heldRequests()
+        val previous = all.optJSONObject(id)
+        if (previous != null) {
+            check(previous.getString("task") == task && previous.getString("mode") == mode && previous.getString("needs") == needs)
+        } else {
+            all.put(id,JSONObject().put("task",task).put("title",title.take(120)).put("mode",mode).put("needs",needs))
+            write(heldFile,all.toString())
+            listeners.forEach { it() }
+        }
+        "「$title」已保存在后台任务中。$reason 授权后点“继续原任务”即可。"
+    }
+
+    fun heldAction(id: String, action: String, overlay: WorkerRuntimeWake? = null): JSONObject = synchronized(lock) {
+        require(UUID.fromString(id).toString() == id && action in setOf("settings","resume","remove"))
+        val all = heldRequests()
+        val row = all.optJSONObject(id) ?: return@synchronized JSONObject().put("message","此请求已处理")
+        val settings = CompanionStore(context)
+        val needs = row.getString("needs")
+        val libraryMissing = needs in setOf("library","both") && !settings.knowledgeModelAccess
+        val memoryMissing = needs in setOf("memory","both") && !(settings.bubbleMemoryAccess && CompanionMemoryStore(context).enabled)
+        val mode = row.getString("mode")
+        val reason = WorkerAccess.denial(mode, needs, !memoryMissing, !libraryMissing, settings.bubblePermissionPreset)
+        if (action == "settings") {
+            val page = when {
+                libraryMissing -> CompanionPreferencePage.LIBRARY
+                memoryMissing -> CompanionPreferencePage.MEMORY
+                mode == "create" && settings.bubblePermissionPreset == "read-only" -> CompanionPreferencePage.PET
+                needs in setOf("library","both") -> CompanionPreferencePage.LIBRARY
+                needs == "memory" -> CompanionPreferencePage.MEMORY
+                else -> CompanionPreferencePage.PET
+            }
+            context.startActivity(android.content.Intent(context,CompanionActivity::class.java).putExtra(CompanionActivity.OPEN_PAGE,page.name)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            return@synchronized JSONObject().put("message","已打开权限设置")
+        }
+        if (action == "resume") {
+            if (reason != null) return@synchronized JSONObject().put("message",reason)
+            WorkerRuntimeWake.submit(context,row.getString("task"),mode,overlay,commandId=id,title=row.getString("title"))
+        }
+        all.remove(id)
+        write(heldFile,all.toString())
+        listeners.forEach { it() }
+        JSONObject().put("message",if (action == "resume") "已提交原任务" else "已移除待授权请求")
+    }
+
     private fun enqueue(command: JSONObject): Boolean = synchronized(commandLock) {
         val items = pending()
         val id = command.getString("commandId")

@@ -76,8 +76,14 @@ class WhaleConversationalTaskTest {
 
     @Test fun revokedLibraryPermissionStopsRecoveryBeforeEnqueue() {
         val tmp = File(app.cacheDir,"pet-worker-denied-"+UUID.randomUUID()).apply { mkdirs() }
+        val prefNames = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
         try {
-            val ctx = storage(tmp); val file = CompanionBubbleHistory(ctx)
+            val ctx = object : ContextWrapper(app) {
+                override fun getApplicationContext(): Context = this
+                override fun getNoBackupFilesDir() = tmp
+                override fun getSharedPreferences(name: String, mode: Int) = app.getSharedPreferences((tmp.name + name).also { prefNames.add(it) },mode)
+            }
+            val file = CompanionBubbleHistory(ctx)
             val message = "整理我收藏的笔记"
             val req = JSONObject().put("kind","worker").put("requestId",UUID.randomUUID().toString())
                 .put("prompt",message).put("user",message).put("needs","library").put("mode","read")
@@ -85,8 +91,98 @@ class WhaleConversationalTaskTest {
             val chat = CompanionBubbleChat(ctx,file.load(),file) { _,_,_,_ -> error("must not enqueue") }
             val reply = chat.fusedReply(listOf(CompanionBubbleChat.Message("user",message)),"",false,false) {}
             assertTrue(reply.text.contains("开启对话访问")); assertNull(file.load()!!.pending)
-            assertEquals(0,WorkerDashboardStore(ctx).pending().length())
-        } finally { check(tmp.parentFile == app.cacheDir); tmp.walkBottomUp().forEach { it.delete() } }
+            val desk = WorkerDashboardStore(ctx)
+            val id = req.getString("requestId")
+            val held = desk.page("attention").getJSONArray("submissions").getJSONObject(0)
+            assertEquals(id,held.getString("commandId")); assertTrue(held.getBoolean("held"))
+            assertEquals(0,desk.batch(0).length())
+            assertTrue(desk.heldAction(id,"resume").getString("message").contains("开启对话访问"))
+            assertEquals(0,desk.pending().length())
+            val otherId = UUID.randomUUID().toString()
+            desk.submit("独立普通任务","read",otherId)
+            assertEquals(otherId,desk.batch(0).getJSONObject(0).getString("commandId"))
+            CompanionStore(ctx).knowledgeModelAccess = true
+            val reopened = WorkerDashboardStore(ctx)
+            // A crash between saving the hold and clearing the conversational checkpoint may replay the turn.
+            file.save(CompanionBubbleHistory.Snapshot("pet-direct-"+UUID.randomUUID(),"c".repeat(64),emptyList(),req.toString()))
+            val replay = CompanionBubbleChat(ctx,file.load(),file) { _,_,_,_ -> error("hold requires explicit resume") }
+            val answer = replay.fusedReply(listOf(CompanionBubbleChat.Message("user",message)),"",false,true) {}
+            assertTrue(answer.text.contains("等待确认"))
+            assertEquals(1,reopened.batch(0).length())
+            reopened.heldAction(id,"resume")
+            reopened.heldAction(id,"resume")
+            val commands = reopened.batch(0)
+            assertEquals(2,commands.length())
+            assertEquals(id,commands.getJSONObject(1).getString("commandId"))
+            assertEquals(message,commands.getJSONObject(1).getString("task"))
+            assertEquals(0,reopened.page("attention").getJSONArray("submissions").let { items ->
+                (0 until items.length()).count { items.getJSONObject(it).optBoolean("held") }
+            })
+            val cancelled = UUID.randomUUID().toString()
+            reopened.hold(cancelled,"另一项请求","create","none","未提交的草稿","需要创作权限")
+            lateinit var inbox: CompanionWorkerPanel
+            inst.runOnMainSync { inbox = CompanionWorkerPanel(ctx,{}); inbox.open() }
+            try {
+                await("桌宠未展示待授权请求的操作", 8000) {
+                    var clicked = false
+                    inst.runOnMainSync {
+                        val dialog = CompanionWorkerPanel::class.java.getDeclaredField("dialog").apply { isAccessible=true }.get(inbox) as? android.app.AlertDialog
+                        val labels = dialog?.window?.decorView?.let { views(it).filterIsInstance<TextView>().toList() }.orEmpty()
+                        if (labels.any { it.text.contains("未提交的草稿") } && labels.any { it.text == "权限设置" } && labels.any { it.text == "继续原任务" })
+                            clicked = labels.singleOrNull { it.text == "移除" }?.performClick() == true
+                    }
+                    clicked
+                }
+                await("移除后的请求仍出现在后台任务") {
+                    val items = reopened.page("attention").getJSONArray("submissions")
+                    (0 until items.length()).none { items.getJSONObject(it).optString("commandId") == cancelled }
+                }
+            } finally { inst.runOnMainSync { inbox.destroy() } }
+            reopened.heldAction(cancelled,"resume")
+            assertEquals(2,reopened.batch(0).length())
+            inst.sendStatus(0,Bundle().apply { putString("permission","held locally across reopen, unrelated command accepted, grant resumed original ID exactly once; removed request not executed") })
+        } finally { prefNames.forEach { app.deleteSharedPreferences(it) }; check(tmp.parentFile == app.cacheDir); tmp.walkBottomUp().forEach { it.delete() } }
+    }
+
+    /** Run twice with one fixture UUID in separate instrumentation processes. No device-wide grant is changed. */
+    @Test fun permissionRequestSurvivesAProcessBoundary() {
+        val args = InstrumentationRegistry.getArguments()
+        org.junit.Assume.assumeTrue("Needs an isolated two-process fixture", args.containsKey("fixtureId"))
+        val id = UUID.fromString(args.getString("fixtureId")).toString()
+        val dir = File(app.cacheDir, "permission-process-$id")
+        val ctx = object : ContextWrapper(app) {
+            override fun getApplicationContext(): Context = this
+            override fun getNoBackupFilesDir() = dir
+            override fun getSharedPreferences(name: String, mode: Int) = app.getSharedPreferences("$id-$name",mode)
+        }
+        val pid = android.os.Process.myPid()
+        val marker = File(dir,"first.pid")
+        val task = "为本次测试整理一份报告"
+        if (args.getString("phase") == "save") {
+            check(dir.mkdirs())
+            val desk = WorkerDashboardStore(ctx)
+            desk.hold(id,task,"read","library","测试报告","需要资料授权")
+            assertEquals(0,desk.batch(0).length())
+            marker.writeText(pid.toString())
+        } else {
+            check(args.getString("phase") == "resume")
+            assertNotEquals(marker.readText().toInt(),pid)
+            val desk = WorkerDashboardStore(ctx)
+            assertTrue(desk.isHeld(id))
+            assertTrue(desk.heldAction(id,"resume").getString("message").contains("开启对话访问"))
+            assertEquals(0,desk.batch(0).length())
+            CompanionStore(ctx).knowledgeModelAccess = true
+            desk.heldAction(id,"resume"); desk.heldAction(id,"resume")
+            assertFalse(desk.isHeld(id))
+            val commands = desk.batch(0)
+            assertEquals(1,commands.length()); assertEquals(id,commands.getJSONObject(0).getString("commandId"))
+            assertEquals(task,commands.getJSONObject(0).getString("task"))
+            check(dir.parentFile == app.cacheDir); dir.walkBottomUp().forEach { it.delete() }
+            for (file in File(app.applicationInfo.dataDir,"shared_prefs").listFiles().orEmpty()) {
+                if (file.name.startsWith("$id-") && file.extension == "xml") app.deleteSharedPreferences(file.nameWithoutExtension)
+            }
+        }
+        inst.sendStatus(0,Bundle().apply { putString("phase",args.getString("phase")); putInt("process",pid); putString("commandId",id) })
     }
 
     @Test fun establishedHarnessSessionChoosesDelegationForAnIndependentDeliverable() {

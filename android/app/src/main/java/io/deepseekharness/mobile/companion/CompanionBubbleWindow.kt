@@ -96,9 +96,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 val prefs = CompanionStore(context)
                 val denial = chat.deniedBackground(mode, decision.needs,
                     prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled, prefs.knowledgeModelAccess)
-                if (denial != null) { receipt = denial; return@runCatching }
                 val title = decision.title(item.text)
                 val id = java.util.UUID.randomUUID().toString()
+                if (denial != null) {
+                    receipt = WorkerDashboardStore(context).hold(id,item.text,mode,decision.needs,title,denial)
+                    return@runCatching
+                }
                 // An uncertain acknowledgement must not send the same instruction to a second router.
                 receipt = "「$title」的接取状态尚未确认，请在后台任务中核对。"
                 if (dispatchTask(item.text, mode, id, title).getString("commandId") == id)

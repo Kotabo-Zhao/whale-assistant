@@ -15,7 +15,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
   const [task, setTask] = useState('')
   const [mode, setMode] = useState<'read' | 'create' | 'device'>('read')
   const [submitting, setSubmitting] = useState(false)
-  const [pending, setPending] = useState<string[]>([])
+  const [pending, setPending] = useState<{id: string; task: string; notice: string; held: boolean}[]>([])
   const [group, setGroup] = useState('')
   const [offset, setOffset] = useState(0)
   const [total, setTotal] = useState(0)
@@ -50,7 +50,8 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
           setRows(items); setTotal(count); setListState('ready')
           const submissions: unknown[] = Array.isArray(tasks.submissions) ? tasks.submissions : []
           setPending(submissions.flatMap(row => row && typeof row === 'object' && 'task' in row && typeof row.task === 'string'
-            ? [row.task + ('notice' in row && typeof row.notice === 'string' ? ' · ' + row.notice : '')] : []))
+            ? [{id: 'commandId' in row && typeof row.commandId === 'string' ? row.commandId : row.task,
+              task: row.task, notice: 'notice' in row && typeof row.notice === 'string' ? row.notice : '', held: 'held' in row && row.held === true}] : []))
           if (groupsOpen) {
             const result = await runtimeBridge.companionDashboard({ operation: 'workerGroups' })
             if (active && Array.isArray(result.groups)) setGroups(result.groups.filter((v): v is string => typeof v === 'string'))
@@ -122,7 +123,16 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
       {mode === 'create' && <small>后台生成独立草稿，完成后可从任务卡预览和启用。</small>}
       <button type="submit" disabled={submitting || !task.trim()}>交办</button>
     </form>}
-    {pending.map((text, i) => <p key={i}>等待接取 · {text}</p>)}
+    {pending.map(row => <div key={row.id} className="worker-card">
+      <p>{row.held ? '待授权' : '等待接取'} · {row.task}{row.notice && ' · ' + row.notice}</p>
+      {row.held && <div className="assistant-task-actions">{(['settings', 'resume', 'remove'] as const).map((action,i) =>
+        <button key={action} type="button" disabled={busy !== null} onClick={() => {
+          setBusy(row.id)
+          void runtimeBridge.companionDashboard({operation:'workerPermission',id:row.id,action})
+            .then(result => { setMessage(String(result.message)); setRevision(v => v + 1) })
+            .catch(() => setMessage('未能处理，请重试')).finally(() => setBusy(null))
+        }}>{['权限设置','继续原任务','移除'][i]}</button>)}</div>}
+    </div>)}
     {message && <p role="status">{message}</p>}
     <div className="worker-catalog-controls">
       <label>任务状态<select value={filter} onChange={event => { setFilter(event.target.value); setOffset(0) }}>

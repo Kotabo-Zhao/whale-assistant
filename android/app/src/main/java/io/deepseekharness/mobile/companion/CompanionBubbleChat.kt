@@ -221,12 +221,8 @@ internal class CompanionBubbleChat(
         sessionScope = CompanionBubbleChatPolicy.memoryDigest("pet-direct")
     }
 
-    internal fun deniedBackground(mode: String, needs: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean): String? = when {
-        needs in setOf("library","both") && !knowledgeAllowed -> "这项工作需要访问本地资料。请先在资料设置中开启对话访问。"
-        needs in setOf("memory","both") && !memoryAllowed -> "这项工作需要访问长期记忆。请先开启桌宠的记忆访问。"
-        mode == "create" && CompanionStore(context).bubblePermissionPreset == "read-only" -> "桌宠会话当前设为仅查看。要生成工具草稿，需要先调整桌宠会话权限。"
-        else -> null
-    }
+    internal fun deniedBackground(mode: String, needs: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean): String? =
+        WorkerAccess.denial(mode, needs, memoryAllowed, knowledgeAllowed, CompanionStore(context).bubblePermissionPreset)
 
     /** The same saved request ID is used after a process restart or an uncertain acknowledgement. */
     private fun sendPendingWorker(history: List<Message>, memoryAllowed: Boolean, knowledgeAllowed: Boolean): Reply {
@@ -237,15 +233,21 @@ internal class CompanionBubbleChat(
         val needs = request.getString("needs"); require(needs in setOf("none","library","memory","both"))
         val store = historyStore
         store.save(requireNotNull(snapshot(history.dropLast(1).takeLast(18))), requireWritable = true)
-        val denied = deniedBackground(mode, needs, memoryAllowed, knowledgeAllowed)
-        val answer = if (denied != null) "$denied 请在「后台任务」核对之前的交办。"
-            else {
-                val id = request.getString("requestId")
-                val title = request.optString("title").ifBlank { user.take(42) }
+        val prefs = CompanionStore(context)
+        val denied = deniedBackground(mode, needs, memoryAllowed && prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled,
+            knowledgeAllowed && prefs.knowledgeModelAccess)
+        val desk = WorkerDashboardStore(context)
+        val id = request.getString("requestId")
+        val title = request.optString("title").ifBlank { user.take(42) }
+        val answer = when {
+            denied != null -> desk.hold(id,request.getString("prompt"),mode,needs,title,denied)
+            desk.isHeld(id) -> "「$title」正在后台任务中等待确认，请点“继续原任务”。"
+            else -> {
                 check(dispatchTask(request.getString("prompt"), mode, id, title).getString("commandId") == id)
                 if (mode == "create") "「$title」已交给后台制作工具草稿。可以继续聊，草稿准备好后能在「后台任务」预览。"
                 else "「$title」已交给后台处理。可以继续聊，进展和结果都在「后台任务」里。"
             }
+        }
         val finished = requireNotNull(snapshot((history + Message("assistant", answer)).takeLast(18))).copy(pending = null)
         store.save(finished, requireWritable = true); pending = null
         return Reply(answer, emptyList(), emptyList())
@@ -273,14 +275,11 @@ internal class CompanionBubbleChat(
         var delegated: Reply? = null
         val result = PetDirectChat(context).reply(CompanionPersonaStore(context).active(), history, onPartial, background = { decision ->
             val mode = if (decision.intent == PetIntentRouter.Intent.BACKGROUND_CREATE) "create" else "read"
-            val denied = deniedBackground(mode, decision.needs, memoryAllowed, knowledgeAllowed)
-            if (denied != null) denied else {
-                directSession()
-                pending = JSONObject().put("kind","worker").put("requestId",java.util.UUID.randomUUID().toString())
-                    .put("mode",mode).put("needs",decision.needs).put("user",history.last().text)
-                    .put("title",decision.title(history.last().text)).put("prompt",decision.workerTask(history.last().text))
-                sendPendingWorker(history, memoryAllowed, knowledgeAllowed).also { delegated = it }.text
-            }
+            directSession()
+            pending = JSONObject().put("kind","worker").put("requestId",java.util.UUID.randomUUID().toString())
+                .put("mode",mode).put("needs",decision.needs).put("user",history.last().text)
+                .put("title",decision.title(history.last().text)).put("prompt",decision.workerTask(history.last().text))
+            sendPendingWorker(history, memoryAllowed, knowledgeAllowed).also { delegated = it }.text
         }) { _, knowledgeQuery ->
             if (knowledgeQuery && !knowledgeAllowed) "本地资料访问尚未授权，请先在桌宠资料设置中开启；尚未检索资料。"
             else harness().also { delegated = it }.text

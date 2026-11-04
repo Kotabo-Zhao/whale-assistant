@@ -143,10 +143,37 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
         val ui = inboxUi ?: return
         container.removeAllViews()
         val shown = rows
-        submissions.forEach { pending -> container.addView(TextView(context).apply {
-            text = "等待接取 · ${pending.optString("task").take(90)}\n${pending.optString("notice")}"
-            setTextColor(ui.muted); setPadding(dp(8), dp(8), dp(8), dp(8))
-        }) }
+        submissions.forEach { pending ->
+            val held = pending.optBoolean("held")
+            val state = if (held) "待授权" else "等待接取"
+            container.addView(TextView(context).apply {
+                text = "$state · ${pending.optString("task").take(90)}\n${pending.optString("notice")}"
+                setTextColor(ui.muted); setPadding(dp(8), dp(8), dp(8), dp(8))
+            })
+            if (held) {
+                val actions = LinearLayout(context)
+                for ((label, action) in listOf("权限设置" to "settings", "继续原任务" to "resume", "移除" to "remove")) {
+                    actions.addView(Button(context).apply {
+                        text = label; textSize = 13f
+                        setOnClickListener {
+                            isEnabled = false
+                            executor.execute {
+                                val result = runCatching { store.heldAction(pending.getString("commandId"),action,runtime).optString("message") }
+                                handler.post {
+                                    if (!disposed) {
+                                        isEnabled = true
+                                        if (action == "settings" && result.isSuccess) dialog?.dismiss()
+                                        Toast.makeText(context,result.getOrDefault("未能处理，请重试"),Toast.LENGTH_SHORT).show()
+                                        schedule()
+                                    }
+                                }
+                            }
+                        }
+                    })
+                }
+                container.addView(actions)
+            }
+        }
         if (shown.isEmpty() && submissions.isEmpty()) {
             container.addView(TextView(context).apply { text = if (showAll) "暂无后台任务" else "没有进行中或待处理的任务"; setTextColor(ui.muted); setPadding(dp(8), dp(20), dp(8), dp(20)) })
             return
