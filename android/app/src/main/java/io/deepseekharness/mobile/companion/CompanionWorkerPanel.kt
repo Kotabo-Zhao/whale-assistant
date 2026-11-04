@@ -408,8 +408,8 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
             }
         }
     }
-    fun submit(task: String, mode: String, id: String = java.util.UUID.randomUUID().toString(), title: String? = null) =
-        WorkerRuntimeWake.submit(context, task, mode, runtime, id, title)
+    fun submit(task: String, mode: String, id: String = java.util.UUID.randomUUID().toString(), title: String? = null, needs: String = "none") =
+        WorkerRuntimeWake.submit(context, task, mode, runtime, id, title, needs)
 
     fun compose() {
         if (disposed || editDialog != null) return

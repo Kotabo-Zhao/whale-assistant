@@ -46,13 +46,13 @@ class WhaleConversationalTaskTest {
             CompanionBubbleChat(app,historyStore=history).preserveDirectInput(emptyList(),user)
             val checkpoint = requireNotNull(history.load())
             val id = JSONObject(requireNotNull(checkpoint.pending)).getString("requestId")
-            val first = CompanionBubbleChat(app,checkpoint,history) { task,mode,key,title ->
-                assertEquals(id,key); desk.submit(task,mode,key,title); error("simulated lost acknowledgement")
+            val first = CompanionBubbleChat(app,checkpoint,history) { task,mode,key,title,needs ->
+                assertEquals(id,key); desk.submit(task,mode,key,title,needs); error("simulated lost acknowledgement")
             }
             assertThrows(IllegalStateException::class.java) { first.fusedReply(turn,"a".repeat(64),false,false) {} }
             val parked = requireNotNull(history.load())
             assertEquals("worker",JSONObject(requireNotNull(parked.pending)).getString("kind"))
-            val resumed = CompanionBubbleChat(app,parked,history) { task,mode,key,title -> desk.submit(task,mode,key,title) }
+            val resumed = CompanionBubbleChat(app,parked,history) { task,mode,key,title,needs -> desk.submit(task,mode,key,title,needs) }
             resumed.fusedReply(turn,"a".repeat(64),false,false) {}
             assertEquals(1,desk.pending().length())
             assertEquals(id,desk.pending().getJSONObject(0).getString("commandId"))
@@ -70,13 +70,13 @@ class WhaleConversationalTaskTest {
             .put("prompt",text).put("needs","none").put("mode","read")
         try {
             history.save(CompanionBubbleHistory.Snapshot("pet-direct-"+UUID.randomUUID(),"a".repeat(64), emptyList(),request.toString()))
-            val interrupted = CompanionBubbleChat(ctx,history.load(),history) { task, mode, key, title ->
-                store.submit(task,mode,key,title); error("simulated lost acknowledgement")
+            val interrupted = CompanionBubbleChat(ctx,history.load(),history) { task, mode, key, title, needs ->
+                store.submit(task,mode,key,title,needs); error("simulated lost acknowledgement")
             }
             assertThrows(IllegalStateException::class.java) { interrupted.fusedReply(turn,"a".repeat(64),false,false) {} }
             val restored = requireNotNull(history.load())
             assertEquals(id,JSONObject(requireNotNull(restored.pending)).getString("requestId"))
-            val recovered = CompanionBubbleChat(ctx,restored,history) { task, mode, key, title -> store.submit(task,mode,key,title) }
+            val recovered = CompanionBubbleChat(ctx,restored,history) { task, mode, key, title, needs -> store.submit(task,mode,key,title,needs) }
             val reply = recovered.fusedReply(turn,"a".repeat(64),false,false) {}
             assertTrue(reply.text.contains("已交给后台")); assertEquals(1,store.pending().length())
             assertEquals(id,store.pending().getJSONObject(0).getString("commandId"))
@@ -113,7 +113,7 @@ class WhaleConversationalTaskTest {
             val req = JSONObject().put("kind","worker").put("requestId",UUID.randomUUID().toString())
                 .put("prompt",message).put("user",message).put("needs","library").put("mode","read")
             file.save(CompanionBubbleHistory.Snapshot("pet-direct-"+UUID.randomUUID(),"c".repeat(64),emptyList(),req.toString()))
-            val chat = CompanionBubbleChat(ctx,file.load(),file) { _,_,_,_ -> error("must not enqueue") }
+            val chat = CompanionBubbleChat(ctx,file.load(),file) { _,_,_,_,_ -> error("must not enqueue") }
             val reply = chat.fusedReply(listOf(CompanionBubbleChat.Message("user",message)),"",false,false) {}
             assertTrue(reply.text.contains("开启对话访问")); assertNull(file.load()!!.pending)
             val desk = WorkerDashboardStore(ctx)
@@ -130,7 +130,7 @@ class WhaleConversationalTaskTest {
             val reopened = WorkerDashboardStore(ctx)
             // A crash between saving the hold and clearing the conversational checkpoint may replay the turn.
             file.save(CompanionBubbleHistory.Snapshot("pet-direct-"+UUID.randomUUID(),"c".repeat(64),emptyList(),req.toString()))
-            val replay = CompanionBubbleChat(ctx,file.load(),file) { _,_,_,_ -> error("hold requires explicit resume") }
+            val replay = CompanionBubbleChat(ctx,file.load(),file) { _,_,_,_,_ -> error("hold requires explicit resume") }
             val answer = replay.fusedReply(listOf(CompanionBubbleChat.Message("user",message)),"",false,true) {}
             assertTrue(answer.text.contains("等待确认"))
             assertEquals(1,reopened.batch(0).length())
@@ -170,6 +170,51 @@ class WhaleConversationalTaskTest {
     }
 
     /** Run twice with one fixture UUID in separate instrumentation processes. No device-wide grant is changed. */
+    @Test fun pickupRechecksRevokedAccessWithoutBlockingIndependentCommands() {
+        val root = File(app.cacheDir,"pickup-permission-"+UUID.randomUUID()).apply { check(mkdirs()) }
+        val names = mutableSetOf<String>()
+        val ctx = object : ContextWrapper(app) {
+            override fun getApplicationContext(): Context = this
+            override fun getNoBackupFilesDir() = root
+            override fun getSharedPreferences(name: String,mode: Int) = app.getSharedPreferences((root.name+name).also { names.add(it) },mode)
+        }
+        try {
+            val settings = CompanionStore(ctx)
+            val desk = WorkerDashboardStore(ctx)
+            settings.knowledgeModelAccess = true
+            val id = UUID.randomUUID().toString()
+            desk.submit("检索我的排期","read",id,"排期","library")
+            val independent = desk.submit("总结随消息提供的文字","read").getString("commandId")
+            settings.knowledgeModelAccess = false
+            val ready = desk.batch(0)
+            assertEquals(1,ready.length())
+            assertEquals(independent,ready.getJSONObject(0).getString("commandId"))
+            assertTrue(desk.isHeld(id))
+            assertTrue(desk.heldAction(id,"resume").getString("message").contains("开启对话访问"))
+            settings.knowledgeModelAccess = true
+            val restarted = WorkerDashboardStore(ctx)
+            assertEquals(1,restarted.batch(0).length())
+            restarted.heldAction(id,"resume")
+            restarted.heldAction(id,"resume")
+            val resumed = restarted.batch(0)
+            assertEquals(2,resumed.length())
+            assertEquals(id,resumed.getJSONObject(1).getString("commandId"))
+            assertEquals("library",resumed.getJSONObject(1).getString("needs"))
+            settings.knowledgeModelAccess = false
+            assertEquals(1,restarted.batch(0).length())
+            // Emulate an interrupted queue rewrite. Removal must clear only this same pending ID.
+            restarted.submit("检索我的排期","read",id,"排期","library")
+            restarted.heldAction(id,"remove")
+            settings.knowledgeModelAccess = true
+            assertEquals(independent,restarted.batch(0).getJSONObject(0).getString("commandId"))
+            assertEquals(1,restarted.pending().length())
+            assertFalse(restarted.isHeld(id))
+        } finally {
+            names.forEach(app::deleteSharedPreferences)
+            root.deleteRecursively()
+        }
+    }
+
     @Test fun permissionRequestSurvivesAProcessBoundary() {
         val args = InstrumentationRegistry.getArguments()
         org.junit.Assume.assumeTrue("Needs an isolated two-process fixture", args.containsKey("fixtureId"))
@@ -186,8 +231,11 @@ class WhaleConversationalTaskTest {
         if (args.getString("phase") == "save") {
             check(dir.mkdirs())
             val desk = WorkerDashboardStore(ctx)
-            desk.hold(id,task,"read","library","测试报告","需要资料授权")
+            CompanionStore(ctx).knowledgeModelAccess = true
+            desk.submit(task,"read",id,"测试报告","library")
+            CompanionStore(ctx).knowledgeModelAccess = false
             assertEquals(0,desk.batch(0).length())
+            assertTrue(desk.isHeld(id))
             marker.writeText(pid.toString())
         } else {
             check(args.getString("phase") == "resume")

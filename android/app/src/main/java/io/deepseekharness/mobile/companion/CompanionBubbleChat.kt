@@ -114,8 +114,8 @@ internal data class Delivery(val turn: Int, val text: String)
 internal class CompanionBubbleChat(
     private val context: Context, restored: CompanionBubbleHistory.Snapshot? = null,
     private val historyStore: CompanionBubbleHistory = CompanionBubbleHistory(context),
-    private val dispatchTask: (String, String, String, String) -> JSONObject = { task, mode, id, title ->
-        WorkerRuntimeWake.submit(context, task, mode, commandId = id, title = title)
+    private val dispatchTask: (String, String, String, String, String) -> JSONObject = { task, mode, id, title, needs ->
+        WorkerRuntimeWake.submit(context, task, mode, commandId = id, title = title, needs = needs)
     },
 ) {
     data class Citation(val id: String, val revision: String, val displayName: String, val documentId: String?, val originalId: String?, val chunkIndex: Int, val chunkCount: Int, val parsingCoverage: String)
@@ -254,7 +254,7 @@ internal class CompanionBubbleChat(
             denied != null -> desk.hold(id,request.getString("prompt"),mode,needs,title,denied)
             desk.isHeld(id) -> "「$title」正在后台任务中等待确认，请点“继续原任务”。"
             else -> {
-                check(dispatchTask(request.getString("prompt"), mode, id, title).getString("commandId") == id)
+                check(dispatchTask(request.getString("prompt"), mode, id, title, needs).getString("commandId") == id)
                 if (mode == "create") "「$title」已交给后台制作工具草稿。可以继续聊，草稿准备好后能在「后台任务」预览。"
                 else "「$title」已交给后台处理。可以继续聊，进展和结果都在「后台任务」里。"
             }

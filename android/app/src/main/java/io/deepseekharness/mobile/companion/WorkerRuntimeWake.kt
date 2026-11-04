@@ -30,11 +30,11 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                 RuntimeHost.startHarness(controller)
             }
         }
-        fun submit(context: Context, task: String, mode: String, overlay: WorkerRuntimeWake? = null, commandId: String = java.util.UUID.randomUUID().toString(), title: String? = null): org.json.JSONObject {
+        fun submit(context: Context, task: String, mode: String, overlay: WorkerRuntimeWake? = null, commandId: String = java.util.UUID.randomUUID().toString(), title: String? = null, needs: String = "none"): org.json.JSONObject {
             val store = WorkerDashboardStore(context)
             // Desktop and app submissions share the more restrictive pet memory permission.
             BubbleSessionRegistry(context).record("session-whale-task-desk")
-            val receipt = store.submit(task, mode, commandId, title)
+            val receipt = store.submit(task, mode, commandId, title, needs)
             executor.execute {
                 runCatching {
                     if (overlay != null) overlay.wake() else start(checkNotNull(RuntimeHost.controllerOrNull()))

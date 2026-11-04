@@ -159,12 +159,12 @@ internal class WorkerDashboardStore(private val context: Context) {
             }
         })
     }
-    fun submit(task: String, mode: String, commandId: String = UUID.randomUUID().toString(), title: String? = null): JSONObject {
+    fun submit(task: String, mode: String, commandId: String = UUID.randomUUID().toString(), title: String? = null, needs: String = "none"): JSONObject {
         val text = task.trim()
         require(text.isNotEmpty() && text.length <= 2000 && mode in setOf("read", "device", "create"))
-        require(UUID.fromString(commandId).toString() == commandId)
+        require(UUID.fromString(commandId).toString() == commandId && needs in setOf("none","library","memory","both"))
         val command = JSONObject().put("commandId", commandId).put("action", "start")
-            .put("task", text).put("mode", mode).put("createdAt", System.currentTimeMillis())
+            .put("task", text).put("mode", mode).put("needs",needs).put("createdAt", System.currentTimeMillis())
             .apply { title?.takeIf(String::isNotBlank)?.let { put("title", it.take(120)) } }
         if (enqueue(command)) {
             acceptedListeners.forEach { it() }
@@ -221,7 +221,15 @@ internal class WorkerDashboardStore(private val context: Context) {
         }
         if (action == "resume") {
             if (reason != null) return@synchronized JSONObject().put("message",reason)
-            WorkerRuntimeWake.submit(context,row.getString("task"),mode,overlay,commandId=id,title=row.getString("title"))
+            WorkerRuntimeWake.submit(context,row.getString("task"),mode,overlay,commandId=id,title=row.getString("title"),needs=needs)
+        } else synchronized(commandLock) {
+            // Recovery after interruption between parking a request and removing its queue entry.
+            val commands = pending()
+            val index = (0 until commands.length()).firstOrNull { commands.getJSONObject(it).optString("commandId") == id }
+            if (index != null) {
+                commands.remove(index)
+                write(File(dir,"commands.json"),commands.toString())
+            }
         }
         all.remove(id)
         write(heldFile,all.toString())
@@ -236,6 +244,11 @@ internal class WorkerDashboardStore(private val context: Context) {
         if (existing != null) {
             check(existing.optString("action") == command.optString("action") &&
                 existing.optString("task") == command.optString("task") && existing.optString("mode") == command.optString("mode"))
+            if (existing.has("needs")) check(existing.getString("needs") == command.optString("needs","none"))
+            else if (command.optString("needs","none") != "none") {
+                existing.put("needs",command.getString("needs"))
+                write(File(dir,"commands.json"),items.toString())
+            }
             return@synchronized false
         }
         write(File(dir, "commands.json"), items.put(command).toString())
@@ -279,11 +292,37 @@ internal class WorkerDashboardStore(private val context: Context) {
         try { JSONArray(file.openRead().bufferedReader().use { it.readText() }) }
         catch (_: java.io.FileNotFoundException) { JSONArray() }
     }
-    fun batch(skip: Int): JSONArray = synchronized(lock) {
+    fun batch(skip: Int): JSONArray = synchronized(lock) { synchronized(commandLock) {
         require(skip >= 0)
         val all = pending()
-        JSONArray().apply { for (i in skip.coerceAtMost(all.length()) until minOf(all.length().toLong(), skip.toLong() + 4).toInt()) put(all.getJSONObject(i)) }
-    }
+        val ready = JSONArray()
+        var index = skip.coerceAtMost(all.length())
+        var changed = false
+        while (index < all.length() && ready.length() < 4) {
+            val cmd = all.getJSONObject(index)
+            val mode = cmd.optString("mode")
+            val needs = cmd.optString("needs","none")
+            if (cmd.optString("action") == "start" && (mode == "create" || needs != "none")) {
+                val settings = CompanionStore(context)
+                val reason = WorkerAccess.denial(mode,needs,settings.bubbleMemoryAccess && CompanionMemoryStore(context).enabled,
+                    settings.knowledgeModelAccess,settings.bubblePermissionPreset)
+                val id = cmd.getString("commandId")
+                if (reason != null || isHeld(id)) {
+                    if (reason != null) hold(id,cmd.getString("task"),mode,needs,cmd.optString("title",cmd.getString("task")),reason)
+                    all.remove(index)
+                    changed = true
+                    continue
+                }
+            }
+            ready.put(cmd)
+            index++
+        }
+        if (changed) {
+            write(File(dir,"commands.json"),all.toString())
+            listeners.forEach { it() }
+        }
+        ready
+    } }
     private fun workerFile(id: String): File {
         require(UUID.fromString(id).toString() == id)
         return File(dir, "$id.json")

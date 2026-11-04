@@ -78,7 +78,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     val visible: Boolean get() = root != null
 
     fun toggle() { if (visible) hide() else show() }
-    private fun dispatchTask(task: String, mode: String, id: String, title: String): org.json.JSONObject = workerPanel.submit(task, mode, id, title)
+    private fun dispatchTask(task: String, mode: String, id: String, title: String, needs: String): org.json.JSONObject = workerPanel.submit(task, mode, id, title, needs)
     fun composeTask() { if (!closed) workerPanel.compose() }
     fun openTaskInbox() { if (!closed) workerPanel.open() }
     fun refreshWorkerStatus() { workerPanel.refreshStatus() }
@@ -113,7 +113,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     return@runCatching
                 }
                 // An uncertain acknowledgement must not send the same instruction to a second router.
-                if (dispatchTask(item.text, mode, id, title).getString("commandId") == id)
+                if (dispatchTask(item.text, mode, id, title, decision.needs).getString("commandId") == id)
                     receipt = "「$title」已交给后台处理，进度可在后台任务中查看。"
             }.onFailure { android.util.Log.d("whale-intake", "intake unavailable: ${it.javaClass.simpleName}") }
             if (receipt != null) runCatching { journal.advance(item.id,"handoff",receipt.orEmpty()) }
