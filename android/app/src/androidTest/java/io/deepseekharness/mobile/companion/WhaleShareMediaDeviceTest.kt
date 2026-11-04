@@ -111,6 +111,47 @@ class WhaleShareMediaDeviceTest {
         }
     }
 
+    @Test fun richShareRetainsSubjectLinkAndAttachment() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val tag = UUID.randomUUID().toString()
+        val title = "灯塔资料 $tag"
+        val body = "查看交接记录"
+        val url = "https://www.xiaohongshu.com/explore/$tag"
+        val html = "<a href='$url'>$body</a><a href='file:///private'>本地标记</a>"
+        val content = "交接文件 $tag"
+        val hash = MessageDigest.getInstance("SHA-256").digest(content.toByteArray()).joinToString("") { "%02x".format(it) }
+        val uri = requireNotNull(app.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME,"whale-rich-$tag.txt"); put(MediaStore.MediaColumns.MIME_TYPE,"text/plain")
+        }))
+        val store = CompanionKnowledgeStore(app)
+        try {
+            requireNotNull(app.contentResolver.openOutputStream(uri)).use { it.write(content.toByteArray()) }
+            val message = Intent(app, WhaleMemoryShareActivity::class.java).apply {
+                action = Intent.ACTION_SEND; type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT,title); putExtra(Intent.EXTRA_TEXT,body); putExtra(Intent.EXTRA_HTML_TEXT,html)
+                putExtra(Intent.EXTRA_STREAM,uri); clipData = ClipData.newHtmlText("摘录",body,html)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            app.startActivity(message)
+            val until = SystemClock.elapsedRealtime()+20_000
+            while (store.originalInfo(hash) == null && SystemClock.elapsedRealtime()<until) Thread.sleep(100)
+            val note = store.searchPage(title,0,4).first.let { rows ->
+                (0 until rows.length()).map(rows::getJSONObject).single { it.getString("text").startsWith(title) }
+            }
+            assertEquals(listOf(title,body,url).joinToString("\n"),note.getString("text"))
+            assertEquals(url,note.getString("sourceUrl"))
+            assertEquals("小红书链接",note.getString("shareOrigin"))
+            assertEquals("微信分享 · 小红书链接",WhaleShareSource.from("com.tencent.mm",note.getString("text"),true).label)
+            assertEquals(hash,store.attachmentPage(note.getString("id"),note.getString("text"),0,10).first.getJSONObject(0).getString("originalId"))
+        } finally {
+            store.originalInfo(hash)?.let { store.removeOriginal(hash,it.getString("id"),it.getString("text")) }
+            val rows = store.searchPage(title,0,4).first
+            (0 until rows.length()).map(rows::getJSONObject).filter { it.optString("text").startsWith(title) }
+                .forEach { store.remove(it.getString("id"),it.getString("text")) }
+            app.contentResolver.delete(uri,null,null)
+        }
+    }
+
     @Test fun pickedFileKeepsBothItsOriginalAndThePetNote() {
         val inst = InstrumentationRegistry.getInstrumentation()
         val app = inst.targetContext

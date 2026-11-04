@@ -59,11 +59,11 @@ open class WhaleMemoryShareActivity : Activity() {
         val clipItems = if (data != null) (0 until data.itemCount).map(data::getItemAt) else emptyList()
         val uris = (multiple + listOfNotNull(single) + clipItems.mapNotNull { it.uri })
             .filterNot { it.scheme in setOf("http", "https") }.distinct()
-        val note = runCatching { WhaleSharedText.fromShare(intent, clipItems, multiple + listOfNotNull(single)) }
-        val sharedText = note.getOrNull()
         val pkg = referrer?.takeIf { it.scheme == "android-app" }?.host
-        importSelection(uris, sharedText, WhaleShareSource.from(pkg, sharedText, uris.isNotEmpty()), intent.type,
-            textRejected = note.isFailure)
+        val share = intent
+        importPayload(uris, share.type, source = { WhaleShareSource.from(pkg,it,uris.isNotEmpty()) }) {
+            WhaleSharedText.fromShare(share, clipItems, multiple + listOfNotNull(single))
+        }
     }
 
     @Deprecated("Activity result is delivered by the system document picker")
@@ -77,13 +77,20 @@ open class WhaleMemoryShareActivity : Activity() {
         importSelection(uris, note, origin, null)
     }
 
-    internal fun importSelection(uris: List<Uri>, sharedText: CharSequence?, origin: WhaleShareSource, mime: String?, textRejected: Boolean = false, release: () -> Unit = {}) {
+    internal fun importSelection(uris: List<Uri>, sharedText: CharSequence?, origin: WhaleShareSource, mime: String?) =
+        importPayload(uris,mime,source = { origin }) { sharedText }
+
+    internal fun importPayload(uris: List<Uri>, mime: String?, release: () -> Unit = {},
+        source: (CharSequence?) -> WhaleShareSource, readText: () -> CharSequence?) {
         val app = applicationContext
         executor.execute {
             val result = runCatching {
                 require(uris.size <= 10) { "一次最多选择 10 个文件" }
                 val results = mutableListOf<String>()
-                if (textRejected) results.add("分享文字过长或格式无效，文字未保存")
+                val note = runCatching(readText)
+                val sharedText = note.getOrNull()
+                val origin = source(sharedText)
+                if (note.isFailure) results.add("分享文字过长或格式无效，文字未保存")
                 var captionIds = emptyList<String>()
                 if (!sharedText.isNullOrBlank()) results += runCatching {
                     val text = requireNotNull(WhaleSharedText.accept(Intent.ACTION_SEND, "text/plain", sharedText))
@@ -131,9 +138,16 @@ internal object WhaleSharedText {
         return value.toString()
     }
 
-    fun fromShare(intent: Intent, items: List<android.content.ClipData.Item>, streams: List<Uri>): String? {
+    fun fromShare(intent: Intent?, items: List<android.content.ClipData.Item>, streams: List<Uri>): String? {
         val parts = linkedSetOf<String>()
+        val targets = linkedSetOf<String>()
         var length = 0L
+        fun links(value: CharSequence?) {
+            if (value !is android.text.Spanned) return
+            value.getSpans(0,value.length,android.text.style.URLSpan::class.java).forEach { span ->
+                span.url?.takeIf(WhaleShareSource::webUrl)?.let(targets::add)
+            }
+        }
         fun add(value: CharSequence?) {
             if (value.isNullOrBlank()) return
             require(value.length <= CompanionKnowledgeData.MAX_DOCUMENT_TEXT)
@@ -143,23 +157,35 @@ internal object WhaleSharedText {
                 require(length <= CompanionKnowledgeData.MAX_DOCUMENT_TEXT && '\u0000' !in text)
             }
         }
-        fun html(value: String?) {
+        fun html(value: String?, includeBody: Boolean) {
             if (!value.isNullOrBlank()) {
                 require(value.length <= CompanionKnowledgeData.MAX_DOCUMENT_TEXT)
-                add(android.text.Html.fromHtml(value, android.text.Html.FROM_HTML_MODE_LEGACY).trimEnd())
+                val rich = android.text.Html.fromHtml(value, android.text.Html.FROM_HTML_MODE_LEGACY)
+                if (includeBody) add(rich.toString().trimEnd())
+                links(rich)
             }
         }
         @Suppress("DEPRECATION")
-        when (val extra = intent.extras?.get(Intent.EXTRA_TEXT)) {
-            is CharSequence -> add(extra)
-            is ArrayList<*> -> { require(extra.size <= 10); extra.forEach { add(it as? CharSequence) } }
+        when (val extra = intent?.extras?.get(Intent.EXTRA_TEXT)) {
+            is CharSequence -> { add(extra); links(extra) }
+            is ArrayList<*> -> { require(extra.size <= 10); extra.filterIsInstance<CharSequence>().forEach { add(it); links(it) } }
         }
-        if (parts.isEmpty()) html(intent.getStringExtra(Intent.EXTRA_HTML_TEXT))
+        html(intent?.getStringExtra(Intent.EXTRA_HTML_TEXT),parts.isEmpty())
         for (item in items) {
-            if (!item.text.isNullOrBlank()) add(item.text) else html(item.htmlText)
+            add(item.text); links(item.text)
+            html(item.htmlText,item.text.isNullOrBlank())
             if (item.uri?.scheme in setOf("http", "https")) add(item.uri.toString())
         }
         for (uri in streams) if (uri.scheme in setOf("http", "https")) add(uri.toString())
+        if (targets.isNotEmpty()) {
+            parts.forEach { WhaleShareSource.visibleUrls(it).forEach(targets::remove) }
+            targets.forEach(::add)
+        }
+        val subject = intent?.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString()?.takeIf(String::isNotBlank)
+        if (subject != null && parts.none { it.lineSequence().firstOrNull() == subject }) {
+            add(subject)
+            return (listOf(subject) + parts.filterNot { it == subject }).joinToString("\n")
+        }
         return parts.takeIf { it.isNotEmpty() }?.joinToString("\n")
     }
 

@@ -6,7 +6,6 @@ import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.service.quicksettings.TileService
 import android.view.DragEvent
@@ -54,25 +53,12 @@ class WhaleDirectCaptureActivity : WhaleMemoryShareActivity() {
         if (clip == null || clip.itemCount !in 1..10) {
             release(); Toast.makeText(this, "没有可投放的内容，或一次超过 10 项。", Toast.LENGTH_SHORT).show(); finish(); return
         }
-        val files = linkedSetOf<Uri>()
-        val text = mutableListOf<String>()
-        var characters = 0L
-        for (i in 0 until clip.itemCount) {
-            val item = clip.getItemAt(i)
-            val uri = item.uri
-            if (uri?.scheme == "content") files.add(uri)
-            val part = item.text?.toString()?.takeIf(String::isNotBlank)
-                ?: item.htmlText?.let { android.text.Html.fromHtml(it, android.text.Html.FROM_HTML_MODE_LEGACY).toString() }
-            if (!part.isNullOrBlank()) { text.add(part); characters += part.length }
-            if (uri?.scheme in setOf("http", "https") && uri.toString() != part) { text.add(uri.toString()); characters += uri.toString().length }
-        }
-        if (characters + maxOf(0, text.size - 1) > CompanionKnowledgeData.MAX_DOCUMENT_TEXT || (files.isEmpty() && text.isEmpty())) {
-            release(); Toast.makeText(this, "无法投放这项内容，可使用来源应用的系统分享。", Toast.LENGTH_LONG).show(); finish(); return
-        }
-        val note = text.joinToString("\n")
-        val inferred = WhaleShareSource.from(null, note, false)
-        val origin = if (inferred.label == "系统分享") inferred.copy(label = source) else inferred
-        importSelection(files.toList(), note, origin, clip.description.getMimeType(0), release = release)
+        val items = (0 until clip.itemCount).map(clip::getItemAt)
+        val files = items.mapNotNull { it.uri?.takeIf { uri -> uri.scheme == "content" } }.distinct()
+        importPayload(files,clip.description.getMimeType(0),release,source = { text ->
+            val inferred = WhaleShareSource.from(null,text,false)
+            if (inferred.label == "系统分享") inferred.copy(label = source) else inferred
+        }) { WhaleSharedText.fromShare(null,items,emptyList()) }
     }
 
     companion object {
