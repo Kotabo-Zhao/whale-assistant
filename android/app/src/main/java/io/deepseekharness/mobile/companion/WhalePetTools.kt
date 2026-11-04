@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import io.deepseekharness.mobile.features.WhaleFeatureActivity
 import io.deepseekharness.mobile.features.WhaleFeatureStore
+import io.deepseekharness.mobile.features.NativeFeatureRegistry
 import io.deepseekharness.mobile.features.loadWhaleTool
 import android.webkit.WebView
 import java.util.concurrent.Executors
@@ -67,7 +68,7 @@ internal class WhalePetToolShelf(context: Context, private val resized: () -> Un
     init {
         val ui = PetUi(context)
         orientation = VERTICAL
-        addView(WhalePetTools(context, resized, ::openTool) { tools ->
+        addView(WhalePetTools(context, resized, ::openTool, launched) { tools ->
             if (selection != null && tools.none { it.id == selection?.id && it.revision == selection?.revision }) closeTool()
         })
         addView(inline)
@@ -85,9 +86,14 @@ internal class WhalePetToolShelf(context: Context, private val resized: () -> Un
 
 /** Read published metadata off the UI thread while the shelf is attached. */
 internal class WhalePetTools(context: Context, private val resized: () -> Unit, private val open: (WhaleFeatureStore.Tool) -> Unit,
+    private val launched: () -> Unit,
     private val onList: (List<WhaleFeatureStore.Tool>) -> Unit) : HorizontalScrollView(context) {
     private val ui = PetUi(context)
     private val strip = LinearLayout(context)
+    private val native = NativeFeatureRegistry(context)
+    private val nativeChanged = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        post { if (isAttachedToWindow) refresh() }
+    }
     private val store = WhaleFeatureStore(context)
     private var generation = 0
     private val change: (String,String) -> Unit = { _,_ -> post { if (isAttachedToWindow) refresh() }; Unit }
@@ -102,12 +108,14 @@ internal class WhalePetTools(context: Context, private val resized: () -> Unit, 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         WhaleFeatureStore.subscribe(change)
+        native.prefs.registerOnSharedPreferenceChangeListener(nativeChanged)
         refresh()
     }
 
     override fun onDetachedFromWindow() {
         generation++
         WhaleFeatureStore.unsubscribe(change)
+        native.prefs.unregisterOnSharedPreferenceChangeListener(nativeChanged)
         super.onDetachedFromWindow()
     }
 
@@ -115,6 +123,7 @@ internal class WhalePetTools(context: Context, private val resized: () -> Unit, 
         val current = ++generation
         reader.execute {
             val tools = runCatching { store.activeTools() }.getOrDefault(emptyList())
+            val candidates = native.entries().filter(native::active)
             post {
                 if (!isAttachedToWindow || generation != current) return@post
                 onList(tools)
@@ -133,7 +142,25 @@ internal class WhalePetTools(context: Context, private val resized: () -> Unit, 
                         }
                     }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6); bottomMargin = dp(3) })
                 }
-                visibility = if (tools.isEmpty()) View.GONE else View.VISIBLE
+                candidates.forEach { entry ->
+                    strip.addView(TextView(context).apply {
+                        text = entry.title; contentDescription = "打开原生工具 · " + entry.title
+                        textSize = 13f; gravity = Gravity.CENTER; minHeight = dp(48)
+                        setPadding(dp(12),0,dp(12),0); maxWidth = dp(168); maxLines = 1
+                        ellipsize = TextUtils.TruncateAt.END; setTextColor(ui.accent)
+                        background = ui.action(ui.soft,12); isFocusable = true
+                        setOnClickListener {
+                            reader.execute {
+                                runCatching { native.openFromPet(entry) }.onSuccess {
+                                    post { if (isAttachedToWindow) launched() }
+                                }.onFailure {
+                                    post { android.widget.Toast.makeText(context,"原生功能已停用或安装包已变更",android.widget.Toast.LENGTH_SHORT).show() }
+                                }
+                            }
+                        }
+                    }, LinearLayout.LayoutParams(-2,-2).apply { marginStart = dp(6); bottomMargin = dp(3) })
+                }
+                visibility = if (tools.isEmpty() && candidates.isEmpty()) View.GONE else View.VISIBLE
                 resized()
             }
         }

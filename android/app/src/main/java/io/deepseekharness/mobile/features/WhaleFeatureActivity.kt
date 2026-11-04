@@ -40,6 +40,7 @@ internal fun WebView.loadWhaleTool(id: String, html: String, preview: Boolean = 
 /** Independently authored local tools run outside the Capacitor management WebView. */
 open class WhaleFeatureActivity : Activity() {
     private val store by lazy { WhaleFeatureStore(this) }
+    private val native by lazy { NativeFeatureRegistry(this) }
     private val taskRuntime by lazy { WorkerRuntimeWake(applicationContext) }
     private val executor = Executors.newSingleThreadExecutor()
     private var page: WebView? = null
@@ -110,8 +111,25 @@ open class WhaleFeatureActivity : Activity() {
         body.addView(ui.header("功能工坊",icon=io.deepseekharness.mobile.R.drawable.ic_pet_assign))
         body.addView(label("在 Harness 对话中说「为鲸鱼助手创建一个……」。生成的工具会出现在这里，可预览、启用或恢复上一版。", 15f))
         body.addView(button("刷新功能库") { library() })
-        read(store::list) { items ->
-            if (items.isEmpty()) body.addView(label("还没有自建功能", 18f))
+        body.addView(button("导入原生功能清单") {
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), 441)
+        })
+        read({ store.list() to native.entries() }) { (items, candidates) ->
+            if (items.isEmpty() && candidates.isEmpty()) body.addView(label("还没有自建功能", 18f))
+            candidates.forEach { entry ->
+                val expected = native.prefs.getString("active." + entry.id, null)
+                val enabled = expected == entry.revision
+                val card = column().apply { background = ui.shape(ui.canvas,16,ui.line) }
+                body.addView(card, LinearLayout.LayoutParams(-1,-2).apply { topMargin = dp(12) })
+                card.addView(label(entry.title,20f))
+                card.addView(label("原生窗口 · " + entry.revision.take(8) + if (enabled) " · 已启用" else "",14f))
+                card.addView(button("预览原生窗口") { read({ native.verify(entry) }) { intent ->
+                    runCatching { startActivity(intent) }.onFailure { Toast.makeText(this,"无法打开原生窗口",Toast.LENGTH_SHORT).show() }
+                } })
+                card.addView(button(if (enabled) "移出桌宠" else "启用到桌宠") {
+                    read({ native.select(entry,expected,!enabled) }) { library() }
+                })
+            }
             for (item in items) {
                 val id = item.getString("id")
                 val active = item.getString("active"); val latest = item.getString("latest"); val previous = item.getString("previous")
@@ -130,6 +148,27 @@ open class WhaleFeatureActivity : Activity() {
             }
         }
     }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode,resultCode,data)
+        if (requestCode != 441 || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        read({
+            require(uri.scheme == "content")
+            val bytes = ByteArray(8193)
+            val count = requireNotNull(contentResolver.openInputStream(uri)).use { stream ->
+                var used = 0
+                while (used < bytes.size) {
+                    val n = stream.read(bytes, used, bytes.size - used)
+                    if (n <= 0) break
+                    used += n
+                }
+                used
+            }
+            require(count in 1..8192)
+            native.import(String(bytes,0,count,Charsets.UTF_8))
+        }, failed = { Toast.makeText(this,"请先安装已审查的候选 APK，再选择与它匹配的 preview.json。",Toast.LENGTH_LONG).show() }) { library() }
+    }
+
     private fun showReplacement(id: String, active: String) {
         generation++
         review?.dismiss()

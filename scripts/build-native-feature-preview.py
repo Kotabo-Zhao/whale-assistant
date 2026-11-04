@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,12 +21,15 @@ def put(root, relative, text):
     path.write_text(text, encoding="utf-8")
 
 
-def build(source, title, out):
+def build(source, title, out, feature_id=None):
     data = source.read_bytes()
     if not 0 < len(data) <= 96 * 1024 or not 0 < len(title.strip()) <= 50:
         raise ValueError("功能源码或标题长度无效")
     code = data.decode("utf-8-sig").replace("\r\n", "\n")
-    revision = hashlib.sha256((CONTRACT + "\0" + title + "\0" + code).encode()).hexdigest()
+    if feature_id is not None and not re.fullmatch(r"[a-z][a-z0-9-]{0,47}", feature_id):
+        raise ValueError("功能 ID 须为小写字母开头的短标识")
+    identity = CONTRACT if feature_id is None else CONTRACT + "\0" + feature_id
+    revision = hashlib.sha256((identity + "\0" + title + "\0" + code).encode()).hexdigest()
     package = NAMESPACE + ".f" + revision[:24]
     android = Path(os.environ["ANDROID_HOME"])
     java = Path(os.environ["JAVA_HOME"])
@@ -93,6 +97,8 @@ class PreviewActivity : Activity() {
         data = apk.read_bytes()
         metadata = dict(contract=CONTRACT, title=title, revision=revision, package=package,
                         activity=NAMESPACE + ".PreviewActivity", apkSha256=hashlib.sha256(data).hexdigest())
+        if feature_id is not None:
+            metadata["featureId"] = feature_id
         (out / "preview.apk").write_bytes(data)
         put(out, "preview.json", json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
     print(out / "preview.json")
@@ -102,6 +108,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument("--title", required=True)
+    parser.add_argument("--id", help="稳定功能 ID，用于在桌宠中替换或恢复同一功能的版本")
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
-    build(args.source, args.title, args.out)
+    build(args.source, args.title, args.out, args.id)
