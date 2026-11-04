@@ -51,6 +51,7 @@ class NativeShelfDeviceTest {
         var cleaned = false
         val studio = inst.startActivitySync(Intent(app,WhaleFeatureActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         try {
+            until("没有展开工坊设置") { click(named("工坊设置")) }
             until("没有打开文档选择器入口") { click(named("导入原生功能清单")) }
             until("系统文件选择器未打开") { ui.rootInActiveWindow?.packageName == "com.android.documentsui" }
             if (named(filename) == null) {
@@ -106,7 +107,10 @@ class NativeShelfDeviceTest {
                 inst.runOnMainSync {
                     val card = views(studio.window.decorView).filterIsInstance<TextView>()
                         .firstOrNull { it.text == entry.title }?.parent as? ViewGroup
-                    clicked = card?.let(::views)?.filterIsInstance<TextView>()?.firstOrNull { it.text == title }?.performClick() == true
+                    val nodes = card?.let(::views).orEmpty().filterIsInstance<TextView>()
+                    val target = nodes.firstOrNull { it.text == title }
+                    if (target != null && !target.isShown) nodes.firstOrNull { it.text == "管理" }?.performClick()
+                    clicked = target?.takeIf { it.isShown }?.performClick() == true
                 }
                 clicked
             }

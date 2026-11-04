@@ -181,9 +181,11 @@ class WhaleFeatureDeviceTest {
             assertTrue("工坊界面操作超时", success)
         }
         fun click(label: String) = waitFor {
-            children(activity.window.decorView).filterIsInstance<Button>().firstOrNull { button ->
-                button.text == label && children(button.parent as View).filterIsInstance<android.widget.TextView>().any { it.text == title }
-            }?.performClick() == true
+            val card = children(activity.window.decorView).filterIsInstance<android.widget.TextView>().firstOrNull { it.text == title }?.parent as? View
+            val nodes = card?.let(::children).orEmpty()
+            val target = nodes.filterIsInstance<Button>().firstOrNull { it.text == label }
+            if (target != null && !target.isShown) nodes.filterIsInstance<Button>().firstOrNull { it.text == "管理" }?.performClick()
+            target?.takeIf { it.isShown }?.performClick() == true
         }
         fun evaluate(script: String): String {
             lateinit var web: WebView

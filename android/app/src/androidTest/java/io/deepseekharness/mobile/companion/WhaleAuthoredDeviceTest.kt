@@ -57,9 +57,14 @@ class WhaleAuthoredDeviceTest {
     private fun click(activity: WhaleFeatureActivity, label: String, card: String? = null) {
         waitFor("找不到 $label") {
             var hit = false
-            inst.runOnMainSync { hit = views(activity.window.decorView).filterIsInstance<Button>().firstOrNull { b ->
-                b.isShown && b.text == label && (card == null || views(b.parent as View).filterIsInstance<TextView>().any { it.text == card })
-            }?.performClick() == true }
+            inst.runOnMainSync {
+                val scope = if (card == null) activity.window.decorView else
+                    views(activity.window.decorView).filterIsInstance<TextView>().firstOrNull { it.text == card }?.parent as? View
+                val nodes = scope?.let(::views).orEmpty()
+                val target = nodes.filterIsInstance<Button>().firstOrNull { it.text == label }
+                if (target != null && !target.isShown) nodes.filterIsInstance<Button>().firstOrNull { it.text == "管理" }?.performClick()
+                hit = target?.takeIf { it.isShown }?.performClick() == true
+            }
             hit
         }
     }

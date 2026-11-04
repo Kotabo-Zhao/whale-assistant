@@ -84,9 +84,45 @@ open class WhaleFeatureActivity : Activity() {
         if (size >= 18f) setTypeface(typeface, android.graphics.Typeface.BOLD)
     }
     private fun button(value: String, action: () -> Unit) = Button(this).apply {
-        text = value; isAllCaps = false; minHeight = dp(44); setTextColor(ui.accent)
+        text = value; isAllCaps = false; minHeight = dp(48); setTextColor(ui.accent)
+        stateListAnimator = null; elevation = 0f
+        layoutParams = LinearLayout.LayoutParams(-1,-2).apply { topMargin = dp(6) }
         background = ui.action(ui.soft,12)
         setOnClickListener { action() }
+    }
+    /** Keep maintenance controls available without competing with the tool's primary action. */
+    private fun management(parent: LinearLayout, title: String = "管理"): LinearLayout {
+        val details = column().apply { visibility = android.view.View.GONE }
+        val toggle = button(title) {
+            val expanded = details.visibility != android.view.View.VISIBLE
+            details.visibility = if (expanded) android.view.View.VISIBLE else android.view.View.GONE
+            androidx.core.view.ViewCompat.setStateDescription(parent.findViewWithTag("management-toggle"),
+                if (expanded) "已展开" else "已收起")
+        }.apply {
+            tag = "management-toggle"
+            background = ui.action(ui.surface,12)
+            layoutParams = LinearLayout.LayoutParams(-2,-2).apply { gravity = Gravity.END; topMargin = dp(4) }
+        }
+        androidx.core.view.ViewCompat.setStateDescription(toggle,"已收起")
+        parent.addView(toggle)
+        parent.addView(details)
+        return details
+    }
+    private fun screen(content: android.view.View) {
+        val frame = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(ui.surface)
+            addView(content,android.widget.FrameLayout.LayoutParams(-1,-1))
+        }
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(frame) { view,insets ->
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(bars.left,bars.top,bars.right,bars.bottom)
+            insets
+        }
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false)
+        setContentView(frame)
+        io.deepseekharness.mobile.AppThemePreference.applySafely(this,ui.surface)
+        androidx.core.view.ViewCompat.requestApplyInsets(frame)
     }
     private fun <T> read(action: () -> T, failed: () -> Unit = {
         Toast.makeText(this, "无法读取或更新功能，请刷新后重试", Toast.LENGTH_LONG).show()
@@ -107,37 +143,50 @@ open class WhaleFeatureActivity : Activity() {
         releasePage()
         openedId = null; replacement = null; direct = false
         val body = column()
-        setContentView(ScrollView(this).apply { addView(body); setBackgroundColor(ui.surface) })
+        screen(ScrollView(this).apply { addView(body); setBackgroundColor(ui.surface) })
         body.addView(ui.header("功能工坊",icon=io.deepseekharness.mobile.R.drawable.ic_pet_assign))
-        body.addView(label("在 Harness 对话中说「为鲸鱼助手创建一个……」。生成的工具会出现在这里，可预览、启用或恢复上一版。", 15f))
-        body.addView(button("刷新功能库") { library() })
-        body.addView(button("导入原生功能清单") {
+        body.addView(label("告诉桌宠你想做什么小工具，完成后在这里预览，喜欢再启用。", 15f))
+        val maintenance = management(body,"工坊设置")
+        maintenance.addView(button("刷新功能库") { library() })
+        maintenance.addView(button("导入原生功能清单") {
             startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), 441)
         })
         read({ store.list() to native.entries() }) { (items, candidates) ->
             if (items.isEmpty() && candidates.isEmpty()) body.addView(label("还没有自建功能", 18f))
+            val columns = if (resources.configuration.screenWidthDp / resources.configuration.fontScale >= 600) 2 else 1
+            val shelf = android.widget.GridLayout(this).apply { columnCount = columns; alignmentMode = android.widget.GridLayout.ALIGN_MARGINS }
+            body.addView(shelf,LinearLayout.LayoutParams(-1,-2))
+            fun addCard(card: LinearLayout) {
+                shelf.addView(card,android.widget.GridLayout.LayoutParams().apply {
+                    width = 0; height = -2
+                    columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED,1f)
+                    setGravity(Gravity.FILL_HORIZONTAL or Gravity.TOP)
+                    topMargin = dp(12); leftMargin = if (columns == 2) dp(4) else 0; rightMargin = leftMargin
+                })
+            }
             candidates.groupBy { it.id }.forEach { (id, versions) ->
                 val expected = native.prefs.getString("active." + id, null)
                 val entry = versions.firstOrNull { it.revision == expected } ?: versions.maxBy { native.prefs.getLong("order." + it.revision,0) }
                 val previous = versions.firstOrNull { it.revision != expected && it.revision == native.prefs.getString("previous." + id,null) }
                 val enabled = expected == entry.revision
                 val card = column().apply { background = ui.shape(ui.canvas,16,ui.line) }
-                body.addView(card, LinearLayout.LayoutParams(-1,-2).apply { topMargin = dp(12) })
+                addCard(card)
                 card.addView(label(entry.title,20f))
-                card.addView(label("原生窗口 · " + entry.revision.take(8) + if (enabled) " · 已启用" else "",14f))
+                card.addView(label(if (enabled) "已在桌宠启用 · 原生工具" else "待启用 · 原生工具",14f))
                 card.addView(button("预览原生窗口") { previewNative(entry) })
-                card.addView(button(if (enabled) "移出桌宠" else "启用到桌宠") {
+                val manage = management(card)
+                manage.addView(button(if (enabled) "移出桌宠" else "启用到桌宠") {
                     read({ native.select(entry,expected,!enabled) }) { library() }
                 })
-                if (previous != null && versions.size > 1) card.addView(button("恢复上一版") {
+                if (previous != null && versions.size > 1) manage.addView(button("恢复上一版") {
                     read({ native.select(previous,expected,true) }) { library() }
                 })
                 if (versions.size > 1) {
                     val list = column().apply { visibility = android.view.View.GONE }
-                    card.addView(button("版本记录（" + versions.size + "）") {
+                    manage.addView(button("版本记录（" + versions.size + "）") {
                         list.visibility = if (list.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
                     })
-                    card.addView(list)
+                    manage.addView(list)
                     versions.forEach { version ->
                         list.addView(label(version.title + " · " + version.revision.take(8), 15f))
                         list.addView(button("预览此版") { previewNative(version) })
@@ -151,17 +200,21 @@ open class WhaleFeatureActivity : Activity() {
                 val id = item.getString("id")
                 val active = item.getString("active"); val latest = item.getString("latest"); val previous = item.getString("previous")
                 val card = column().apply { background = ui.shape(ui.canvas,16,ui.line) }
-                body.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }); card.addView(label(item.getString("title"), 20f))
+                addCard(card); card.addView(label(item.getString("title"), 20f))
+                card.addView(label(if (active.isEmpty()) "待启用" else if (active != latest) "已启用 · 有新草稿" else "已在桌宠启用",14f))
                 if (active.isNotEmpty()) {
                     if (active != latest) card.addView(label("当前启用 · " + item.getString("activeTitle"), 14f))
                     card.addView(button("打开功能") { open(id, active, false) })
                 }
                 if (latest != active) {
                     card.addView(button("预览新版本") { open(id, latest, true) })
-                    card.addView(button("启用此版本") { read({ store.activate(id, latest, active) }) { library() } })
                 }
-                if (previous.isNotEmpty() && active != previous) card.addView(button("恢复上一版") { read({ store.activate(id, previous, active) }) { library() } })
-                if (active.isNotEmpty()) card.addView(button("停用") { read({ store.activate(id, "", active) }) { library() } })
+                val manage = management(card)
+                if (latest != active) {
+                    manage.addView(button("启用此版本") { read({ store.activate(id, latest, active) }) { library() } })
+                }
+                if (previous.isNotEmpty() && active != previous) manage.addView(button("恢复上一版") { read({ store.activate(id, previous, active) }) { library() } })
+                if (active.isNotEmpty()) manage.addView(button("停用") { read({ store.activate(id, "", active) }) { library() } })
             }
         }
     }
@@ -198,7 +251,7 @@ open class WhaleFeatureActivity : Activity() {
         releasePage()
         replacement = active
         val body = column().apply { setBackgroundColor(ui.surface) }
-        setContentView(body)
+        screen(body)
         body.addView(label(if (active.isEmpty()) "此工具已停用" else "工具版本已变更",20f))
         if (active.isNotEmpty()) body.addView(button("打开当前版本") { open(id,active,false) })
         body.addView(button(if (direct) "返回" else "返回工坊") { if (direct) finish() else library() })
@@ -236,7 +289,7 @@ open class WhaleFeatureActivity : Activity() {
                     }) { open(id, version, false) }
                 })
             }
-            body.addView(bar); setContentView(body)
+            body.addView(bar); screen(body)
             val web = WebView(this)
             page = web
             body.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
