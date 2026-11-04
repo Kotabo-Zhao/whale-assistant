@@ -267,6 +267,9 @@ object RuntimeHost {
         return MobileRuntimeController(application, fanOut).also { controller = it }
     }
 
+    /** Run after work already submitted to the sole teardown executor, without blocking the UI thread. */
+    internal fun afterCurrentTeardown(action: () -> Unit) { teardownExecutor.execute(action) }
+
     /**
      * 将关停排入后台；生命周期回调不能在 Host 锁内等待 Binder、进程或 PTY 退出。
      *

@@ -310,6 +310,8 @@ private var uncleanExitRecorded = false
 )
 class MobileRuntimePlugin : Plugin() {
     private lateinit var controller: MobileRuntimeController
+    private val runtimeReady = java.util.concurrent.CountDownLatch(1)
+    @Volatile private var initializationFailed = false
     private lateinit var auditLog: PrivateAuditLog
     private val executor: ExecutorService = Executors.newFixedThreadPool(4)
     private val destroying = AtomicBoolean(false)
@@ -613,6 +615,32 @@ class MobileRuntimePlugin : Plugin() {
     override fun load() {
         auditLog = PrivateAuditLog(context)
         recordAudit(AuditEvent.PLUGIN_LOAD, AuditResult.STARTED)
+        attachWhenAvailable(deferred = false)
+    }
+
+    private fun attachWhenAvailable(deferred: Boolean) {
+        if (destroying.get()) return
+        try {
+            loadRuntimePlugin()
+        } catch (failure: RuntimeFailure) {
+            if (failure.code == "RUNTIME_CLOSING") {
+                RuntimeHost.afterCurrentTeardown { workerEvents.post { attachWhenAvailable(deferred = true) } }
+                return
+            }
+            failInitialization(failure, deferred)
+        } catch (failure: Exception) {
+            failInitialization(failure, deferred)
+        }
+        runtimeReady.countDown()
+    }
+
+    private fun failInitialization(failure: Exception, deferred: Boolean) {
+        initializationFailed = true
+        recordAudit(AuditEvent.PLUGIN_LOAD, AuditResult.FAILED)
+        if (!deferred) throw failure
+    }
+
+    private fun loadRuntimePlugin() {
         try {
             // 运行时由 RuntimeHost 跨插件实例持有：前台服务保留的会话在这里被复用，
             // 不会因为 WebView 重建而重新安装或重新生成认证凭据。
@@ -622,7 +650,6 @@ class MobileRuntimePlugin : Plugin() {
             // 插件注册失败会让整个管理界面失去原生桥：这里必须释放已经登记的订阅，
             // 否则 RuntimeHost 永远判不出「没有订阅者」，运行时就再也释放不掉。
             RuntimeHost.detachPluginSink(eventSink)
-            recordAudit(AuditEvent.PLUGIN_LOAD, AuditResult.FAILED)
             throw error
         }
         // 设备桥只服务设备 Shell，属于可选能力。保活生效时 Harness 进程仍在运行，
@@ -707,6 +734,7 @@ class MobileRuntimePlugin : Plugin() {
         workerEvents.removeCallbacks(captureChange)
         workerEvents.removeCallbacks(workerChange)
         if (!destroying.compareAndSet(false, true)) return
+        runtimeReady.countDown()
         harnessOpenRequests.invalidate()
         harnessStartGeneration.incrementAndGet()
         recordAudit(AuditEvent.PLUGIN_DESTROY, AuditResult.STARTED)
@@ -4431,6 +4459,8 @@ class MobileRuntimePlugin : Plugin() {
     }
 
     private fun resolveWhileActive(call: PluginCall, operation: () -> JSObject?) {
+        if (runtimeReady.count != 0L) { execute(call, operation); return }
+        if (initializationFailed) { call.reject("本机运行环境初始化失败", "RUNTIME_INIT_FAILED"); return }
         if (destroying.get()) {
             rejectRuntimeClosed(call)
         } else {
@@ -4515,7 +4545,9 @@ class MobileRuntimePlugin : Plugin() {
                 rejectRuntimeClosed()
             } else {
                 resolveSafely(call) {
+                    runtimeReady.await()
                     ensurePluginActive()
+                    if (initializationFailed) throw RuntimeFailure("RUNTIME_INIT_FAILED", "本机运行环境初始化失败")
                     operation()
                 }
             }

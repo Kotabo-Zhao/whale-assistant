@@ -35,7 +35,11 @@ class WhaleAuthoredDeviceTest {
     private fun waitFor(why: String, action: () -> Boolean) {
         val end = SystemClock.elapsedRealtime() + 15_000
         while (SystemClock.elapsedRealtime() < end) { if (action()) return; Thread.sleep(60) }
-        error(why)
+        val names = listOf("工作台", "工具", "我的工具", "去对话创作", title, "更新运行环境")
+        val focus = shell("dumpsys window").lineSequence().firstOrNull { it.contains("mCurrentFocus=") }
+        // Only include known navigation labels and counts in diagnostics.
+        val catalog = io.deepseekharness.mobile.features.WhaleFeatureStore(app).activeTools().size
+        error("$why · 窗口=$focus · 根包=${inst.uiAutomation.rootInActiveWindow?.packageName} · 可见入口=${names.filter { labelled(it) != null }} · 目录=$catalog")
     }
     private fun views(view: View): List<View> = listOf(view) + if (view is ViewGroup) (0 until view.childCount).flatMap { views(view.getChildAt(it)) } else emptyList()
     private fun web(activity: WhaleFeatureActivity): WebView {
