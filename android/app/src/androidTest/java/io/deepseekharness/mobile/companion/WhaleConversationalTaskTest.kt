@@ -35,6 +35,69 @@ class WhaleConversationalTaskTest {
         while (!check()) { if (SystemClock.elapsedRealtime() >= until) fail(message); Thread.sleep(100) }
     }
 
+    private fun verifyToolPreview(preview: android.app.Activity, id: String) {
+        try {
+            assertTrue(preview.intent.getBooleanExtra("draftPreview",false))
+            val document = java.util.concurrent.atomic.AtomicReference(JSONObject())
+            await("工具预览未加载",15000) {
+                inst.runOnMainSync { views(preview.window.decorView).filterIsInstance<android.webkit.WebView>().firstOrNull()
+                    ?.evaluateJavascript("({base:document.baseURI,ready:document.readyState,content:!!document.body&&document.body.innerText.length>20})") { value ->
+                        runCatching { document.set(JSONObject(value)) }
+                    } }
+                document.get().let { it.optString("base") == "https://${id}.preview.whale.invalid/" &&
+                    it.optString("ready") == "complete" && it.optBoolean("content") }
+            }
+            if (InstrumentationRegistry.getArguments().getString("checkHours") == "true") {
+                val result = java.util.concurrent.atomic.AtomicReference("")
+                inst.runOnMainSync {
+                    views(preview.window.decorView).filterIsInstance<android.webkit.WebView>().single().evaluateJavascript("""
+                        (()=>{const f=[...document.querySelectorAll('input[type=number]')];if(f.length!==2)throw Error('expected two hour fields');
+                        f[0].value='24';f[1].value='8';for(const e of f){e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}
+                        const b=[...document.querySelectorAll('button')].find(e=>/计算|换算/.test(e.innerText));if(b)b.click();})()
+                    """.trimIndent(),null)
+                }
+                await("24 小时按每天 8 小时未得到 3 个工作日",8000) {
+                    inst.runOnMainSync { views(preview.window.decorView).filterIsInstance<android.webkit.WebView>().single()
+                        .evaluateJavascript("document.body.innerText") { value -> runCatching { result.set(org.json.JSONArray("[$value]").getString(0)) } } }
+                    Regex("3(?:\\.0+)?\\s*(?:个|标准)?\\s*(?:工作日|天)").containsMatchIn(result.get())
+                }
+                inst.runOnMainSync { views(preview.window.decorView).filterIsInstance<android.webkit.WebView>().single()
+                    .evaluateJavascript("window.scrollTo(0,document.documentElement.scrollHeight)",null) }
+                inst.sendStatus(0,Bundle().apply { putString("calculation","24 / 8 = 3 working days") })
+            }
+            val painted = java.util.concurrent.atomic.AtomicBoolean(false)
+            inst.runOnMainSync {
+                views(preview.window.decorView).filterIsInstance<android.webkit.WebView>().single().postVisualStateCallback(1,
+                    object : android.webkit.WebView.VisualStateCallback() { override fun onComplete(requestId: Long) { painted.set(true) } })
+            }
+            await("预览画面尚未提交绘制",8000) { painted.get() }
+            Thread.sleep(700) // Let the activity transition and compositor present the submitted WebView frame.
+        } finally {
+            inst.waitForIdleSync()
+            val capture = requireNotNull(inst.uiAutomation.takeScreenshot())
+            try { File(app.getExternalFilesDir(null),"bound-creation-preview.png").outputStream().use {
+                check(capture.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it))
+            } } finally { capture.recycle() }
+            inst.runOnMainSync { preview.finish() }
+        }
+    }
+    @Test fun inspectSavedBoundCreationPreview() {
+        val token = InstrumentationRegistry.getArguments().getString("previewToken")
+        org.junit.Assume.assumeTrue(token != null)
+        require(token!!.matches(Regex("[a-f0-9]{8}")))
+        val rows = WorkerDashboardStore(app).list().getJSONArray("items")
+        val row = (0 until rows.length()).map(rows::getJSONObject).single {
+            it.optString("title").contains("海星工时卡 $token") && it.optString("mode") == "create" &&
+                it.optString("owner") != "session-whale-task-desk"
+        }
+        val draft = row.getJSONObject("authoredDraft")
+        val monitor = inst.addMonitor(io.deepseekharness.mobile.features.WhaleFeatureActivity::class.java.name,null,false)
+        try {
+            WorkerDashboardStore(app).previewDraft(row.getString("id"),draft.getString("revision"))
+            verifyToolPreview(requireNotNull(inst.waitForMonitorWithTimeout(monitor,8000)),draft.getString("id"))
+        } finally { inst.removeMonitor(monitor) }
+    }
+
     @Test fun interruptedFirstInputReusesItsIdWhenItBecomesAWorker() {
         val tmp = File(app.cacheDir,"direct-worker-"+UUID.randomUUID()).apply { check(mkdirs()) }
         val storage = storage(tmp)
@@ -188,7 +251,7 @@ class WhaleConversationalTaskTest {
             desk.submit("核对资料","read",id,needs="library",sourceSession=source)
             assertEquals(1,desk.pending().length())
             assertThrows(IllegalStateException::class.java) { desk.submit("核对资料","read",id,needs="library") }
-            assertThrows(IllegalArgumentException::class.java) { desk.submit("制作工具","create",sourceSession=source) }
+            assertThrows(IllegalArgumentException::class.java) { desk.submit("操作设备","device",sourceSession=source) }
             assertThrows(IllegalArgumentException::class.java) { desk.submit("核对资料","read",sourceSession="session-unregistered") }
             val other = desk.submit("普通任务","read").getString("commandId")
             assertEquals(other,desk.batch(0).getJSONObject(0).getString("commandId"))
@@ -505,6 +568,7 @@ class WhaleConversationalTaskTest {
         val transcript = CompanionBubbleHistory(storage(tmp))
         val desk = WorkerDashboardStore(app)
         val boundSession = InstrumentationRegistry.getArguments().getString("boundSession") == "true"
+        val createTask = InstrumentationRegistry.getArguments().getString("createTask") == "true"
         var boundOwner: String? = null
         val sink = object : io.deepseekharness.mobile.runtime.RuntimeEventSink {
             override fun onProgress(snapshot: io.deepseekharness.mobile.runtime.RuntimeStateSnapshot) = Unit
@@ -512,7 +576,8 @@ class WhaleConversationalTaskTest {
             override fun onTerminalExit(sessionId: String, exitCode: Int) = Unit
         }
         val first = "请直接用中文给我讲一篇完整的长童话，主角是小鲸鱼和海猫，分十五段写，每段都写出场景、对白和细节。"
-        val next = "另一件独立的事：明早交接要用「蓝港差异报告 $token」。甲表写周四交付九箱，乙表写周五交付六箱，整理成一份列出差异和待确认事项的交接报告。"
+        val next = if (createTask) "另一件独立的事：请制作一个名为「海星工时卡 $token」的可运行小工具草稿，输入总工时和每天工作小时数，显示换算后的工作日。我还要继续聊天，做好后让我预览，不要自动启用。"
+            else "另一件独立的事：明早交接要用「蓝港差异报告 $token」。甲表写周四交付九箱，乙表写周五交付六箱，整理成一份列出差异和待确认事项的交接报告。"
         lateinit var window: CompanionBubbleWindow
         val screenCycle = InstrumentationRegistry.getArguments().getString("screenCycle") == "true"
         var windowReady = false
@@ -534,7 +599,7 @@ class WhaleConversationalTaskTest {
                 val client = HarnessBubbleClient(controller.openHarnessAccess())
                 val session = client.call("session/create",JSONObject()).getString("sessionId")
                 boundOwner = session
-                client.command(session,"/permission read-only")
+                client.command(session,if (createTask) "/permission workspace-write" else "/permission read-only")
                 CompanionBubbleChat(app,historyStore=transcript).resumeSession(session)
             }
             inst.runOnMainSync {
@@ -548,7 +613,7 @@ class WhaleConversationalTaskTest {
                 input.setText(next); send.performClick()
                 input.setText("还没发的第三句")
             }
-            inst.sendStatus(0,Bundle().apply { putString("conversationPath",if (boundSession) "bound-read-only-session" else "direct") })
+            inst.sendStatus(0,Bundle().apply { putString("conversationPath",if (boundSession) "bound-${if (createTask) "create" else "read-only"}-session" else "direct") })
             await("首轮回复期间未见独立工单",120_000) {
                 val accepted = work().isNotEmpty() || desk.pending().let { commands -> (0 until commands.length()).any { commands.getJSONObject(it).optString("task").contains(token) } }
                 var outstanding = false
@@ -584,6 +649,43 @@ class WhaleConversationalTaskTest {
             }
             await("后台报告没有完成",180_000) { work().singleOrNull()?.optString("state") == "completed" }
             if (boundSession) assertEquals("独立工单必须保留绑定会话归属",boundOwner,work().single().getString("owner"))
+            if (createTask) {
+                val row = work().single()
+                assertEquals("create",row.getString("mode"))
+                val draft = row.getJSONObject("authoredDraft")
+                assertEquals("task-"+row.getString("localCreation"),draft.getString("id"))
+                val feature = requireNotNull(io.deepseekharness.mobile.features.WhaleFeatureStore(app).read(draft.getString("id")))
+                assertEquals(draft.getString("revision"),feature.getString("latest"))
+                assertTrue("生成草稿不能自动启用",feature.optString("active").isEmpty())
+                val monitor = inst.addMonitor(io.deepseekharness.mobile.features.WhaleFeatureActivity::class.java.name,null,false)
+                try {
+                    inst.runOnMainSync { window.openTaskInbox() }
+                    fun dialog(): android.app.AlertDialog? {
+                        val panel = CompanionBubbleWindow::class.java.getDeclaredField("workerPanel").apply { isAccessible=true }.get(window)
+                        return CompanionWorkerPanel::class.java.getDeclaredField("dialog").apply { isAccessible=true }.get(panel) as? android.app.AlertDialog
+                    }
+                    await("未显示全部任务入口",8000) {
+                        var clicked = false
+                        inst.runOnMainSync { dialog()?.window?.decorView?.let { tree ->
+                            views(tree).filterIsInstance<TextView>().firstOrNull { it.text == "全部任务" }?.let { clicked = it.performClick() }
+                        } }
+                        clicked
+                    }
+                    await("桌宠任务卡未提供此草稿的预览入口",8000) {
+                        var clicked = false
+                        inst.runOnMainSync { dialog()?.window?.decorView?.let { tree ->
+                            views(tree).filterIsInstance<TextView>().filter { it.text == "预览工具草稿" }.firstOrNull { button ->
+                                val card = button.parent?.parent?.parent as? View
+                                card != null && views(card).filterIsInstance<TextView>().any { it.text.contains(token) }
+                            }?.let { clicked = it.performClick() }
+                        } }
+                        clicked
+                    }
+                    val preview = requireNotNull(inst.waitForMonitorWithTimeout(monitor,8000)) { "预览页面未打开" }
+                    verifyToolPreview(preview,draft.getString("id"))
+                    assertTrue(io.deepseekharness.mobile.features.WhaleFeatureStore(app).read(draft.getString("id"))!!.optString("active").isEmpty())
+                } finally { inst.removeMonitor(monitor) }
+            }
             if (screenCycle) {
                 assertFalse("收件回执不应主动点亮设备",power.isInteractive)
                 val asleepMs = SystemClock.elapsedRealtime() - offAt
@@ -625,6 +727,9 @@ class WhaleConversationalTaskTest {
                 if (nextDraft != null) { assertTrue(input.isEnabled); input.setText(nextDraft) }
             }
             await("未收到这条普通消息的回复") {
+                var error: String? = null
+                inst.runOnMainSync { error = CompanionBubbleWindow::class.java.getDeclaredField("lastError").apply { isAccessible=true }.get(window) as? String }
+                check(error == null) { "普通消息回复失败：$error" }
                 val snapshot = transcript.load()
                 snapshot != null && snapshot.pending == null && snapshot.messages.size > before &&
                     snapshot.messages.takeLast(2).firstOrNull()?.text == text

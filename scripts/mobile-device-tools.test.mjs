@@ -31,6 +31,17 @@ const ok = text => ({ ok: true, exitCode: 0, text, truncated: false, errorCode: 
 const virtualSession = '00000000-1111-2222-3333-444444444444'
 const memoryExec = { agent: { session: { id: virtualSession } } }
 
+test('草稿重复转义返回可修正的固定建议，不转发任意异常内容', async t => {
+  const f = fixture(t, () => ({ ok: false, exitCode: 1, text: 'private-runtime-error', errorCode: 'FEATURE_HTML_DOUBLE_ESCAPED' }))
+  await assert.rejects(f.tools.get('mobile_whale_feature').execute({ action: 'draft', id: 'sample', title: '示例', html: '<p>示例</p>' },
+    { agent: { id: 'session-main' } }), error => {
+    assert.match(error.message, /FEATURE_HTML_DOUBLE_ESCAPED/)
+    assert.match(error.message, /真实 HTML 源码/)
+    assert.doesNotMatch(error.message, /private-runtime-error/)
+    return true
+  })
+})
+
 test('资料工具兼容当前运行时的会话注入形态，但不接受模型参数伪造', async t => {
   const f = fixture(t, () => ok('{"schemaVersion":1}'))
   await f.tools.get('mobile_companion_capabilities').execute({}, { session: { id: virtualSession } })

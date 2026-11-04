@@ -265,7 +265,7 @@ class DeviceBridgeServer(
                                     }
                                     request.has("ack") -> { store.acknowledge(request.getString("ack"), request.optString("authorWorkerId").ifBlank { null }); "[]" }
                                     request.has("deferred") -> { store.dispatchUnavailable(request.getString("deferred"), true); "[]" }
-                                    else -> store.batch(request.optInt("skip", 0), request.optInt("sourceSessionProtocol", 0) == 1).toString()
+                                    else -> store.batch(request.optInt("skip", 0), request.optInt("sourceSessionProtocol", 0) in 1..2, request.optInt("sourceSessionProtocol", 0) == 2).toString()
                                 }
                             }
                             "screenWatch" -> {

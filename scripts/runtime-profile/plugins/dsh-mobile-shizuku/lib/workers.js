@@ -342,6 +342,7 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
           if (row.state === 'cancelling') { row.state = 'cancelled'; save(row); continue }
           const parent = await resolve(row.owner)
           const permission = ctx.permissionPresets.current(parent.session)
+          if (row.mode === 'create' && !['workspace-write', 'danger-full-access'].includes(permission)) throw Object.assign(new Error('来源会话未允许创作，请调整原会话权限后继续此任务'), { code: 'WORKER_SOURCE_PERMISSION' })
           if (permission === 'custom') throw new Error('请先为主会话选择明确的权限预设，再派发 Worker')
           ctx.permissionPresets.set(found.agent.session, permission)
           bind(found.agent)
@@ -365,8 +366,8 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
         } catch (error) {
           const input = ledger(row).inputs.find(item => item.revision === row.revision)
           if (input?.delivery === 'sending') { input.delivery = 'unknown'; input.deliveryError = failureMessage(error) }
-          row.state = 'failed'; row.summary = failureMessage(error); row.finishedAt = Date.now()
-          if (!row.reports.some(item => item.revision === row.revision)) row.reports.push({ revision: row.revision, state: 'failed', summary: row.summary, finishedAt: row.finishedAt, domainAssignmentId: row.domainAssignmentId })
+          row.state = error?.code === 'WORKER_SOURCE_PERMISSION' ? 'blocked' : 'failed'; row.summary = failureMessage(error); row.finishedAt = Date.now()
+          if (!row.reports.some(item => item.revision === row.revision)) row.reports.push({ revision: row.revision, state: row.state, summary: row.summary, finishedAt: row.finishedAt, domainAssignmentId: row.domainAssignmentId })
           queueReport(row, row.reports.find(item => item.revision === row.revision))
           save(row); void notify(row).catch(() => {})
         }
@@ -476,7 +477,7 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
   const dispatchOwner = 'session-whale-task-desk'
   async function acceptSubmission(command) {
     const owner = command.sourceSession ?? dispatchOwner
-    if (command.sourceSession != null && (command.mode !== 'read' || typeof owner !== 'string' || !/^session-[a-zA-Z0-9._-]{1,192}$/.test(owner)))
+    if (command.sourceSession != null && (!['read', 'create'].includes(command.mode) || typeof owner !== 'string' || !/^session-[a-zA-Z0-9._-]{1,192}$/.test(owner)))
       throw new Error('来源会话或交办模式无效')
     const found = await ctx.sessionController.resolveAgent(owner)
     if (found.error) {
@@ -496,7 +497,7 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
     if (polling) { pollAgain = true; return }
     polling = true
     try {
-      const commands = JSON.parse((await bridge('workerUi', JSON.stringify({ skip: deferredSkip, sourceSessionProtocol: 1 }))).output)
+      const commands = JSON.parse((await bridge('workerUi', JSON.stringify({ skip: deferredSkip, sourceSessionProtocol: 2 }))).output)
       if (commands.length < 4) deferredSkip = 0
       for (const command of commands) {
         if (command.action === 'start') {
@@ -627,7 +628,7 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
       const hex = ticket.id
       const id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
       createWorker({ id, owner: session, title: ticket.title, mode, route,
-        creationCommandId: mode === 'create' && session === dispatchOwner && trigger.source === 'phone' ? trigger.meta?.creationCommandId : undefined,
+        creationCommandId: mode === 'create' && trigger.source === 'phone' ? trigger.meta?.creationCommandId : undefined,
         domainTicketId: ticket.id, domainAssignmentId: assignment.id,
         group: trigger.meta?.group, source: trigger.source, requester: ticket.mandate.actor?.id, scope: ticket.mandate.scope, dependsOn: trigger.meta?.dependsOn, priority: trigger.meta?.priority,
         decisionReason: (decision?.reason ?? []).map(item => item.values?.text || item.code).join('；'), decisionEvidence: decision?.audit?.evidence, mandateStrength: ticket.mandate.strength,
@@ -770,12 +771,15 @@ export function installWorkers(ctx, { defineTool, bridge, directory = join(homed
     const assignment = row && superagent.domain.repo.tickets.get(row.domainTicketId)?.assignments.at(-1)
     if (!row || row.mode !== 'create' || row.state !== 'running' || row.reportState || row.authorizationRevoked ||
         !assignment || assignment.id !== row.domainAssignmentId || assignment.state === 'ended') throw new Error('本工单没有有效的草稿创作授权')
+    const parent = await resolve(row.owner)
     const id = 'task-' + row.creationCommandId
     if (args.id && args.id !== id) throw new Error('此工单只能创作 ' + id)
     const revision = row.revision
     await mirror(row.id)
     await bridge('workerUi', JSON.stringify({ ack: row.creationCommandId, authorWorkerId: row.id }))
     if (row.state !== 'running' || row.reportState || row.revision !== revision) throw new Error('创作工单状态已变化')
+    if (!['workspace-write', 'danger-full-access'].includes(ctx.permissionPresets.current(parent.session)))
+      throw new Error('来源会话的创作权限已改变，草稿操作已停止')
     const reply = await bridge('featureWorkerAuthor', JSON.stringify({ ...args, id, workerId: row.id,
       assignmentId: assignment.id, commandId: row.creationCommandId, revision }), exec.signal, 120000)
     if (args.action === 'draft' || args.action === 'read') {

@@ -20,7 +20,7 @@ internal class WorkerDashboardStore(private val context: Context) {
             if (row.optLong("writeSeq", 0) < current.optLong("writeSeq", 0)) return@synchronized
         }
         // The guest mirrors execution. Only the native user-command path grants draft access.
-        for (field in listOf("localCreation", "creationRevoked", "authoredDraft")) {
+        for (field in listOf("localCreation", "localCreationOwner", "creationRevoked", "authoredDraft")) {
             row.remove(field)
             if (current?.has(field) == true) row.put(field, current.get(field))
         }
@@ -200,7 +200,7 @@ internal class WorkerDashboardStore(private val context: Context) {
         val text = task.trim()
         require(text.isNotEmpty() && text.length <= 2000 && mode in setOf("read", "device", "create"))
         require(UUID.fromString(commandId).toString() == commandId && needs in setOf("none","library","memory","both"))
-        require(sourceSession == null || (mode == "read" && sourceSession.startsWith("session-") && BubbleSessionRegistry.valid(sourceSession) && BubbleSessionRegistry(context).contains(sourceSession)))
+        require(sourceSession == null || (mode in setOf("read","create") && sourceSession.startsWith("session-") && BubbleSessionRegistry.valid(sourceSession) && BubbleSessionRegistry(context).contains(sourceSession)))
         val command = JSONObject().put("commandId", commandId).put("action", "start")
             .put("task", text).put("mode", mode).put("needs",needs).put("createdAt", System.currentTimeMillis())
             .apply { title?.takeIf(String::isNotBlank)?.let { put("title", it.take(120)) } }
@@ -223,7 +223,7 @@ internal class WorkerDashboardStore(private val context: Context) {
     fun hold(id: String, task: String, mode: String, needs: String, title: String, reason: String, sourceSession: String? = null): String = synchronized(lock) {
         require(UUID.fromString(id).toString() == id && task.length in 1..2000 && mode in setOf("read","create"))
         require(needs in setOf("none","library","memory","both"))
-        require(sourceSession == null || (mode == "read" && sourceSession.startsWith("session-") && BubbleSessionRegistry.valid(sourceSession) && BubbleSessionRegistry(context).contains(sourceSession)))
+        require(sourceSession == null || (mode in setOf("read","create") && sourceSession.startsWith("session-") && BubbleSessionRegistry.valid(sourceSession) && BubbleSessionRegistry(context).contains(sourceSession)))
         val all = heldRequests()
         val previous = all.optJSONObject(id)
         if (previous != null) {
@@ -336,7 +336,7 @@ internal class WorkerDashboardStore(private val context: Context) {
         try { JSONArray(file.openRead().bufferedReader().use { it.readText() }) }
         catch (_: java.io.FileNotFoundException) { JSONArray() }
     }
-    fun batch(skip: Int, sourceSessionSupported: Boolean = false): JSONArray = synchronized(lock) { synchronized(commandLock) {
+    fun batch(skip: Int, sourceSessionSupported: Boolean = false, sourceCreationSupported: Boolean = false): JSONArray = synchronized(lock) { synchronized(commandLock) {
         require(skip >= 0)
         val all = pending()
         val ready = JSONArray()
@@ -345,7 +345,7 @@ internal class WorkerDashboardStore(private val context: Context) {
         while (index < all.length() && ready.length() < 4) {
             val cmd = all.getJSONObject(index)
             // Older plugins ignore unknown fields; never hand them a session-bound task.
-            if (cmd.has("sourceSession") && !sourceSessionSupported) {
+            if (cmd.has("sourceSession") && (!sourceSessionSupported || (cmd.optString("mode") == "create" && !sourceCreationSupported))) {
                 val notice = "请更新对话运行环境以接取此会话的任务，原请求已保留"
                 if (cmd.optString("notice") != notice) { cmd.put("notice",notice); changed = true }
                 index++; continue
@@ -389,14 +389,14 @@ internal class WorkerDashboardStore(private val context: Context) {
                 val workerId = requireNotNull(authorWorkerId)
                 val row = worker(workerId)
                 check(row.optString("creationCommandId") == id && row.optString("mode") == "create" &&
-                    row.optString("owner") == "session-whale-task-desk" && row.optString("sessionId") == "session-worker-$workerId")
+                    row.optString("owner") == command.optString("sourceSession","session-whale-task-desk") && row.optString("sessionId") == "session-worker-$workerId")
                 val bound = command.optString("authorWorkerId")
                 check(bound.isEmpty() || bound == workerId)
                 if (bound.isEmpty()) {
                     command.put("authorWorkerId", workerId)
                     write(File(dir, "commands.json"), old.toString())
                 }
-                writeWorker(workerFile(workerId), row.put("localCreation", id))
+                writeWorker(workerFile(workerId), row.put("localCreation", id).put("localCreationOwner",command.optString("sourceSession","session-whale-task-desk")))
             } else if (command.optString("action") == "cancel") {
                 val workerId = command.getString("id")
                 val row = worker(workerId)
@@ -430,7 +430,7 @@ internal class WorkerDashboardStore(private val context: Context) {
         val commands = pending()
         check(UUID.fromString(command).toString() == command && request.getString("id") == featureId &&
             row.optString("localCreation") == command && row.optString("creationCommandId") == command &&
-            row.optString("owner") == "session-whale-task-desk" && row.optString("mode") == "create" &&
+            row.optString("owner") == row.optString("localCreationOwner","session-whale-task-desk") && row.optString("mode") == "create" &&
             row.optString("sessionId") == "session-worker-$workerId" && row.optString("state") == "running" &&
             (row.isNull("reportState") || row.optString("reportState").isEmpty()) && !row.optBoolean("authorizationRevoked") &&
             !row.optBoolean("creationRevoked") && row.getLong("revision") == request.getLong("revision") &&

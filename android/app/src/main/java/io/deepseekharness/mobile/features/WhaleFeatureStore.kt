@@ -57,6 +57,16 @@ internal class WhaleFeatureStore(context: Context) {
         val title = input.getString("title").trim()
         val html = input.getString("html").trim()
         require(title.isNotEmpty() && title.length <= 50 && html.isNotEmpty() && html.toByteArray().size <= 96 * 1024)
+        // Reject double-encoded formatting, not legitimate escapes inside JavaScript or code examples.
+        val literalWhitespace = Regex("(?:\\\\[nrt])+")
+        val literalContainers = setOf("script","style","pre","code","textarea")
+        val escapedFormatting = org.jsoup.Jsoup.parse(html).allElements.sumOf { element ->
+            if (element.tagName() in literalContainers ||
+                element.parents().any { it.tagName() in setOf("pre","code","textarea") }) 0
+            else element.textNodes().count { it.wholeText.trim().matches(literalWhitespace) }
+        }
+        if (escapedFormatting >= 3) throw io.deepseekharness.mobile.runtime.RuntimeFailure("FEATURE_HTML_DOUBLE_ESCAPED",
+            "HTML 中有多处重复转义的换行，请提交真实 HTML 源码；脚本内部需要的转义保留。")
         val hash = MessageDigest.getInstance("SHA-256").digest((title + "\u0000" + html).toByteArray()).joinToString("") { "%02x".format(it) }
         if (assignedId != null) require(assignedId == id)
         val current = if (assignedId != null) readAssigned(id) else read(id)

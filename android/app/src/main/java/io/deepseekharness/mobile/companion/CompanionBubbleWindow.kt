@@ -101,8 +101,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     PetIntentRouter.Intent.BACKGROUND_CREATE -> "create"
                     else -> return@runCatching
                 }
-                if (closed || !decision.independent || sourceSession != chat.handoffSessionId() ||
-                    (sourceSession != null && mode != "read")) return@runCatching
+                if (closed || !decision.independent || sourceSession != chat.handoffSessionId()) return@runCatching
                 sourceSession?.let { BubbleSessionRegistry(context).record(it) }
                 val prefs = CompanionStore(context)
                 val denial = chat.deniedBackground(mode, decision.needs,

@@ -87,6 +87,8 @@ const AUTOMATION_TASK_HINTS = {
 
 /** 受控码 → 固定恢复建议。只有登记过表的命令才有建议，其余命令仍旧只回码。 */
 function hintFor(command, code) {
+  if (['featureAuthor', 'featureWorkerAuthor'].includes(command) && code === 'FEATURE_HTML_DOUBLE_ESCAPED')
+    return 'HTML 有重复转义的换行；提交真实 HTML 源码，标签之间用真实换行或直接连接，不要再次 JSON.stringify 整份源码。保留脚本字符串内部需要的转义，再提交草稿。'
   if (command.startsWith('virtualScreen')) return VIRTUAL_ERROR_HINTS[code]
   if (command === 'automationTask') return AUTOMATION_TASK_HINTS[code]
   return undefined

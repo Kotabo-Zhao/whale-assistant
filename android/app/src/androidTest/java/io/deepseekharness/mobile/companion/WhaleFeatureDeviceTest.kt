@@ -24,6 +24,22 @@ import java.util.concurrent.TimeUnit
 class WhaleFeatureDeviceTest {
     private val inst get() = InstrumentationRegistry.getInstrumentation()
     private val base get() = inst.targetContext
+    @Test fun rejectsDoubleEncodedMarkupWithoutRewritingScriptEscapes() {
+        val dir = File(base.cacheDir,"escaped-tool-"+UUID.randomUUID()).apply { check(mkdirs()) }
+        val store = WhaleFeatureStore(object : ContextWrapper(base) { override fun getNoBackupFilesDir() = dir })
+        try {
+            fun input(html: String, revision: String = "") = JSONObject().put("id","sample").put("title","转义检查").put("html",html).put("baseRevision",revision)
+            val first = store.draft(input("<p>原版</p>")).getString("latest")
+            val bad = "<div>\\n<p>甲</p>\\n<p>乙</p>\\n<p>丙</p>\\n</div>"
+            val failure = assertThrows(io.deepseekharness.mobile.runtime.RuntimeFailure::class.java) { store.draft(input(bad,first)) }
+            assertEquals("FEATURE_HTML_DOUBLE_ESCAPED",failure.code)
+            assertTrue(failure.message!!.contains("重复转义"))
+            assertEquals(first,store.read("sample")!!.getString("latest"))
+            val source = "<div>\n<p>正常换行</p>\n<script>const lines='a\\nb'.split('\\n');</script><pre><code>\\n</code><code>\\n</code><code>\\n</code></pre></div>"
+            val next = store.draft(input(source,first)).getString("latest")
+            assertEquals(source,store.read("sample")!!.getJSONObject("versions").getJSONObject(next).getString("html"))
+        } finally { dir.deleteRecursively() }
+    }
     @Test fun draftEnableRollbackAndStaleEdits() {
         val dir = File(base.cacheDir, "feature-test-" + UUID.randomUUID()).apply { check(mkdirs()) }
         val store = WhaleFeatureStore(object : ContextWrapper(base) { override fun getNoBackupFilesDir() = dir })

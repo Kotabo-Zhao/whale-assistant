@@ -11,9 +11,10 @@ function fixture(t) {
   return { queue: new WorkerQueue(dir), dir }
 }
 
-test('bound phone submissions inherit their existing parent and never recreate a missing parent', async t => {
+for (const [mode, permission] of [['read', 'read-only'], ['create', 'workspace-write'], ['create', 'read-only']])
+test(`bound ${mode}/${permission} submissions retain their parent and enforce its creation permission`, async t => {
   const { dir } = fixture(t)
-  const events = new Map(), agents = new Map(), inherited = new Map(), created = []
+  const events = new Map(), agents = new Map(), inherited = new Map(), created = [], registered = new Map()
   const makeAgent = id => {
     const agent = { id, options: { provider: 'test', model: 'test' },
       session: { id, requestHeader: () => ({ config: { provider: 'test', model: 'test' } }), snapshotEvents: () => [] },
@@ -23,35 +24,58 @@ test('bound phone submissions inherit their existing parent and never recreate a
   }
   makeAgent('session-bound')
   const commands = [
-    { commandId: 'bound-command', action: 'start', task: 'Compare two supplied tables', mode: 'read', sourceSession: 'session-bound' },
+    { commandId: 'bound-command', action: 'start', task: 'Prepare the requested deliverable', mode, sourceSession: 'session-bound' },
     { commandId: 'missing-command', action: 'start', task: 'Missing parent', mode: 'read', sourceSession: 'session-missing' },
   ]
+  let preset = permission, featureCalls = 0, revokeOnAck = false
   const deferred = [], acked = [], protocols = []
-  const ctx = { on: (name, fn) => events.set(name, fn), tools: { register() {}, guard() {} }, systemPrompt: { section() {} },
+  const ctx = { on: (name, fn) => events.set(name, fn), tools: { register: tool => registered.set(tool.name,tool), guard() {} }, systemPrompt: { section() {} },
     sessionController: { resolveAgent: async id => agents.has(id) ? { agent: agents.get(id) } : { error: {} },
       create: async ({ sessionId }) => { created.push(sessionId); makeAgent(sessionId) } },
     sessionPersistence: { flush: async () => {} },
-    permissionPresets: { current: session => { assert.equal(session.id, 'session-bound'); return 'read-only' },
+    permissionPresets: { current: session => { assert.equal(session.id, 'session-bound'); return preset },
       set: (session, permission) => inherited.set(session.id, permission) } }
   const installed = installWorkers(ctx, { directory: dir, defineTool: tool => tool, bridge: async (name, input) => {
     const req = JSON.parse(input || '{}')
+    if (name === 'featureWorkerAuthor') featureCalls++
     if (name !== 'workerUi') return { output: '[]' }
     if (req.hostCapacity) return { output: '{}' }
-    if (req.ack) { acked.push(req.ack); return { output: '{}' } }
+    if (req.ack) { acked.push(req.ack); if (revokeOnAck) preset = 'read-only'; return { output: '{}' } }
     if (req.deferred) { deferred.push(req.deferred); return { output: '{}' } }
     protocols.push(req.sourceSessionProtocol)
     return { output: JSON.stringify(commands.filter(command => !acked.includes(command.commandId))) }
   } })
   t.after(() => events.get('dispose')())
   const until = Date.now() + 3000
-  while ((!deferred.length || !inherited.size) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10))
-  assert.deepEqual(protocols, [1])
+  while ((!deferred.length || ![...installed.queue.rows.values()].some(row => ['running','blocked'].includes(row.state))) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10))
+  assert.deepEqual(protocols, [2])
   assert.deepEqual(acked, ['bound-command'])
   assert.deepEqual(deferred, ['missing-command'])
   assert.equal(installed.queue.rows.size, 1)
   const row = [...installed.queue.rows.values()][0]
   assert.equal(row.owner, 'session-bound')
-  assert.equal(inherited.get(row.sessionId), 'read-only')
+  if (mode === 'create' && permission === 'read-only') {
+    assert.equal(row.state, 'blocked'); assert.equal(inherited.size, 0)
+    assert.match(row.summary, /来源会话未允许创作/)
+    preset = 'workspace-write'
+    await registered.get('mobile_workers').execute({ action: 'resume', id: row.id, task: '权限已恢复，请继续原草稿' }, { agent: agents.get('session-bound'), callId: 'resume-bound' })
+    const resumedUntil = Date.now() + 1000
+    while (row.state !== 'running' && Date.now() < resumedUntil) await new Promise(resolve => setTimeout(resolve,10))
+    assert.equal(row.state, 'running')
+    assert.equal(installed.queue.rows.size, 1)
+    assert.equal(row.owner, 'session-bound')
+    assert.equal(inherited.get(row.sessionId), 'workspace-write')
+  } else {
+    assert.equal(inherited.get(row.sessionId), permission)
+    if (mode === 'create') {
+      assert.equal(row.creationCommandId, 'bound-command')
+      await installed.authorDraft({ action: 'list' }, { agent: agents.get(row.sessionId) })
+      assert.equal(featureCalls, 1)
+      revokeOnAck = true
+      await assert.rejects(installed.authorDraft({ action: 'list' }, { agent: agents.get(row.sessionId) }), /创作权限已改变/)
+      assert.equal(featureCalls, 1)
+    }
+  }
   assert.deepEqual(created, [row.sessionId])
 })
 test('heartbeat tier: active rows/pending deliveries 5 s, channels 15 s, idle 60 s', () => {
