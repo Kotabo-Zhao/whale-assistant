@@ -9,8 +9,8 @@ import java.net.URL
 
 /** Character dialogue delegates actual actions to the existing permission-checked agent. */
 internal class PetDirectChat(private val context: android.content.Context) {
-    private data class ToolCall(var id: String = "", var name: String = "", val arguments: StringBuilder = StringBuilder())
-    private data class Turn(val text: String, val calls: List<ToolCall>)
+    internal data class ToolCall(var id: String = "", var name: String = "", val arguments: StringBuilder = StringBuilder())
+    internal data class Turn(val text: String, val calls: List<ToolCall>)
 
     fun reply(card: JSONObject, history: List<CompanionBubbleChat.Message>, onPartial: (String) -> Unit,
               background: (PetIntentRouter.Decision) -> String, delegate: (String, Boolean) -> String): String {
@@ -82,33 +82,39 @@ internal class PetDirectChat(private val context: android.content.Context) {
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val status = connection.responseCode
             if (status !in 200..299) error("模型请求失败（HTTP $status），请检查配置或稍后重试。")
+            return connection.inputStream.bufferedReader(Charsets.UTF_8).use { readStream(it,onPartial) }
+        } finally { connection.disconnect() }
+    }
+    companion object {
+        /** DONE terminates the SSE response even when its HTTP connection remains open. */
+        internal fun readStream(reader: java.io.BufferedReader, onPartial: (String) -> Unit = {}): Turn {
             val answer = StringBuilder(); val calls = sortedMapOf<Int, ToolCall>()
             var finish = ""; var done = false
-            connection.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
-                lines.forEach { line ->
-                    if (!line.startsWith("data:")) return@forEach
-                    val data = line.substringAfter(':').trim()
-                    if (data == "[DONE]") { done = true; return@forEach }
-                    if (data.isEmpty()) return@forEach
-                    val choice = JSONObject(data).optJSONArray("choices")?.optJSONObject(0) ?: return@forEach
-                    val delta = choice.optJSONObject("delta")
-                    val token = delta?.opt("content") as? String ?: ""
-                    if (token.isNotEmpty()) { answer.append(token); onPartial(answer.toString()) }
-                    val chunks = delta?.optJSONArray("tool_calls")
-                    if (chunks != null) for (i in 0 until chunks.length()) {
-                        val chunk = chunks.getJSONObject(i); val call = calls.getOrPut(chunk.getInt("index")) { ToolCall() }
-                        (chunk.opt("id") as? String)?.let { call.id += it }
-                        chunk.optJSONObject("function")?.let { f ->
-                            (f.opt("name") as? String)?.let { call.name += it }
-                            (f.opt("arguments") as? String)?.let { call.arguments.append(it) }
-                        }
+            while (true) {
+                val line = reader.readLine() ?: break
+                if (!line.startsWith("data:")) continue
+                val data = line.substringAfter(':').trim()
+                if (data == "[DONE]") { done = true; break }
+                if (data.isEmpty()) continue
+                val choice = JSONObject(data).optJSONArray("choices")?.optJSONObject(0) ?: continue
+                val delta = choice.optJSONObject("delta")
+                val token = delta?.opt("content") as? String ?: ""
+                if (token.isNotEmpty()) { answer.append(token); onPartial(answer.toString()) }
+                val chunks = delta?.optJSONArray("tool_calls")
+                if (chunks != null) for (i in 0 until chunks.length()) {
+                    val chunk = chunks.getJSONObject(i); val call = calls.getOrPut(chunk.getInt("index")) { ToolCall() }
+                    (chunk.opt("id") as? String)?.let { call.id += it }
+                    chunk.optJSONObject("function")?.let { f ->
+                        (f.opt("name") as? String)?.let { call.name += it }
+                        (f.opt("arguments") as? String)?.let { call.arguments.append(it) }
                     }
-                    (choice.opt("finish_reason") as? String)?.takeIf(String::isNotBlank)?.let { finish = it }
                 }
+                (choice.opt("finish_reason") as? String)?.takeIf(String::isNotBlank)?.let { finish = it }
             }
             if (finish == "content_filter") error("模型服务未返回完整回复（内容过滤）。")
             if (!done && finish.isBlank()) error("模型流式连接中断，请重试。")
             return Turn(answer.toString(), calls.values.toList())
-        } finally { connection.disconnect() }
+        }
     }
+
 }
