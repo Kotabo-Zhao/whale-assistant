@@ -151,7 +151,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
       </select></label>}
       <button type="button" onClick={() => setRevision(value => value + 1)}>刷新任务</button>
     </div>
-    {group && report && listState === 'ready' && <WorkerGroupReport group={group} report={report} />}
+    {group && report && listState === 'ready' && <WorkerGroupReport key={group} group={group} report={report} />}
     {listState === 'loading' && <p>正在读取任务…</p>}
     {listState === 'failed' && <p role="status">暂时无法读取任务，请刷新重试。</p>}
     {listState === 'ready' && total === 0 && <p>当前筛选下没有任务。</p>}

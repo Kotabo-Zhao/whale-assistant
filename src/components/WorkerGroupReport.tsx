@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { runtimeBridge } from '../platform/native'
 import { WorkerTaskDetail } from './WorkerTaskDetail'
 
 const sections = { done: '已完成', attention: '需处理', working: '执行与排队', cancelled: '已取消' } as const
@@ -16,8 +18,22 @@ function bucket(value: unknown): Bucket | undefined {
 }
 
 export function WorkerGroupReport({ group, report }: { group: string; report: Record<string, unknown> }) {
+  const [busy,setBusy] = useState(false)
+  const [notice,setNotice] = useState('')
+  async function analyze() {
+    setBusy(true); setNotice('')
+    try {
+      const result = await runtimeBridge.companionDashboard({operation:'workerGroupAnalysisDraft',group})
+      if (typeof result.draft !== 'string' || !result.draft) throw new Error()
+      await runtimeBridge.insertTaskDraft(result.draft)
+      setNotice('请在主对话核对草稿后发送。')
+    } catch { setNotice('未能直接放入草稿，请确认主对话已打开、目标仍存在。') }
+    finally { setBusy(false) }
+  }
   return <section className="assistant-task-card" aria-label="目标汇总">
     <h3>{group} · 目标汇总</h3>
+    {Object.keys(report).length > 0 && <button type="button" disabled={busy} onClick={() => { void analyze() }}>在主对话分析</button>}
+    {notice && <p role="status">{notice}</p>}
     {Object.entries(sections).map(([key, name]) => {
       const data = bucket(report[key])
       if (!data?.count) return null

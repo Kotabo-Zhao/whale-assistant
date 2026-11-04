@@ -297,6 +297,58 @@ class WorkerVisionDeviceTest {
                 .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", text))))
         }
     }
+    @Test fun freshSessionSynthesizesConflictingGroupReports() = withClient { client ->
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = WorkerDashboardStore(context)
+        val owner = client.call("session/create",JSONObject()).getString("sessionId")
+        client.command(owner,"/permission read-only")
+        val existing = InstrumentationRegistry.getArguments().getString("resumeAnalysisFixture")
+        if (existing != null) require(existing.matches(Regex("交付核对-[a-f0-9]{8}")))
+        val group = existing ?: "交付核对-" + UUID.randomUUID().toString().take(8)
+        if (existing == null) send(client,owner,"请立即用 mobile_workers 创建两张独立只读工单，group 均为「$group」。第一张「仓库回执」以用户提供的原文“仓库记录：发货定在周四”为证据回报仓库日期。第二张「承运回执」以用户提供的原文“承运记录：发货定在周五”为证据回报承运日期。两份原文已随任务提供，无须查找文件。各自调用 mobile_worker_report completed 并说明只核对了各自的资料。不要协调两项说法，不要轮询，派发后结束本轮。")
+        fun members(): List<JSONObject> {
+            val rows = store.page("all",group=group).getJSONArray("items")
+            return (0 until rows.length()).map(rows::getJSONObject)
+        }
+        val deadline = android.os.SystemClock.elapsedRealtime()+240000
+        val answered = mutableSetOf<String>()
+        while (android.os.SystemClock.elapsedRealtime()<deadline) {
+            val rows = members()
+            for (row in rows.filter { it.optString("state") == "waiting" }) {
+                val day = when (row.getString("title")) {
+                    "仓库回执" -> "周四"; "承运回执" -> "周五"; else -> error("验收目标包含非测试工单")
+                }
+                val id = row.getString("id")
+                if (answered.add(id)) store.command(JSONObject().put("id",id).put("action","reply")
+                    .put("task","测试资料就是用户提供的纸面回执摘录：发货定在$day。无需再检索文件，据此报告并注明证据范围。"))
+            }
+            if (rows.size == 2 && rows.all { it.optString("state") == "completed" }) break
+            Thread.sleep(500)
+        }
+        val before = members()
+        assertEquals(2,before.size); assertTrue(before.all { it.getString("state") == "completed" })
+        fun outcomes() = members().associate { row ->
+            val detail = store.detail(row.getString("id"))
+            row.getString("id") to listOf(detail.getString("state"),detail.getString("summary"),detail.getInt("historyCount").toString())
+        }
+        val completed = outcomes()
+        val analyst = client.call("session/create",JSONObject()).getString("sessionId")
+        client.command(analyst,"/permission read-only")
+        val draft = CompanionDashboard(context).execute(JSONObject().put("operation","workerGroupAnalysisDraft").put("group",group)).getString("draft")
+        assertFalse(draft.contains("周四") || draft.contains("周五"))
+        val reply = send(client,analyst,draft)
+        assertTrue(reply.tools.toString(), "mobile_workers" in reply.tools)
+        assertTrue(listOf("周四","星期四").any(reply.text::contains) && listOf("周五","星期五").any(reply.text::contains))
+        assertTrue(before.all { reply.text.contains(it.getString("id").take(8)) })
+        assertTrue(listOf("冲突","分歧","不一致","矛盾").any(reply.text::contains))
+        assertEquals(completed,outcomes())
+        assertFalse(store.activeFor(analyst))
+        val all = store.list().getJSONArray("items")
+        assertFalse((0 until all.length()).any { all.getJSONObject(it).optString("owner") == analyst })
+        InstrumentationRegistry.getInstrumentation().sendStatus(0,android.os.Bundle().apply {
+            putString("groupAnalysis","new session cited both workers and conflicting dates; same outcomes and history counts, no new analytic-session jobs")
+        })
+    }
     @Test fun dependentWorkerUsesTheAnsweredPredecessorResult() = withClient { client ->
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val session = client.call("session/create",JSONObject()).getString("sessionId")

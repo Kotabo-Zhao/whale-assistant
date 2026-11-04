@@ -249,6 +249,7 @@ internal class CompanionDashboard(private val context: Context) {
             "workerPage" -> WorkerDashboardStore(context).page(request.optString("filter","all"),request.optString("group"),
                 request.optInt("offset",0),request.optInt("limit",20), withCounts = false)
             "workerGroups" -> JSONObject().put("groups",WorkerDashboardStore(context).groups())
+            "workerGroupAnalysisDraft" -> JSONObject().put("draft",WorkerDashboardStore(context).analysisDraft(text("group")))
             "workerDetail" -> WorkerDashboardStore(context).detail(text("id"),request.optInt("offset",0))
             "workerList" -> WorkerDashboardStore(context).list()
             "workerPreviewDraft" -> {

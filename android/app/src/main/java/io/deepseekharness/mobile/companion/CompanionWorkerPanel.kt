@@ -324,6 +324,10 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
             minHeight = dp(44); gravity = android.view.Gravity.CENTER_VERTICAL; setOnClickListener { selectGroup("") }
         })
         val report = groupReport ?: return
+        if (report.length() > 0) container.addView(ui.text("在主对话分析",14f,ui.accent,true).apply {
+            minHeight = dp(44); gravity = android.view.Gravity.CENTER_VERTICAL
+            setOnClickListener { prepareAnalysis(selectedGroup) }
+        })
         for ((key,label) in listOf("done" to "已完成","attention" to "需处理","working" to "执行与排队","cancelled" to "已取消")) {
             val bucket = report.optJSONObject(key) ?: continue
             val items = bucket.getJSONArray("items")
@@ -337,6 +341,26 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                 })
             }
             if (bucket.getInt("count") > items.length()) container.addView(ui.text("显示最近 ${items.length()} 项",12f,ui.muted))
+        }
+    }
+    private fun prepareAnalysis(group: String) {
+        val current = dialog ?: return
+        executor.execute {
+            val drafted = runCatching { store.analysisDraft(group) }
+            handler.post {
+                if (disposed || dialog !== current || group != selectedGroup) return@post
+                drafted.onSuccess { text ->
+                    val staged = io.deepseekharness.mobile.MainHarnessSurface.stageCompanionKnowledge(text)
+                    val intent = android.content.Intent(context,io.deepseekharness.mobile.MainActivity::class.java)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    if (!staged) intent.setAction(android.content.Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_TEXT,text)
+                    runCatching { context.startActivity(intent) }.onSuccess { current.dismiss(); onDraftOpened() }.onFailure {
+                        if (staged) io.deepseekharness.mobile.MainHarnessSurface.cancelCompanionDraft()
+                        Toast.makeText(context,"暂时无法打开主对话",Toast.LENGTH_SHORT).show()
+                    }
+                }.onFailure { Toast.makeText(context,"目标已变化，请刷新后重试",Toast.LENGTH_SHORT).show() }
+            }
         }
     }
     private fun showDetail(id: String, title: String, start: Int) {

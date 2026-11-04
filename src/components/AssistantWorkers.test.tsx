@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
-const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn(), addWorkerDashboardListener: vi.fn() }))
+const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn(), addWorkerDashboardListener: vi.fn(), insertTaskDraft:vi.fn() }))
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { AssistantWorkers } from './AssistantWorkers'
 import { SuperagentSettings } from './SuperagentSettings'
@@ -165,6 +165,7 @@ it('有原生订阅时，静置不扫描工单或屏幕状态，翻页只取该�
 it('opens a completed source from the goal report while the filtered page is empty', async () => {
   bridge.companionDashboard.mockImplementation(({operation, group}: {operation:string; group?:string}) => {
     if (operation === 'workerGroups') return Promise.resolve({groups:['发布准备']})
+    if (operation === 'workerGroupAnalysisDraft') return Promise.resolve({draft:'分析发布准备'})
     if (operation === 'workerDetail') return Promise.resolve({events:[], summary:'完整结论'})
     if (operation === 'workerPage' && group === '发布准备') return Promise.resolve({
       items:[], total:0, groupReport:{done:{count:1, items:[{id:'worker-A', title:'核对清单', state:'completed', note:'清单已核对'}]}},
@@ -176,6 +177,9 @@ it('opens a completed source from the goal report while the filtered page is emp
   await screen.findByRole('option',{name:'发布准备'})
   fireEvent.change(screen.getByLabelText('所属目标'),{target:{value:'发布准备'}})
   expect(await screen.findByText('清单已核对')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'在主对话分析'}))
+  await waitFor(() => expect(bridge.insertTaskDraft).toHaveBeenCalledWith('分析发布准备'))
+  expect(bridge.companionDashboard).toHaveBeenCalledWith({operation:'workerGroupAnalysisDraft',group:'发布准备'})
   fireEvent.click(screen.getByText('核对清单', {selector:'summary'}))
   await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({operation:'workerDetail', id:'worker-A', offset:0}))
 })

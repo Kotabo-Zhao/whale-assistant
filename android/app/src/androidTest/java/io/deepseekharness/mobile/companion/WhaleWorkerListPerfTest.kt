@@ -401,6 +401,18 @@ class WhaleWorkerListPerfTest {
             }
             until("detailDialog") { labels -> labels.any { it.text.contains("结果 2") } }
             capture("detailDialog")
+            if (args.getString("groupHandoff") == "true") {
+                inst.runOnMainSync { dialog("detailDialog").dismiss() }
+                val monitor = inst.addMonitor(io.deepseekharness.mobile.MainActivity::class.java.name,null,false)
+                try {
+                    until("dialog") { labels -> labels.singleOrNull { it.text == "在主对话分析" }?.performClick() == true }
+                    val host = requireNotNull(inst.waitForMonitorWithTimeout(monitor,8000))
+                    try {
+                        assertEquals(android.content.Intent.ACTION_SEND,host.intent.action)
+                        assertEquals(store.analysisDraft(group),host.intent.getStringExtra(android.content.Intent.EXTRA_TEXT))
+                    } finally { inst.runOnMainSync { host.finish() } }
+                } finally { inst.removeMonitor(monitor) }
+            }
         } finally {
             inst.runOnMainSync { panel.destroy() }; root.deleteRecursively()
             for (name in listOf("whale-interface","app_theme")) app.deleteSharedPreferences("${root.name}-$name")
