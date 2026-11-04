@@ -186,7 +186,39 @@ class WhaleWorkerListPerfTest {
                 }; document.querySelector('button[aria-label=事项]').click()""")
             until("后台任务设置未就绪") { js("!!document.querySelector('.worker-secondary-settings summary')") == "true" }
             js("document.querySelector('.worker-secondary-settings summary').click()")
+            until("跨渠道入口未就绪") { js("!!document.querySelector('.worker-secondary-settings details summary')") == "true" }
+            val closedProbe = InstrumentationRegistry.getArguments().getString("innerProbe")
+            if (closedProbe != null) {
+                Thread.sleep(11_000)
+                val reads = js("window.whalePollReads").toInt()
+                inst.sendStatus(0,Bundle().apply { putInt("unopenedChannelReads",reads); putInt("sampleMs",11000) })
+                if (closedProbe == "before") { assertTrue(reads > 0); return }
+                assertEquals(0,reads)
+            }
+            js("document.querySelector('.worker-secondary-settings details summary').click()")
             until("未读取展开的渠道设置") { js("window.whalePollReads > 0") == "true" }
+            if (closedProbe == "after") {
+                val inner = "document.querySelector('.worker-secondary-settings details')"
+                val repo = "$inner.querySelector('input:not([type])')"
+                until("渠道表单读取尚未完成") { js("!$repo.matches(':disabled')") == "true" }
+                js("""(() => { const field=$repo;
+                    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(field,'fixture-unsaved');
+                    field.dispatchEvent(new InputEvent('input',{bubbles:true,data:'fixture-unsaved'})); })()""")
+                until("未输入测试草稿") { js("$repo.value") == "\"fixture-unsaved\"" }
+                js("$inner.querySelector('summary').click()")
+                until("渠道设置未收起") { js("$inner.open") == "false" }
+                val before = js("window.whalePollReads").toInt()
+                Thread.sleep(11_000)
+                val reads = js("window.whalePollReads").toInt() - before
+                assertEquals(0,reads)
+                js("document.querySelector('.worker-secondary-settings summary').click()")
+                until("外层设置未收起") { js("document.querySelector('.worker-secondary-settings').open") == "false" }
+                js("document.querySelector('.worker-secondary-settings summary').click()")
+                js("$inner.querySelector('summary').click()")
+                until("展开后未刷新渠道状态") { js("window.whalePollReads").toInt() > before }
+                assertEquals("\"fixture-unsaved\"",js("$repo.value"))
+                inst.sendStatus(0,Bundle().apply { putInt("recollapsedChannelReads",reads); putString("draft","preserved") })
+            }
             js("$nav.find(b=>b.textContent==='我的待办').click()")
             until("没有离开后台任务页") { js("$nav.find(b=>b.textContent==='我的待办').getAttribute('aria-pressed')") == "\"true\"" }
             val start = js("window.whalePollReads").toInt()

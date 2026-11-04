@@ -9,6 +9,7 @@ const list = (text: string): string[] => text.split(/[\n,，]/).map(value => val
 /** Explicit source scope and credentials; existing passwords are never returned to this view. */
 export function SuperagentSettings({ visible = true }: { visible?: boolean }) {
   const initialized = useRef(false)
+  const [expanded, setExpanded] = useState(false)
   const revision = useRef('initial')
   const [saving, setSaving] = useState(false)
   const [conflict, setConflict] = useState(false)
@@ -25,10 +26,10 @@ export function SuperagentSettings({ visible = true }: { visible?: boolean }) {
   const [chatIds, setChatIds] = useState('')
   const [ruleText, setRuleText] = useState('')
   useEffect(() => {
-    if (!visible) return
+    if (!visible || !expanded) return
     return pollWhileVisible(5000, async current => {
       try {
-        const value = await runtimeBridge.companionDashboard({ operation: 'superagentSettings' })
+        const value = await runtimeBridge.companionDashboard({ operation: 'superagentSettings', diagnosticsOnly: initialized.current })
         if (!current()) return
         setDiagnostics((value.diagnostics || {}) as Record<string, unknown>)
         setUnapproved(Array.isArray(value.unapproved) ? value.unapproved as Array<{ source: 'github' | 'feishu'; actorId: string }> : [])
@@ -44,7 +45,7 @@ export function SuperagentSettings({ visible = true }: { visible?: boolean }) {
         initialized.current = true
       } catch { if (current() && !initialized.current) setMessage('未能读取渠道设置。') }
     })
-  }, [visible,reread])
+  }, [visible,expanded,reread])
   const change = (source: 'github' | 'feishu', update: Partial<Source>) => setConfig(old => ({ ...old, [source]: { ...old[source], ...update } }))
   const save = async () => {
     if (!initialized.current || saving || conflict) return
@@ -71,7 +72,7 @@ export function SuperagentSettings({ visible = true }: { visible?: boolean }) {
       ? current.filter(key => !keys.includes(key)) : [...current,...keys])}>
     {removed.includes(keys[0]) ? '撤销移除凭据' : '保存时移除本机凭据'}
   </button>
-  return <details><summary>跨渠道任务设置</summary>
+  return <details onToggle={event => setExpanded(event.currentTarget.open)}><summary>跨渠道任务设置</summary>
     <p>只处理所选来源中允许的发送人。新发送人需要在此明确添加，凭据保存在设备内。</p>
     {(Object.keys((diagnostics.errors || {}) as object).length > 0 || (Array.isArray(diagnostics.problems) && diagnostics.problems.length > 0)) &&
       <p role="status">渠道或任务暂时不可用，请检查配置和授权。{JSON.stringify(diagnostics.errors)} {JSON.stringify(diagnostics.problems)}</p>}

@@ -189,7 +189,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
       {offset > 0 && <button type="button" onClick={() => setOffset(Math.max(0,offset-20))}>上一页</button>}
       {offset + rows.length < total && <button type="button" onClick={() => setOffset(offset+20)}>下一页</button>}
     </nav>}
-    <details className="worker-secondary-settings" onToggle={event => setSettingsOpen(event.currentTarget.open)}><summary>渠道与屏幕陪看设置</summary>{settingsOpen && <SuperagentSettings visible={visible} />}
+    <details className="worker-secondary-settings" onToggle={event => setSettingsOpen(event.currentTarget.open)}><summary>渠道与屏幕陪看设置</summary><SuperagentSettings visible={visible && settingsOpen} />
     <label><input type="checkbox" checked={watch.enabled} onChange={event => { void screenControl(event.target.checked) }} />允许屏幕陪看</label>
     <p>开启后，只有你要求陪看时才采集；关键画面会发给当前视觉模型，每次最多两分钟。{watch.active ? '正在采集。' : '当前未采集。'}</p>
     {watch.active && <button type="button" onClick={() => { void screenControl() }}>立即停止看屏幕</button>}

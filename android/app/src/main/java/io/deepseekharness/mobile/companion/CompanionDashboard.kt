@@ -212,7 +212,7 @@ internal class CompanionDashboard(private val context: Context) {
                     .put("quietStart", store.quietHoursStart).put("quietEnd", store.quietHoursEnd)
                     .put("notificationStatus", CompanionReminderHealth.read(context).name)
             }
-            "superagentSettings" -> SuperagentSettings(context).status()
+            "superagentSettings" -> SuperagentSettings(context).status(request.optBoolean("diagnosticsOnly"))
             "superagentSettingsSave" -> SuperagentSettings(context).save(request)
             "knowledgePickFiles" -> {
                 context.startActivity(android.content.Intent(context, WhaleMemoryShareActivity::class.java)

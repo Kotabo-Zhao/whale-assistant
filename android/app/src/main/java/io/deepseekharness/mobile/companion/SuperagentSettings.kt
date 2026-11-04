@@ -16,9 +16,12 @@ internal class SuperagentSettings(context: Context) {
         val encrypted = prefs.getString("credentials", null) ?: return JSONObject()
         return JSONObject(String(cipher.decrypt(encrypted), Charsets.UTF_8))
     }
-    fun status(): JSONObject = synchronized(settingsLock) {
+    fun status(diagnosticsOnly: Boolean = false): JSONObject = synchronized(settingsLock) {
+        val result = JSONObject().put("unapproved",JSONArray(prefs.getString("unapproved","[]") ?: "[]"))
+            .put("diagnostics",JSONObject(prefs.getString("diagnostics","{}") ?: "{}"))
+        if (diagnosticsOnly) return@synchronized result
         val secrets = credentials()
-        JSONObject().put("revision",revision()).put("config", config()).put("unapproved", JSONArray(prefs.getString("unapproved", "[]") ?: "[]")).put("diagnostics", JSONObject(prefs.getString("diagnostics", "{}") ?: "{}")).put("credentials", JSONObject().apply {
+        result.put("revision",revision()).put("config", config()).put("credentials", JSONObject().apply {
             credentialNames.forEach { put(it, secrets.optString(it).isNotBlank()) }
         })
     }

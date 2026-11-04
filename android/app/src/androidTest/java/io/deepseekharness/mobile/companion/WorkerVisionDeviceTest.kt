@@ -182,6 +182,9 @@ class WorkerVisionDeviceTest {
             val effective = desk.runtime()
             assertEquals(0,effective.getJSONObject("config").getJSONObject("github").getJSONArray("allowedActors").length())
             assertFalse(effective.getJSONObject("credentials").has("githubToken"))
+            context.getSharedPreferences("superagent_sources_v1",0).edit().putString("credentials","invalid-test-ciphertext").commit()
+            val diagnostic = CompanionDashboard(context).execute(JSONObject().put("operation","superagentSettings").put("diagnosticsOnly",true))
+            assertTrue(diagnostic.has("diagnostics")); assertFalse(diagnostic.has("config")); assertFalse(diagnostic.has("credentials"))
         } finally { executor.shutdownNow(); app.deleteSharedPreferences(file) }
     }
 

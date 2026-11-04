@@ -30,6 +30,14 @@ it('suspends visible settings reads without overwriting the draft when the task 
   try {
     const details = app.container.querySelector('details.worker-secondary-settings')!
     await act(async () => { details.setAttribute('open',''); details.dispatchEvent(new Event('toggle')); await Promise.resolve() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000) })
+    expect(reads).toBe(0)
+    const channel = details.querySelector('details')!
+    const toggle = (node: Element, open: boolean) => act(async () => {
+      node.toggleAttribute('open',open); node.dispatchEvent(new Event('toggle'))
+      await Promise.resolve()
+    })
+    await toggle(channel,true)
     expect(reads).toBe(1)
     const input = screen.getByLabelText('仓库（owner/name）')
     fireEvent.change(input,{target:{value:'draft/project'}})
@@ -40,6 +48,14 @@ it('suspends visible settings reads without overwriting the draft when the task 
     await act(async () => {})
     expect(reads).toBe(2)
     expect(input).toHaveValue('draft/project')
+    await toggle(channel,false)
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000) })
+    expect(reads).toBe(2)
+    await toggle(details,false)
+    await toggle(details,true)
+    await toggle(channel,true)
+    expect(reads).toBe(3)
+    expect(screen.getByLabelText('仓库（owner/name）')).toHaveValue('draft/project')
     expect(interval.mock.calls.some(([,delay]) => delay === 5000 || delay === 15000)).toBe(false)
   } finally { app.unmount(); interval.mockRestore(); bridge.addWorkerDashboardListener.mockReset(); vi.useRealTimers() }
 })
