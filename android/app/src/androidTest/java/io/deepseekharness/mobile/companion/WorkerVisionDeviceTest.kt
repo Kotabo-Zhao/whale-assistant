@@ -395,10 +395,61 @@ class WorkerVisionDeviceTest {
         }
         fun control(worker: String, action: String, text: String) =
             store.command(JSONObject().put("id",worker).put("action",action).put("task",text))
+        val viaPet = InstrumentationRegistry.getArguments().getString("petSurface") == "true"
+        var pet: CompanionBubbleWindow? = null
+        fun views(v: android.view.View): List<android.view.View> = listOf(v) + if (v is android.view.ViewGroup)
+            (0 until v.childCount).flatMap { views(v.getChildAt(it)) } else emptyList()
+        fun tap(find: () -> android.view.View?) {
+            val deadline = android.os.SystemClock.elapsedRealtime()+8000
+            val bounds = android.graphics.Rect()
+            while (bounds.isEmpty && android.os.SystemClock.elapsedRealtime()<deadline) {
+                inst.runOnMainSync {
+                    val v = find()?.takeIf { it.isShown && it.width > 0 } ?: return@runOnMainSync
+                    v.requestRectangleOnScreen(android.graphics.Rect(0,0,v.width,v.height),true)
+                    if (v.getLocalVisibleRect(bounds)) {
+                        val pos = IntArray(2).also(v::getLocationOnScreen)
+                        bounds.offset(pos[0],pos[1])
+                    } else bounds.setEmpty()
+                }
+                if (bounds.isEmpty) Thread.sleep(100)
+            }
+            check(!bounds.isEmpty) { "找不到工单浮层控件" }
+            val start = android.os.SystemClock.uptimeMillis()
+            for (action in listOf(android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_UP)) {
+                val event = android.view.MotionEvent.obtain(start,android.os.SystemClock.uptimeMillis(),action,bounds.exactCenterX(),bounds.exactCenterY(),0)
+                event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                try { check(inst.uiAutomation.injectInputEvent(event,true)) } finally { event.recycle() }
+            }
+        }
+        fun panelDialog(field: String): android.app.AlertDialog? {
+            val panel = CompanionBubbleWindow::class.java.getDeclaredField("workerPanel").apply { isAccessible=true }.get(pet)
+            return CompanionWorkerPanel::class.java.getDeclaredField(field).apply { isAccessible=true }.get(panel) as? android.app.AlertDialog
+        }
+        fun tapCard(title: String,label: String) {
+            inst.runOnMainSync {
+                if (pet == null) pet = CompanionBubbleWindow(app,app.getSystemService(android.view.WindowManager::class.java),autoOpenOnDelivery=false) { intArrayOf(36,160,120,120) }
+                pet!!.show()
+            }
+            inst.waitForIdleSync()
+            repeat(3) {
+                if (panelDialog("dialog") == null) {
+                    tap {
+                        val root = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible=true }.get(pet) as? android.view.View
+                        root?.let(::views)?.firstOrNull { it.contentDescription?.toString()?.startsWith("后台任务") == true }
+                    }
+                    Thread.sleep(350)
+                }
+            }
+            check(panelDialog("dialog") != null) { "触摸后台入口后未打开收件箱" }
+            tap {
+                val card = panelDialog("dialog")?.window?.decorView?.let(::views)?.singleOrNull { it.contentDescription == "任务管理：$title" }
+                card?.let(::views)?.filterIsInstance<android.widget.Button>()?.singleOrNull { it.text == label }
+            }
+        }
         var revoked = false
         try {
             client.command(owner,"/permission read-only")
-            send(client,owner,"用 mobile_workers 只创建一张 read 工单。任务是核对一份指定的验收资料，先用 mobile_worker_report waiting 请用户提供资料 ID 与版本。收到后仅调用 mobile_knowledge_read 按该 ID 和版本读取，不搜索、不读任何其他资料。如果读取权限被关闭，调用 mobile_worker_report blocked 在摘要保留原错误代码并结束；用户确认恢复授权后再读同一资料，最后 completed 报告原文口令。发完工单就结束本轮。")
+            send(client,owner,"用 mobile_workers 只创建一张 read 工单，标题为「资料核对 ${id.take(8)}」。任务是核对一份指定的验收资料，先用 mobile_worker_report waiting 请用户提供资料 ID 与版本。收到后仅调用 mobile_knowledge_read 按该 ID 和版本读取，不搜索、不读任何其他资料。如果读取权限被关闭，调用 mobile_worker_report blocked 在摘要保留原错误代码并结束；用户确认恢复授权后再读同一资料，最后 completed 报告原文口令。发完工单就结束本轮。")
             val worker = waitState("waiting").getString("id")
             revoked = true
             check(prefs.edit().putBoolean("knowledge_model_access",false).commit())
@@ -407,15 +458,15 @@ class WorkerVisionDeviceTest {
             assertEquals(worker,blocked.getString("id"))
             assertFalse(blocked.optString("summary").contains(code))
             assertTrue(blocked.optString("summary"),blocked.optString("summary").contains("KNOWLEDGE_MODEL_DISABLED"))
+            assertFalse(store.resumeAuthorizedRead(worker,blocked.getLong("writeSeq")).getBoolean("ok"))
             val page = store.page("attention",limit=100).getJSONArray("items")
             assertTrue((0 until page.length()).map(page::getJSONObject).single { it.getString("id")==worker }.getBoolean("hasPermissionSettings"))
             val monitor = inst.addMonitor(CompanionActivity::class.java.name,null,false)
             try {
-                CompanionDashboard(app).execute(JSONObject().put("operation","workerBlockedSettings").put("id",worker))
+                if (viaPet) tapCard(blocked.getString("title"),"权限设置")
+                else CompanionDashboard(app).execute(JSONObject().put("operation","workerBlockedSettings").put("id",worker))
                 val screen = requireNotNull(inst.waitForMonitorWithTimeout(monitor,8000))
                 try {
-                    fun views(v: android.view.View): List<android.view.View> = listOf(v) + if (v is android.view.ViewGroup)
-                        (0 until v.childCount).flatMap { views(v.getChildAt(it)) } else emptyList()
                     inst.runOnMainSync {
                         val toggle = views(screen.window.decorView).filterIsInstance<android.widget.Switch>()
                             .single { it.text == "允许助手对话访问本地资料" }
@@ -432,12 +483,16 @@ class WorkerVisionDeviceTest {
                 } finally { inst.runOnMainSync { screen.finish() } }
             } finally { inst.removeMonitor(monitor) }
             revoked = false
-            control(worker,"resume","资料权限已恢复，请调用 mobile_knowledge_read 读取刚才同一 ID 和 revision，汇报口令。")
+            val instruction = "资料权限已恢复，请调用 mobile_knowledge_read 读取刚才同一 ID 和 revision，汇报口令。"
+            if (viaPet) {
+                tapCard(blocked.getString("title"),"继续原任务")
+            } else control(worker,"resume",instruction)
             val done = waitState("completed")
             assertEquals(worker,done.getString("id"))
             assertTrue(done.getString("summary").contains(code))
             inst.sendStatus(0,android.os.Bundle().apply { putString("permission","one worker: waiting, denied, blocked, resumed, verified fresh record") })
         } finally {
+            inst.runOnMainSync { pet?.destroy() }
             if (revoked) check(prefs.edit().putBoolean("knowledge_model_access",true).commit())
             library.remove(id,body)
         }

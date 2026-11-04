@@ -209,6 +209,22 @@ class WhaleConversationalTaskTest {
             assertEquals(independent,restarted.batch(0).getJSONObject(0).getString("commandId"))
             assertEquals(1,restarted.pending().length())
             assertFalse(restarted.isHeld(id))
+            val worker = UUID.randomUUID().toString()
+            val row = JSONObject().put("id",worker).put("owner","session-whale-task-desk").put("title","授权回读")
+                .put("mode","read").put("state","blocked").put("summary","KNOWLEDGE_MODEL_DISABLED")
+                .put("revision",2).put("writeSeq",9)
+            restarted.put(row)
+            settings.knowledgeModelAccess = false
+            assertFalse(restarted.resumeAuthorizedRead(worker,9).getBoolean("ok"))
+            settings.knowledgeModelAccess = true
+            assertThrows(IllegalStateException::class.java) { restarted.resumeAuthorizedRead(worker,8) }
+            repeat(2) { assertTrue(restarted.resumeAuthorizedRead(worker,9).getBoolean("ok")) }
+            val resumes = restarted.pending()
+            assertEquals(2,resumes.length())
+            assertEquals(worker,resumes.getJSONObject(1).getString("id"))
+            assertEquals("resume",resumes.getJSONObject(1).getString("action"))
+            restarted.put(row.put("mode","device").put("writeSeq",10))
+            assertThrows(IllegalStateException::class.java) { restarted.resumeAuthorizedRead(worker,10) }
         } finally {
             names.forEach(app::deleteSharedPreferences)
             root.deleteRecursively()

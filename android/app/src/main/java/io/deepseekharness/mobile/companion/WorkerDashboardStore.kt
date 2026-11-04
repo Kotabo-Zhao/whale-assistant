@@ -128,6 +128,28 @@ internal class WorkerDashboardStore(private val context: Context) {
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
     }
 
+    fun resumeAuthorizedRead(id: String, expectedWrite: Long): JSONObject = synchronized(lock) {
+        val row = worker(id)
+        check(row.optString("mode") == "read" && row.getLong("writeSeq") == expectedWrite)
+        check(!guestDir.isDirectory || File(guestDir,"$id.json").isFile)
+        val access = CompanionAgentAccess(context,JSONObject().put("callerSession",row.getString("owner")))
+        val page = requireNotNull(WorkerAccess.settingsForReport(row))
+        try {
+            when (page) {
+                CompanionPreferencePage.LIBRARY -> access.requireKnowledge()
+                CompanionPreferencePage.MEMORY -> access.requireMemory()
+                CompanionPreferencePage.NOTIFICATIONS -> access.requireTasks()
+                else -> error("权限入口无效")
+            }
+        } catch (denied: io.deepseekharness.mobile.runtime.RuntimeFailure) {
+            return@synchronized JSONObject().put("ok",false).put("message",denied.message)
+        }
+        val commandId = UUID.nameUUIDFromBytes("permission-resume:$id:${row.getLong("revision")}".toByteArray()).toString()
+        if (enqueue(JSONObject().put("commandId",commandId).put("id",id).put("action","resume")
+                .put("task","用户已确认恢复本次读取所需权限，请在原范围内继续并重新核对资料。"))) listeners.forEach { it() }
+        JSONObject().put("ok",true).put("message","已提交原工单，等待后台继续")
+    }
+
     /** Page backwards from the newest revision; even a single revision with many progress reports is bounded. */
     fun detail(id: String, offset: Int = 0, limit: Int = 12): JSONObject = synchronized(lock) {
         require(offset >= 0 && limit in 1..40)

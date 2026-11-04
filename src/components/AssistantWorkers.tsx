@@ -168,6 +168,13 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
         {row.state === 'queued' && typeof row.waitReason === 'string' && row.waitReason && <p>{row.waitReason}</p>}
         {typeof row.question === 'string' && row.question && <p>{row.question}</p>}
         {typeof row.summary === 'string' && row.summary !== '' && <p className="worker-text worker-result-preview">{row.summary}</p>}
+        {row.hasPermissionSettings === true && row.mode === 'read' && typeof row.writeSeq === 'number' &&
+          <button type="button" disabled={busy !== null} onClick={() => {
+            setBusy(row.id)
+            void runtimeBridge.companionDashboard({ operation: 'workerResumeAuthorizedRead', id: row.id, writeSeq: Number(row.writeSeq) })
+              .then(result => { setMessage(String(result.message)); setRevision(v => v + 1) })
+              .catch(() => setMessage('工单已变化，请刷新查看')).finally(() => setBusy(null))
+          }}>继续原任务</button>}
         {row.hasPermissionSettings === true && <button type="button" onClick={() => {
           void runtimeBridge.companionDashboard({ operation: 'workerBlockedSettings', id: row.id })
             .catch(() => setMessage('任务状态已变化，请刷新查看'))

@@ -269,7 +269,18 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
             }
             if (!missing) when (state) {
                 "waiting" -> action("回答",true) { input(id,title,"reply","回答任务问题",row.optString("question")) }
-                "blocked","interrupted","failed" -> action("继续",true) { input(id,title,"resume","确认现场后的继续说明",row.optString("summary")) }
+                "blocked","interrupted","failed" -> if (row.optBoolean("hasPermissionSettings") && row.optString("mode") == "read") {
+                    action("继续原任务",true) {
+                        executor.execute {
+                            val result = runCatching { store.resumeAuthorizedRead(id,row.getLong("writeSeq")).getString("message") }
+                            handler.post { if (!disposed) {
+                                Toast.makeText(context,result.getOrDefault("工单已变化，请刷新查看"),Toast.LENGTH_SHORT).show()
+                                schedule()
+                            } }
+                        }
+                    }
+                    if (expandedId == id) action("补充说明") { input(id,title,"resume","确认现场后的继续说明",row.optString("summary")) }
+                } else action("继续",true) { input(id,title,"resume","确认现场后的继续说明",row.optString("summary")) }
             }
             if (row.optBoolean("hasPermissionSettings")) action("权限设置") {
                 executor.execute {

@@ -263,6 +263,7 @@ internal class CompanionDashboard(private val context: Context) {
             "workerControl" -> WorkerDashboardStore(context).command(request)
             "workerPermission" -> WorkerDashboardStore(context).heldAction(text("id"),text("action"))
             "workerBlockedSettings" -> { WorkerDashboardStore(context).openBlockedSettings(text("id")); JSONObject().put("ok",true) }
+            "workerResumeAuthorizedRead" -> WorkerDashboardStore(context).resumeAuthorizedRead(text("id"),request.getLong("writeSeq"))
             "screenWatchStatus" -> ScreenWatchAccess(context).status()
             "screenWatchSet" -> { ScreenWatchAccess(context).enabled(request.getBoolean("enabled")); ScreenWatchAccess(context).status() }
             "screenWatchStop" -> { ScreenWatchAccess(context).stop(); ScreenWatchAccess(context).status() }
