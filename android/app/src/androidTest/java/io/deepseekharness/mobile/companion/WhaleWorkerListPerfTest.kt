@@ -307,13 +307,21 @@ class WhaleWorkerListPerfTest {
     @Test fun petOpensCompletedSourceWhileViewingOpenWork() {
         val app = inst.targetContext
         val root = File(app.cacheDir, "group-window-" + UUID.randomUUID()).apply { check(mkdirs()) }
+        val args = InstrumentationRegistry.getArguments()
+        val style = args.getString("petStyle") ?: "cute"
+        val mode = args.getString("petMode") ?: "light"
         val ctx = object : ContextWrapper(app) {
             override fun getNoBackupFilesDir() = root
             override fun getApplicationContext(): Context = this
+            override fun getSharedPreferences(name: String, flags: Int) = app.getSharedPreferences(
+                if (name in setOf("whale-interface","app_theme")) "${root.name}-$name" else name,flags)
         }
+        check(ctx.getSharedPreferences("whale-interface",0).edit().putString("style",style).commit())
+        io.deepseekharness.mobile.AppThemePreference.save(ctx,mode)
         val store = WorkerDashboardStore(ctx)
         val group = "联调目标"
-        store.put(fixture(1).put("group",group).put("state","waiting"))
+        store.put(fixture(1).put("group",group).put("title","核对旅行日期").put("state","waiting").put("question","周五还是周六出发？"))
+        store.put(fixture(3).put("group","另一目标").put("state","running"))
         store.put(fixture(2).put("group",group).put("state","completed"))
         lateinit var panel: CompanionWorkerPanel
         fun views(v: android.view.View): List<android.view.View> = listOf(v) + if (v is android.view.ViewGroup)
@@ -333,13 +341,38 @@ class WhaleWorkerListPerfTest {
         }
         try {
             inst.runOnMainSync { panel = CompanionWorkerPanel(ctx, {}); panel.open() }
+            until("dialog") { labels -> labels.singleOrNull { it.text == "待我处理" }?.performClick() == true }
+            until("dialog") { labels -> labels.any { it.text == "回答" } && labels.none { it.text == "测试任务 3" } }
+            fun dialog(field: String) = CompanionWorkerPanel::class.java.getDeclaredField(field).apply { isAccessible=true }.get(panel) as android.app.AlertDialog
+            fun capture(field: String) {
+                if (args.getString("captureProof") != "true") return
+                inst.waitForIdleSync()
+                inst.runOnMainSync {
+                    val view = dialog(field).window!!.decorView
+                    val bitmap = android.graphics.Bitmap.createBitmap(view.width,view.height,android.graphics.Bitmap.Config.ARGB_8888)
+                    view.draw(android.graphics.Canvas(bitmap))
+                    File(app.getExternalFilesDir(null),"worker-$style-$mode-$field.png").outputStream().use {
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
+                    }
+                    bitmap.recycle()
+                }
+            }
+            capture("dialog")
+            until("dialog") { labels -> labels.single { it.text == "回答" }.performClick() }
+            until("editDialog") { labels -> labels.any { it is android.widget.EditText && it.hint == "回答任务问题" } }
+            capture("editDialog")
+            inst.runOnMainSync { dialog("editDialog").dismiss() }
             until("dialog") { labels -> labels.singleOrNull { it.text == "目标汇总" }?.performClick() == true }
             until("dialog") { labels ->
                 labels.any { it.text == "已完成 · 1" } && labels.any { it.text == "需处理 · 1" } &&
                     labels.singleOrNull { it.text.toString() == "测试任务 2\n结果 2" }?.performClick() == true
             }
             until("detailDialog") { labels -> labels.any { it.text.contains("结果 2") } }
-        } finally { inst.runOnMainSync { panel.destroy() }; root.deleteRecursively() }
+            capture("detailDialog")
+        } finally {
+            inst.runOnMainSync { panel.destroy() }; root.deleteRecursively()
+            for (name in listOf("whale-interface","app_theme")) app.deleteSharedPreferences("${root.name}-$name")
+        }
     }
 
     @Test fun petPanelPagesAndOpensSelectedTaskHistory() {

@@ -12,16 +12,11 @@ import org.json.JSONObject
 internal class WorkerDetailView(context: Context, row: JSONObject) : ScrollView(context) {
     private val content = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private fun dp(value: Int) = (resources.displayMetrics.density * value + .5f).toInt()
-    private fun color(attr: Int): android.content.res.ColorStateList? =
-        context.obtainStyledAttributes(intArrayOf(attr)).let { try { it.getColorStateList(0) } finally { it.recycle() } }
-
-    private val primary = color(android.R.attr.textColorPrimary)
-    private val secondary = color(android.R.attr.textColorSecondary)
-    private val accent = color(android.R.attr.colorAccent)
+    private val ui = PetUi(context)
     private fun text(value: String, size: Float, muted: Boolean = false, bold: Boolean = false) =
         TextView(context).apply {
             text = value; textSize = size
-            (if (muted) secondary else primary)?.let(::setTextColor)
+            setTextColor(if (muted) ui.muted else ui.ink)
             if (bold) setTypeface(typeface,Typeface.BOLD)
         }
 
@@ -30,8 +25,8 @@ internal class WorkerDetailView(context: Context, row: JSONObject) : ScrollView(
     }
 
     private fun toggle(label: String, onClick: (TextView) -> Unit) = text(label,13f).apply {
-        minHeight = dp(40); gravity = android.view.Gravity.CENTER_VERTICAL; isFocusable = true
-        accent?.let(::setTextColor); setOnClickListener { onClick(this) }
+        minHeight = dp(44); gravity = android.view.Gravity.CENTER_VERTICAL; isFocusable = true
+        setTextColor(ui.accent); setOnClickListener { onClick(this) }
     }
 
     private fun paragraph(value: String, limit: Int, label: String) {

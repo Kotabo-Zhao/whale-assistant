@@ -37,7 +37,7 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
     private var detailDialog: AlertDialog? = null
     private var detailRequest = 0
     private var expandedId: String? = null
-    private var showAll = false
+    private var filter = "open"
     private var disposed = false
     private var scheduled = false
     private var loading = false
@@ -62,11 +62,11 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
         if (loading) { loadAgain = true; return }
         loading = true
         val opened = dialog
-        val all = showAll
+        val selectedFilter = filter
         val start = offset
         val group = selectedGroup
         executor.execute {
-            val result = runCatching { store.page(if (all) "all" else "open", group = group, offset = start, limit = if (opened == null) 0 else 20) }
+            val result = runCatching { store.page(selectedFilter, group = group, offset = start, limit = if (opened == null) 0 else 20) }
             handler.post {
                 loading = false
                 if (!disposed) result.onSuccess { page ->
@@ -86,7 +86,7 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                         val description = "后台任务：${counts.first}项运行中，${counts.second}项待处理"
                         if (contentDescription != description) contentDescription = description
                     }
-                    if (opened != null && opened === dialog && all == showAll && start == offset && group == selectedGroup) {
+                    if (opened != null && opened === dialog && selectedFilter == filter && start == offset && group == selectedGroup) {
                         total = page.getInt("total")
                         if (start >= total && start > 0) { offset = ((total - 1).coerceAtLeast(0) / 20) * 20; schedule() }
                         else {
@@ -116,25 +116,34 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
         }
         val tabs = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(7), 0, dp(6)) }
         fun styleTab(tab: Button) {
-            tab.isSelected = tab.tag == showAll
+            tab.isSelected = tab.tag == filter
             tab.setTextColor(if (tab.isSelected) ui.accent else ui.muted)
             tab.background = ui.action(if (tab.isSelected) ui.soft else ui.surface, 10)
         }
-        fun tab(text: String, all: Boolean) = Button(context).apply {
-            this.text = text; tag = all; isAllCaps = false; textSize = 14f; minHeight = dp(44); styleTab(this)
+        fun tab(text: String, value: String) = Button(context).apply {
+            this.text = text; tag = value; isAllCaps = false; textSize = 14f; minHeight = dp(44); styleTab(this)
             setOnClickListener {
-                if (showAll != all) {
-                    showAll = all; offset = 0; lastPage = ""; expandedId = null
+                if (filter != value) {
+                    filter = value; offset = 0; lastPage = ""; expandedId = null
                     for (i in 0 until tabs.childCount) styleTab(tabs.getChildAt(i) as Button)
                     schedule()
                 }
             }
         }
-        tabs.addView(tab("进行中与待处理", false), LinearLayout.LayoutParams(0, -2, 1f))
-        tabs.addView(tab("全部任务", true), LinearLayout.LayoutParams(0, -2, 1f))
+        tabs.addView(tab("当前任务", "open"), LinearLayout.LayoutParams(0, -2, 1f))
+        tabs.addView(tab("待我处理", "attention"), LinearLayout.LayoutParams(0, -2, 1f))
+        tabs.addView(tab("全部任务", "all"), LinearLayout.LayoutParams(0, -2, 1f))
         body.addView(tabs)
         cards = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        body.addView(ScrollView(context).apply { addView(cards) }, LinearLayout.LayoutParams(-1, minOf(dp(390), (context.resources.displayMetrics.heightPixels * 0.5f).toInt())))
+        val list = object : ScrollView(context) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val cap = minOf(dp(390),context.resources.displayMetrics.heightPixels / 2)
+                val height = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) cap else minOf(cap,MeasureSpec.getSize(heightMeasureSpec))
+                super.onMeasure(widthMeasureSpec,MeasureSpec.makeMeasureSpec(height,MeasureSpec.AT_MOST))
+            }
+        }
+        list.addView(cards)
+        body.addView(list,LinearLayout.LayoutParams(-1,-2))
         dialog = ui.dialogBuilder("后台任务", null, io.deepseekharness.mobile.R.drawable.ic_whale_nav_tasks, manual).setView(body).setNegativeButton("关闭", null).create().apply {
             window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
             setOnDismissListener { dialog = null; inboxUi = null; expandedId = null; selectedGroup = ""; groupReport = null; cards = null; rows = emptyList(); submissions = emptyList(); lastPage = ""; offset = 0; total = 0 }
@@ -180,7 +189,12 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
             }
         }
         if (shown.isEmpty() && submissions.isEmpty()) {
-            container.addView(TextView(context).apply { text = if (showAll) "暂无后台任务" else "没有进行中或待处理的任务"; setTextColor(ui.muted); setPadding(dp(8), dp(20), dp(8), dp(20)) })
+            val message = when (filter) {
+                "attention" -> "目前没有需要你处理的任务"
+                "all" -> "暂无后台任务"
+                else -> "没有进行中或待处理的任务"
+            }
+            container.addView(ui.text(message,14f,ui.muted).apply { setPadding(dp(8),dp(20),dp(8),dp(20)) })
             return
         }
         for (row in shown) {
@@ -242,7 +256,18 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
             })
             row.optString("uiError").takeIf { it.isNotBlank() }?.let { error -> card.addView(TextView(context).apply { text = error; setTextColor(ui.alert) }) }
             val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-            fun action(label: String, click: () -> Unit) { actions.addView(Button(context).apply { text = label; isAllCaps = false; textSize = 13f; minWidth = dp(52); minHeight = dp(44); setTextColor(ui.accent); background = ui.action(ui.canvas, 10); setOnClickListener { click() } }) }
+            fun action(label: String, primary: Boolean = false, click: () -> Unit) {
+                actions.addView(Button(context).apply {
+                    text = label; isAllCaps = false; textSize = 13f; minWidth = dp(52); minHeight = dp(44)
+                    setTextColor(if (primary) ui.onPrimary else ui.accent)
+                    background = ui.action(if (primary) ui.primary else ui.canvas,10)
+                    setOnClickListener { click() }
+                })
+            }
+            if (!missing) when (state) {
+                "waiting" -> action("回答",true) { input(id,title,"reply","回答任务问题",row.optString("question")) }
+                "blocked","interrupted","failed" -> action("继续",true) { input(id,title,"resume","确认现场后的继续说明",row.optString("summary")) }
+            }
             if (!row.optBoolean("recordUnreadable")) action("任务详情") { showDetail(id, title, 0) }
             val taskGroup = row.optString("group")
             if (selectedGroup.isEmpty() && taskGroup.isNotBlank()) action("目标汇总") { selectGroup(taskGroup) }
@@ -267,11 +292,8 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                 }
             }
             if (!missing) {
-                when (state) {
-                    "queued", "starting", "running", "completed" -> if (!row.optBoolean("authorizationRevoked")) action("追加") { input(id, title, "add", "追加任务信息") }
-                    "waiting" -> action("回答") { input(id, title, "reply", "回答任务问题") }
-                    "blocked", "interrupted", "failed" -> action("继续") { input(id, title, "resume", "确认现场后的继续说明") }
-                }
+                if (expandedId == id && state in setOf("queued","starting","running","completed") && !row.optBoolean("authorizationRevoked"))
+                    action("追加") { input(id, title, "add", "追加任务信息") }
                 if (expandedId == id && state == "queued") action("优先级") { input(id, title, "priority", "输入 0 到 10，数字越大越优先") }
                 if (expandedId == id && ((state in active && state != "cancelling") || state == "failed" || (state == "completed" && !row.optBoolean("authorizationRevoked") && row.optString("domainTicketId").isNotBlank()))) action("撤销") { command(id, "cancel", "") }
             }
@@ -329,21 +351,30 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                     detailDialog?.dismiss()
                     val heading = row.optJSONObject("authoredDraft")?.optString("title")?.takeIf(String::isNotBlank)
                         ?: title.takeIf { it.length <= 38 } ?: "任务详情"
-                    val builder = AlertDialog.Builder(context).setTitle(heading).setView(WorkerDetailView(context,row)).setNegativeButton("关闭",null)
+                    val ui = PetUi(context)
+                    val builder = ui.dialogBuilder(heading,null,io.deepseekharness.mobile.R.drawable.ic_whale_nav_tasks).setView(WorkerDetailView(context,row)).setNegativeButton("关闭",null)
                     if (start + events.length() < historyCount) builder.setNeutralButton("更早记录") { _,_ -> showDetail(id,title,start+12) }
                     if (start > 0) builder.setPositiveButton("较新记录") { _,_ -> showDetail(id,title,(start-12).coerceAtLeast(0)) }
-                    detailDialog = builder.create().apply { window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY); show() }
+                    detailDialog = builder.create().apply { window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY); show(); ui.finishDialog(this,390) }
                 }
             }
         }
     }
-    private fun input(id: String, title: String, action: String, hint: String) {
+    private fun input(id: String, title: String, action: String, hint: String, note: String = "") {
         if (editDialog != null) return
-        val field = EditText(context).apply { this.hint = hint; maxLines = 5 }
-        editDialog = AlertDialog.Builder(context).setTitle(title).setView(field).setNegativeButton("取消", null).setPositiveButton("提交", null).create().apply {
+        val ui = PetUi(context)
+        val field = ui.editor(EditText(context)).apply { this.hint = hint; maxLines = 5 }
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(16),dp(8),dp(16),dp(8))
+            if (note.isNotBlank()) addView(ui.text(note,14f).apply {
+                maxLines = 4; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0,0,0,dp(8))
+            })
+            addView(field,LinearLayout.LayoutParams(-1,-2))
+        }
+        editDialog = ui.dialogBuilder(title,null,io.deepseekharness.mobile.R.drawable.ic_whale_nav_tasks).setView(body).setNegativeButton("取消", null).setPositiveButton("提交", null).create().apply {
             window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
             setOnDismissListener { editDialog = null }
-            show()
+            show(); ui.finishDialog(this,390)
             getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val value = field.text.toString().trim()
                 if (value.isBlank()) field.error = "请输入内容" else { command(id, action, value); dismiss() }

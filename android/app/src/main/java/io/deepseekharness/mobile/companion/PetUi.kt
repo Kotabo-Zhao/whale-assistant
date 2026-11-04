@@ -64,7 +64,13 @@ internal class PetUi(private val context: Context) {
             val r = dp(if (simple) 7 else 20).toFloat()
             cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f)
         }
-        row.addView(PetPortrait(context, this, icon), LinearLayout.LayoutParams(dp(52), dp(52)))
+        if (simple) {
+            row.addView(android.widget.ImageView(context).apply {
+                setImageDrawable(palette.getDrawable(icon)?.mutate()?.apply { setTint(accent) })
+                setPadding(dp(4),dp(4),dp(4),dp(4))
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(dp(32),dp(32)))
+        } else row.addView(PetPortrait(context, this, icon), LinearLayout.LayoutParams(dp(52), dp(52)))
         row.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, dp(2), 0)
             addView(text(title, 17f, ink, true).apply { ViewCompat.setAccessibilityHeading(this, true) })

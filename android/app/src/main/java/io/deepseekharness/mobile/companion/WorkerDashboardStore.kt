@@ -80,7 +80,7 @@ internal class WorkerDashboardStore(private val context: Context) {
             val item = commands.getJSONObject(i)
             if (item.optString("action") != "start") continue
             queued++
-            if (limit > 0) submissions.put(JSONObject().put("task",item.optString("task").take(120))
+            if (limit > 0 && offset == 0 && group.isEmpty() && filter in setOf("all","open","running")) submissions.put(JSONObject().put("task",item.optString("task").take(120))
                 .put("notice",item.optString("notice")).put("commandId",item.optString("commandId")))
         }
         val held = if (group.isEmpty() && filter in setOf("all", "open", "attention")) heldRequests() else JSONObject()
