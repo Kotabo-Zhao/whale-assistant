@@ -595,16 +595,18 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (!busy) (chat.pendingUser ?: failedUser)?.let { retryText = it; send.performClick() }
         }
         send.setOnClickListener {
-            if (busy || (queued == null && retryText == null && failedUser == null && followups.isNotEmpty())) {
+            // A recoverable turn owns its transcript slot, but independent work can still be dispatched.
+            val pendingTurn = inFlightUser ?: chat.pendingUser ?: failedUser
+            val newInput = queued == null && retryText == null && input.text.toString().trim() != pendingTurn
+            if (busy || (newInput && (pendingTurn != null || followups.isNotEmpty()))) {
                 if (busy && inFlightUser == null) return@setOnClickListener
                 val next = runCatching { CompanionBubbleChatPolicy.validateMessage(input.text.toString()) }.getOrNull() ?: return@setOnClickListener
                 if (followups.size >= 12) { android.widget.Toast.makeText(context, "已有 12 条消息等待发送", android.widget.Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-                val id = runCatching { journal.accept(next,followups.lastOrNull()?.text ?: inFlightUser.orEmpty()) }.getOrElse {
+                val id = runCatching { journal.accept(next,followups.lastOrNull()?.text ?: pendingTurn.orEmpty()) }.getOrElse {
                     android.widget.Toast.makeText(context,it.message?.takeIf { note -> note.startsWith("有 12 条") } ?: "无法保存待处理消息，输入已保留",android.widget.Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
                 val item = Followup(next,id)
-                val pendingTurn = inFlightUser
                 if (pendingTurn != null && chat.handoffSessionId() == null) {
                     val outstanding = (listOf(pendingTurn) + followups.map { it.text } + next).takeLast(6)
                     classifyFollowup(item, outstanding.map { CompanionBubbleChat.Message("user", it) })

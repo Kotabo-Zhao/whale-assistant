@@ -301,6 +301,52 @@ class WhaleConversationalTaskTest {
         } finally { inst.runOnMainSync { window.destroy() }; if (!save) dir.deleteRecursively() }
     }
 
+    @Test fun independentReportCanStartBeforeInterruptedReplyIsRetried() {
+        val token = UUID.randomUUID().toString().take(8)
+        val dir = File(app.cacheDir,"pet-interrupted-$token").apply { check(mkdirs()) }
+        val transcript = CompanionBubbleHistory(storage(dir))
+        val original = "给我讲一个灯塔的故事。"
+        val next = "另一件独立的事：为明天的交接整理差异报告 $token。甲表周三交九箱，乙表周五交六箱，列出差异和待确认事项。"
+        CompanionBubbleChat(app,historyStore=transcript).preserveDirectInput(emptyList(),original)
+        val pending = requireNotNull(transcript.load()?.pending)
+        lateinit var window: CompanionBubbleWindow
+        try {
+            inst.runOnMainSync {
+                window = CompanionBubbleWindow(app,app.getSystemService(WindowManager::class.java),autoOpenOnDelivery=false,historyStore=transcript) { intArrayOf(52,260,128,128) }
+                window.show()
+                val root = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible = true }.get(window) as View
+                val input = views(root).filterIsInstance<EditText>().single()
+                assertEquals(original,input.text.toString())
+                input.setText(next)
+                views(root).filterIsInstance<TextView>().single { it.text == "发送" }.performClick()
+                assertTrue(input.text.isEmpty())
+                input.setText("未发送的第三句")
+            }
+            await("中断的首轮挡住了独立任务",120_000) {
+                transcript.followups.entries().singleOrNull()?.receipt?.contains("已交给后台处理") == true
+            }
+            assertEquals(pending,transcript.load()?.pending)
+            assertTrue(transcript.load()?.messages.orEmpty().isEmpty())
+            val entry = transcript.followups.entries().single()
+            assertEquals(original,entry.after)
+            assertEquals(next,entry.text)
+            val desk = WorkerDashboardStore(app)
+            await("找不到同 ID 的后台投递或工单") {
+                val rows = desk.list().getJSONArray("items")
+                val commands = desk.pending()
+                (0 until rows.length()).any { rows.getJSONObject(it).optString("scope").contains(token) } ||
+                    (0 until commands.length()).any { commands.getJSONObject(it).optString("commandId") == entry.id }
+            }
+            inst.runOnMainSync {
+                val root = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible = true }.get(window) as View
+                assertEquals("未发送的第三句",views(root).filterIsInstance<EditText>().single().text.toString())
+            }
+        } finally {
+            inst.runOnMainSync { window.destroy() }
+            dir.deleteRecursively()
+        }
+    }
+
     @Test fun queueFollowupWhileReplyIsInFlight() {
         val tmp = File(app.cacheDir, "pet-inflight-" + UUID.randomUUID()).apply { mkdirs() }
         val transcript = CompanionBubbleHistory(storage(tmp))
@@ -382,6 +428,11 @@ class WhaleConversationalTaskTest {
                 seen
             }
             await("独立交办回执未按对话顺序保存",180_000) {
+                var error: String? = null
+                inst.runOnMainSync {
+                    error = CompanionBubbleWindow::class.java.getDeclaredField("lastError").apply { isAccessible=true }.get(window) as? String
+                }
+                check(error == null) { "前台回复失败：$error" }
                 val messages = transcript.load()?.messages.orEmpty()
                 messages.size == 4 && messages[2].text == next && messages[3].text.contains("已交给后台处理")
             }
