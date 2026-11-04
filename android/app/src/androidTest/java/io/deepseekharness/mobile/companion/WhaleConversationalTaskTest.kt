@@ -234,8 +234,18 @@ class WhaleConversationalTaskTest {
                 input.setText(first); send.performClick()
                 assertTrue(send.isEnabled)
                 input.setText(second); send.performClick()
-                assertEquals("已排 1", send.text.toString())
+                assertEquals("继续发送", send.text.toString())
                 input.setText("下一条还没写完")
+                window.hide()
+                window.show()
+                val reopened = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible = true }.get(window) as View
+                val shown = views(reopened).filterIsInstance<TextView>().toList()
+                assertTrue(shown.any { it.text.toString() == first })
+                assertEquals("下一条还没写完", shown.filterIsInstance<EditText>().single().text.toString())
+                val status = shown.single { it.contentDescription?.toString()?.endsWith("查看消息状态") == true }
+                assertTrue(status.performClick())
+                assertTrue(shown.any { it.isShown && it.text.contains(second) })
+                assertTrue(shown.single { it.text == "继续发送" }.isEnabled)
             }
             await("第二条消息未按顺序处理", 150_000) {
                 transcript.load()?.messages?.filter { it.role == "user" }?.map { it.text } == listOf(first, second)

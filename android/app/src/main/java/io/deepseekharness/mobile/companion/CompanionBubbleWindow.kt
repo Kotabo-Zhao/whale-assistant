@@ -28,6 +28,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var previewDialog: android.app.AlertDialog? = null
     private var questionDialog: android.app.AlertDialog? = null
     private var pendingQuestion: org.json.JSONObject? = null
+    private var mainQuestion: String? = null
     private var liveText = ""
     private var renderLive: ((String) -> Unit)? = null
     private var request = 0L
@@ -414,8 +415,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
         }
         if (busy) {
-            chat.pendingUser?.let { bubble(it, true) }
-            val live = bubble(liveText.ifBlank { "正在恢复回复…" }, false)
+            (inFlightUser ?: chat.pendingUser)?.let { bubble(it, true) }
+            val live = bubble(mainQuestion ?: liveText.ifBlank { "正在回复…" }, false)
             renderLive = { text -> live.text = CompanionRichText.render(text, ui); panel.post { positionUpdater?.invoke() } }
         }
         val input = EditText(context).apply {
@@ -437,13 +438,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(2), dp(2), dp(2), dp(2)); background = ui.shape(ui.canvas, 14, ui.line)
         }
-        var waitingInMain = false
+
         val continueButton = TextView(context).apply {
             text = "主对话"; setTextColor(android.content.res.ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()), intArrayOf(secondary, accent))); textSize = 13f; setPadding(dp(4), dp(12), dp(4), dp(12))
             contentDescription = "在主对话继续桌宠会话"
-            isEnabled = !busy && chat.handoffSessionId() != null
+            isEnabled = chat.handoffSessionId() != null
             setOnClickListener {
-                if (!busy || waitingInMain || pendingQuestion != null) chat.handoffSessionId()?.let { id -> hide(); openSession(id) }
+                chat.handoffSessionId()?.let { id -> hide(); openSession(id) }
             }
         }
         val newTopic = TextView(context).apply {
@@ -486,16 +487,31 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         panel.addView(progress)
+        val progressDetails = ui.text("", 12f, secondary).apply { setPadding(dp(12),0,dp(12),dp(6)) }
+        val detailScroll = ScrollView(context).apply { addView(progressDetails) }
+        panel.addView(detailScroll, LinearLayout.LayoutParams(-1,dp(80)))
+        var expanded = false
         renderFollowups = {
-            val text = followups.lastOrNull { it.receipt != null }?.receipt ?: when {
-                followups.any { it.deciding } -> "正在判断新消息是否需要后台处理…"
-                followups.isNotEmpty() -> "会话中还有 ${followups.size} 条消息等待处理"
-                else -> ""
-            }
-            progress.text = text
-            progress.visibility = if (text.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+            val deciding = followups.count { it.deciding }
+            val received = followups.count { it.receipt != null }
+            val waiting = followups.size - deciding - received
+            val counts = listOfNotNull(
+                "判断中 $deciding".takeIf { deciding > 0 }, "等待对话 $waiting".takeIf { waiting > 0 },
+                "已收到回执 $received".takeIf { received > 0 }
+            ).joinToString(" · ")
+            if (followups.isEmpty()) expanded = false
+            val latest = followups.lastOrNull { it.receipt != null }?.receipt
+            progress.text = listOfNotNull(counts, latest).joinToString("\n")
+            progress.visibility = if (counts.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+            progress.contentDescription = "$counts，查看消息状态"
+            progressDetails.text = if (expanded) followups.joinToString("\n") { entry ->
+                val state = entry.receipt ?: if (entry.deciding) "正在判断" else "等待对话"
+                "${entry.text.take(80)} · $state"
+            } else ""
+            detailScroll.visibility = if (expanded) android.view.View.VISIBLE else android.view.View.GONE
             panel.post { positionUpdater?.invoke() }
         }
+        progress.setOnClickListener { expanded = !expanded; renderFollowups?.invoke() }
         renderFollowups?.invoke()
         val answerQuestion = TextView(context).apply {
             text = "回答助手的问题"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); setTextColor(accent); background = bar()
@@ -508,11 +524,18 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         status.visibility = if (busy || lastError != null) android.view.View.VISIBLE else android.view.View.GONE
         fun sendLabel() {
             send.text = if (busy && inFlightUser != null) {
-                if (followups.isEmpty()) "继续发送" else "已排 ${followups.size}"
+                "继续发送"
             } else ui.string(R.string.pet_ui_send)
         }
         sendLabel()
-        if (busy) { status.text = "正在回复…"; input.isEnabled = inFlightUser != null }
+        if (busy) {
+            status.text = when {
+                pendingQuestion != null -> "需要你回答；回答后会继续原任务。"
+                mainQuestion != null -> "需要你回答，请点“主对话”继续。"
+                else -> "正在回复…"
+            }
+            input.isEnabled = inFlightUser != null
+        }
         var failedMessage: TextView? = null
         var retryText: String? = null
         var queued: Followup? = null
@@ -562,12 +585,16 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val streamingBubble = bubble("正在输入…", false)
             liveText = ""
             renderLive = { text -> streamingBubble.text = CompanionRichText.render(text, ui); panel.post { positionUpdater?.invoke() } }
-            waitingInMain = false
-            busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = false; sendLabel(); status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
+            mainQuestion = null
+            busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = chat.handoffSessionId() != null; sendLabel(); status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
             chat.onInteractionNeeded = { question -> handler.post {
-                if (!closed && request == generation && root === panel) {
-                    waitingInMain = true
+                if (!closed && request == generation) {
+                    mainQuestion = question
+                    if (root !== panel) {
+                        if (visible) { hide(); show() }
+                        return@post
+                    }
                     streamingBubble.text = CompanionRichText.render(question, ui)
                     status.text = "需要你回答，请点“主对话”继续。"
                     status.visibility = android.view.View.VISIBLE
@@ -578,8 +605,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             chat.onQuestion = { question -> handler.post {
                 if (!closed && request == generation) {
                     pendingQuestion = question
+                    mainQuestion = null
                     if (root === panel) {
-                        waitingInMain = false
                         answerQuestion.visibility = android.view.View.VISIBLE
                         status.text = "需要你回答；回答后会继续原任务。"
                         continueButton.isEnabled = true
@@ -633,7 +660,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     if (closed || request != generation) return@post
                     acceptingPartials.set(false); latestPartial.set(null)
                     val samePanel = root === panel
-                    inFlightUser = null; busy = false; send.isEnabled = true; input.isEnabled = true
+                    mainQuestion = null; inFlightUser = null; busy = false; send.isEnabled = true; input.isEnabled = true
                     result.onSuccess { answer ->
                         pendingQuestion = null; questionDialog?.dismiss(); questionDialog = null; answerQuestion.visibility = android.view.View.GONE
                         onState("reply")

@@ -303,11 +303,18 @@ class PetSessionDeviceTest {
                 instrumentation.runOnMainSync {
                     val dialog = field("questionDialog") as? android.app.AlertDialog
                     if (!submitted && dialog?.isShowing == true) {
-                        val inputs = descendants(dialog.window!!.decorView).filterIsInstance<android.widget.EditText>()
+                        window.hide()
+                        window.show()
+                        val reopened = descendants(field("root") as android.view.View).filterIsInstance<android.widget.TextView>()
+                        assertTrue(reopened.any { it.isShown && it.text == "需要你回答；回答后会继续原任务。" })
+                        assertTrue(reopened.single { it.text == "主对话" }.isEnabled)
+                        assertTrue(reopened.single { it.text == "回答助手的问题" }.performClick())
+                        val restoredDialog = field("questionDialog") as android.app.AlertDialog
+                        val inputs = descendants(restoredDialog.window!!.decorView).filterIsInstance<android.widget.EditText>()
                         assertTrue(inputs.isNotEmpty())
                         assertEquals("waiting", PetExecutionStore(context).page(0).getJSONArray("items").getJSONObject(0).getString("state"))
                         inputs.forEach { it.setText("蓝色") }
-                        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+                        restoredDialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
                         submitted = true
                     }
                     finished = submitted && field("busy") == false
