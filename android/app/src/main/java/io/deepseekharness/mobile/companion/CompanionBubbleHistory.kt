@@ -11,33 +11,38 @@ internal class CompanionBubbleHistory(context: Context) {
     data class Snapshot(val sessionId: String, val scope: String, val messages: List<CompanionBubbleChat.Message>, val pending: String? = null, val continuedMain: Boolean = false)
     private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "companion-bubble-history-v1.json"))
     val followups = PetFollowupJournal(File(file.baseFile.parentFile, "pet-followups-v1.json"))
-    private var writable = true
+    private var writable: Boolean? = null
 
-    fun load(): Snapshot? {
-        if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return null
-        return try { decode(file.readFully()) } catch (_: Exception) { writable = false; null }
+    fun load(): Snapshot? = synchronized(lock) {
+        if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) {
+            writable = true
+            return@synchronized null
+        }
+        try { decode(file.readFully()).also { writable = true } } catch (_: Exception) { writable = false; null }
     }
-    @Synchronized fun save(snapshot: Snapshot, requireWritable: Boolean = false) {
-        if (!writable) { check(!requireWritable) { "对话记录不可写，未交办新任务。" }; return }
+    fun save(snapshot: Snapshot, requireWritable: Boolean = false): Unit = synchronized(lock) {
+        if (writable == null) load()
+        if (writable != true) { check(!requireWritable) { "对话记录不可写，未交办新任务。" }; return@synchronized }
         val bytes = encode(snapshot)
         var output: java.io.FileOutputStream? = null
         try { output = file.startWrite(); output.write(bytes); file.finishWrite(output) }
         catch (e: Exception) { if (output != null) file.failWrite(output); throw e }
     }
-    @Synchronized fun exportArchive(): ByteArray? = load()?.copy(pending = null)?.let(::encode)
+    fun exportArchive(): ByteArray? = load()?.copy(pending = null)?.let(::encode)
     /** Never overwrites a current local conversation during restore. */
-    @Synchronized fun restoreArchive(bytes: ByteArray): Boolean {
+    fun restoreArchive(bytes: ByteArray): Boolean = synchronized(lock) {
         // Imported history is an archive, not permission to submit unfinished work on another installation.
         val snapshot = decode(bytes).copy(pending = null)
-        if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) { save(snapshot); return true }
+        if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) { writable = true; save(snapshot,requireWritable = true); return@synchronized true }
         val archive = AtomicFile(File(file.baseFile.parentFile, "companion-bubble-history-import-${java.util.UUID.randomUUID()}.json"))
         var output: java.io.FileOutputStream? = null
         try { output = archive.startWrite(); output.write(encode(snapshot)); archive.finishWrite(output); return false }
         catch (e: Exception) { if (output != null) archive.failWrite(output); throw e }
     }
     /** Preserve the local transcript before starting an explicitly requested new topic. */
-    @Synchronized fun archiveAndClear() {
-        check(writable) { "聊天记录无法读取，未开启新话题" }
+    fun archiveAndClear(): Unit = synchronized(lock) {
+        if (writable == null) load()
+        check(writable == true) { "聊天记录无法读取，未开启新话题" }
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return
         val bytes = file.readFully()
         decode(bytes)
@@ -49,6 +54,8 @@ internal class CompanionBubbleHistory(context: Context) {
         check(!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) { "无法切换话题，原记录已保留" }
     }
     companion object {
+        // The live pet and backup controller construct separate handles for the same AtomicFile.
+        private val lock = Any()
         fun encode(snapshot: Snapshot): ByteArray {
             snapshot.pending?.let { value ->
                 val request = JSONObject(value)
