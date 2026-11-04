@@ -217,6 +217,57 @@ class WhaleConversationalTaskTest {
         }
     }
 
+    @Test fun followupSurvivesSeparatePetProcesses() {
+        val args = InstrumentationRegistry.getArguments()
+        org.junit.Assume.assumeTrue(args.containsKey("fixtureId"))
+        val id = UUID.fromString(args.getString("fixtureId")).toString()
+        val dir = File(app.cacheDir,"queue-process-$id")
+        val save = args.getString("phase") == "save"
+        if (save) check(dir.mkdirs()) else check(args.getString("phase") == "resume" && dir.isDirectory)
+        val transcript = CompanionBubbleHistory(storage(dir))
+        val second = "七加九是多少？请只回答数字。"
+        val marker = File(dir,"first.pid")
+        lateinit var window: CompanionBubbleWindow
+        fun field(name: String) = CompanionBubbleWindow::class.java.getDeclaredField(name).apply { isAccessible = true }.get(window)
+        fun nodes() = views(field("root") as View).filterIsInstance<TextView>().toList()
+        try {
+            inst.runOnMainSync {
+                window = CompanionBubbleWindow(app, app.getSystemService(WindowManager::class.java), autoOpenOnDelivery=false, historyStore=transcript) { intArrayOf(52,260,128,128) }
+                window.show()
+                if (save) {
+                    val input = nodes().filterIsInstance<EditText>().single()
+                    val send = nodes().single { it.text == "发送" }
+                    input.setText("用两句话介绍蓝鲸。"); send.performClick()
+                    input.setText(second); send.performClick()
+                    assertEquals(second,transcript.followups.entries().single().text)
+                    val uncertain = transcript.followups.accept("交办状态待核对")
+                    transcript.followups.advance(uncertain,"handoff")
+                    marker.writeText(android.os.Process.myPid().toString())
+                } else {
+                    assertNotEquals(marker.readText().toInt(),android.os.Process.myPid())
+                    nodes().single { it.text.toString().startsWith("上次退出时的消息 ·") }.performClick()
+                    val dialog = field("recoveryDialog") as android.app.AlertDialog
+                    assertEquals("继续这条消息",dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).text)
+                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+                }
+            }
+            if (!save) {
+                await("恢复的消息没有完成或日志未核销") { transcript.followups.entries().size == 1 &&
+                    transcript.load()?.messages?.count { it.role == "user" && it.text == second } == 1 }
+                assertTrue(transcript.load()!!.messages.last().text.contains("16"))
+                assertEquals("handoff",transcript.followups.entries().single().stage)
+                inst.runOnMainSync {
+                    nodes().single { it.text.toString().startsWith("上次退出时的消息 ·") }.performClick()
+                    val dialog = field("recoveryDialog") as android.app.AlertDialog
+                    assertEquals("已核对",dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).text)
+                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+                }
+                await("已核对的记录仍在恢复列表") { transcript.followups.entries().isEmpty() }
+            }
+            inst.sendStatus(0,Bundle().apply { putString("phase",args.getString("phase")); putInt("pid",android.os.Process.myPid()) })
+        } finally { inst.runOnMainSync { window.destroy() }; if (!save) dir.deleteRecursively() }
+    }
+
     @Test fun queueFollowupWhileReplyIsInFlight() {
         val tmp = File(app.cacheDir, "pet-inflight-" + UUID.randomUUID()).apply { mkdirs() }
         val transcript = CompanionBubbleHistory(storage(tmp))
