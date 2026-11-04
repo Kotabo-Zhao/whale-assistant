@@ -218,7 +218,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 composeTask()
             }
         })
-        shortcut("存资料", R.drawable.ic_pet_shell, "存入本地资料库") { openCapture() }
+        shortcut(ui.string(R.string.pet_menu_capture), R.drawable.ic_pet_shell, "存入本地资料库") { openCapture() }
         shortcut(ui.string(R.string.pet_menu_tools), R.drawable.ic_whale_nav_plugins, ui.string(R.string.pet_menu_tools)) {
             sessionActions.visibility = android.view.View.GONE
             if (toolShelf.childCount > 0) toolShelf.removeAllViews()
@@ -232,7 +232,18 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         val scroll = ScrollView(context).apply { addView(content); isVerticalScrollBarEnabled = false; setBackgroundColor(ui.canvas) }
         panel.addView(scroll, LinearLayout.LayoutParams(-1, dp(120)))
-        panel.addView(toolShelf); panel.addView(sessionActions); panel.addView(shortcuts)
+        val controls = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        var controlLimit = dp(180)
+        val controlsScroll = object : ScrollView(context) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val cap = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) controlLimit
+                    else minOf(controlLimit,MeasureSpec.getSize(heightMeasureSpec))
+                super.onMeasure(widthMeasureSpec,MeasureSpec.makeMeasureSpec(cap,MeasureSpec.AT_MOST))
+            }
+        }
+        controls.addView(toolShelf); controls.addView(sessionActions)
+        controlsScroll.addView(controls)
+        panel.addView(shortcuts); panel.addView(controlsScroll)
         content.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
             if (bottom - top != oldBottom - oldTop) panel.post { if (root === panel) positionUpdater?.invoke() }
         }
@@ -474,28 +485,29 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
         }
-        sessionActions.addView(LinearLayout(context).apply { addView(continueButton); addView(newTopic) })
-        footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        footer.addView(ui.text("⋯", 20f, secondary).apply {
-            gravity = Gravity.CENTER; minWidth = dp(44); minHeight = dp(44)
-            contentDescription = ui.string(R.string.pet_menu_session); background = ui.action(ui.canvas, 10)
-            setOnClickListener {
-                toolShelf.removeAllViews()
-                sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
-                panel.post { positionUpdater?.invoke() }
+        sessionActions.addView(LinearLayout(context).apply {
+            for (action in listOf(continueButton,newTopic)) {
+                action.gravity = Gravity.CENTER; action.minHeight = dp(44)
+                addView(action,LinearLayout.LayoutParams(0,-2,1f))
             }
         })
+        footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        shortcut(ui.string(R.string.pet_menu_session), R.drawable.ic_whale_nav_chat, ui.string(R.string.pet_menu_session)) {
+            toolShelf.removeAllViews()
+            sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
+            controlsScroll.scrollTo(0,0)
+            panel.post { positionUpdater?.invoke() }
+        }
         footer.addView(send)
-        panel.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(10), 0, dp(10), dp(9)) })
-        val status = TextView(context).apply { text = ""; textSize = 12f; setTextColor(foreground); background = bar() }
-        panel.addView(status)
+        val status = ui.text("",12f,secondary).apply { setPadding(dp(12),dp(4),dp(12),dp(4)) }
+        controls.addView(status)
         val progress = ui.text("", 12f, secondary).apply {
             setPadding(dp(12), dp(4), dp(12), dp(5))
             accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
-        panel.addView(progress)
+        controls.addView(progress)
         val recoveryChip = ui.text("", 13f, accent).apply { minHeight = dp(44); gravity = Gravity.CENTER }
-        panel.addView(recoveryChip)
+        controls.addView(recoveryChip)
         fun recoveryLabel() {
             recoveryChip.text = if (recovery.isFailure) "待处理消息暂时无法读取" else "上次退出时的消息 · ${recovered.size}"
             recoveryChip.visibility = if (recovered.isEmpty() && recovery.isSuccess) android.view.View.GONE else android.view.View.VISIBLE
@@ -533,8 +545,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             recoveryDialog = builder.create().apply { window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY); show() }
         }
         val progressDetails = ui.text("", 12f, secondary).apply { setPadding(dp(12),0,dp(12),dp(6)) }
-        val detailScroll = ScrollView(context).apply { addView(progressDetails) }
-        panel.addView(detailScroll, LinearLayout.LayoutParams(-1,dp(80)))
+        controls.addView(progressDetails)
         var expanded = false
         renderFollowups = {
             val deciding = followups.count { it.deciding }
@@ -553,7 +564,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 val state = entry.receipt ?: if (entry.deciding) "正在判断" else "等待对话"
                 "${entry.text.take(80)} · $state"
             } else ""
-            detailScroll.visibility = if (expanded) android.view.View.VISIBLE else android.view.View.GONE
+            progressDetails.visibility = if (expanded) android.view.View.VISIBLE else android.view.View.GONE
             panel.post { positionUpdater?.invoke() }
         }
         progress.setOnClickListener { expanded = !expanded; renderFollowups?.invoke() }
@@ -563,7 +574,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             visibility = if (pendingQuestion != null) android.view.View.VISIBLE else android.view.View.GONE
             setOnClickListener { showQuestion() }
         }
-        panel.addView(answerQuestion)
+        controls.addView(answerQuestion)
+        panel.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(10), dp(4), dp(10), dp(9)) })
         // Message bubbles always precede the input, regardless of the pet's screen position.
         status.text = if (busy) "正在回复…" else lastError.orEmpty()
         status.visibility = if (busy || lastError != null) android.view.View.VISIBLE else android.view.View.GONE
@@ -792,6 +804,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val gap = dp(8)
             val hasSideRoom = maxOf(currentPet[0], metrics.widthPixels - currentPet[0] - currentPet[2]) >= width + gap
             val availableHeight = if (hasSideRoom) usable else minOf(usable, maxOf(currentPet[1], usable - currentPet[1] - currentPet[3]) - gap)
+            val nextLimit = (usable / 3).coerceIn(dp(48),dp(208))
+            if (controlLimit != nextLimit) { controlLimit = nextLimit; controlsScroll.requestLayout() }
             val chrome = if (panel.measuredHeight > scroll.measuredHeight) panel.measuredHeight - scroll.measuredHeight else dp(110)
             val natural = content.measuredHeight.takeIf { it > 0 } ?: dp(112)
             val desiredScroll = minOf(dp(400), (metrics.heightPixels * .55f).toInt(), natural.coerceAtLeast(dp(72)),
