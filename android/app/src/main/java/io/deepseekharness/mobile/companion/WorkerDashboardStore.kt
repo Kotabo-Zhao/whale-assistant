@@ -94,8 +94,9 @@ internal class WorkerDashboardStore(private val context: Context) {
             if (limit > 0 && offset == 0 && group.isEmpty() && filter in setOf("all","open","running")) submissions.put(JSONObject().put("task",item.optString("task").take(120))
                 .put("notice",item.optString("notice")).put("commandId",item.optString("commandId")))
         }
-        val held = if (group.isEmpty() && filter in setOf("all", "open", "attention")) heldRequests() else JSONObject()
-        if (limit > 0 && offset == 0 && held.length() > 0) {
+        val showHeld = group.isEmpty() && filter in setOf("all", "open", "attention")
+        val held = if (withCounts || showHeld) heldRequests() else JSONObject()
+        if (showHeld && limit > 0 && offset == 0 && held.length() > 0) {
             val prefs = CompanionStore(context)
             val memory = prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled
             val library = prefs.knowledgeModelAccess

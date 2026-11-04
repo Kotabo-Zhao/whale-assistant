@@ -14,6 +14,7 @@ internal class WorkerCardCatalog(private val dir: File) {
     private data class Entry(val id: String, val owner: String, val state: String, val group: String,
         val title: String, val order: Long, val dependencies: List<String>)
     private val entries = HashMap<String, Entry>()
+    private val openEntries = HashMap<String, Entry>()
     private var sorted: List<Entry>? = null
     private val stamps = HashMap<String,Long>()
     private val activeOwners = HashMap<String,String>()
@@ -29,8 +30,10 @@ internal class WorkerCardCatalog(private val dir: File) {
         val deps = card.optJSONArray("dependsOn")
         val modified = file.lastModified()
         if (stamps.put(id,modified) != modified) fileOrder = null
-        entries[id] = Entry(id, card.optString("owner"), card.optString("state"), card.optString("group"),
+        val entry = Entry(id, card.optString("owner"), card.optString("state"), card.optString("group"),
             card.optString("title"), modified, (0 until (deps?.length() ?: 0)).map { deps!!.getString(it) })
+        entries[id] = entry
+        if (entry.state in RUNNING || entry.state in ATTENTION) openEntries[id] = entry else openEntries.remove(id)
         activeOwners[id] = ownerOf(card)
         cards.put(id, card.toString())
         sorted = null
@@ -109,9 +112,15 @@ internal class WorkerCardCatalog(private val dir: File) {
             return JSONObject().put("items",items).put("total",order.size).put("offset",offset).put("submissions",pending)
         }
         load()
-        val order = if (limit == 0) entries.values else sorted ?: entries.values.sortedWith(compareByDescending<Entry> { it.order }.thenBy { it.id }).also { sorted = it }
+        val badge = limit == 0 && filter == "open" && group.isEmpty()
+        val order = when {
+            badge -> openEntries.values
+            limit == 0 -> entries.values
+            else -> sorted ?: entries.values.sortedWith(compareByDescending<Entry> { it.order }.thenBy { it.id }).also { sorted = it }
+        }
         val guestPresent = guestDir.isDirectory
-        val files = if (guestPresent) guestDir.listFiles { f -> f.name.endsWith(".json") && f.isFile }?.mapTo(hashSetOf()) { it.name } else null
+        // A counts-only refresh needs current records and their parents, even when most history is finished.
+        val files = if (guestPresent && !badge) guestDir.listFiles { f -> f.name.endsWith(".json") && f.isFile }?.mapTo(hashSetOf()) { it.name } else null
         fun missing(id: String) = guestPresent && (files?.contains("$id.json") ?: File(guestDir,"$id.json").isFile) == false
         fun dependencyBlocked(row: Entry) = row.dependencies.any { id ->
             val parent = entries[id]

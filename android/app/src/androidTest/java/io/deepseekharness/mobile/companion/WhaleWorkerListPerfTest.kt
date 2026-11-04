@@ -56,6 +56,10 @@ class WhaleWorkerListPerfTest {
             val source = samples.getJSONObject(0)
             assertEquals(source.getString("note"), store.detail(source.getString("id")).getString("summary"))
             assertFalse(store.page(limit = 0).has("groupReport"))
+            store.hold(UUID.randomUUID().toString(),"整理资料","read","library","资料归档","待授权")
+            val filtered = store.page("running", group = "同一目标")
+            assertEquals(store.page("open",limit = 0).getInt("attention"),filtered.getInt("attention"))
+            assertEquals(0,filtered.getJSONArray("submissions").length())
         } finally { root.deleteRecursively() }
     }
 
@@ -484,6 +488,41 @@ class WhaleWorkerListPerfTest {
                 bitmap.recycle()
             }
         } finally { inst.runOnMainSync { panel.destroy() } }
+    }
+
+    @Test fun measurePetBadgeWithFinishedHistory() {
+        val root = File(inst.targetContext.cacheDir,"pet-badge-"+UUID.randomUUID()).apply { check(mkdirs()) }
+        try {
+            val dir = File(root,"mirror").apply { check(mkdir()) }
+            val guest = File(root,"ledger").apply { check(mkdir()) }
+            val catalog = WorkerCardCatalog(dir)
+            fun row(i: Int,state: String, parent: Int? = null): JSONObject {
+                val item = JSONObject().put("id",i.toString()).put("state",state).put("title","测试")
+                if (parent != null) item.put("dependsOn",JSONArray().put(parent.toString()))
+                catalog.remember(File(dir,"$i.json"),item)
+                File(guest,"$i.json").createNewFile()
+                return item
+            }
+            repeat(600) { row(it,"completed") }
+            row(600,"waiting"); row(601,"queued",600); row(602,"running")
+            fun page() = catalog.page(guest,JSONArray(),0,"open","",0,0,true)
+            fun checkCounts(running: Int, attention: Int, asking: Int) {
+                val result = page()
+                assertEquals(running,result.getInt("running")); assertEquals(attention,result.getInt("attention"))
+                assertEquals(asking,result.getInt("asking")); assertEquals(running+attention,result.getInt("total"))
+            }
+            checkCounts(1,2,1)
+            val elapsed = LongArray(25) {
+                val start = SystemClock.elapsedRealtimeNanos()
+                checkCounts(1,2,1)
+                (SystemClock.elapsedRealtimeNanos()-start)/1000
+            }.sorted()
+            inst.sendStatus(0,Bundle().apply { putLong("badgeMedianUs",elapsed[12]); putLong("badgeP90Us",elapsed[22]) })
+            row(600,"completed"); checkCounts(2,0,0)
+            check(File(guest,"600.json").delete()); checkCounts(1,1,0)
+            check(File(guest,"602.json").delete()); checkCounts(0,1,0)
+            row(601,"completed"); checkCounts(0,0,0)
+        } finally { root.deleteRecursively() }
     }
 
     @Test fun measureInstalledLibraryWithoutLoggingTaskContents() {

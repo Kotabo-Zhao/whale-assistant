@@ -66,7 +66,10 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
         val start = offset
         val group = selectedGroup
         executor.execute {
-            val result = runCatching { store.page(selectedFilter, group = group, offset = start, limit = if (opened == null) 0 else 20) }
+            val result = runCatching {
+                if (opened == null) store.page("open",limit = 0)
+                else store.page(selectedFilter, group = group, offset = start, limit = 20)
+            }
             handler.post {
                 loading = false
                 if (!disposed) result.onSuccess { page ->
