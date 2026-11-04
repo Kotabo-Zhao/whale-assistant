@@ -51,7 +51,8 @@ internal class NativeFeatureRegistry(private val context: Context) {
     }
 
     fun entries(): List<Entry> = prefs.all.entries.filter { it.key.startsWith("rev.") }
-        .mapNotNull { runCatching { parse(it.value as String) }.getOrNull() }.sortedBy { it.title }
+        .mapNotNull { runCatching { parse(it.value as String) }.getOrNull() }.sortedWith(
+            compareBy<Entry> { it.title }.thenByDescending { prefs.getLong("order." + it.revision,0) }.thenBy { it.revision })
 
     fun import(raw: String) {
         val entry = parse(raw)
@@ -61,7 +62,10 @@ internal class NativeFeatureRegistry(private val context: Context) {
             val old = prefs.getString(key, null)
             require(old == null || parse(old) == entry)
             require(old != null || entries().size < 64)
-            check(prefs.edit().putString(key,raw).commit())
+            if (old == null) {
+                val order = prefs.getLong("lastOrder",0) + 1
+                check(prefs.edit().putString(key,raw).putLong("order." + entry.revision,order).putLong("lastOrder",order).commit())
+            }
         }
     }
     fun active(entry: Entry) = prefs.getString("active." + entry.id, null) == entry.revision
@@ -70,7 +74,10 @@ internal class NativeFeatureRegistry(private val context: Context) {
         require(prefs.getString("rev." + entry.revision, null)?.let(::parse) == entry)
         require(prefs.getString("active." + entry.id, null) == expected)
         if (enable) verify(entry) else require(expected == entry.revision)
-        check(prefs.edit().putString("active." + entry.id, if (enable) entry.revision else null).commit())
+        val selected = if (enable) entry.revision else null
+        val edit = prefs.edit().putString("active." + entry.id, selected)
+        if (expected != null && expected != selected) edit.putString("previous." + entry.id,expected)
+        check(edit.commit())
     }
 
     fun openFromPet(entry: Entry) = synchronized(lock) {

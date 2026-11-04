@@ -116,19 +116,36 @@ open class WhaleFeatureActivity : Activity() {
         })
         read({ store.list() to native.entries() }) { (items, candidates) ->
             if (items.isEmpty() && candidates.isEmpty()) body.addView(label("还没有自建功能", 18f))
-            candidates.forEach { entry ->
-                val expected = native.prefs.getString("active." + entry.id, null)
+            candidates.groupBy { it.id }.forEach { (id, versions) ->
+                val expected = native.prefs.getString("active." + id, null)
+                val entry = versions.firstOrNull { it.revision == expected } ?: versions.maxBy { native.prefs.getLong("order." + it.revision,0) }
+                val previous = versions.firstOrNull { it.revision != expected && it.revision == native.prefs.getString("previous." + id,null) }
                 val enabled = expected == entry.revision
                 val card = column().apply { background = ui.shape(ui.canvas,16,ui.line) }
                 body.addView(card, LinearLayout.LayoutParams(-1,-2).apply { topMargin = dp(12) })
                 card.addView(label(entry.title,20f))
                 card.addView(label("原生窗口 · " + entry.revision.take(8) + if (enabled) " · 已启用" else "",14f))
-                card.addView(button("预览原生窗口") { read({ native.verify(entry) }) { intent ->
-                    runCatching { startActivity(intent) }.onFailure { Toast.makeText(this,"无法打开原生窗口",Toast.LENGTH_SHORT).show() }
-                } })
+                card.addView(button("预览原生窗口") { previewNative(entry) })
                 card.addView(button(if (enabled) "移出桌宠" else "启用到桌宠") {
                     read({ native.select(entry,expected,!enabled) }) { library() }
                 })
+                if (previous != null && versions.size > 1) card.addView(button("恢复上一版") {
+                    read({ native.select(previous,expected,true) }) { library() }
+                })
+                if (versions.size > 1) {
+                    val list = column().apply { visibility = android.view.View.GONE }
+                    card.addView(button("版本记录（" + versions.size + "）") {
+                        list.visibility = if (list.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
+                    })
+                    card.addView(list)
+                    versions.forEach { version ->
+                        list.addView(label(version.title + " · " + version.revision.take(8), 15f))
+                        list.addView(button("预览此版") { previewNative(version) })
+                        if (version.revision != expected) list.addView(button("启用 " + version.revision.take(8)) {
+                            read({ native.select(version,expected,true) }) { library() }
+                        })
+                    }
+                }
             }
             for (item in items) {
                 val id = item.getString("id")
@@ -148,6 +165,12 @@ open class WhaleFeatureActivity : Activity() {
             }
         }
     }
+    private fun previewNative(entry: NativeFeatureRegistry.Entry) {
+        read({ native.verify(entry) }) { intent ->
+            runCatching { startActivity(intent) }.onFailure { Toast.makeText(this,"无法打开原生窗口",Toast.LENGTH_SHORT).show() }
+        }
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode,resultCode,data)
         if (requestCode != 441 || resultCode != RESULT_OK) return
