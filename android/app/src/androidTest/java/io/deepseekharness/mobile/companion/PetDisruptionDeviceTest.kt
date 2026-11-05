@@ -41,14 +41,14 @@ class PetDisruptionDeviceTest {
         val replies = AtomicInteger()
         val firstReply = CountDownLatch(1)
         lateinit var window: CompanionBubbleWindow
-        fun open(classify: () -> PetIntentRouter.Decision?, receive: ((String,String,String,String,String) -> JSONObject)? = null) {
+        fun open(classify: (List<CompanionBubbleChat.Message>) -> PetIntentRouter.Decision?, receive: ((String,String,String,String,String) -> JSONObject)? = null, stall: (() -> Unit)? = null) {
             inst.runOnMainSync {
                 window = CompanionBubbleWindow(context,app.getSystemService(WindowManager::class.java),
-                    autoOpenOnDelivery=false, historyStore=history, classifyWaiting={ classify() }, receiveTask=receive,
+                    autoOpenOnDelivery=false, historyStore=history, classifyWaiting=classify, receiveTask=receive,
                     replyRunner={ _,_,_,_,_,_ ->
                         if (replies.incrementAndGet() == 1) {
                             firstReply.countDown()
-                            CountDownLatch(1).await(160,TimeUnit.SECONDS)
+                            if (stall == null) CountDownLatch(1).await(160,TimeUnit.SECONDS) else stall()
                         }
                         CompanionBubbleChat.Reply("夹具回复", emptyList(), emptyList())
                     }) { intArrayOf(32,120,100,100) }
@@ -72,6 +72,13 @@ class PetDisruptionDeviceTest {
         }
         fun click(label: String) = inst.runOnMainSync {
             labels().single { it.text == label || it.contentDescription == label }.performClick()
+        }
+        fun assignFromPet(text: String) = inst.runOnMainSync {
+            window.composeTask()
+            val panel = window.javaClass.getDeclaredField("workerPanel").apply { isAccessible=true }.get(window)
+            val dialog = panel.javaClass.getDeclaredField("editDialog").apply { isAccessible=true }.get(panel) as AlertDialog
+            views(checkNotNull(dialog.window).decorView).filterIsInstance<EditText>().single().setText(text)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         }
         fun confirmRecovery() = inst.runOnMainSync {
             val dialog = window.javaClass.getDeclaredField("recoveryDialog").apply { isAccessible=true }.get(window) as AlertDialog
@@ -161,6 +168,78 @@ class PetDisruptionDeviceTest {
         var value = false
         inst.runOnMainSync { value=window.javaClass.getDeclaredField("busy").apply { isAccessible=true }.getBoolean(window) }
         return value
+    }
+
+    @Test fun modelAndRouterBothSilentStillAcceptAdditionalMessages() {
+        val server = java.net.ServerSocket(0,3,java.net.InetAddress.getByName("127.0.0.1"))
+        val accepted = CountDownLatch(2)
+        val release = CountDownLatch(1)
+        val peer = Thread {
+            runCatching { server.accept().use { accepted.countDown(); server.accept().use {
+                accepted.countDown(); release.await(20,TimeUnit.SECONDS)
+            } } }
+        }.apply { isDaemon=true; start() }
+        val request = okhttp3.Request.Builder().url("http://127.0.0.1:${server.localPort}/").build()
+        fun silent() { PetModelHttp.execute(request,20_000) { it.readText() } }
+        try {
+            Pet(fresh()).use { pet ->
+                pet.open({ silent(); null }, stall=::silent)
+                pet.send("等待首个响应"); assertTrue(pet.firstReply.await(3,TimeUnit.SECONDS))
+                pet.send("路由也没有响应的第二条")
+                assertTrue(accepted.await(3,TimeUnit.SECONDS))
+                pet.send("两个连接都挂起时的第三条")
+                assertTrue(busy(pet.window))
+                val queued = pet.history.followups.entries()
+                assertEquals(listOf("路由也没有响应的第二条","两个连接都挂起时的第三条"), queued.map { it.text })
+                assertTrue(queued.all { it.stage=="queued" }); assertEquals(2,queued.map { it.id }.distinct().size)
+                assertEquals("",pet.draft())
+                pet.assignFromPet("两个连接都挂起时明确交办的工单")
+                until(4000) { pet.desk.pending().length()==1 }
+                val order = pet.desk.pending().getJSONObject(0)
+                assertEquals("两个连接都挂起时明确交办的工单",order.getString("task"))
+                UUID.fromString(order.getString("commandId"))
+                assertTrue(busy(pet.window))
+                inst.sendStatus(0,android.os.Bundle().apply { putString("silentPaths","two durable messages and one explicit local work order while both sockets remain unanswered") })
+            }
+        } finally { release.countDown(); server.close(); peer.join(2000) }
+    }
+
+    @Test fun silentReplyAllowsLiveRouterAndWorkerToTakeNextOrder() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("livePetChecks")=="yes")
+        withLivePetRuntime(app) {
+            val token = "WhaleCheck"+UUID.randomUUID().toString().take(8)
+            val stored = RuntimeStore(app)
+            val key = checkNotNull(stored.readModelCredential("deepseek")?.takeIf(String::isNotBlank)) { "设备缺少 DeepSeek 凭据" }
+            val model = stored.settings().defaultModels[io.deepseekharness.mobile.runtime.ModelProvider.DEEPSEEK] ?: "deepseek-flash"
+            val server = java.net.ServerSocket(0,1,java.net.InetAddress.getByName("127.0.0.1"))
+            val waiting = CountDownLatch(1); val release = CountDownLatch(1)
+            val peer = Thread {
+                runCatching { server.accept().use { waiting.countDown(); release.await(50,TimeUnit.SECONDS) } }
+            }.apply { isDaemon=true; start() }
+            try {
+                Pet(fresh()).use { pet ->
+                    val task = "请独立在后台整理一份三点式旅行打包清单，标题为"+token+"，只需生成文字，完成后用 mobile_worker_report 回报。"
+                    val desk = WorkerDashboardStore(app)
+                    pet.open({ messages -> PetIntentRouter.classify(key,model,messages,whileWaiting=true) },
+                        receive={ text, mode, id, _, needs -> WorkerRuntimeWake.submit(app,text,mode,commandId=id,title=token,needs=needs) },
+                        stall={ PetModelHttp.execute(okhttp3.Request.Builder().url("http://127.0.0.1:${server.localPort}/").build(),45_000) { it.readText() } })
+                    pet.send("写一封问候信")
+                    assertTrue(waiting.await(4,TimeUnit.SECONDS))
+                    val start = SystemClock.elapsedRealtime()
+                    pet.send(task)
+                    until(28_000) { pet.history.followups.entries().single().stage=="handoff" }
+                    assertTrue("第一条必须仍在等网络",busy(pet.window))
+                    val elapsed = SystemClock.elapsedRealtime()-start
+                    fun workers() = desk.list().getJSONArray("items").let { rows ->
+                        (0 until rows.length()).map(rows::getJSONObject).filter { it.optString("title").contains(token) }
+                    }
+                    until(120_000) { workers().singleOrNull()?.optString("state") in setOf("completed","failed","blocked") }
+                    assertEquals("completed",workers().single().getString("state"))
+                    assertTrue(workers().single().optString("summary").isNotBlank())
+                    inst.sendStatus(0,android.os.Bundle().apply { putLong("handoffWhileBusyMs",elapsed); putString("worker","completed, unique title and report") })
+                }
+            } finally { release.countDown(); server.close(); peer.join(1000) }
+        }
     }
 
     private fun restartDir(phase: String): File {
