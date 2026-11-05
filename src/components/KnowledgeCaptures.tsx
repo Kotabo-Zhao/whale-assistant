@@ -1,7 +1,8 @@
 import { knowledgeParseFailure } from '../knowledgeParseFailure'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowUpRight, ChevronDown, FileAudio, FileText, Image, Inbox } from 'lucide-react'
 import { companionRows, type CompanionRow } from '../platform/companion'
+import { KnowledgeDialog } from './KnowledgeDialog'
 import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
 
@@ -35,12 +36,13 @@ export function CaptureShelf({ revision, active = true, open }: { revision: numb
   const [items, setItems] = useState<Row[]>([])
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [retry, setRetry] = useState(0)
   useEffect(() => {
     if (!change || !active || document.hidden) return
     let live = true
     void runtimeBridge.companionDashboard({ operation: 'knowledgeRecentCaptures' }).then(result => {
-      if (live) { setItems(companionRows(result.items)); setError(false) }
+      if (live) { setItems(companionRows(result.items)); setError(false); setLoaded(true) }
     }).catch(() => { if (live) setError(true) })
     return () => { live = false }
   }, [revision, change, retry, active])
@@ -48,7 +50,7 @@ export function CaptureShelf({ revision, active = true, open }: { revision: numb
     <div className="capture-heading"><h4><Inbox size={18} />{t("最近投放")}</h4>
       {items.length > 2 && <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? '收起' : '查看全部 ' + items.length}<ChevronDown size={15} /></button>}</div>
     {error ? <button type="button" onClick={() => setRetry(v => v + 1)}>未能读取最近投放，重试</button>
-      : items.length === 0 ? <p>{t("从其他 App 收藏后，可以在这里回看。")}</p> : <div className="capture-grid">{items.slice(0, expanded ? 8 : 2).map(row => {
+      : !loaded ? <p role="status">正在读取最近投放…</p> : items.length === 0 ? <p>{t("从其他 App 收藏后，可以在这里回看。")}</p> : <div className="capture-grid">{items.slice(0, expanded ? 8 : 2).map(row => {
         const Kind = icon(row)
         return <button type="button" className="capture-card" key={row.id} onClick={() => open(row)}>
           <Kind size={20} /><span><strong>{title(row)}</strong><small>{[string(row.shareOrigin), timeLabel(row.capturedAt), stateLabel(row)].filter(Boolean).join(' · ')}</small></span><ArrowUpRight size={15} /></button>
@@ -71,14 +73,6 @@ export function CaptureReader({ reference, onClose, manage }: { reference: Row; 
   const [result, setResult] = useState<{ row: Row; parts: Row[]; next: number | null; offset?: number; start: number } | null>(null)
   const [problem, setProblem] = useState('')
   const [reload, setReload] = useState(0)
-  const closeButton = useRef<HTMLButtonElement>(null)
-  const scroll = useRef<HTMLElement>(null)
-  useEffect(() => {
-    const previous = document.activeElement
-    closeButton.current?.focus()
-    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus() }
-  }, [])
-  useEffect(() => { scroll.current?.scrollTo?.(0, 0) }, [offset])
   useEffect(() => {
     if (!change || document.hidden || typeof reference.createdAt !== 'number') return
     let live = true
@@ -97,21 +91,14 @@ export function CaptureReader({ reference, onClose, manage }: { reference: Row; 
   const row = page?.row
   const transcript = string(row?.mime).startsWith('audio/') || page?.parts.some(p => p.mediaKind === 'audio_transcript')
   const heading = transcript ? '录音转写' : string(row?.mime).startsWith('image/') ? '图中内容' : '资料正文'
-  return <div className="knowledge-detail-backdrop" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onClose() }
-    if (event.key === 'Tab') {
-      const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
-      const first = buttons[0]; const last = buttons[buttons.length - 1]
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
-      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
-    } }}>
-    <section ref={scroll} className="knowledge-detail-page capture-reader" role="dialog" aria-modal="true" aria-labelledby="capture-reader-title">
+  return <KnowledgeDialog titleId="capture-reader-title" onClose={onClose} pageKey={offset}>
       <header><div><span className="knowledge-type">收藏阅读</span><h4 id="capture-reader-title">{row ? title(row) : '读取收藏'}</h4>
         {row && <small>{[string(row.shareOrigin), stateLabel(row)].filter(Boolean).join(' · ')}</small>}</div>
-        <button type="button" className="button button-secondary" ref={closeButton} onClick={onClose}>关闭</button></header>
+        <button type="button" className="button button-secondary" onClick={onClose}>关闭</button></header>
       {problem ? <p role="status">{problem} <button type="button" onClick={() => setReload(v => v + 1)}>重新读取</button></p>
         : !row || !page ? <p role="status">正在读取资料…</p> : <>
           {row.parseState === 'needs_retry' && <p role="status">{knowledgeParseFailure(row)}</p>}
-          <h5>{heading}</h5>
+          <div className="reader-section-heading"><h5>{heading}</h5><span>保存在本机</span></div>
           {page.parts.length ? page.parts.map(part => <article key={part.id} className="capture-part">
             {typeof part.chunkCount === 'number' && part.chunkCount > 1 && <small>第 {Number(part.chunkIndex) + 1} / {part.chunkCount} 段</small>}
             {part.mediaKind === 'audio_transcript' ? <Transcript value={part.text} /> : <p className="knowledge-detail-content">{part.text}</p>}</article>)
@@ -126,5 +113,5 @@ export function CaptureReader({ reference, onClose, manage }: { reference: Row; 
           </nav>}
           <div className="workspace-card-actions"><button type="button" onClick={() => manage(row)}>打开资料详情</button></div>
         </>}
-    </section></div>
+    </KnowledgeDialog>
 }

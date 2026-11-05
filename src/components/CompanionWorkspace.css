@@ -116,3 +116,48 @@
 .knowledge-origins ul { padding-inline-start:1.25rem; }
 .knowledge-origins li { margin-block:.5rem; overflow-wrap:anywhere; }
 .knowledge-origins li span { display:block; color:var(--muted); user-select:text; }
+
+/* 资料入口、检索结果和阅读层共用主题，不引入常驻动画或轮询。 */
+.library-intro { margin-top:8px !important; }
+.library-intake { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:14px 0 20px; }
+.library-intake > .button, .library-capture-guide > summary { display:flex; align-items:center; justify-content:flex-start; gap:12px; min-height:72px; padding:14px; text-align:start; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-inner); box-shadow:var(--shadow-card); }
+.library-intake > .button:hover, .library-capture-guide > summary:hover { border-color:var(--blue-line); background:var(--surface-muted); }
+.library-intake svg { flex-shrink:0; color:var(--blue); }
+.library-intake strong { display:block; font-size:.9rem; font-weight:600; }
+.library-intake small { display:block; color:var(--muted); font-size:.75rem; margin-top:4px; }
+.library-intake input[type=file] { position:absolute; width:1px; height:1px; opacity:0; }
+.library-capture-guide { min-width:0; }
+.library-capture-guide > summary { cursor:pointer; list-style:none; box-sizing:border-box; }
+.library-capture-guide > summary::-webkit-details-marker { display:none; }
+.library-capture-guide > summary::after { content:'＋'; margin-inline-start:auto; color:var(--muted); }
+.library-capture-guide[open] { grid-column:1 / -1; }
+.library-capture-guide[open] > summary::after { content:'−'; }
+.library-capture-help { padding:4px 16px 16px; background:var(--surface); border:1px solid var(--line); border-top:0; border-radius:0 0 var(--radius-inner) var(--radius-inner); }
+.library-capture-guide[open] > summary { border-radius:var(--radius-inner) var(--radius-inner) 0 0; box-shadow:none; }
+.library-capture-help p { color:var(--muted); font-size:.85rem; line-height:1.75; }
+.library-results-heading { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; margin-top:22px; }
+.library-results-heading h4 { margin:0; font-size:1.05rem; }
+.library-results-heading span { font-size:.78rem; color:var(--muted); }
+.library-result .result-excerpt { grid-column:2; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:anywhere; line-height:1.65; font-size:.85rem; color:var(--muted); margin:3px 0; white-space:pre-wrap; }
+.result-excerpt:empty { display:none; }
+.result-excerpt mark { background:var(--blue-soft); color:var(--blue); border-radius:3px; }
+.knowledge-detail-backdrop { padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
+.knowledge-detail-page { max-height:100%; min-height:0; border:1px solid var(--line); border-radius:var(--radius-card); box-shadow:var(--shadow-card); padding:0 26px 26px; overscroll-behavior:contain; }
+.knowledge-detail-page > header { position:sticky; top:0; z-index:1; padding:20px 0 16px; background:var(--surface); }
+.knowledge-detail-page > header > div { min-width:0; }
+.knowledge-detail-page > header > button { flex-shrink:0; }
+.knowledge-detail-page header h4 { font-size:1.25rem; line-height:1.45; }
+.knowledge-detail-page header small { color:var(--muted); line-height:1.6; }
+.knowledge-detail-page > .workspace-card-actions { padding-top:18px; margin-top:20px; border-top:1px solid var(--line); }
+.reader-section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin:12px 0; }
+.reader-section-heading span { color:var(--muted); font-size:.75rem; }
+.capture-part { padding:8px 0; }
+.knowledge-detail-content { line-height:1.9; }
+@media (max-width:600px) {
+  .library-intake { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .library-capture-guide { grid-column:1 / -1; }
+  .library-capture-guide > summary { min-height:48px; padding:10px 14px; }
+  .knowledge-detail-backdrop { padding:0; }
+  .knowledge-detail-page { border:0; border-radius:0; padding:0 max(16px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
+  .knowledge-detail-page > header { padding-top:max(16px,env(safe-area-inset-top)); }
+}

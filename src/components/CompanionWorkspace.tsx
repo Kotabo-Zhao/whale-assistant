@@ -3,8 +3,9 @@ import { companionRows, type CompanionRow, type CompanionRequest } from '../plat
 import { useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { t } from '../i18n'
-import { Bell, BookOpen, Brain, Download, Upload, RefreshCw, Search, PenLine } from 'lucide-react'
+import { Bell, BookOpen, Brain, Download, Upload, RefreshCw, Search, PenLine, Share2 } from 'lucide-react'
 import { runtimeBridge } from '../platform/native'
+import { KnowledgeDialog } from './KnowledgeDialog'
 import { CaptureReader, CaptureShelf } from './KnowledgeCaptures'
 import './CompanionWorkspace.css'
 
@@ -31,6 +32,12 @@ const expected = (row: Row) => typeof row._review === 'string' ? row._review : '
 const originalId = (row: Row) => typeof row.originalId === 'string' && /^[a-f0-9]{64}$/.test(row.originalId) ? row.originalId : null
 const knowledgeRevision = (row: Row) => typeof row.revision === 'string' && /^[a-f0-9]{64}$/.test(row.revision) ? row.revision : null
 const canPreviewKnowledgeImage = (row: Row) => originalId(row) !== null && (row.source === 'image_analysis' || row.mediaKind === 'image_ocr' || (row.source === 'original' && typeof row.mime === 'string' && row.mime.startsWith('image/')))
+function KnowledgeExcerpt({ text, query }: { text: string; query: string }) {
+  const match = query ? text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) : -1
+  const start = Math.max(0, match - 48)
+  const end = Math.min(text.length, start + 180)
+  return <>{start > 0 && '…'}{match < 0 ? text.slice(start, end) : <>{text.slice(start, match)}<mark>{text.slice(match, match + query.length)}</mark>{text.slice(match + query.length, end)}</>}{end < text.length && '…'}</>
+}
 function KnowledgeThumbnail({ row }: { row: Row }) {
   const target = useRef<HTMLSpanElement>(null)
   const [image, setImage] = useState('')
@@ -465,7 +472,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
     if (result) { setSelectedMemoryIds(new Set()); setMemorySelectionMode(false) }
   }
   return <section className={library ? "companion-workspace memory-workspace" : "companion-workspace"} aria-labelledby="companion-workspace-title">
-    <div className="workspace-heading"><div>{library ? <h1 id="companion-workspace-title">{t("记忆")}</h1> : <><h3 id="companion-workspace-title">助手工作台</h3><p>管理本地资料、长期记忆和提醒。</p></>}</div>
+    <div className="workspace-heading"><div>{library ? <><h1 id="companion-workspace-title">{t("记忆")}</h1><p className="library-intro">随手存下，需要时轻松找回。</p></> : <><h3 id="companion-workspace-title">助手工作台</h3><p>管理本地资料、长期记忆和提醒。</p></>}</div>
       <button className="icon-button" type="button" aria-label="刷新助手数据" disabled={busy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></div>
     <div className="workspace-tabs" role="tablist" aria-label="助手工作台分类">
       {([{ id: 'knowledge', label: '资料', icon: <BookOpen size={17} /> }, { id: 'memory', label: '长期记忆', icon: <Brain size={17} /> }, { id: 'reminders', label: '提醒', icon: <Bell size={17} /> }] as const).map(tab =>
@@ -496,14 +503,24 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
         <button type="button" onClick={() => { if (window.confirm(`删除提醒“${row.text}”？`)) void run({ operation: row.nextAt ? 'recurringDelete' : 'reminderDelete', id: row.id, expected: expected(row) }, '提醒已删除。') }}>删除</button></div></article>)}</div>
     </> : <>
       <div className="library-command-row">
-        <label className="library-search"><Search size={18} aria-hidden="true"/><span className="sr-only">搜索</span><input aria-label={t("搜索")} type="search" maxLength={panel === 'knowledge' ? 100 : undefined} value={query} onChange={e => setQuery(e.target.value)} placeholder={t(panel === 'memory' ? '搜索已确认及待确认的记忆' : '搜索正文、文件名或来源')} /></label>
+        <label className="library-search"><Search size={18} aria-hidden="true"/><span className="sr-only">搜索</span><input aria-label={t("搜索")} type="search" maxLength={panel === 'knowledge' ? 100 : undefined} value={query} onChange={e => setQuery(e.target.value)} placeholder={t(panel === 'memory' ? '搜索已确认及待确认的记忆' : '搜索正文、文件名或来源')} /></label>{query && <button type="button" className="button button-quiet" onClick={() => setQuery('')}>清除搜索</button>}
+      </div>
+      <div className={panel === 'knowledge' ? 'library-intake' : 'library-command-row'} role="group" aria-label={panel === 'knowledge' ? '存入资料' : '添加记忆'}>
         {panel === 'knowledge' && (Capacitor.isNativePlatform()
-          ? <button type="button" className="button button-secondary" disabled={busy} onClick={() => {
+          ? <button type="button" className="button button-secondary" aria-label="存入本地文件" disabled={busy} onClick={() => {
             void runtimeBridge.companionDashboard({ operation: 'knowledgePickFiles' }).catch(() => setMessage('无法打开系统文件选择器。'))
-          }}><Upload size={17} />{t("存入本地文件")}</button>
+          }}><Upload size={17} /><span><strong>{t("存入本地文件")}</strong><small>文档、图片、录音</small></span></button>
           : <label className="button button-secondary"><Upload size={17} />{t("导入文本")}<input type="file" accept="text/plain,.txt" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void readFile(file, 'text'); e.target.value = '' }} /></label>)}
-        {library && !writing && !editing && <button type="button" className="button button-secondary" onClick={() => setWriting(true)}>
-          <PenLine size={16}/>{t(panel === 'memory' ? '写记忆' : '记一笔')}</button>}
+        {library && !writing && !editing && <button type="button" className="button button-secondary" aria-label={panel === 'memory' ? '写记忆' : '记一笔'} onClick={() => setWriting(true)}>
+          <PenLine size={16}/><span><strong>{t(panel === 'memory' ? '写记忆' : '记一笔')}</strong>{panel === 'knowledge' && <small>粘贴文字或链接</small>}</span></button>}
+      {panel === 'knowledge' && <details className="library-capture-guide"><summary><Share2 size={18} /><strong>{t("从其他 App 投放")}</strong></summary>
+        <div className="library-capture-help"><p>能拖动时，把文字、图片或文件拖到鲸鱼上松手。也可以在系统分享或选中文字的菜单里点「存入鲸鱼记忆」。</p>
+        <p>只有复制入口时，复制内容后下拉快捷设置，点「收藏剪贴板」。想保存眼前的页面，点「收藏这一屏」，按系统提示授权一次。</p>
+        {Capacitor.isNativePlatform() && <div className="workspace-card-actions">
+          <button type="button" onClick={() => { void addCaptureTile('clipboard') }}>添加「收藏剪贴板」</button>
+          <button type="button" onClick={() => { void addCaptureTile('screen') }}>添加「收藏这一屏」</button>
+        </div>}
+      </div></details>}
       </div>
       {(!library || writing || editing) && <div className="library-editor">
       <label>{panel === 'memory' ? '记忆内容' : '资料内容'}<textarea ref={noteInput} value={text} maxLength={panel === 'memory' ? 600 : 2000000} rows={3} onChange={e => setText(e.target.value)} placeholder={panel === 'memory' ? '写下希望助手记住的事实或偏好' : '输入或导入需要保存的资料（最长 200 万字，会自动分段）'} /></label>
@@ -513,20 +530,14 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
       }}>{editing ? '保存修改' : '添加'}</button>{(editing || library) && <button type="button" onClick={() => { setWriting(false); setEditing(null); setText(''); setReview(null) }}>取消编辑</button>}</div>
       </div>}
       {panel === 'knowledge' && runtimeBridge.addKnowledgeCapturesListener && !knowledgeQuery && knowledgeSource === 'all' && knowledgeCoverage === 'all' && <CaptureShelf revision={revision} active={!captureReader && !knowledgeDetail} open={row => showKnowledgeView(row, 'reader')} />}
+      {panel === 'knowledge' && <div className="library-results-heading"><h4>{knowledgeQuery ? '搜索结果' : '资料库'}</h4><span>{loading ? '正在查找…' : loadFailed ? '读取未完成' : `已显示 ${list.length} 条${knowledgeNextOffset !== null ? ' · 还有更多' : ''}`}</span></div>}
       <div className="library-options">
-      {panel === 'knowledge' && <details className="knowledge-attachments"><summary><strong>{t("从其他 App 投放")}</strong></summary>
-        <p>能拖动时，把文字、图片或文件拖到鲸鱼上松手。也可以在系统分享或选中文字的菜单里点「存入鲸鱼记忆」。</p>
-        <p>只有复制入口时，复制内容后下拉快捷设置，点「收藏剪贴板」。想保存眼前的页面，点「收藏这一屏」，按系统提示授权一次。</p>
-        {Capacitor.isNativePlatform() && <div className="workspace-card-actions">
-          <button type="button" onClick={() => { void addCaptureTile('clipboard') }}>添加「收藏剪贴板」</button>
-          <button type="button" onClick={() => { void addCaptureTile('screen') }}>添加「收藏这一屏」</button>
-        </div>}
-      </details>}
       {panel === 'knowledge' && <details className="library-disclosure" open={!library || undefined}><summary>{t("筛选与管理")}{knowledgeSource !== 'all' || knowledgeCoverage !== 'all' ? ' · 已筛选' : ''}</summary>
       {panel === 'knowledge' && <div className="workspace-form-row knowledge-filter-row">
         <label>资料来源<select value={knowledgeSource} onChange={event => setKnowledgeSource(event.target.value as typeof knowledgeSource)}><option value="all">全部来源</option><option value="shared_text">分享文本</option><option value="text_file">文档/文本</option><option value="original">已保存原件</option><option value="image_analysis">图片描述</option></select></label>
         <label>解析覆盖<select value={knowledgeCoverage} onChange={event => setKnowledgeCoverage(event.target.value as typeof knowledgeCoverage)}><option value="all">全部状态</option><option value="not_parsed">尚未解析</option><option value="partial">部分解析</option><option value="extracted_text">已提取文字</option><option value="model_description">模型图片描述</option></select></label>
       </div>}
+      {(knowledgeSource !== 'all' || knowledgeCoverage !== 'all') && <button type="button" className="button button-quiet" onClick={() => { setKnowledgeSource('all'); setKnowledgeCoverage('all') }}>清除筛选</button>}
       {panel === 'knowledge' && list.length > 0 && <div className="workspace-card-actions"><button type="button" disabled={busy} onClick={() => { setKnowledgeSelectionMode(value => !value); setSelectedKnowledgeIds(new Set()) }}>{knowledgeSelectionMode ? '结束批量管理' : '批量管理'}</button>{knowledgeSelectionMode && <button type="button" className="button-danger-quiet" disabled={busy || selectedKnowledgeIds.size === 0} onClick={() => { void deleteSelectedKnowledge() }}>删除所选（{selectedKnowledgeIds.size}）</button>}</div>}
       </details>}
       <details className="library-disclosure" open={!library || undefined}><summary>{t("备份与导入")}</summary>
@@ -545,7 +556,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
         <label>来源筛选<select value={memorySource} onChange={event => setMemorySource(event.target.value)}><option value="all">全部来源</option>{memorySources.map(source => <option key={source} value={source}>{source}</option>)}</select></label>
         <label>排序<select value={memoryOrder} onChange={event => setMemoryOrder(event.target.value as typeof memoryOrder)}><option value="recent">最近</option><option value="oldest">最早</option><option value="source">来源</option><option value="type">类型</option></select></label>
       </div>}
-      {panel === 'knowledge' && library && !loading && !loadFailed && list.length === 0 && <p className="workspace-hint">{query ? '没有找到匹配的资料。' : '当前没有资料，可以存入文件或记一笔。'}</p>}
+      {panel === 'knowledge' && library && !loading && !loadFailed && list.length === 0 && <p className="workspace-hint">{query || knowledgeSource !== 'all' || knowledgeCoverage !== 'all' ? '没有找到匹配的资料，试试其他关键词或清除筛选。' : '还没有存入资料。从上方选择一种方式，开始收藏。'}</p>}
 
       {review && <div className="workspace-review"><strong>核对相关记忆</strong><p>相关内容仅供参考，请确认是否重复、冲突或包含敏感信息。</p>{review.candidates.map((row, i) => <p key={i}>{row.status}：{row.text}</p>)}<div className="workspace-card-actions"><button type="button" onClick={() => setReview(null)}>取消</button><button type="button" disabled={busy} onClick={() => { void saveMemory() }}>确认保存</button></div></div>}
       {panel === 'memory' && memoryList.length > 0 && <div className="workspace-card-actions"><p className="workspace-hint">展开分类查看缩略卡片，点击卡片查看详情；左滑可删除。</p><button type="button" disabled={busy} onClick={() => { setMemorySelectionMode(value => !value); setSelectedMemoryIds(new Set()) }}>{memorySelectionMode ? '结束批量管理' : '批量管理'}</button>{memorySelectionMode && <button type="button" className="button-danger-quiet" disabled={busy || selectedMemoryIds.size === 0} onClick={() => { void deleteSelectedMemories() }}>删除所选（{selectedMemoryIds.size}）</button>}</div>}
@@ -568,7 +579,8 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
         </article>)}</div>
 </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}>{knowledgeSelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedKnowledgeIds.has(row.id)} onChange={() => toggleKnowledgeSelection(row.id)} aria-label={`选择资料：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}`} />选择</label>}<div className="knowledge-card-copy">{canPreviewKnowledgeImage(row) && <KnowledgeThumbnail row={row} />}{library ? <button type="button" className="library-result" aria-pressed={knowledgeSelectionMode ? selectedKnowledgeIds.has(row.id) : undefined} onClick={() => knowledgeSelectionMode ? toggleKnowledgeSelection(row.id) : showKnowledgeView(row, row.source === 'original' || !!row.documentId ? 'reader' : 'detail')}>
           <span className="result-kind">{knowledgeFileTypeLabel(row)}</span>
-          <span className="result-title">{typeof row.displayName === 'string' && row.displayName ? row.displayName : row.text}</span>
+          <span className="result-title">{typeof row.displayName === 'string' && row.displayName ? row.displayName : row.text.split('\n', 1)[0].slice(0, 80)}</span>
+          <span className="result-excerpt">{row.source !== 'original' && (typeof row.displayName === 'string' || !!knowledgeQuery || row.text.length > 80) ? <KnowledgeExcerpt text={row.text} query={knowledgeQuery} /> : null}</span>
           <small>{[typeof row.shareOrigin === 'string' ? row.shareOrigin : knowledgeSourceLabel(row.source), row.source === 'original' || row.coverage ? knowledgeParseLabel(row) : null].filter(Boolean).join(' · ')}</small>
         </button> : <details className="knowledge-card-detail"><summary><span className="knowledge-type" aria-label={`资料类型：${knowledgeFileTypeLabel(row)}`}>{knowledgeFileTypeLabel(row)}</span><span className="knowledge-preview">{typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}</span><small>{knowledgeSourceLabel(row.source)} · {knowledgeParseLabel(row)}</small></summary><p>{row.text}</p>{knowledgeDetailMeta(row) && <small>{knowledgeDetailMeta(row)}</small>}</details>}
         {knowledgeProcessing?.id === row.id && <div className="workspace-review"><strong>资料处理状态</strong><p>{processingDescription(knowledgeProcessing)}</p><div className="workspace-card-actions">
@@ -594,7 +606,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
     </>}
     </fieldset>
     {captureReader && panel === 'knowledge' && <CaptureReader key={captureReader.id} reference={captureReader} onClose={() => closeKnowledgeView()} manage={row => showKnowledgeView(row, 'detail')} />}
-    {knowledgeDetail && <div className="knowledge-detail-backdrop"><section className="knowledge-detail-page" role="dialog" aria-modal="true" aria-labelledby="knowledge-detail-title">
+    {knowledgeDetail && <KnowledgeDialog titleId="knowledge-detail-title" onClose={() => closeKnowledgeView()}>
       <header><div><span className="knowledge-type">{knowledgeFileTypeLabel(knowledgeDetail)}</span><h4 id="knowledge-detail-title">{typeof knowledgeDetail.displayName === 'string' && knowledgeDetail.displayName !== '' ? knowledgeDetail.displayName : '资料详情'}</h4><small>{knowledgeSourceLabel(knowledgeDetail.source)} · {knowledgeParseLabel(knowledgeDetail)}</small></div><button type="button" className="button button-secondary" onClick={() => closeKnowledgeView()}>关闭</button></header>
       {runtimeBridge.addKnowledgeCapturesListener && typeof knowledgeDetail.createdAt === 'number' && (knowledgeDetail.source === 'original' || typeof knowledgeDetail.documentId === 'string') && <button type="button" className="button button-secondary" onClick={() => showKnowledgeView(knowledgeDetail, 'reader')}>阅读提取内容</button>}
       {knowledgeDetailMeta(knowledgeDetail) && <p className="knowledge-detail-meta">{knowledgeDetailMeta(knowledgeDetail)}</p>}
@@ -620,6 +632,6 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
       <p className="knowledge-detail-content">{knowledgeDetail.text}</p>
       {knowledgeDetail.attachmentLinks != null && <SharedOriginals key={knowledgeDetail.id} note={knowledgeDetail} open={row => { if (runtimeBridge.addKnowledgeCapturesListener && typeof row.createdAt === "number") { showKnowledgeView(row, 'reader') } else { void openKnowledgeOriginal(row) } }} />}
       <div className="workspace-card-actions">{canPreviewKnowledgeImage(knowledgeDetail) && <button type="button" disabled={busy} onClick={() => { void showKnowledgeImagePreview(knowledgeDetail) }}>{knowledgeImagePreview?.id === knowledgeDetail.id ? '隐藏图片预览' : '显示图片预览'}</button>}{originalId(knowledgeDetail) !== null && knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void openKnowledgeOriginal(knowledgeDetail) }}>在助手中查看原件</button>}{knowledgeRevision(knowledgeDetail) !== null && <button type="button" onClick={() => { void askKnowledge(knowledgeDetail) }}>用此资料提问</button>}<button type="button" onClick={() => closeKnowledgeView(true)}>返回资料列表</button></div>
-    </section></div>}
+    </KnowledgeDialog>}
   </section>
 }
