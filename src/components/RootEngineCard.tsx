@@ -134,7 +134,7 @@ export function RootEngineCard({ bridge = runtimeBridge }: { bridge?: RuntimeBri
   return <div className="settings-subsection" aria-labelledby="root-engine">
     <div className="section-title"><span className="section-icon"><KeyRound size={19} /></span>
       <div><h3 id="root-engine">{t('根通道设置')}</h3>
-        <p>{t('打开后，AI 的设备命令可以以 UID 0 执行：命令先过静态审查，再在私有命名空间里跑，并尽量把核心分区挂成只读。默认关闭。')}</p></div>
+        <p>{t('高级设备权限，默认关闭。')}</p></div>
     </div>
     {load.status === 'loading' && <p className="settings-note">{t('正在读取根通道状态…')}</p>}
     {value !== null && <p className="settings-note">
@@ -153,11 +153,6 @@ export function RootEngineCard({ bridge = runtimeBridge }: { bridge?: RuntimeBri
         : t('开关关着')}
       {value.enabled && value.reason !== 'READY' && ` · ${t(REASON_NOTES[value.reason] ?? '暂时说不上来具体原因')}`}
     </p>}
-    {/* 关着时说不成「没有 KernelSU」（原生此刻不拉 su，根本没查过）：如实说「还不知道」，并讲清为什么。 */}
-    {value !== null && !value.enabled && <p className="settings-note">
-      {t('关着的时候本应用不拉 su，所以现在还不知道这台设备支不支持 KernelSU；打开开关后才会检测。')}
-    </p>}
-    {value !== null && value.suVersion !== null && <p className="settings-note">{t('su 版本：{0}', value.suVersion)}</p>}
     {value !== null && value.enabled && !value.usable && <p className="settings-note">
       {t('开关开着但还没法用：设备命令仍走 Shizuku（shell 身份，没有 UID 0）。')}
     </p>}
@@ -171,9 +166,21 @@ export function RootEngineCard({ bridge = runtimeBridge }: { bridge?: RuntimeBri
       </ul>
       <p className="settings-note">{t('命令仍会执行，但静态审查已按严格档收紧：挂载、写 /dev 下的设备节点、加载内核模块这类命令一律拒绝。')}</p>
     </>}
-    {value !== null && <p className="settings-note">
-      {t('UID 0 的命令能改动系统分区与内核参数。审查放行的命令会在私有命名空间里执行，但它仍然是 UID 0——不确定时请保持关闭。')}
-    </p>}
+    {value !== null && <>
+      <p className="settings-note">{t('启用后允许 AI 以 root 权限执行设备命令，可能改动系统；不确定时请保持关闭。')}</p>
+      <details className="capability-technical">
+        <summary>{t('检测与权限说明')}</summary>
+        {/* 关着时说不成「没有 KernelSU」（原生此刻不拉 su，根本没查过）：如实说「还不知道」，并讲清为什么。 */}
+        {value !== null && !value.enabled && <p className="settings-note">
+          {t('关着的时候本应用不拉 su，所以现在还不知道这台设备支不支持 KernelSU；打开开关后才会检测。')}
+        </p>}
+        {value !== null && value.suVersion !== null && <p className="settings-note">{t('su 版本：{0}', value.suVersion)}</p>}
+        <p className="settings-note">{t('打开后，AI 的设备命令可以以 UID 0 执行：命令先过静态审查，再在私有命名空间里跑，并尽量把核心分区挂成只读。默认关闭。')}</p>
+        {value !== null && <p className="settings-note">
+          {t('UID 0 的命令能改动系统分区与内核参数。审查放行的命令会在私有命名空间里执行，但它仍然是 UID 0——不确定时请保持关闭。')}
+        </p>}
+      </details>
+    </>}
     {writeError !== null && <p role="alert">{t('保存根通道开关失败：{0}', writeError)}</p>}
     {value !== null && <button className="button button-secondary compact-button" type="button" disabled={busy} onClick={() => { void refresh() }}>{t('重新检测')}</button>}
     {load.status === 'failed' && <p role="alert">{t('无法读取根通道状态')} <button className="button button-quiet" type="button" onClick={() => { void refresh() }}>{t('重试')}</button></p>}

@@ -3372,12 +3372,11 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         )}
         {page === 'diagnostics-capability' && (
         <>
-        <RuntimeSelfCheckPanel runSelfCheck={runSelfCheck} runtime={runtime} />
-
         {/* 设备能力清单：从版本管理页挪过来，回答「这台机器现在能做什么」。 */}
         <DeviceCapabilityCard onOpenDeviceShell={onOpenDeviceShell} />
         {/* 根通道单独立卡：它是**写**操作（开关），不能和能力清单那份 5 秒轮询共用状态。 */}
         <RootEngineCard />
+        <RuntimeSelfCheckPanel runSelfCheck={runSelfCheck} runtime={runtime} />
         </>
         )}
         {page === 'diagnostics-feedback' && (

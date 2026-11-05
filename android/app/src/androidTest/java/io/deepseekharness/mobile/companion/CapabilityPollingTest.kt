@@ -37,6 +37,23 @@ class CapabilityPollingTest {
             js("document.querySelector('button[aria-label=打开应用设置]').click()")
             click("设备与诊断"); click("诊断与日志"); click("设备能力")
             until { js("!!document.getElementById('root-engine')") == "true" }
+            until { js("!!document.querySelector('.capability-technical')") == "true" }
+            assertEquals("false",js("document.querySelector('.capability-technical').open"))
+            assertEquals("true",js("document.getElementById('root-engine').closest('.settings-subsection').innerText.includes('可能改动系统')"))
+            js("document.getElementById('root-engine').scrollIntoView({block:'start'})")
+            Thread.sleep(250)
+            fun capture(name: String) {
+                val bitmap = requireNotNull(inst.uiAutomation.takeScreenshot())
+                try { File(app.getExternalFilesDir(null),name).outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) } }
+                finally { bitmap.recycle() }
+            }
+            capture("capability-collapsed.png")
+            js("document.querySelector('.capability-technical summary').click()")
+            assertEquals("true",js("document.querySelector('.capability-technical').open"))
+            assertEquals("true",js("document.querySelector('.capability-technical').innerText.includes('UID 0 的命令能改动系统分区')"))
+            Thread.sleep(250)
+            capture("capability-expanded.png")
+            js("document.querySelector('.capability-technical summary').click()")
             js("""window.capabilityReads=0;window.capabilityOriginal=window.Capacitor.nativePromise;
                 window.Capacitor.nativePromise=function(plugin,method,options){
                     if(method==='getDeviceCapabilities' || method==='rootEngineState') window.capabilityReads++;

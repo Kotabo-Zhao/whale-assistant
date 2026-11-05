@@ -3753,3 +3753,9 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
   .management-copy { min-width:0; overflow-wrap:anywhere; }
   .dialog { padding:16px; }
 }
+
+/* Shared hierarchy for both appearance styles; no expensive visual effects. */
+.capability-technical { margin: 12px 0; padding: 0 12px; border: 1px solid var(--line-alt); border-radius: 12px; }
+.capability-technical > summary { min-height: 44px; padding: 11px 0; cursor: pointer; color: var(--muted); font-size: .875rem; line-height: 1.5; overflow-wrap: anywhere; }
+.capability-technical[open] > summary { border-bottom: 1px solid var(--line-alt); }
+.capability-technical .settings-note { overflow-wrap: anywhere; }

@@ -28,6 +28,19 @@ function card(bridge: Partial<RuntimeBridge>): void {
 const checkbox = (): HTMLInputElement => screen.getByRole('checkbox')
 
 describe('根通道卡片', () => {
+  it('默认收起技术细节，同时保留开关、系统风险与降级说明', async () => {
+    card({ getRootEngineStatus: vi.fn().mockResolvedValue(status({ enabled: true, usable: true, degraded: true, degradations: ['NAMESPACE_UNAVAILABLE'] })) })
+    await waitFor(() => expect(checkbox().checked).toBe(true))
+    expect(screen.getByText(/启用后允许 AI 以 root/)).toBeVisible()
+    expect(screen.getByText(/隔离不完整，少了这些保护/)).toBeVisible()
+    expect(screen.getByText(/unshare 用不了/)).toBeVisible()
+    const details = screen.getByText('检测与权限说明').closest('details')!
+    expect(details.open).toBe(false)
+    expect(screen.getByText(/UID 0 的命令能改动系统分区/)).not.toBeVisible()
+    fireEvent.click(screen.getByText('检测与权限说明'))
+    expect(details.open).toBe(true)
+    expect(screen.getByText(/UID 0 的命令能改动系统分区/)).toBeVisible()
+  })
   it('设置入口标题与设备能力名称分开', async () => {
     card({ getRootEngineStatus: vi.fn().mockResolvedValue(status()) })
     await waitFor(() => expect(screen.getByRole('heading', { name: '根通道设置' })).toBeTruthy())

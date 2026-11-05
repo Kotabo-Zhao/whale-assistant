@@ -1,5 +1,8 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "高级设备权限，默认关闭。": "Advanced device access. Off by default.",
+  "启用后允许 AI 以 root 权限执行设备命令，可能改动系统；不确定时请保持关闭。": "Allows AI to run device commands as root, which can modify the system. Leave off if unsure.",
+  "检测与权限说明": "Detection and permission details",
   "从其他 App 收藏后，可以在这里回看。": "Items saved from other apps appear here.",
   "更多操作": "More actions",
   "备份与导入": "Backup and import",
