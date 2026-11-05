@@ -21,7 +21,7 @@ it('首页事项摘要只跳转到统一事项入口', async () => {
 it('缺失的原生数据不能显示为零条事项', async () => {
   bridge.companionDashboard.mockResolvedValue({})
   render(<AssistantOverview />)
-  expect(await screen.findByRole('status')).toHaveTextContent('不会把读取失败当作没有事项')
+  expect(await screen.findByText(/暂时无法读取概览/)).toHaveTextContent('不会把读取失败当作没有事项')
   expect(screen.queryByText('当前没有已安排的未来提醒。')).not.toBeInTheDocument()
 })
 
