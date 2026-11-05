@@ -95,7 +95,9 @@ internal object UnderstandingPrompt {
 internal object CustomUnderstandingHttp {
     fun post(target: java.net.URI, headers: Map<String, String>, payload: JSONObject): JSONObject {
         val connection = target.toURL().openConnection() as HttpURLConnection
+        val cancellation=PetReplyOperation.bind(connection::disconnect)
         try {
+            PetReplyOperation.checkpoint()
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 10_000; connection.readTimeout = 30_000
             connection.requestMethod = "POST"; connection.doOutput = true
@@ -106,7 +108,7 @@ internal object CustomUnderstandingHttp {
             if (status !in 200..299) throw UnderstandingRequestException(statusCode(status), "后台模型请求未成功")
             val bytes = connection.inputStream.use(::readBounded)
             return JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString())
-        } finally { connection.disconnect() }
+        } finally { cancellation.close(); connection.disconnect() }
     }
 
     private fun readBounded(input: java.io.InputStream): ByteArray {

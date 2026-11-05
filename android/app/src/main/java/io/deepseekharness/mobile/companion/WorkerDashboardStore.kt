@@ -26,6 +26,7 @@ internal class WorkerDashboardStore(private val context: Context, private val co
         }
         row.put("text", row.getString("title"))
         writeWorker(target, row)
+        WorkerWatchdog.wake(context)
         io.deepseekharness.mobile.DeviceControlState.worker(context,row)
         if (current == null && row.optLong("createdAt") >= processStartedAt &&
             row.optString("owner") != "session-whale-task-desk" && row.optString("state") in ACTIVE_STATES) {
@@ -169,6 +170,7 @@ internal class WorkerDashboardStore(private val context: Context, private val co
         events.sortWith(compareBy<Event> { it.data.optLong("revision",Long.MAX_VALUE) }.thenBy { it.phase })
         val end = (events.size-offset).coerceAtLeast(0)
         val start = (end-limit).coerceAtLeast(0)
+        detail.put("supervisionNote",WorkerWatchdogJournal(context).note(row))
         detail.put("events",JSONArray().apply {
             for (i in start until end) {
                 val event = events[i]
@@ -308,6 +310,42 @@ internal class WorkerDashboardStore(private val context: Context, private val co
         }
         true
     }
+    internal fun watchdogRows(): List<JSONObject> = synchronized(lock) {
+        val rows=mutableListOf<JSONObject>()
+        var offset=0
+        do {
+            val page=catalog().page(guestDir,JSONArray(),0,"running","",offset,40,false)
+            val items=page.getJSONArray("items")
+            for(index in 0 until items.length()) {
+                val row=items.getJSONObject(index)
+                watchdogRow(row.getString("id"))?.takeIf { it.optString("state")=="running" }?.let(rows::add)
+            }
+            offset+=items.length()
+        } while(items.length()==40)
+        rows
+    }
+
+    internal fun watchdogRow(id: String): JSONObject? = synchronized(lock) {
+        require(UUID.fromString(id).toString()==id)
+        val file=File(guestDir,"$id.json")
+        if(!file.isFile || file.canonicalFile!=file.absoluteFile) return@synchronized null
+        catalog().snapshot(file)
+    }
+
+    internal fun holdForWatchdog(expected: JSONObject, reason: String, explanation: String): Boolean = synchronized(lock) {
+        if(io.deepseekharness.mobile.runtime.RuntimeStore(context).runtimeIntentRecord().intent==
+            io.deepseekharness.mobile.runtime.RuntimeIntent.STOPPED) return@synchronized false
+        val row=watchdogRow(expected.getString("id")) ?: return@synchronized false
+        if(!WorkerWatchdogPolicy.same(expected,row)) return@synchronized false
+        val health=row.getJSONObject("health")
+        val id=UUID.nameUUIDFromBytes(("watchdog:"+row.getString("id")+":"+health.getString("runId")+":"+
+            health.getLong("sequence")).toByteArray()).toString()
+        val created=enqueue(JSONObject().put("commandId",id).put("id",row.getString("id")).put("action","watchdog")
+            .put("revision",row.getLong("revision")).put("runId",health.getString("runId"))
+            .put("sequence",health.getLong("sequence")).put("heartbeatAt",health.getLong("heartbeatAt")).put("reason",reason).put("explanation",explanation.take(500)))
+        created || pending().let { items -> (0 until items.length()).any { items.getJSONObject(it).optString("commandId")==id } }
+    }
+
     fun dispatchUnavailable(id: String, pickupFailure: Boolean = false) {
         val changed = synchronized(commandLock) {
             val items = pending()

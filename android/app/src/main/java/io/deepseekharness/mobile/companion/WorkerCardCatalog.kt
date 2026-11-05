@@ -201,6 +201,8 @@ internal class WorkerCardCatalog(private val dir: File) {
             .apply { if (report != null) put("groupReport",report) }
     }
 
+    internal fun snapshot(file: File): JSONObject = readCard(file)
+
     private fun readCard(file: File, ownerOnly: Boolean = false): JSONObject {
         AtomicFile(file).openRead().buffered().use { input ->
             input.mark(MAX_HEADER + PREFIX.size + 2)
@@ -245,7 +247,7 @@ internal class WorkerCardCatalog(private val dir: File) {
         private val DEPENDENCY_ATTENTION = ATTENTION + "cancelled"
         private val OWNER_ACTIVE = setOf("queued","starting","running","waiting","blocked")
         private val fields = listOf("id","owner","title","sessionId","state","mode","group","source","priority","authorizationRevoked",
-            "authoredDraft","dependsOn","writeSeq","updatedAt","createdAt","requester","goalState","goalOutcome","goalCriteria","goalCoordinator","budget","budgetUsage")
+            "authoredDraft","dependsOn","revision","health","reportState","watchdog","writeSeq","updatedAt","createdAt","requester","goalState","goalOutcome","goalCriteria","goalCoordinator","budget","budgetUsage")
         private val previews = listOf("scope","decisionReason","decisionEvidence","progress","summary","question","uiError","waitReason")
 
         private val cardFields = (fields + previews).toSet()

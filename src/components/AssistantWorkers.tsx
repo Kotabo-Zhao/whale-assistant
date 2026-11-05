@@ -141,6 +141,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
         {row.recordUnreadable !== true && <WorkerTaskDetail row={row} />}
         <WorkerDependencyDetail target={row.dependencyTarget} action={resumeForm} />
         {typeof row.uiError === 'string' && row.uiError && <p>{row.uiError}</p>}
+        {typeof row.supervisionNote === 'string' && row.supervisionNote && <p>{row.supervisionNote}</p>}
         {addingTo === row.id && row.missingLedger !== true && row.authorizationRevoked !== true && ['queued', 'starting', 'running', 'completed'].includes(String(row.state)) && <label>追加任务信息（当前轮结束后处理）
           <textarea value={answers[row.id] || ''} onChange={event => setAnswers(old => ({ ...old, [row.id]: event.target.value }))} />
           <button type="button" disabled={busy !== null || !answers[row.id]?.trim()} onClick={() => { void control(row, 'add') }}>提交补充</button></label>}

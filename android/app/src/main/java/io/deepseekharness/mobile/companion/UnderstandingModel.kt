@@ -89,7 +89,9 @@ internal class DeepSeekUnderstandingModel(
         require(target.scheme == "https" && target.userInfo == null && target.host != null &&
             (allowCustomEndpoint || target.host in builtInHosts))
         val connection = target.toURL().openConnection() as HttpURLConnection
+        val cancellation=PetReplyOperation.bind(connection::disconnect)
         try {
+            PetReplyOperation.checkpoint()
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 10_000; connection.readTimeout = 30_000
             connection.requestMethod = "POST"; connection.doOutput = true
@@ -116,7 +118,7 @@ internal class DeepSeekUnderstandingModel(
             val response = JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString())
             val content = response.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
             return content
-        } finally { connection.disconnect() }
+        } finally { cancellation.close(); connection.disconnect() }
     }
 }
 

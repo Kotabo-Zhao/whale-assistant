@@ -5,6 +5,7 @@ import { homedir, availableParallelism, loadavg } from 'node:os'
 import { freezeMessage } from '@deepseek-ai/dsh-llm'
 import { installSuperagent } from './superagent-runtime.js'
 import { delegationApi, delegatedWriteAllowed, prepareDelegatedWorker } from './worker-delegation.js'
+import { beginWorkerHealth, recordWorkerHealth, acceptsWatchdogHold } from './worker-health.js'
 import { WorkerGoals, TASK_BUDGET, GOAL_BUDGET, budget, chargeElapsed } from './worker-goals.js'
 
 /**
@@ -302,7 +303,10 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       toolEvidence:row.toolEvidence||{},domainAssignmentId:row.domainAssignmentId }
     if(!ledger(row).reports.some(item=>item.revision===row.revision)) row.reports.push(report)
     queueReport(row,report); save(row)
-    void resolve(row.sessionId).then(child=>child.cancel()).catch(()=>{})
+    const blockedRevision = row.revision
+    void resolve(row.sessionId).then(child=>{
+      if(row.revision === blockedRevision && row.state === 'blocked') child.cancel()
+    }).catch(()=>{})
     void notify(row).catch(()=>{})
   }
   function refreshGoal(group) {
@@ -405,6 +409,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
           delete row.finishedAt; delete row.endReason; delete row.toolEvidence
           row.budgetUsage ??= { tokens:0,calls:0,milliseconds:0 }
           row.budgetStartedAt = Date.now()
+          beginWorkerHealth(row)
           row.startedAt = Date.now(); row.activeAtStart = [...queue.rows.values()].filter(item => ['running', 'starting'].includes(item.state)).length;
           delete row.modelUsage
           traces.set(row.sessionId, { calls: new Map(), totals: {}, modelUsage: { reported: 0, tokens: 0, retries: 0 } })
@@ -452,6 +457,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
         }
       }
     }
+    recordWorkerHealth(row,event)
     const trace = traces.get(session.id)
     if (trace && event.type === 'llm/retry') {
       trace.modelUsage.retries++
@@ -603,6 +609,15 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
           continue
         }
         const row = queue.rows.get(command.id)
+        if (row && command.action === 'watchdog') {
+          if (acceptsWatchdogHold(row,command)) {
+            row.watchdog = { commandId:command.commandId,runId:command.runId,sequence:command.sequence,
+              reason:command.reason,at:Date.now(),explanation:command.explanation }
+            blockWorker(row,'任务监督已暂停此工单：' + command.explanation + '。请核对任务后继续。')
+          }
+          await bridge('workerUi',JSON.stringify({ack:command.commandId}))
+          continue
+        }
         if (row && row.lastUiCommand !== command.commandId) {
           try { if (!(await superagent?.controlPhone(row, command.action, command.task, command.commandId))) await control(row, command); row.uiError = '' }
           catch (error) { row.uiError = error.message }
@@ -867,6 +882,11 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     void pollUi().catch(() => {})
     if (queue.rows.size > 0) {
       // Settled rows still need domain settlement and the final outbox delivery.
+      for(const row of queue.rows.values()) if(row.state === 'running' && row.health &&
+          Date.now()-row.health.heartbeatAt >= 30000) {
+        row.health.heartbeatAt=Date.now()
+        save(row)
+      }
       if (activeRowCount(queue.rows.values()) > 0) void pump()
       // Completed and interrupted cards can also receive follow-up commands.
       void syncDomainReports()

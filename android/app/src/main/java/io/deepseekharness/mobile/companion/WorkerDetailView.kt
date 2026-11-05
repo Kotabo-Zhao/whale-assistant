@@ -57,7 +57,7 @@ internal class WorkerDetailView(context: Context, row: JSONObject) : ScrollView(
         }
         val mode = when (row.optString("mode")) { "create" -> "创作工具"; "device" -> "设备操作"; else -> "读取整理" }
         content.addView(text("$state  ·  $mode",13f,muted=true))
-        for ((key,label) in listOf("question" to "待回答","summary" to "最新结果","progress" to "当前进展","uiError" to "提示")) {
+        for ((key,label) in listOf("question" to "待回答","summary" to "最新结果","progress" to "当前进展","uiError" to "提示","supervisionNote" to "任务监督")) {
             val value = row.optString(key)
             if (value.isNotBlank()) { heading(label); paragraph(value,4,label) }
         }

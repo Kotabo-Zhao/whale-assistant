@@ -28,6 +28,7 @@ internal object DeviceControlState {
         }
     }
     private var holder: Pair<String,Context>? = null
+    private var holderRun = ""
     private val workerVersions = LinkedHashMap<String,Long>()
     @Synchronized fun worker(context: Context, row: org.json.JSONObject) {
         val id=row.optString("id"); val version=row.optLong("writeSeq")
@@ -37,9 +38,10 @@ internal object DeviceControlState {
         if(row.optString("mode")=="device" && row.optString("state") in setOf("starting","running","cancelling")) {
             refreshIndicator(context)
             holder=id to context.applicationContext
+            holderRun=row.optJSONObject("health")?.optString("runId").orEmpty()
             if(!halted && current.phase=="idle") publish("waiting","后台设备任务")
         } else if(holder?.first==id) {
-            holder=null
+            holder=null; holderRun=""
             if(!halted && current.phase=="waiting") publish("idle")
         }
     }
@@ -51,11 +53,14 @@ internal object DeviceControlState {
     fun subscribe(listener: (Snapshot) -> Unit) { listeners.add(listener) }
     fun unsubscribe(listener: (Snapshot) -> Unit) { listeners.remove(listener) }
     @Synchronized fun disconnected() {
-        holder=null; cancel=null
+        holder=null; holderRun=""; cancel=null
         if(!halted && current.phase!="idle") { generation++; publish("idle") }
     }
     @Synchronized fun pause() { halted = true; generation++; publish("paused") }
     @Synchronized fun resume() { halted = false; generation++; publish(if(holder==null) "idle" else "waiting") }
+    fun holdWorker(id: String, runId: String) {
+        synchronized(this) { if(holder?.first==id && holderRun==runId) stop() }
+    }
     fun stop() {
         val (action,task) = synchronized(this) { halted = true; generation++; publish("stopped"); (cancel to holder).also { cancel = null } }
         cancelExecutor.execute {
