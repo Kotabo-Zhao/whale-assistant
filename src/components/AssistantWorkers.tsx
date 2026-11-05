@@ -6,8 +6,9 @@ import { pollWhileVisible } from '../pollWhileVisible'
 import { companionRows, type CompanionRow } from '../platform/companion'
 import { SuperagentSettings } from './SuperagentSettings'
 
-const states: Record<string, string> = { unreadable: '记录待检查', queued: '排队中', starting: '启动中', running: '执行中', waiting: '等你回答', blocked: '遇到阻碍', interrupted: '中断待确认', failed: '失败', cancelling: '正在取消', cancelled: '已取消', completed: '已完成' }
+const states: Record<string, string> = { unreadable: '记录待检查', queued: '排队中', starting: '启动中', running: '执行中', waiting: '等你回答', blocked: '遇到阻碍', interrupted: '中断待确认', failed: '未完成', cancelling: '正在取消', cancelled: '已取消', completed: '已完成' }
 export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSession: (id: string) => void; visible?: boolean }) {
+  const [counts, setCounts] = useState<{ running: number | null; attention: number | null }>({ running: null, attention: null })
   const [rows, setRows] = useState<CompanionRow[]>([])
   const [watch, setWatch] = useState({ enabled: false, active: false })
   const [message, setMessage] = useState('')
@@ -47,6 +48,8 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
       try {
         const tasks = await runtimeBridge.companionDashboard({ operation: 'workerPage', filter, group, offset, limit: 20 })
         if (active) {
+          const countOf = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null
+          setCounts({ running: countOf(tasks.running), attention: countOf(tasks.attention) })
           const items = companionRows(tasks.items)
           const count = Number.isSafeInteger(tasks.total) && Number(tasks.total) >= 0 ? Number(tasks.total) : items.length
           if (offset > 0 && offset >= count) { setOffset(Math.floor(Math.max(0,count-1)/20)*20); return }
@@ -107,6 +110,13 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
     } catch { setMessage('屏幕陪看设置未能保存。') }
   }
   return <section className="worker-workspace" aria-label="后台协作与屏幕陪看">
+    <header className="worker-flow-heading"><div><h3>交给后台，随时回来看看</h3><p>直接在对话中说出需求。这里查看进度、回答追问和领取结果。</p></div></header>
+    <div className="worker-overview" role="group" aria-label="全部目标的任务概况">
+      {([['running','执行与排队'],['attention','待我处理']] as const).map(([key,label]) => <button type="button" key={key}
+        className={`worker-overview-item ${key}`} onClick={() => { setGroup(''); setFilter(key); setOffset(0) }}>
+        <span>{label}</span><strong>{listState === 'ready' ? counts[key] ?? '—' : '—'}</strong><small>查看全部目标</small>
+      </button>)}
+    </div>
     <div className="worker-manual-actions">
       <button type="button" className="button button-secondary" aria-expanded={manualOpen}
         onClick={() => setManualOpen(!manualOpen)}>{manualOpen ? '收起手动交办' : '手动交办'}</button>
@@ -139,10 +149,10 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
     </div>)}
     {message && <p role="status">{message}</p>}
     <div className="worker-catalog-controls">
-      <label>任务状态<select value={filter} onChange={event => { setFilter(event.target.value); setOffset(0) }}>
-        <option value="all">全部任务</option><option value="attention">待我处理</option>
-        <option value="running">执行与排队</option><option value="finished">已结束及历史</option>
-      </select></label>
+      <nav className="worker-status-tabs" aria-label="任务状态">
+        {([['all','全部任务'],['attention','待我处理'],['running','执行与排队'],['finished','已结束及历史']] as const).map(([key,label]) =>
+          <button key={key} type="button" aria-pressed={filter === key} onClick={() => { setFilter(key); setOffset(0) }}>{label}</button>)}
+      </nav>
       <button type="button" aria-expanded={groupsOpen} onClick={() => setGroupsOpen(value => !value)}>
         {group ? '所属目标 · '+group : '按目标筛选'}
       </button>
@@ -155,8 +165,8 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
     {listState === 'loading' && <p>正在读取任务…</p>}
     {listState === 'failed' && <p role="status">暂时无法读取任务，请刷新重试。</p>}
     {listState === 'ready' && total === 0 && <p>当前筛选下没有任务。</p>}
-    <div className="assistant-task-list">{rows.map(row => <article key={row.id} className="assistant-task-card worker-card">
-      <div><strong>{row.text}</strong><small>{states[String(row.state)] || '状态待确认'} · {row.mode === 'create' ? '创作工具' : row.mode === 'device' ? '手机操作' : '读取与整理'}</small>
+    <div className="assistant-task-list">{rows.map(row => <article key={row.id} className="assistant-task-card worker-card" data-state={String(row.state)}>
+      <div><strong>{row.text}</strong><small className="worker-card-status">{states[String(row.state)] || '状态待确认'} · {row.mode === 'create' ? '创作工具' : row.mode === 'device' ? '手机操作' : '读取与整理'}</small>
         {typeof row.group === 'string' && row.group !== '' && <small>所属目标 · {row.group}</small>}
         {row.authorizationRevoked === true && <small>任务授权已撤回</small>}
         {row.authoredDraft && typeof row.authoredDraft === 'object' && 'revision' in row.authoredDraft && typeof row.authoredDraft.revision === 'string' ?
@@ -167,7 +177,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
         {typeof row.progress === 'string' && row.progress && <p>进展：{row.progress}</p>}
         {row.state === 'queued' && typeof row.waitReason === 'string' && row.waitReason && <p>{row.waitReason}</p>}
         {typeof row.question === 'string' && row.question && <p>{row.question}</p>}
-        {typeof row.summary === 'string' && row.summary !== '' && <p className="worker-text worker-result-preview">{row.summary}</p>}
+        {typeof row.summary === 'string' && row.summary !== '' && <p className="worker-text worker-result-preview" aria-label={row.state === 'completed' ? '结果摘要' : '任务说明'}>{row.summary}</p>}
         {row.hasPermissionSettings === true && row.mode === 'read' && typeof row.writeSeq === 'number' &&
           <button type="button" disabled={busy !== null} onClick={() => {
             setBusy(row.id)

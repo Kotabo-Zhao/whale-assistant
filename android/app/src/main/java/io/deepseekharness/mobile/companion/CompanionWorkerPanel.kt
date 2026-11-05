@@ -210,7 +210,14 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
             }
             val states = mapOf("unreadable" to "记录待检查", "queued" to "排队中", "starting" to "启动中", "running" to "执行中", "waiting" to "等你回答", "blocked" to "遇到阻碍", "interrupted" to "中断待确认", "failed" to "未完成", "completed" to "已完成", "cancelled" to "已取消", "cancelling" to "正在取消")
             card.addView(TextView(context).apply { text = title; textSize = 15f; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; setTextColor(ui.ink); setTypeface(typeface, android.graphics.Typeface.BOLD) })
-            card.addView(TextView(context).apply { text = if (row.optBoolean("recordUnreadable")) "原生任务记录无法读取" else if (missing) "历史任务记录缺失，无法继续" else if (row.optBoolean("blockedDependency")) "前置任务待处理" else states[state] ?: "状态待确认"; textSize = 12f; setTextColor(ui.muted) })
+            card.addView(TextView(context).apply { text = if (row.optBoolean("recordUnreadable")) "原生任务记录无法读取" else if (missing) "历史任务记录缺失，无法继续" else if (row.optBoolean("blockedDependency")) "前置任务待处理" else states[state] ?: "状态待确认"; textSize = 12f; setTextColor(ui.ink)
+                setPadding(dp(8),dp(5),dp(8),dp(5))
+                background = ui.shape(when (state) {
+                    "waiting", "blocked", "interrupted", "failed" -> ui.honey
+                    "running", "starting" -> ui.soft
+                    else -> ui.canvas
+                }, 8)
+            }, LinearLayout.LayoutParams(-2,-2).apply { topMargin = dp(6); bottomMargin = dp(4) })
             if (row.optBoolean("authorizationRevoked")) card.addView(TextView(context).apply { text = "任务授权已撤回"; textSize = 12f; setTextColor(ui.alert) })
             if (expandedId == id) {
                 row.optString("group").takeIf { it.isNotBlank() }?.let { group ->

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
 const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn(), addWorkerDashboardListener: vi.fn(), insertTaskDraft:vi.fn() }))
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
@@ -216,4 +216,23 @@ it('keeps revoked actors and tokens out of stale channel saves', async () => {
   fireEvent.click(screen.getByRole('button',{name:'放弃草稿并载入最新设置'}))
   await waitFor(() => expect(actors).toHaveValue(''))
   expect(screen.queryByRole('button',{name:'保存时移除本机凭据'})).toBeNull()
+})
+
+it('shows global counts from the backend and opens the corresponding queue', async () => {
+  bridge.companionDashboard.mockReset()
+  bridge.addWorkerDashboardListener.mockResolvedValue({ remove: vi.fn() })
+  bridge.companionDashboard.mockResolvedValue({items:[], total:0, running:27, attention:6})
+  render(<AssistantWorkers onOpenSession={vi.fn()} />)
+  const overview = screen.getByRole('group', {name:'全部目标的任务概况'})
+  await waitFor(() => expect(within(overview).getByText('27')).toBeInTheDocument())
+  fireEvent.click(within(overview).getByRole('button', {name:/待我处理/}))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith(expect.objectContaining({operation:'workerPage',filter:'attention',group:'',offset:0})))
+})
+it('does not invent a zero when global statistics are absent', async () => {
+  bridge.companionDashboard.mockReset()
+  bridge.addWorkerDashboardListener.mockResolvedValue({ remove: vi.fn() })
+  bridge.companionDashboard.mockResolvedValue({items:[],total:0})
+  render(<AssistantWorkers onOpenSession={vi.fn()} />)
+  await screen.findByText('当前筛选下没有任务。')
+  expect(within(screen.getByRole('group',{name:'全部目标的任务概况'})).getAllByText('—')).toHaveLength(2)
 })
