@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { RootEngineStatus, RuntimeBridge } from '../platform/types'
 import { RootEngineCard } from './RootEngineCard'
@@ -28,6 +28,24 @@ function card(bridge: Partial<RuntimeBridge>): void {
 const checkbox = (): HTMLInputElement => screen.getByRole('checkbox')
 
 describe('根通道卡片', () => {
+  it('保存权限期间不启动后台读取，迟到的旧读取不会覆盖保存结果', async () => {
+    let finishRead!: (value: RootEngineStatus) => void
+    let finishWrite!: (value: RootEngineStatus) => void
+    const getRootEngineStatus = vi.fn().mockResolvedValue(status()).mockResolvedValueOnce(status())
+      .mockImplementationOnce(() => new Promise<RootEngineStatus>(resolve => { finishRead = resolve }))
+    const setRootEngineEnabled = vi.fn(() => new Promise<RootEngineStatus>(resolve => { finishWrite = resolve }))
+    card({ getRootEngineStatus, setRootEngineEnabled })
+    await waitFor(() => expect(checkbox().checked).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: '重新检测' }))
+    fireEvent.click(checkbox())
+    fireEvent(window, new Event('focus'))
+    expect(getRootEngineStatus).toHaveBeenCalledTimes(2)
+    finishWrite(status({ enabled: true, usable: true, kernelSuStatus: 'ready', reason: 'READY' }))
+    await waitFor(() => expect(checkbox().checked).toBe(true))
+    await act(async () => { finishRead(status()); await Promise.resolve() })
+    await waitFor(() => expect(checkbox()).not.toBeDisabled())
+    expect(checkbox().checked).toBe(true)
+  })
   it('默认收起技术细节，同时保留开关、系统风险与降级说明', async () => {
     card({ getRootEngineStatus: vi.fn().mockResolvedValue(status({ enabled: true, usable: true, degraded: true, degradations: ['NAMESPACE_UNAVAILABLE'] })) })
     await waitFor(() => expect(checkbox().checked).toBe(true))

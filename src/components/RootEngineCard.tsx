@@ -88,8 +88,10 @@ export function RootEngineCard({ bridge = runtimeBridge }: { bridge?: RuntimeBri
   const [busy, setBusy] = useState(false)
   const [writeError, setWriteError] = useState<string | null>(null)
   const requestId = useRef(0)
+  const writeRequest = useRef<number | null>(null)
 
-  const refresh = useCallback(async (current: () => boolean = () => true) => {
+  const refresh = useCallback(async (current: () => boolean = () => true, afterFailedWrite = false) => {
+    if (writeRequest.current !== null && !afterFailedWrite) return
     const currentRequest = ++requestId.current
     try {
       const next = await bridge.getRootEngineStatus()
@@ -104,30 +106,40 @@ export function RootEngineCard({ bridge = runtimeBridge }: { bridge?: RuntimeBri
   }, [bridge])
 
   useEffect(() => {
+    setBusy(false)
     const stop = pollWhileVisible(10000, current => refresh(current), true)
     return () => {
       stop()
       requestId.current += 1
+      writeRequest.current = null
     }
   }, [refresh])
 
   const value = load.status === 'ready' ? load.value : null
 
   const toggle = useCallback(async (enabled: boolean) => {
+    if (writeRequest.current !== null) return
+    const operation = ++requestId.current
+    writeRequest.current = operation
     setBusy(true)
     setWriteError(null)
     try {
       /* 原生侧保存开关后会顺手丢弃两个探测器的缓存，所以这一条返回的就是重测结果，
          不必再补一次查询——补了反而会出现两次状态变化、白渲染一遍。 */
       const next = await bridge.setRootEngineEnabled(enabled)
+      if (writeRequest.current !== operation) return
       setLoad({ status: 'ready', value: next })
     } catch (error) {
+      if (writeRequest.current !== operation) return
       setWriteError(error instanceof Error ? error.message : String(error))
       /* 写失败也重读一次：界面上的开关必须反映**设备上真实的**取值，
          不能停在我以为它变成了的那个值上。 */
-      await refresh()
+      await refresh(() => writeRequest.current === operation, true)
     } finally {
-      setBusy(false)
+      if (writeRequest.current === operation) {
+        writeRequest.current = null
+        setBusy(false)
+      }
     }
   }, [bridge, refresh])
 
