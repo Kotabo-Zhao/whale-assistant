@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { KeyRound } from 'lucide-react'
 import { t } from '../i18n'
+import { pollWhileVisible } from '../pollWhileVisible'
 import { runtimeBridge } from '../platform/native'
 import type { RootEngineStatus, RuntimeBridge } from '../platform/types'
 
@@ -88,37 +89,24 @@ export function RootEngineCard({ bridge = runtimeBridge }: { bridge?: RuntimeBri
   const [writeError, setWriteError] = useState<string | null>(null)
   const requestId = useRef(0)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (current: () => boolean = () => true) => {
     const currentRequest = ++requestId.current
     try {
       const next = await bridge.getRootEngineStatus()
-      if (currentRequest !== requestId.current) return
+      if (currentRequest !== requestId.current || !current()) return
       setLoad(previous => (previous.status === 'ready' && sameStatus(previous.value, next)
         ? previous
         : { status: 'ready', value: next }))
     } catch {
-      if (currentRequest !== requestId.current) return
+      if (currentRequest !== requestId.current || !current()) return
       setLoad(previous => (previous.status === 'failed' ? previous : { status: 'failed' }))
     }
   }, [bridge])
 
   useEffect(() => {
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') void refresh()
-    }
-    refreshWhenVisible()
-    /*
-     * 根通道的状态只会被两件事改变：用户在 KernelSU 管理器里授权（本应用收不到通知）、
-     * 用户自己开机后重新挂载。所以这里只做低频轮询——10 秒一次足以让授权后的界面在一个
-     * 呼吸内跟上，又不至于让每次轮询都去问一遍包管理器。
-     */
-    const timer = window.setInterval(refreshWhenVisible, 10_000)
-    document.addEventListener('visibilitychange', refreshWhenVisible)
-    window.addEventListener('focus', refreshWhenVisible)
+    const stop = pollWhileVisible(10000, current => refresh(current), true)
     return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', refreshWhenVisible)
-      window.removeEventListener('focus', refreshWhenVisible)
+      stop()
       requestId.current += 1
     }
   }, [refresh])

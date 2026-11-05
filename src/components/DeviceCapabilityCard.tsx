@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Cpu, Loader2, RefreshCw } from 'lucide-react'
 import { t } from '../i18n'
+import { pollWhileVisible } from '../pollWhileVisible'
 import { runtimeBridge } from '../platform/native'
 import type {
   DeviceCapabilityReport,
@@ -163,42 +164,30 @@ export function DeviceCapabilityCard({ bridge = runtimeBridge, onOpenDeviceShell
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const requestId = useRef(0)
-  const invalidate = useCallback(() => { requestId.current += 1 }, [])
 
-  const refresh = useCallback(async (manual = false) => {
+  const refresh = useCallback(async (manual = false, current: () => boolean = () => true) => {
     const currentRequest = ++requestId.current
     if (manual) setRefreshing(true)
     try {
       const next = await bridge.getDeviceCapabilities()
-      if (currentRequest !== requestId.current) return
+      if (currentRequest !== requestId.current || !current()) return
       setLoad(previous => (previous.status === 'ready' && sameReport(previous.report, next)
         ? previous
         : { status: 'ready', report: next }))
     } catch {
-      if (currentRequest !== requestId.current) return
+      if (currentRequest !== requestId.current || !current()) return
       setLoad(previous => (previous.status === 'failed' ? previous : { status: 'failed' }))
     } finally {
       if (manual) setRefreshing(false)
     }
   }, [bridge])
   useEffect(() => {
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') void refresh()
-      else invalidate()
-    }
-    refreshWhenVisible()
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh()
-    }, 5_000)
-    document.addEventListener('visibilitychange', refreshWhenVisible)
-    window.addEventListener('focus', refreshWhenVisible)
+    const stop = pollWhileVisible(5000, current => refresh(false, current), true)
     return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', refreshWhenVisible)
-      window.removeEventListener('focus', refreshWhenVisible)
-      invalidate()
+      stop()
+      requestId.current += 1
     }
-  }, [invalidate, refresh])
+  }, [refresh])
 
   const report = load.status === 'ready' ? load.report : null
   const failed = load.status === 'failed'

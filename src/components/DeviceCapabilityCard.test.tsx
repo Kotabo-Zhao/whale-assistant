@@ -238,9 +238,11 @@ describe('设备能力卡片', () => {
     }
     card(bridge)
     fireEvent(window, new Event('focus'))
+    expect(bridge.getDeviceCapabilities).toHaveBeenCalledTimes(1)
+    finishOld(report())
+    await waitFor(() => expect(bridge.getDeviceCapabilities).toHaveBeenCalledTimes(2))
     finishNew(report([entry('accessibility', { state: 'needs_action', reason: 'ACCESSIBILITY_OFF', action: 'open_accessibility_settings' })]))
     await findRow('无障碍服务 需要一步设置 · 无障碍服务没有开启 · 下一步：到系统设置里开启本应用的无障碍服务')
-    finishOld(report())
     await new Promise(resolve => setTimeout(resolve, 0))
     row('无障碍服务 需要一步设置 · 无障碍服务没有开启 · 下一步：到系统设置里开启本应用的无障碍服务')
   })

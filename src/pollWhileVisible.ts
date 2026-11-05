@@ -1,5 +1,5 @@
 /** Schedule the next read only after the previous one settles and the page is visible. */
-export function pollWhileVisible(delay: number, read: (current: () => boolean) => Promise<void>): () => void {
+export function pollWhileVisible(delay: number, read: (current: () => boolean) => Promise<void>, refreshOnFocus = false): () => void {
   let timer: number | undefined
   let running = false
   let stopped = false
@@ -25,10 +25,12 @@ export function pollWhileVisible(delay: number, read: (current: () => boolean) =
     void refresh()
   }
   document.addEventListener('visibilitychange', changed)
+  if (refreshOnFocus) window.addEventListener('focus', changed)
   void refresh()
   return () => {
     stopped = true
     window.clearTimeout(timer)
     document.removeEventListener('visibilitychange', changed)
+    if (refreshOnFocus) window.removeEventListener('focus', changed)
   }
 }
