@@ -1,5 +1,8 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "结合最近对话和资料主动跟进": "Follow up using recent chats and library notes",
+  "需开启资料检索。桌宠空闲时，将近 7 天一段对话的最多 4 条短摘录和 1 段相关资料发给后台模型；每天或每周最多判断一次。": "Requires library search. When idle, the pet may send up to four short excerpts from a chat in the past seven days and one related library excerpt to the background model, at most once per day or week.",
+  "开启「允许对话检索本地资料」后，桌宠才能根据资料跟进。": "Enable library search to let the pet follow up on related notes.",
   "允许对话写入资料库": "Allow chats to write to the library",
   "主对话和桌宠可按你的要求保存文字。修改已有笔记还需开启资料检索。": "Chat and the pet can save text on request. Editing existing notes also requires library search access.",
   "高级设备权限，默认关闭。": "Advanced device access. Off by default.",

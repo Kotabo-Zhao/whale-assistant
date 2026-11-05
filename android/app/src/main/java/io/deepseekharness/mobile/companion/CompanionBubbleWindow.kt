@@ -199,7 +199,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         return true
     }
     private var initiativeQuestion: String? = null
-    private var initiativeUsesMemory = false
+    private var activeOpening: PetInitiative.Opening? = null
     val canReceiveInitiative: Boolean get() = !closed && !visible && !busy && draft.isBlank() &&
         chat.pendingUser == null && followups.isEmpty() && failedUser == null
 
@@ -534,14 +534,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         if (history.isNotEmpty() && opening != null) bubble(opening, false)
         if (initiativeQuestion == null && opening == null && !busy && chat.pendingUser == null && (draft.isBlank() || resumeInitiativeDraft) &&
-            CompanionStore(context).modelInitiative) {
+            CompanionStore(context).let { it.modelInitiative || it.contextFollowup }) {
             executor.execute {
                 val pending = runCatching { PetInitiative.pendingOpening(context) }.getOrNull()
                 handler.post {
                     if (pending != null && !closed && root === panel && !busy && (draft.isBlank() || resumeInitiativeDraft) &&
-                        CompanionStore(context).modelInitiative && (!pending.usesMemory || CompanionStore(context).bubbleMemoryAccess)) {
+                        pending.allowed(context)) {
                         initiativeQuestion = pending.text
-                        initiativeUsesMemory = pending.usesMemory
+                        activeOpening = pending
                         bubble(pending.text, false)
                         scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
                     }
@@ -825,8 +825,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val fromQueue = queued != null
             val typed = input.text.toString().trim()
             val replyingTo = initiativeQuestion?.takeIf { item == null && retryText == null &&
-                CompanionStore(context).modelInitiative && (!initiativeUsesMemory ||
-                    (CompanionStore(context).bubbleMemoryAccess && CompanionMemoryStore(context).enabled)) }
+                activeOpening?.allowed(context) == true }
             val raw = item?.text ?: retryText ?: if (replyingTo != null && typed.isNotEmpty())
                 "鲸鱼娘问：「$replyingTo」\n我的回答：$typed" else typed
             val message = runCatching { CompanionBubbleChatPolicy.validateMessage(raw) }.getOrElse {

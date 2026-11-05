@@ -60,6 +60,78 @@ class PetInitiativeDeviceTest {
         assertNull(PetInitiative.question("""{"speak":"true","question":"打开链接？"}"""))
     }
 
+    private fun petTurn(ctx: Context, user: String, answer: String) {
+        val history = CompanionBubbleHistory(ctx)
+        history.save(CompanionBubbleHistory.Snapshot("pet-synthetic", "a".repeat(64),
+            listOf(CompanionBubbleChat.Message("user", user), CompanionBubbleChat.Message("assistant", answer))))
+    }
+
+    @Test fun contextRequiresBothGrantsAndEvidenceAndRechecksBeforeDelivery() = isolated { ctx ->
+        val settings = CompanionStore(ctx)
+        settings.contextFollowup = true
+        val knowledge = CompanionKnowledgeStore(ctx)
+        val text = "白鲸桌游的样卡已到店，周六可以领取。"
+        val id = knowledge.saveText(text, "text_file", null).recordIds.single()
+        petTurn(ctx, "白鲸桌游的样卡还没到，到店后我想选一天去取。", "等到店再定。")
+        assertNull(PetContextFollowup.find(ctx))
+        settings.knowledgeModelAccess = true
+        val evidence = requireNotNull(PetContextFollowup.find(ctx))
+        val topic = PetInitiative.Topic("context", evidence.signature, evidence)
+        val raw = """{"speak":true,"chatQuote":"白鲸桌游","noteQuote":"周六可以领取","question":"白鲸桌游的样卡到了，你想周六去取吗？"}"""
+        assertNotNull(PetContextFollowup.question(raw, evidence))
+        assertNull(PetContextFollowup.question(raw.replace("周六可以领取", "周五可以领取"), evidence))
+        val now = Calendar.getInstance()
+        var calls = 0
+        val client = object : CompanionJsonModel {
+            override fun complete(prompt: UnderstandingPrompt.Value, tokenLimit: Int): String {
+                calls++
+                return raw
+            }
+        }
+        fun think() = PetInitiative.think(ctx, topic, "daily", now, { client }) { true }
+        val question = requireNotNull(think())
+        now.add(Calendar.DATE, 1)
+        assertNull(think())
+        assertEquals(1, calls)
+        assertNull(PetContextFollowup.find(ctx))
+        val another = knowledge.saveText("白鲸桌游周日还有样卡演示。", "text_file", null).recordIds.single()
+        assertEquals(another, PetContextFollowup.find(ctx)?.id)
+        PetInitiative.rememberOpening(ctx, topic, question)
+        assertEquals(question, PetInitiative.pendingOpening(ctx)?.text)
+        assertTrue(knowledge.edit(id, text, "白鲸桌游的样卡取消领取。"))
+        assertNull(PetInitiative.pendingOpening(ctx))
+        settings.knowledgeModelAccess = false
+        assertFalse(PetInitiative.stillAllowed(ctx, topic))
+        assertNull(PetContextFollowup.find(ctx))
+        settings.knowledgeModelAccess = true
+        petTurn(ctx, "厨房水龙头漏水，要找师傅。", "先关阀门。")
+        assertNull(PetContextFollowup.find(ctx))
+    }
+
+    @Test fun configuredModelStaysQuietForAnAlreadyClosedConversation() = isolated { ctx ->
+        assumeTrue(InstrumentationRegistry.getArguments().getString("livePetChecks") == "yes")
+        val settings = CompanionStore(ctx)
+        settings.contextFollowup = true
+        settings.knowledgeModelAccess = true
+        petTurn(ctx, "白鲸展览改到星港馆，我已经取票并通知大家了。这件事结束了，不用再跟进。", "好的，事情已经办完。")
+        CompanionKnowledgeStore(ctx).add("白鲸展览确认改到星港馆，票已经取好。", "text_file")
+        val evidence = requireNotNull(PetContextFollowup.find(ctx))
+        val client = configuredUnderstandingModel(app)
+        var declined = false
+        val checkedModel = object : CompanionJsonModel {
+            override fun complete(prompt: UnderstandingPrompt.Value, tokenLimit: Int): String {
+                val raw = client.complete(prompt, tokenLimit)
+                declined = org.json.JSONObject(raw).opt("speak") == false
+                return raw
+            }
+        }
+        val topic = PetInitiative.Topic("context", evidence.signature, evidence)
+        assertNull(PetInitiative.think(ctx, topic, "daily", Calendar.getInstance(), { checkedModel }) { true })
+        assertTrue("需要模型明确选择保持安静", declined)
+        assertNull(PetInitiative.pendingOpening(ctx))
+        inst.sendStatus(0, android.os.Bundle().apply { putString("closedFollowup", "model chose silence") })
+    }
+
     @Test fun configuredModelOpensConversationAndReplyCarriesQuestion() = isolated { ctx ->
         assumeTrue(InstrumentationRegistry.getArguments().getString("livePetChecks") == "yes")
         val settings = CompanionStore(ctx)

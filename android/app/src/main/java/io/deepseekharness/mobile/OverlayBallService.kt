@@ -3,6 +3,7 @@ package io.deepseekharness.mobile
 import io.deepseekharness.mobile.overlay.PetAction
 import io.deepseekharness.mobile.overlay.PetActing
 import io.deepseekharness.mobile.overlay.PetPose
+import io.deepseekharness.mobile.companion.PetContextFollowup
 import io.deepseekharness.mobile.companion.PetInitiative
 import io.deepseekharness.mobile.companion.CompanionProactiveChatPolicy
 import io.deepseekharness.mobile.companion.CompanionMemoryStore
@@ -530,9 +531,28 @@ class OverlayBallService : Service() {
             getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == false &&
             getSystemService(PowerManager::class.java)?.isInteractive == true
 
+    private fun memoryChatTopic(settings: CompanionStore, modeled: Boolean, previous: String?, met: Boolean): PetInitiative.Topic? {
+        val store = CompanionMemoryStore(this)
+        val readMemory = store.enabled && (!modeled || settings.bubbleMemoryAccess)
+        val database = readMemory && store.usesDatabase()
+        val rows = when {
+            !readMemory -> org.json.JSONArray()
+            database -> store.pageForUser(null, null).rows
+            else -> store.listForUser()
+        }
+        val indices = if (database) 0 until rows.length() else rows.length() - 1 downTo 0
+        return indices.asSequence().mapNotNull(rows::optJSONObject)
+            .filter { modeled || CompanionBubbleChatPolicy.proactiveMemory(org.json.JSONArray().put(it)) != null }
+            .mapNotNull(PetInitiative::topic)
+            .firstOrNull { CompanionBubbleChatPolicy.memoryDigest(it.text) != previous }
+            ?: if (modeled && !met && rows.length() == 0) PetInitiative.firstMeeting else null
+    }
+
     private fun checkProactiveMemoryChat() {
         val settings = CompanionStore(this)
-        val modeled = settings.modelInitiative
+        val contextual = settings.contextFollowup
+        val modeled = contextual || settings.modelInitiative
+        if (contextual && !settings.knowledgeModelAccess) return
         if ((!modeled && !settings.proactiveMemoryChat) || proactiveMemoryRunning || !initiativeScreenReady()) return
         if (SystemClock.elapsedRealtime() < nextTopicScanAt) return
         val prefs = getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
@@ -546,20 +566,10 @@ class OverlayBallService : Service() {
         initiativeExecutor.execute {
             var candidate: PetInitiative.Topic? = null
             val opening = runCatching {
-                val store = CompanionMemoryStore(this)
-                val readMemory = store.enabled && (!modeled || settings.bubbleMemoryAccess)
-                val database = readMemory && store.usesDatabase()
-                val rows = when {
-                    !readMemory -> org.json.JSONArray()
-                    database -> store.pageForUser(null, null).rows
-                    else -> store.listForUser()
-                }
-                val indices = if (database) 0 until rows.length() else rows.length() - 1 downTo 0
-                val topic = indices.asSequence().mapNotNull(rows::optJSONObject)
-                    .filter { modeled || CompanionBubbleChatPolicy.proactiveMemory(org.json.JSONArray().put(it)) != null }
-                    .mapNotNull(PetInitiative::topic)
-                    .firstOrNull { CompanionBubbleChatPolicy.memoryDigest(it.text) != previous }
-                    ?: if (modeled && !prefs.getBoolean("met", false) && rows.length() == 0) PetInitiative.firstMeeting else return@runCatching null
+                val topic = if (contextual) PetContextFollowup.find(this)?.let {
+                    PetInitiative.Topic("context", it.signature, it)
+                } else memoryChatTopic(settings, modeled, previous, prefs.getBoolean("met", false))
+                if (topic == null) return@runCatching null
                 candidate = topic
                 if (!modeled) return@runCatching "你之前提到：${topic.text}。最近还想聊聊吗？"
                 PetInitiative.think(this, topic, frequency, now, { configuredUnderstandingModel(this) }) {
@@ -573,13 +583,19 @@ class OverlayBallService : Service() {
                     nextTopicScanAt = SystemClock.elapsedRealtime() + 30 * 60_000L
                     return@post
                 }
-                if (opening == null || !initiativeScreenReady() || settings.modelInitiative != modeled ||
-                    settings.proactiveMemoryFrequency != frequency ||
-                    (topic != PetInitiative.firstMeeting && !CompanionMemoryStore(this).enabled) ||
-                    (if (modeled) topic != PetInitiative.firstMeeting && !settings.bubbleMemoryAccess else !settings.proactiveMemoryChat)) return@post
+                if (contextual) nextTopicScanAt = SystemClock.elapsedRealtime() + 15 * 60_000L
+                if (opening == null || !initiativeScreenReady() || settings.contextFollowup != contextual ||
+                    settings.proactiveMemoryFrequency != frequency) return@post
+                val permission = when {
+                    contextual -> PetContextFollowup.enabled(this)
+                    modeled -> settings.modelInitiative && (topic == PetInitiative.firstMeeting ||
+                        (settings.bubbleMemoryAccess && CompanionMemoryStore(this).enabled))
+                    else -> !settings.modelInitiative && settings.proactiveMemoryChat && CompanionMemoryStore(this).enabled
+                }
+                if (!permission) return@post
                 if (showCompanionHint(opening) {
                     if (!modeled) { if (settings.proactiveMemoryChat) bubbleChat.show(opening) }
-                    else if (settings.modelInitiative && initiativeScreenReady()) bubbleChat.show()
+                    else if ((if (contextual) PetContextFollowup.enabled(this) else settings.modelInitiative) && initiativeScreenReady()) bubbleChat.show()
                 }) {
                     if (modeled) PetInitiative.rememberOpening(this, topic, opening)
                     prefs.edit().putString("key", key).putString("last", CompanionBubbleChatPolicy.memoryDigest(topic.text)).apply()

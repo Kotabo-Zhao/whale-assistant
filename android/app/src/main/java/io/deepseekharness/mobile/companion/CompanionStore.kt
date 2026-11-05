@@ -32,6 +32,12 @@ class CompanionStore(context: Context) {
             prefs.edit().putBoolean("model_initiative", value).apply()
             if (!value) PetInitiative.clearOpening(app)
         }
+    var contextFollowup: Boolean
+        get() = prefs.getBoolean("context_followup", false)
+        set(value) {
+            check(prefs.edit().putBoolean("context_followup", value).commit())
+            if (!value) PetInitiative.clearContextOpening(app)
+        }
     var proactiveMemoryFrequency: String
         get() = prefs.getString("proactive_memory_frequency", "daily")?.takeIf { it in setOf("daily", "weekly") } ?: "daily"
         set(value) { require(value in setOf("daily", "weekly")); prefs.edit().putString("proactive_memory_frequency", value).apply() }
@@ -116,6 +122,7 @@ class CompanionStore(context: Context) {
         set(value) {
             check(prefs.edit().putBoolean("knowledge_model_access", value).commit())
             if (!value) {
+                PetInitiative.clearContextOpening(app)
                 SemanticControl(app).setEnabled(false)
                 SemanticIndexJobs.cancel(app)
             }

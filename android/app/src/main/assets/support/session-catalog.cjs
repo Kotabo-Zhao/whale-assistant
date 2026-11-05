@@ -550,4 +550,4 @@ if (require.main === module) {
   })
 }
 
-module.exports = { MAX_SCAN_BYTES, MAX_COMPRESSED_BYTES, buildCatalog, cleanTitleText, decodeSegment, fallbackSessionTitle, makeCursor, normalizeSessionTitle, parseArguments, parseCursor, truncateTitleUtf8 }
+module.exports = { collectCandidates, zstdFrameEnd, MAX_SCAN_BYTES, MAX_COMPRESSED_BYTES, buildCatalog, cleanTitleText, decodeSegment, fallbackSessionTitle, makeCursor, normalizeSessionTitle, parseArguments, parseCursor, truncateTitleUtf8 }

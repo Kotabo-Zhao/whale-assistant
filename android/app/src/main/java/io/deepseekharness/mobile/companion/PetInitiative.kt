@@ -5,7 +5,7 @@ import org.json.JSONObject
 import java.util.Calendar
 
 internal object PetInitiative {
-    data class Topic(val id: String, val text: String)
+    data class Topic(val id: String, val text: String, val evidence: PetContextFollowup.Evidence? = null)
 
     val firstMeeting = Topic("", "")
 
@@ -35,11 +35,18 @@ internal object PetInitiative {
         return Topic(id, text)
     }
 
-    data class Opening(val text: String, val usesMemory: Boolean)
+    data class Opening(val text: String, val usesMemory: Boolean, val contextual: Boolean = false) {
+        fun allowed(context: Context): Boolean {
+            if (contextual) return PetContextFollowup.enabled(context)
+            val settings = CompanionStore(context)
+            return settings.modelInitiative && (!usesMemory || (settings.bubbleMemoryAccess && CompanionMemoryStore(context).enabled))
+        }
+    }
 
     fun rememberOpening(context: Context, topic: Topic, question: String) {
         val value = JSONObject().put("id", topic.id).put("digest", CompanionBubbleChatPolicy.memoryDigest(topic.text))
             .put("text", question).put("time", System.currentTimeMillis())
+        topic.evidence?.let { value.put("context", it.reference()) }
         context.getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE).edit()
             .putString("opening", value.toString()).apply()
     }
@@ -50,6 +57,10 @@ internal object PetInitiative {
         val raw = prefs.getString("opening", null) ?: return null
         val value = JSONObject(raw)
         if (System.currentTimeMillis() - value.getLong("time") !in 0L..86_400_000L) return null
+        value.optJSONObject("context")?.let { ref ->
+            if (CompanionStore(context).inQuietHours() || !PetContextFollowup.current(context, ref)) return null
+            return Opening(value.getString("text"), usesMemory = false, contextual = true)
+        }
         val id = value.getString("id")
         val topic = if (id.isEmpty()) firstMeeting else {
             val settings = CompanionStore(context)
@@ -64,9 +75,21 @@ internal object PetInitiative {
         context.getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE).edit().remove("opening").apply()
     }
 
+    fun consideredContexts(context: Context): List<String> =
+        context.getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
+            .getString("considered_contexts", "").orEmpty().split(',').filter(String::isNotEmpty)
+
+    fun clearContextOpening(context: Context) {
+        val prefs = context.getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
+        val opening = prefs.getString("opening", null) ?: return
+        if (runCatching { JSONObject(opening).has("context") }.getOrDefault(true)) clearOpening(context)
+    }
+
     fun stillAllowed(context: Context, candidate: Topic): Boolean {
         val settings = CompanionStore(context)
-        if (!settings.modelInitiative || settings.inQuietHours()) return false
+        if (settings.inQuietHours()) return false
+        candidate.evidence?.let { return PetContextFollowup.current(context, it.reference()) }
+        if (!settings.modelInitiative) return false
         if (candidate == firstMeeting) return true
         if (!settings.bubbleMemoryAccess) return false
         return CompanionMemoryStore(context).semanticRecord(candidate.id)?.let(::topic) == candidate
@@ -75,13 +98,26 @@ internal object PetInitiative {
     fun think(context: Context, topic: Topic, frequency: String, now: Calendar,
               model: () -> CompanionJsonModel, available: () -> Boolean): String? {
         if (!available() || !stillAllowed(context, topic)) return null
+        val evidence = topic.evidence
+        val prefs = context.getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
+        val seen = if (evidence == null) emptyList() else consideredContexts(context)
+        if (evidence != null && evidence.signature in seen) return null
         val client = try { model() } catch (error: Exception) {
             status(context, "请检查后台模型和凭据")
             throw error
         }
         val digest = CompanionBubbleChatPolicy.memoryDigest(topic.text)
         if (!available() || !stillAllowed(context, topic) || !reserve(context, frequency, now, digest)) return null
-        val opening = try { question(client.complete(prompt(topic, now), 300)) } catch (error: Exception) {
+        val opening = try {
+            if (evidence == null) question(client.complete(prompt(topic, now), 300))
+            else {
+                val raw = client.complete(PetContextFollowup.prompt(evidence), 450)
+                val answer = PetContextFollowup.question(raw, evidence)
+                if (answer != null || runCatching { JSONObject(raw).opt("speak") == false }.getOrDefault(false))
+                    prefs.edit().putString("considered_contexts", (seen + evidence.signature).takeLast(16).joinToString(",")).apply()
+                answer
+            }
+        } catch (error: Exception) {
             status(context, "模型请求失败，已计入本周期次数")
             throw error
         }
@@ -96,7 +132,7 @@ internal object PetInitiative {
 
     private fun status(context: Context, value: String) {
         val prefs = context.getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
-        if (CompanionStore(context).modelInitiative) prefs.edit().putString("status", value)
+        if (CompanionStore(context).let { it.modelInitiative || it.contextFollowup }) prefs.edit().putString("status", value)
             .putLong("status_at", System.currentTimeMillis()).apply()
     }
 

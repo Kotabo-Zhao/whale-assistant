@@ -10,6 +10,7 @@ import java.io.File
 internal class CompanionBubbleHistory(context: Context, private val writer: TaskStateWriter = TaskStateWriter()) {
     data class Snapshot(val sessionId: String, val scope: String, val messages: List<CompanionBubbleChat.Message>, val pending: String? = null, val continuedMain: Boolean = false)
     private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "companion-bubble-history-v1.json"))
+    internal val sourceFile: File get() = file.baseFile
     val followups = PetFollowupJournal(File(file.baseFile.parentFile, "pet-followups-v1.json"), writer)
     private var writable: Boolean? = null
 

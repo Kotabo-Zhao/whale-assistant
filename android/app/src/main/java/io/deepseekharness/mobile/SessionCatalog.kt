@@ -211,7 +211,19 @@ class SessionCatalog(context: Context, private val store: RuntimeStore) {
      * 把 APK 资产里的脚本投放到访客的固定目录（与 `RuntimeSelfCheck`/`RuntimePluginManager` 同款）：
      * 逐层拒绝符号链接、临时文件独占创建、`Os.rename` 原子替换，每次都覆盖（脚本必须与宿主同版本）。
      */
-    private fun prepareScript() {
+    /** Native opt-in only. Contents never use the owner-facing WebView catalog payload. */
+    internal fun initiativeChats(): JSONArray {
+        if (store.installedManifest() == null) return JSONArray()
+        val name = "initiative-chat.cjs"
+        prepareScript()
+        prepareScript(name)
+        val result = ProcessProbe.run(resolver.launch(listOf(NODE_BINARY, "/root/.dsh-mobile/$name")),
+            store.currentRoot, TIMEOUT_SECONDS, outputLimit = 32_000)
+        if (!result.succeeded || result.timedOut) return JSONArray()
+        return JSONObject(result.output.trim().lineSequence().last()).getJSONArray("chats")
+    }
+
+    private fun prepareScript(scriptName: String = SCRIPT_NAME) {
         for (folder in listOf(File(store.currentRoot, "root"), directory)) {
             if (!Files.exists(folder.toPath(), LinkOption.NOFOLLOW_LINKS)) Files.createDirectory(folder.toPath())
             if (!Files.isDirectory(folder.toPath(), LinkOption.NOFOLLOW_LINKS)) {
@@ -219,14 +231,14 @@ class SessionCatalog(context: Context, private val store: RuntimeStore) {
             }
         }
         Os.chmod(directory.absolutePath, 0x1c0)
-        val target = File(directory, SCRIPT_NAME)
+        val target = File(directory, scriptName)
         if (Files.exists(target.toPath(), LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS)) {
             throw IllegalStateException("会话脚本位置不可用")
         }
         val pending = Files.createTempFile(directory.toPath(), ".session-catalog-", ".tmp")
         try {
             Os.chmod(pending.toString(), 0x180)
-            appContext.assets.open("support/$SCRIPT_NAME").use { input ->
+            appContext.assets.open("support/$scriptName").use { input ->
                 Files.newOutputStream(pending, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { output -> input.copyTo(output) }
             }
             Os.rename(pending.toString(), target.absolutePath)

@@ -4210,6 +4210,7 @@ class MobileRuntimePlugin : Plugin() {
             .put("notificationCapture", store.notificationCapture)
             .put("knowledgeModelAccess", store.knowledgeModelAccess)
             .put("knowledgeModelWrite", store.knowledgeModelWrite)
+            .put("contextFollowup", store.contextFollowup)
             .put("notificationMemorySuggestions", store.notificationMemorySuggestions)
             .put("automaticNotificationMemory", store.automaticNotificationMemory)
             .put("automaticUsageMemory", store.automaticUsageMemory)
@@ -4225,7 +4226,7 @@ class MobileRuntimePlugin : Plugin() {
     fun setCompanionQuickSetting(call: PluginCall) {
         val field = call.getString("field")
         val value = call.getBoolean("value")
-        if (value == null || field !in setOf("memoryEnabled", "bubbleMemoryAccess", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled", "knowledgeModelAccess", "knowledgeModelWrite", "notificationMemorySuggestions", "automaticNotificationMemory", "automaticUsageMemory", "automaticAssistantMemory")) {
+        if (value == null || field !in setOf("memoryEnabled", "bubbleMemoryAccess", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled", "knowledgeModelAccess", "knowledgeModelWrite", "contextFollowup", "notificationMemorySuggestions", "automaticNotificationMemory", "automaticUsageMemory", "automaticAssistantMemory")) {
             call.reject("无效的助手设置", "COMPANION_SETTING_INVALID"); return
         }
         execute(call) {
@@ -4238,6 +4239,10 @@ class MobileRuntimePlugin : Plugin() {
                 "notificationCapture" -> store.notificationCapture = value
                 "knowledgeModelAccess" -> store.knowledgeModelAccess = value
                 "knowledgeModelWrite" -> store.knowledgeModelWrite = value
+                "contextFollowup" -> {
+                    store.contextFollowup = value
+                    if (value) OverlayBallService.checkInitiativeAfterOptIn()
+                }
                 "notificationMemorySuggestions" -> store.notificationMemorySuggestions = value
                 "automaticNotificationMemory" -> store.automaticNotificationMemory = value
                 "automaticUsageMemory" -> store.automaticUsageMemory = value

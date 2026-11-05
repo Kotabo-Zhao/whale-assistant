@@ -643,8 +643,8 @@ export function beforeEachAppTest(): void {
   bridge.resumeCompanionSession.mockResolvedValue(undefined)
   bridge.exportCompanionBackup.mockResolvedValue(undefined)
   bridge.openCompanionSettings.mockResolvedValue(undefined)
-  bridge.getCompanionQuickSettings.mockResolvedValue({ memoryEnabled: false, bubbleMemoryAccess: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, knowledgeModelWrite: false, notificationMemorySuggestions: false, reminders: false, quietHoursEnabled: false })
-  bridge.setCompanionQuickSetting.mockImplementation((field: keyof CompanionQuickSettings, value: boolean) => Promise.resolve({ memoryEnabled: false, bubbleMemoryAccess: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, knowledgeModelWrite: false, notificationMemorySuggestions: false, reminders: false, quietHoursEnabled: false, [field]: value }))
+  bridge.getCompanionQuickSettings.mockResolvedValue({ memoryEnabled: false, bubbleMemoryAccess: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, knowledgeModelWrite: false, contextFollowup: false, notificationMemorySuggestions: false, reminders: false, quietHoursEnabled: false })
+  bridge.setCompanionQuickSetting.mockImplementation((field: keyof CompanionQuickSettings, value: boolean) => Promise.resolve({ memoryEnabled: false, bubbleMemoryAccess: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, knowledgeModelWrite: false, contextFollowup: false, notificationMemorySuggestions: false, reminders: false, quietHoursEnabled: false, [field]: value }))
   bridge.cancelAutomationTask.mockResolvedValue({ connected: true, task: null })
   // 默认「没有任何快照」：多数用例只关心别的页面，不该被一份假快照影响；
   // 关心快照的用例自己覆盖这四条桩。上限取值与原生侧一致（3 份 / 512 MiB）。

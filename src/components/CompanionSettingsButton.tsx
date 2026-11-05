@@ -7,6 +7,7 @@ import './CompanionSettingsButton.css'
 const options: { key: keyof CompanionQuickSettings; title: string; hint: string }[] = [
   { key: 'memoryEnabled', title: '允许使用长期记忆', hint: '已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。' },
   { key: 'bubbleMemoryAccess', title: '允许桌宠访问长期记忆', hint: '需要同时开启长期记忆。允许桌宠按需检索、保存和按你的要求修改记忆；相关内容可能发送给当前模型服务。' },
+  { key: 'contextFollowup', title: '结合最近对话和资料主动跟进', hint: '需开启资料检索。桌宠空闲时，将近 7 天一段对话的最多 4 条短摘录和 1 段相关资料发给后台模型；每天或每周最多判断一次。' },
   { key: 'knowledgeModelWrite', title: '允许对话写入资料库', hint: '主对话和桌宠可按你的要求保存文字。修改已有笔记还需开启资料检索。' },
   { key: 'knowledgeModelAccess', title: '允许对话检索本地资料', hint: '开启后检索到的资料可能发送给当前模型服务。' },
   { key: 'automaticAssistantMemory', title: '自动记住对话中的偏好', hint: '开启后助手提出的长期事实会直接保存，无需逐条确认；可能记错，可随时查看、修改或删除。' },
@@ -39,12 +40,13 @@ export function CompanionSettingsButton({ disabled, openMemory }: { disabled: bo
   }
   return <section className="companion-settings" aria-label={t('助手偏好')}>
     {['记忆与资料', '通知与提醒'].map((group, index) => <details key={group} className="companion-settings-group"><summary><strong>{t(group)}</strong><small>{t(index === 0 ? '管理助手能记住和使用的信息' : '选择哪些提醒可以出现')}</small></summary>
-    {options.filter(option => ['memoryEnabled', 'bubbleMemoryAccess', 'knowledgeModelAccess', 'knowledgeModelWrite', 'automaticAssistantMemory', 'automaticUsageMemory', 'automaticNotificationMemory'].includes(option.key) === (index === 0)).map(option => <label className="toggle-row" key={option.key}>
+    {options.filter(option => ['memoryEnabled', 'bubbleMemoryAccess', 'knowledgeModelAccess', 'knowledgeModelWrite', 'contextFollowup', 'automaticAssistantMemory', 'automaticUsageMemory', 'automaticNotificationMemory'].includes(option.key) === (index === 0)).map(option => <label className="toggle-row" key={option.key}>
       <span><strong>{t(option.title)}</strong><small>{t(option.hint)}</small></span>
       <input type="checkbox" role="switch" checked={settings?.[option.key] ?? false} disabled={disabled || working || settings === null}
         onChange={event => { const value = event.target.checked; if (value && option.key === 'knowledgeModelAccess' && !window.confirm('允许助手检索资料？相关内容可能发送给当前模型服务。')) return; if (value && option.key === 'bubbleMemoryAccess' && !window.confirm('允许桌宠访问长期记忆？相关内容可能发送给当前模型服务。')) return; void update(option.key, value) }} />
     </label>)}
     </details>)}
+    {settings?.contextFollowup && !settings.knowledgeModelAccess && <p className="workspace-hint" role="status">{t('开启「允许对话检索本地资料」后，桌宠才能根据资料跟进。')}</p>}
     {settings?.memoryEnabled && !settings.bubbleMemoryAccess && <p className="workspace-hint" role="status">长期记忆已开启，但桌宠尚未获准访问。请在“记忆与资料”中开启“允许桌宠访问长期记忆”。</p>}
     {openMemory && <button className="button button-secondary" type="button" onClick={openMemory}>{t('打开记忆')}</button>}
     <button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => {
