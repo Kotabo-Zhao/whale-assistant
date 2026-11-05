@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { runtimeBridge } from '../platform/native'
-import { pollWhileVisible } from '../pollWhileVisible'
+import { observeWhileVisible } from '../observeWhileVisible'
 import { companionRows, type CompanionRow } from '../platform/companion'
 
 const stateLabel = (state: unknown): string => state === 'running' ? '进行中' : state === 'waiting' ? '等你回答' : state === 'permission' ? '等待权限确认' : state === 'failed' ? '未完成 · 查看原因' : state === 'completed' ? '已完成' : '连接已中断 · 请回会话确认'
@@ -13,7 +13,7 @@ export function AssistantExecutions({ onOpenSession }: { onOpenSession: (id: str
   const [loading, setLoading] = useState(false)
   const [pageCount, setPageCount] = useState(1)
   useEffect(() => {
-    return pollWhileVisible(5000, async current => {
+    return observeWhileVisible(runtimeBridge.addPetExecutionsListener, async current => {
       setLoading(true)
       try {
         const all: CompanionRow[] = []

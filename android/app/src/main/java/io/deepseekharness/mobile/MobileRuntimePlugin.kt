@@ -344,6 +344,14 @@ class MobileRuntimePlugin : Plugin() {
         workerChangeQueued.set(false)
         if (!destroying.get()) notifyListeners("workerDashboardChanged", JSObject())
     }
+    private val executionChangeQueued = java.util.concurrent.atomic.AtomicBoolean()
+    private val executionChange = Runnable {
+        executionChangeQueued.set(false)
+        if (!destroying.get()) notifyListeners("petExecutionsChanged", JSObject())
+    }
+    private val onExecutionChange: () -> Unit = {
+        if (!destroying.get() && executionChangeQueued.compareAndSet(false,true)) workerEvents.postDelayed(executionChange,120)
+    }
     private val captureChangeQueued = java.util.concurrent.atomic.AtomicBoolean()
     private val captureChange = Runnable {
         captureChangeQueued.set(false)
@@ -672,6 +680,7 @@ class MobileRuntimePlugin : Plugin() {
         io.deepseekharness.mobile.features.WhaleFeatureStore.subscribe(onFeatureChange)
         io.deepseekharness.mobile.companion.CompanionKnowledgeStore.subscribeCaptures(onCaptureChange)
         io.deepseekharness.mobile.companion.WorkerDashboardStore.subscribe(onWorkerChange)
+        io.deepseekharness.mobile.companion.PetExecutionStore.subscribe(onExecutionChange)
         // 悬浮球可以在插件加载时恢复，keep-alive 不能：后者要求运行时确实在跑，
         // 没跑就启动只会留下一个无法解释的通知；悬浮球与运行时无关，只取决于
         // 「用户开关 + 系统权限」（syncOverlayBallService 内部判断），所以重启应用后
@@ -730,6 +739,8 @@ class MobileRuntimePlugin : Plugin() {
     override fun handleOnDestroy() {
         io.deepseekharness.mobile.features.WhaleFeatureStore.unsubscribe(onFeatureChange)
         io.deepseekharness.mobile.companion.WorkerDashboardStore.unsubscribe(onWorkerChange)
+        io.deepseekharness.mobile.companion.PetExecutionStore.unsubscribe(onExecutionChange)
+        workerEvents.removeCallbacks(executionChange)
         io.deepseekharness.mobile.companion.CompanionKnowledgeStore.unsubscribeCaptures(onCaptureChange)
         workerEvents.removeCallbacks(captureChange)
         workerEvents.removeCallbacks(workerChange)
