@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { delegationFixture } from './worker-test-host.mjs'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -17,7 +18,7 @@ test(`bound ${mode}/${permission} submissions retain their parent and enforce it
   const events = new Map(), agents = new Map(), inherited = new Map(), created = [], registered = new Map()
   const makeAgent = id => {
     const agent = { id, options: { provider: 'test', model: 'test' },
-      session: { id, requestHeader: () => ({ config: { provider: 'test', model: 'test' } }), snapshotEvents: () => [] },
+      session: { id, requestHeader: () => ({ config: { provider: 'test', model: 'test' } }), snapshotEvents: () => [], append: (type,data) => { if(type==='sandbox/mode') inherited.set(id,data.mode) } },
       ctx: { tools: { guard() {} }, systemPrompt: { section() {} } },
       inbox: { nextTurn: [], nextStep: [] }, followup: message => agent.inbox.nextTurn.push(message), cancel() {}, steer() {} }
     agents.set(id, agent); return agent
@@ -36,7 +37,7 @@ test(`bound ${mode}/${permission} submissions retain their parent and enforce it
     permissionPresets: { current: session => { assert.equal(session.id, 'session-bound'); return preset },
       resolve: name => ({ sandbox: name === '团队创作' ? 'workspace-write' : name }),
       set: (session, permission) => inherited.set(session.id, permission) } }
-  const installed = installWorkers(ctx, { directory: dir, defineTool: tool => tool, bridge: async (name, input) => {
+  const installed = installWorkers(ctx, { delegation: delegationFixture(ctx,id => { created.push(id); return makeAgent(id) }), directory: dir, defineTool: tool => tool, bridge: async (name, input) => {
     const req = JSON.parse(input || '{}')
     if (name === 'featureWorkerAuthor') featureCalls++
     if (name !== 'workerUi') return { output: '[]' }
@@ -67,7 +68,7 @@ test(`bound ${mode}/${permission} submissions retain their parent and enforce it
     assert.equal(row.owner, 'session-bound')
     assert.equal(inherited.get(row.sessionId), 'workspace-write')
   } else {
-    assert.equal(inherited.get(row.sessionId), permission)
+    assert.equal(inherited.get(row.sessionId), permission === '团队创作' ? 'workspace-write' : permission)
     if (mode === 'create') {
       assert.equal(row.creationCommandId, 'bound-command')
       await installed.authorDraft({ action: 'list' }, { agent: agents.get(row.sessionId) })
@@ -253,10 +254,14 @@ test('worker question releases its slot and reply returns to that same worker an
     sessionController: { resolveAgent: async id => agents.has(id) ? { agent: agents.get(id) } : { error: { code: 'session/not-found' } },
       create: async request => { makeAgent(request.sessionId) } },
     sessionPersistence: { flush: async () => { if (failParentFlush) throw new Error('temporary flush error') } }, permissionPresets: { current: () => 'read-only', set() {} } }
-  const installed = installWorkers(ctx, { directory: dir, defineTool: tool => tool, bridge: async () => ({ output: '[]' }) })
+  const installed = installWorkers(ctx, { delegation: delegationFixture(ctx,makeAgent), directory: dir, defineTool: tool => tool, bridge: async () => ({ output: '[]' }) })
   t.after(() => events.get('dispose')())
   let invocation = 0
   const call = (args, agent = parent) => tools.get('mobile_workers').execute(args, { agent, callId: `call-${++invocation}` })
+  const goal = JSON.parse((await tools.get('mobile_goals').execute(
+    { action: 'define', group: 'two-checks', outcome: '核对条件', criteria: ['两项一致'] }, { agent: parent }
+  )).text)
+  assert.equal(goal.budget.tokens, 600000)
   const start = JSON.parse((await call({ action: 'start', task: 'ask color', mode: 'read' })).text)
   parent.steer({ role: 'user', content: [{ type: 'text', text: 'review' }], source: { kind: 'plugin', plugin: 'dsh-answer-reviewer', note: 'parent' } })
   assert.deepEqual(parent.lastSteer.source, { kind: 'dsh-answer-reviewer', note: 'parent' })
@@ -357,6 +362,9 @@ test('worker question releases its slot and reply returns to that same worker an
   assert.equal(row.progress, '正在核对')
   assert.equal(child.guards[0]({ name: 'read' }), undefined)
   tools.get('mobile_worker_report').execute({ state: 'blocked', summary: '缺少必要权限' }, { agent: child })
+  row.budgetUsage.tokens = row.budget.tokens
+  await installed.pump()
+  assert.equal(row.summary, '缺少必要权限')
   events.get('session/event')(child.session, { type: 'turn/end', data: { turn: 6, reason: { kind: 'completed' } } })
   await new Promise(resolve => setImmediate(resolve))
   await installed.flushNotifications(row)

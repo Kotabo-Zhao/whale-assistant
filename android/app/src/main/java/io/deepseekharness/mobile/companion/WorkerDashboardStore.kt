@@ -26,6 +26,7 @@ internal class WorkerDashboardStore(private val context: Context, private val co
         }
         row.put("text", row.getString("title"))
         writeWorker(target, row)
+        io.deepseekharness.mobile.DeviceControlState.worker(context,row)
         if (current == null && row.optLong("createdAt") >= processStartedAt &&
             row.optString("owner") != "session-whale-task-desk" && row.optString("state") in ACTIVE_STATES) {
             acceptedListeners.forEach { it() }
@@ -295,6 +296,7 @@ internal class WorkerDashboardStore(private val context: Context, private val co
             }
             return@synchronized false
         }
+        if(command.optString("action")=="start") ContextFollowupEvents.matterForTask(context,command.optString("task"))?.let { command.put("matterId",it) }
         write(File(dir, "commands.json"), items.put(command).toString())
         // The guest watches only this hint. Recovery always reads the durable command queue.
         runCatching {

@@ -29,6 +29,9 @@ import java.util.Calendar
 
 /** 权限与数据在此由用户直接控制；无需解锁或无障碍读取其他应用私有数据。 */
 class CompanionActivity : AppCompatActivity() {
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(AppThemePreference.palette(AppLanguage.localizedContext(base)))
+    }
     private lateinit var store: CompanionStore
     private lateinit var content: LinearLayout
     private lateinit var scroll: ScrollView
@@ -42,7 +45,7 @@ class CompanionActivity : AppCompatActivity() {
     private val muted: Int get() = palette.getColor(R.color.overlay_panel_muted_foreground)
     private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
     private fun surface(border: Boolean = true) = GradientDrawable().apply {
-        setColor(palette.getColor(R.color.harness_page_background)); cornerRadius = dp(14).toFloat()
+        setColor(palette.getColor(R.color.harness_page_background)); cornerRadius = dp(io.deepseekharness.mobile.WhaleDesign.of(this@CompanionActivity).radius).toFloat()
         if (border) setStroke(dp(1), palette.getColor(R.color.harness_search_border))
     }
     private fun actionSurface() = RippleDrawable(ColorStateList.valueOf(palette.getColor(R.color.harness_search_action)), surface(), null)
@@ -2296,12 +2299,12 @@ class CompanionActivity : AppCompatActivity() {
                 orientation = android.widget.LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 background = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(android.graphics.Color.rgb(248, 250, 255)); cornerRadius = dp(16).toFloat()
-                    setStroke(dp(1), android.graphics.Color.rgb(216, 228, 245))
+                    setColor(palette.getColor(R.color.harness_search_surface)); cornerRadius = dp(16).toFloat()
+                    setStroke(dp(1), palette.getColor(R.color.harness_search_border))
                 }
             }
             val text = android.widget.TextView(this).apply {
-                this.text = labels[index]; textSize = 15f; setTextColor(android.graphics.Color.rgb(44, 54, 75))
+                this.text = labels[index]; textSize = 15f; setTextColor(ink)
                 setPadding(dp(14), dp(14), dp(14), dp(14)); isClickable = true
                 setOnClickListener { openRecord(index) }
             }
@@ -2508,6 +2511,10 @@ class CompanionActivity : AppCompatActivity() {
     private fun toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
         content.addView(Switch(this).apply {
             text = label; textSize = 15f; setTextColor(ink); isChecked = checked; minHeight = dp(56)
+            val design=io.deepseekharness.mobile.WhaleDesign.of(this@CompanionActivity)
+            val states=arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf())
+            thumbTintList=ColorStateList(states,intArrayOf(design.accent,design.muted))
+            trackTintList=ColorStateList(states,intArrayOf(design.soft,design.line))
             setPadding(dp(14), dp(8), dp(14), dp(8)); background = surface(border = false)
             setOnCheckedChangeListener { _, value -> onChange(value) }
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6); bottomMargin = dp(6) })

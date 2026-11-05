@@ -21,7 +21,7 @@ describe('版本管理：运行时占用卡片接线', () => {
   /** 进「版本管理」一级页：等启动链把视图推到设置首页，再点进去（与 App.runtime.test.tsx 同一口径）。 */
   async function openVersionsPage(): Promise<void> {
     await screen.findByRole('heading', { name: '设置' }, { timeout: 5_000 })
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(await screen.findByRole('button', { name: /版本管理/ }, { timeout: 5_000 }))
     await screen.findByRole('heading', { name: '版本管理' }, { timeout: 5_000 })
   }

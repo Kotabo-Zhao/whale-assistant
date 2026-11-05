@@ -173,6 +173,7 @@ describe('悬浮球设置', () => {
     let resolveSettings!: (value: RuntimeSettings) => void
     bridge.getSettings.mockImplementationOnce(() => new Promise<RuntimeSettings>(resolve => { resolveSettings = resolve }))
 
+    expandSettingsGroup('外观与语言')
     fireEvent.click(screen.getByRole('button', { name: /主题/ }))
     expect(screen.getByText('正在读取设置')).toBeVisible()
     expect(screen.queryByRole('slider')).toBeNull()
@@ -182,8 +183,7 @@ describe('悬浮球设置', () => {
       resolveSettings({ ...settings, terminalFontSize: 16 })
       await Promise.resolve()
     })
-    // 「主题」现在只摆入口，字号在三级页「字号与配色」里。
-    fireEvent.click(await screen.findByRole('button', { name: /字号与配色/ }))
+    // 读取完成后在主题页直接编辑字号，不再增加一个三级入口。
     const slider = await screen.findByRole('slider', { name: /字号/ })
     expect(slider).toHaveValue('16')
     fireEvent.change(slider, { target: { value: '18' } })
@@ -195,7 +195,7 @@ describe('悬浮球设置', () => {
     render(<App />)
   await arriveAtSettingsHome()
     bridge.getSettings.mockRejectedValueOnce(new Error('read failed'))
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /后台/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('无法读取最新设置，请重试')
     expect(screen.queryByRole('button', { name: '保存' })).toBeNull()
@@ -763,21 +763,16 @@ describe('外观设置接线', () => {
     expect(window.localStorage.getItem('dsh-mobile-theme-v1')).toBe('dark')
   })
 
-  it('「主题」摆三行入口，DSH 的主题与背景合在同一页', async () => {
+  it('主题与字号直接编辑，背景与 DSH 高级选项仍可独立进入', async () => {
     render(<App />)
   await arriveAtSettingsHome()
 
     await openSettingsPage('主题')
-    expect(await screen.findByRole('button', { name: /字号与配色/ })).toBeVisible()
-    expect(screen.getByRole('button', { name: /^背景/ })).toBeVisible()
-    expect(screen.getByRole('button', { name: /DSH 主题/ })).toBeVisible()
-    // 二级页不再直接摆控件：字号滑杆和背景卡片都不该在这里。
-    expect(screen.queryByRole('slider', { name: /字号/ })).toBeNull()
-    expect(screen.queryByText('应用背景与卡片')).toBeNull()
-
-    await openSettingsPage('主题', '字号与配色')
-    expect(await screen.findByRole('region', { name: /界面主题/ })).toBeVisible()
+    expect(await screen.findByRole('button', { name: '月汐·陪伴' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '深海·专注' })).toBeVisible()
     expect(screen.getByRole('slider', { name: /字号/ })).toBeVisible()
+    const advanced=screen.getByText('背景与对话外观',{selector:'summary'}).parentElement as HTMLDetailsElement
+    expect(advanced.open).toBe(false)
     expect(screen.queryByText('应用背景与卡片')).toBeNull()
 
     await openSettingsPage('主题', '背景')

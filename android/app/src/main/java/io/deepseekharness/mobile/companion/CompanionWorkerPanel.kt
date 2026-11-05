@@ -244,6 +244,14 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                     })
                 }
             }
+            row.optString("goalState").takeIf { it.isNotBlank() }?.let { goal ->
+                card.addView(ui.text(when(goal) {
+                    "verified" -> "目标已核验"
+                    "verification" -> "子任务已返回 · 目标待核验"
+                    "budget" -> "目标预算待处理"
+                    else -> "目标正在推进"
+                },12f,if(goal=="verified") ui.accent else ui.muted))
+            }
             val dependencies = row.optJSONArray("dependsOn")
             if (state == "queued" && dependencies != null && row.optInt("remainingDependencies") > 0 && row.optString("waitReason").isBlank()) {
                 val titles = row.optJSONArray("dependencyTitles") ?: org.json.JSONArray()

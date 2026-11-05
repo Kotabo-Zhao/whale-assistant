@@ -823,13 +823,17 @@ export function expandSettingsGroup(name: string): void {
 
 export async function openSettingsPage(name: string, sub?: string): Promise<void> {
   await openSettingsHome()
-  expandSettingsGroup(/自动化|设备 Shell|诊断/.test(name) ? '设备与诊断' : /后台|文件|版本|运行时/.test(name) ? '运行与存储' : '助手与外观')
+  expandSettingsGroup(/自动化|设备 Shell/.test(name) ? '设备控制' : /后台|文件|版本|运行时|诊断/.test(name) ? '运行与数据' : /模型|连接/.test(name) ? '模型连接' : /外观|主题|语言/.test(name) ? '外观与语言' : '桌宠与主动跟进')
   const entry = await screen.findByRole('button', { name: new RegExp(name) }, {
     timeout: SETTINGS_NAV_TIMEOUT_MS,
   })
   fireEvent.click(entry)
   await screen.findByRole('heading', { name }, { timeout: SETTINGS_NAV_TIMEOUT_MS })
   if (sub === undefined) return
+  if (name === '主题' && /背景|DSH/.test(sub)) {
+    const summary=screen.getByText('背景与对话外观',{selector:'summary'})
+    if (!(summary.parentElement as HTMLDetailsElement).open) fireEvent.click(summary)
+  }
   // 先按「以 sub 开头」找：分组里可能同时有「背景」与「DSH 背景」两行，子串匹配会撞车。
   const subEntry = screen.queryByRole('button', { name: new RegExp(`^${sub}`) })
     ?? screen.queryByRole('button', { name: new RegExp(sub) })
@@ -849,7 +853,7 @@ export async function openSettingsPage(name: string, sub?: string): Promise<void
  */
 export async function openFilesPage(): Promise<void> {
   await openSettingsHome()
-  expandSettingsGroup('运行与存储')
+  expandSettingsGroup('运行与数据')
   const entry = await screen.findByRole('button', { name: /文件管理/ }, {
     timeout: SETTINGS_NAV_TIMEOUT_MS,
   })

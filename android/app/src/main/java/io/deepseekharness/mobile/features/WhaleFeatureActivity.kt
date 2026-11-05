@@ -32,13 +32,22 @@ internal fun WebView.loadWhaleTool(id: String, html: String, preview: Boolean = 
             WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
         override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean { gone(); return true }
     }
+    val design = io.deepseekharness.mobile.WhaleDesign.of(context)
+    val themed = "<style>:root{" + design.variables() + "color-scheme:" + (if(design.dark) "dark" else "light") +
+        ";}html body{background:var(--whale-background);color:var(--whale-text);font-family:system-ui,sans-serif;}"+
+        "body input,body select,body textarea{background:var(--whale-surface);color:var(--whale-text);border:1px solid var(--whale-border);border-radius:var(--whale-radius);padding:10px;font:inherit;}"+
+        "body button{background:var(--whale-accent);color:var(--whale-on-accent);border-radius:var(--whale-radius);border:0;padding:10px 14px;font:inherit;}"+
+        "body output{color:var(--whale-accent);}</style>"
     val policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-src 'none'"
     val origin = if (!preview) "https://$id.features.whale.invalid/" else "https://$id.preview.whale.invalid/"
-    loadDataWithBaseURL(origin, "<meta charset=utf-8><meta http-equiv=\"Content-Security-Policy\" content=\"$policy\"><meta name=viewport content=\"width=device-width,initial-scale=1\">" + html, "text/html", "utf-8", null)
+    loadDataWithBaseURL(origin, "<meta charset=utf-8><meta http-equiv=\"Content-Security-Policy\" content=\"$policy\"><meta name=viewport content=\"width=device-width,initial-scale=1\">" + html + themed, "text/html", "utf-8", null)
 }
 
 /** Independently authored local tools run outside the Capacitor management WebView. */
 open class WhaleFeatureActivity : Activity() {
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(io.deepseekharness.mobile.AppThemePreference.palette(io.deepseekharness.mobile.AppLanguage.localizedContext(base)))
+    }
     private val store by lazy { WhaleFeatureStore(this) }
     private val native by lazy { NativeFeatureRegistry(this) }
     private val taskRuntime by lazy { WorkerRuntimeWake(applicationContext) }

@@ -16,6 +16,13 @@ source = assets / 'rootfs.bundle'
 def open_source():
     return archive.open('assets/runtime/rootfs.bundle') if archive else source.open('rb')
 expected_bases = {
+    '0.3.67-whale-integrated': '7ab05befee573c5ea6254990aa65708abbedeaf67538d2418c22c8fa2acb626e',
+    '0.3.66-whale-integrated': '92f96dc2cd37a1e8a129323c488970df2939ec4bed05f3f511f464aaa65a6ff2',
+    '0.3.65-whale-integrated': '0f0b72fe942071e055c90a594fea6d0ccdbdedb0458784c92e2c5aa923b67b1c',
+    '0.3.64-whale-integrated': '1ac35afbd6aab6be156eda132fb11b0106075a94d4438067fd35770c2c0325e8',
+    '0.3.63-whale-integrated': 'fa2edf5814bd51eaad3db5446e5fcda9e2dfa9ca11e5df07e4d97c57ec84a190',
+    '0.3.62-whale-integrated': 'f88f8ad3b9627cc765b404b60131946709e774d0e34c609d31fb1f6d3c67fae5',
+    '0.3.60-whale-knowledge-write': 'dafb6cd3b8bb132cc1392ba9ec8a5955e36215a4ac05bd011616970fbd9f52cc',
     '0.3.59-whale-task-budget': '87202ebd9181181a31ec9f74c8e57c12fa1f13d91b2b46e08609a21b2816b375',
     '0.3.58-whale-bound-creation': '9ba659261da490ad0f403dc4ab656a28aefcc136bbf0b65cdc54f4737fb232b1',
     '0.3.57-whale-bound-session': '1f6b88bc1eaca93add37e3dcfb0f4b0353af0ba88c524479fb6793c769cf50ff',

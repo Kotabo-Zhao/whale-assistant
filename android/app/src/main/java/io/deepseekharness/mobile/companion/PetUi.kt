@@ -21,7 +21,7 @@ import kotlin.math.roundToInt
 
 /** Shared typography, surfaces and controls for the pet's small windows. */
 internal class PetUi(private val context: Context) {
-    val palette = AppLanguage.localizedContext(AppThemePreference.palette(context))
+    val palette = AppThemePreference.palette(AppLanguage.localizedContext(context))
     private val simple = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") == "simple"
     val surface = palette.getColor(if (simple) R.color.pet_simple_surface else R.color.pet_surface)
     val canvas = palette.getColor(if (simple) R.color.pet_simple_canvas else R.color.pet_canvas)
@@ -39,7 +39,7 @@ internal class PetUi(private val context: Context) {
     fun dp(n: Int) = (n * context.resources.displayMetrics.density).roundToInt()
     fun string(id: Int): String = palette.getString(id)
     fun shape(fill: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply {
-        setColor(fill); cornerRadius = dp(if (simple) minOf(7, radius) else radius).toFloat()
+        setColor(fill); cornerRadius = dp(if (simple) minOf(12, radius) else maxOf(12, radius)).toFloat()
         if (stroke != null) setStroke(dp(1), stroke)
     }
     fun action(fill: Int, radius: Int, stroke: Int? = null) =

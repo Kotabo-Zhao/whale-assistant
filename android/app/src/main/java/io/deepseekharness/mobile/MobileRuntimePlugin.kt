@@ -451,6 +451,25 @@ class MobileRuntimePlugin : Plugin() {
      * 存结论会把那一刻固化成显式选择。解析由 [AppThemePreference.apply] 每次按 `uiMode` 现算。
      */
     @PluginMethod
+    fun setHarnessViewport(call: PluginCall) {
+        val data=call.data
+        val view=data.optString("view")
+        val fields=listOf("x","y","width","height","viewportWidth")
+        if(!view.matches(Regex("[a-z][a-z0-9-]{0,79}")) || data.opt("visible") !is Boolean || fields.any { data.opt(it) !is Number || !data.optDouble(it).isFinite() } ||
+            data.optDouble("viewportWidth")<=0 || fields.any { kotlin.math.abs(data.optDouble(it))>100000 }) {
+            call.reject("对话区域无效","HARNESS_VIEWPORT_INVALID"); return
+        }
+        val host=activity as? MainActivity ?: run { call.resolve(); return }
+        host.runOnUiThread {
+            val current=host.bridge?.webView?.url?.substringAfter('#',"")?.ifBlank { "conversation" }
+            if(current!=view) { call.resolve(); return@runOnUiThread }
+            host.updateHarnessViewport(data.getBoolean("visible"),data.getDouble("x"),data.getDouble("y"),
+                data.getDouble("width"),data.getDouble("height"),data.getDouble("viewportWidth"))
+            call.resolve()
+        }
+    }
+
+    @PluginMethod
     fun setAppTheme(call: PluginCall) {
         val mode = call.getString("mode").orEmpty()
         if (mode != AppThemePreference.MODE_SYSTEM &&
@@ -466,7 +485,16 @@ class MobileRuntimePlugin : Plugin() {
                 require(style == "simple" || style == "cute")
                 context.getSharedPreferences("whale-interface", 0).edit().putString("style", style).apply()
             }
-            AppThemePreference.save(context, mode)
+            val saved = AppThemePreference.save(context, mode)
+            if (saved) {
+                HarnessThemeBridge.saveFamily(context)
+                DeviceControlState.refreshIndicator(context)
+                activity?.runOnUiThread {
+                    val host=activity as? MainActivity
+                    if(host!=null) host.refreshHarnessTheme() else HarnessThemeBridge.refresh()
+                }
+            }
+            saved
         } catch (_: IllegalArgumentException) {
             false
         }

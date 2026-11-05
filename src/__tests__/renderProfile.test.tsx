@@ -235,7 +235,7 @@ describe('§5.6-B 渲染测量', () => {
       await arriveAtSettingsHome()
       await screen.findByRole('heading', { name: '设置' })
       await tick(6_000)
-      expandSettingsGroup('运行与存储')
+      expandSettingsGroup('运行与数据')
       profile.reset()
 
       fireEvent.click(screen.getByRole('button', { name: '打开 Harness' }))

@@ -248,7 +248,7 @@ describe('Ubuntu 运行时设置', () => {
   it('不再在运行时设置页显示工作区文件管理入口', async () => {
     render(<App />)
   await arriveAtSettingsHome()
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /Ubuntu 运行时/ }))
     expect(await screen.findByRole('heading', { name: 'Ubuntu 24.04' })).toBeVisible()
     expect(screen.queryByRole('heading', { name: '工作区文件' })).toBeNull()

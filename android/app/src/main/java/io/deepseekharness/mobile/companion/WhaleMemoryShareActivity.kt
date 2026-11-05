@@ -9,6 +9,9 @@ import java.util.concurrent.Executors
 
 /** Explicit share target: keep the original selected text in the user's local knowledge store. */
 open class WhaleMemoryShareActivity : Activity() {
+    override fun attachBaseContext(base: android.content.Context) {
+        super.attachBaseContext(io.deepseekharness.mobile.AppThemePreference.palette(io.deepseekharness.mobile.AppLanguage.localizedContext(base)))
+    }
     companion object {
         const val FROM_PET = "io.deepseekharness.mobile.PET_CAPTURE"
         const val PICK = "io.deepseekharness.mobile.PICK_KNOWLEDGE"

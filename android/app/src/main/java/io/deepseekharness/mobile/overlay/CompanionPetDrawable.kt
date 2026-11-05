@@ -24,9 +24,17 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
     private val left = cutArm(PetJoint.ELBOW_L, floatArrayOf(.395f,.584f, .441f,.584f, .474f,.649f, .489f,.661f, .499f,.714f, .490f,.732f, .452f,.732f, .432f,.697f, .414f,.657f))
     private val right = cutArm(PetJoint.ELBOW_R, floatArrayOf(.536f,.584f, .578f,.584f, .560f,.657f, .544f,.697f, .528f,.732f, .493f,.732f, .486f,.714f, .497f,.661f, .516f,.649f))
     private var pose = PetPose()
+    private var prepared: PetPose? = null
     fun setPose(next: PetPose) {
+        if (next == pose) return
+        val sheetChanged=(pose.sheet>.01f)!=(next.sheet>.01f)
         pose = next
-        invalidateSelf()
+        prepareGeometry()
+        // The 20/30 Hz motion clock continues unchanged. Avoid submitting another
+        // mesh when all movement is below one fifth of a physical display pixel.
+        val scale = if (bounds.width()>0) bounds.width()/w*.90f else 1f
+        if (skin.movedSinceDraw(scale,.18f) || left.skin.movedSinceDraw(scale,.18f) ||
+            right.skin.movedSinceDraw(scale,.18f) || sheetChanged || pose.sheet>.01f) invalidateSelf()
     }
     var blinkAmount = 0f
         set(value) { if (field != value) { field = value.coerceIn(0f, 1f); invalidateSelf() } }
@@ -66,7 +74,7 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
         canvas.translate(bounds.left.toFloat(), bounds.top.toFloat())
         canvas.scale(bounds.width() / w, bounds.height() / h)
         canvas.scale(.90f, .90f, w * .5f, h * .60f)
-        skeleton.set(pose)
+        prepareGeometry()
         drawSkin(canvas, base, skin, paint)
         if (pose.sheet > .01f) drawWorkSheet(canvas)
         layerPaint.alpha = paint.alpha
@@ -80,8 +88,15 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
         canvas.restore()
     }
     private fun drawSkin(canvas: Canvas, image: Bitmap, skin: PetSkin, color: Paint) {
-        skin.update(skeleton, pose)
         canvas.drawBitmapMesh(image, skin.cols, skin.rows, skin.vertices, 0, null, 0, color)
+        skin.recordDraw()
+    }
+    private fun prepareGeometry() {
+        if (prepared == pose) return
+        skeleton.set(pose)
+        skin.update(skeleton,pose); left.skin.update(skeleton,pose); right.skin.update(skeleton,pose)
+        leftEye.skin.update(skeleton,pose); rightEye.skin.update(skeleton,pose)
+        prepared=pose
     }
     /** The slate sits under the writing hand and follows the torso while the wrist taps. */
     private fun drawWorkSheet(canvas: Canvas) {

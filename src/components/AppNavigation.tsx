@@ -10,8 +10,8 @@ interface AppSidebarProps {
 
 const destinations = [
   { view: 'harness', label: '对话', Icon: MessageSquare },
-  { view: 'assistant-memory', label: '记忆', Icon: BookOpen },
-  { view: 'assistant-tasks', label: '事项', Icon: ListTodo },
+  { view: 'assistant-memory', label: '资料', Icon: BookOpen },
+  { view: 'assistant-tasks', label: '任务', Icon: ListTodo },
   { view: 'tools', label: '工具', Icon: Wrench },
   { view: 'settings', label: '我的', Icon: Settings2 },
 ] as const

@@ -18,7 +18,7 @@ const cachedUpdate: AppUpdateState = {
 async function openVersions(): Promise<void> {
   // 开机不再自动进设置首页：先导航，再进「版本管理」。
   await arriveAtSettingsHome()
-  expandSettingsGroup('运行与存储')
+  expandSettingsGroup('运行与数据')
   fireEvent.click(screen.getByRole('button', { name: /版本管理/ }))
   await screen.findByRole('heading', { name: '版本管理' })
 }

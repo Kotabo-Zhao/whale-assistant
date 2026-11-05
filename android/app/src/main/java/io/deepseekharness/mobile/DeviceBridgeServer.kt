@@ -104,8 +104,35 @@ class DeviceBridgeServer(
         null
     }
 
+    private val screenshotLock = Any()
+    private val screenshotSession = java.util.concurrent.atomic.AtomicReference<String?>(null)
+    private val screenshotCleanup = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+    private var screenshotEpoch = 0L
+
+    private fun releaseScreenshot() {
+        screenshotSession.getAndSet(null)?.let { runCatching { shizuku.close(it) } }
+    }
+
+    private fun captureScreen(): io.deepseekharness.mobile.shizuku.DeviceCommandResult = synchronized(screenshotLock) {
+        val id = screenshotSession.get() ?: shizuku.create(DEFAULT_COLUMNS,DEFAULT_ROWS,suppressPublicOutput=true,
+            permitted=running::get,onSessionExit={ session -> runner.onSessionExit(session); screenshotSession.compareAndSet(session,null) })
+            .also { screenshotSession.set(it) }
+        val epoch = ++screenshotEpoch
+        DeviceControlState.cancellation { releaseScreenshot() }
+        try {
+            runner.execute(id,DeviceCommand.SCREENSHOT,"",COMMAND_TIMEOUT_MS).also { if(!it.ok) releaseScreenshot() }
+        } finally {
+            if (!screenshotCleanup.isShutdown) screenshotCleanup.schedule({
+                synchronized(screenshotLock) { if (screenshotEpoch == epoch) releaseScreenshot() }
+            },5,TimeUnit.SECONDS)
+        }
+    }
+
     override fun stop() {
         running.set(false)
+        DeviceControlState.disconnected()
+        screenshotCleanup.shutdownNow()
+        releaseScreenshot()
         try {
             server.close()
         } catch (_: Throwable) {
@@ -256,6 +283,8 @@ class DeviceBridgeServer(
                             "workerUi" -> {
                                 val store = io.deepseekharness.mobile.companion.WorkerDashboardStore(context)
                                 when {
+                                    request.optBoolean("contextMatters") -> io.deepseekharness.mobile.companion.ContextFollowupEvents.pendingMatters(context).toString()
+                                    request.has("ackMatter") -> { io.deepseekharness.mobile.companion.ContextFollowupEvents.acknowledgeMatter(context,request.getString("ackMatter")); "[]" }
                                     request.optBoolean("hostCapacity") -> {
                                         val power = context.getSystemService(android.os.PowerManager::class.java)
                                         val thermal = if (android.os.Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else 0
@@ -265,7 +294,12 @@ class DeviceBridgeServer(
                                     }
                                     request.has("ack") -> { store.acknowledge(request.getString("ack"), request.optString("authorWorkerId").ifBlank { null }); "[]" }
                                     request.has("deferred") -> { store.dispatchUnavailable(request.getString("deferred"), true); "[]" }
-                                    else -> store.batch(request.optInt("skip", 0), request.optInt("sourceSessionProtocol", 0) in 1..2, request.optInt("sourceSessionProtocol", 0) == 2).toString()
+                                    else -> {
+                                        val batch=store.batch(request.optInt("skip",0),request.optInt("sourceSessionProtocol",0) in 1..2,request.optInt("sourceSessionProtocol",0)==2)
+                                        if(request.optBoolean("includeMatters")) JSONObject().put("commands",batch)
+                                            .put("matters",io.deepseekharness.mobile.companion.ContextFollowupEvents.pendingMatters(context)).toString()
+                                        else batch.toString()
+                                    }
                                 }
                             }
                             "screenWatch" -> {
@@ -552,6 +586,42 @@ class DeviceBridgeServer(
                         return
                     }
                     // 自动化授权与设备能力都不经过 Shell；能力判定复用原生统一策略，不在 AI 插件里另算一套。
+                    if (commandName == "screenObserve") {
+                        if (param.length > 1024) throw RuntimeFailure("SCREEN_INPUT_INVALID", "观察参数过长")
+                        val context = appContext ?: throw RuntimeFailure("SCREEN_UNAVAILABLE","屏幕服务不可用")
+                        val request = JSONObject(param)
+                        if(request.has("ocr") && request.opt("ocr") !is Boolean) throw RuntimeFailure("SCREEN_INPUT_INVALID","OCR 参数无效")
+                        val started = android.os.SystemClock.elapsedRealtime()
+                        val tree = DeepSeekAccessibilityService.current()?.execute("accessibilityTree","")
+                        val value = JSONObject().put("treeAvailable",tree?.ok == true)
+                            .put("observedAtMs",System.currentTimeMillis())
+                        val treeJson=if(tree?.ok==true) JSONObject(tree.text) else null
+                        if(treeJson!=null) value.put("tree",treeJson)
+                        else value.put("treeReason",tree?.errorCode ?: "ACCESSIBILITY_UNAVAILABLE")
+                        val nodes=treeJson?.optJSONArray("nodes")
+                        val useful=nodes!=null && (0 until nodes.length()).any { index ->
+                            val node=nodes.getJSONObject(index)
+                            node.optString("text").isNotBlank() || node.optString("contentDescription").isNotBlank()
+                        }
+                        if(request.has("region") && request.has("ocr") && !request.getBoolean("ocr"))
+                            throw RuntimeFailure("SCREEN_INPUT_INVALID","指定识别区域时不能关闭 OCR")
+                        val ocr=request.optBoolean("ocr",!useful || request.has("region"))
+                        value.put("method",if(ocr) "native_tree_and_local_ocr" else "native_tree")
+                        if(ocr) {
+                            DeviceCommand.requireShellRoute(DeviceCommand.SCREENSHOT,false,shellEnabled())
+                            val capturedAt=System.currentTimeMillis()
+                            val screenshot = runOneShot(DeviceCommand.SCREENSHOT,"")
+                            if(!screenshot.ok) throw RuntimeFailure(screenshot.errorCode ?: "SCREEN_UNAVAILABLE","无法读取当前截图")
+                            val result = DeviceControlState.execute(context,true,"本地文字识别") {
+                                val text = io.deepseekharness.mobile.companion.ScreenObservation.text(screenshot.text,request).put("capturedAtMs",capturedAt)
+                                io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,text.toString(),false,null)
+                            }
+                            value.put("image",JSONObject(result.text))
+                        }
+                        io.deepseekharness.mobile.runtime.DeviceObservationTiming.record(context,"screenObserve",android.os.SystemClock.elapsedRealtime()-started)
+                        respondResult(output,io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,value.toString(),false,null))
+                        return
+                    }
                     if (commandName == "automationPolicy") {
                         if (param.isNotEmpty()) throw RuntimeFailure("DEVICE_COMMAND_INVALID", "能力查询不接受参数")
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(
@@ -713,13 +783,26 @@ class DeviceBridgeServer(
      * 会话退出（Shell 死亡 / Shizuku 断开）后不会再有输出：在途的设备命令立刻按协议错误收口，
      * 不必空等到 60 秒超时。通用命令与副屏直通命令共用这一条路径，只有命令与脚本文本不同。
      */
-    private fun runOneShot(
+    private fun runOneShot(command: DeviceCommand, param: String, rootEngine: Boolean = false): io.deepseekharness.mobile.shizuku.DeviceCommandResult {
+        val context = appContext ?: return runOneShotRaw(command,param,rootEngine)
+        val observed = command in setOf(DeviceCommand.SCREENSHOT, DeviceCommand.UI_DUMP)
+        if (command == DeviceCommand.UI_DUMP) {
+            val native = DeepSeekAccessibilityService.current()?.execute("accessibilityTree","")
+            if (native?.ok == true) return native.copy(text = "原生无障碍节点树（JSON）：\n" + native.text)
+        }
+        return if (observed || command in setOf(DeviceCommand.SHELL, DeviceCommand.LAUNCH_APP))
+            DeviceControlState.execute(context,observed,if(observed) "读取屏幕" else "设备命令") { runOneShotRaw(command,param,rootEngine) }
+        else runOneShotRaw(command,param,rootEngine)
+    }
+
+    private fun runOneShotRaw(
         command: DeviceCommand,
         param: String,
         rootEngine: Boolean = false,
     ): io.deepseekharness.mobile.shizuku.DeviceCommandResult {
         // 根通道不建 Shizuku 会话：会话 ID 对这个分支没有意义（`execute` 会先于任何会话操作返回）。
         if (rootEngine) return runner.execute(ROOT_ENGINE_SESSION_ID, command, param, COMMAND_TIMEOUT_MS, useRootEngine = true)
+        if (command == DeviceCommand.SCREENSHOT) return captureScreen()
         val sessionId = shizuku.create(
             DEFAULT_COLUMNS,
             DEFAULT_ROWS,
@@ -727,6 +810,7 @@ class DeviceBridgeServer(
             permitted = running::get,
             onSessionExit = { id -> runner.onSessionExit(id) },
         )
+        DeviceControlState.cancellation { shizuku.close(sessionId) }
         try {
             return runner.execute(sessionId, command, param, COMMAND_TIMEOUT_MS)
         } finally {

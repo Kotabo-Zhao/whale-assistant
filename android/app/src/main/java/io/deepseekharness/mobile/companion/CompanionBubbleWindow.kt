@@ -97,8 +97,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var deliveryWatcher: CompanionDeliveryWatcher? = null
     val visible: Boolean get() = root != null
 
-    private val toolWindows = PetToolWindows(context, wm)
-    fun openTool(tool: io.deepseekharness.mobile.features.WhaleFeatureStore.Tool) = toolWindows.open(tool)
+    private var inlineTool: PetInlineTool? = null
+    private var selectedTool: io.deepseekharness.mobile.features.WhaleFeatureStore.Tool? = null
+    private var presentTool: ((io.deepseekharness.mobile.features.WhaleFeatureStore.Tool) -> Unit)? = null
+    fun openTool(tool: io.deepseekharness.mobile.features.WhaleFeatureStore.Tool) {
+        selectedTool = tool
+        if (!visible) show()
+        presentTool?.invoke(tool)
+    }
     fun toggle() { if (visible) hide() else show() }
     private fun dispatchTask(task: String, mode: String, id: String, title: String, needs: String): org.json.JSONObject =
         receiveTask?.invoke(task, mode, id, title, needs) ?: workerPanel.submit(task, mode, id, title, needs)
@@ -350,7 +356,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             gravity = if (showAbove) Gravity.BOTTOM else Gravity.TOP
         }
         val scroll = ScrollView(context).apply { addView(content); isVerticalScrollBarEnabled = false; setBackgroundColor(ui.canvas) }
-        panel.addView(scroll, LinearLayout.LayoutParams(-1, dp(120)))
+        val bodyHost = android.widget.FrameLayout(context).apply {
+            addView(scroll, android.widget.FrameLayout.LayoutParams(-1, -1))
+        }
+        panel.addView(bodyHost, LinearLayout.LayoutParams(-1, dp(120)))
         val controls = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         var controlLimit = dp(180)
         controlsScroll = object : ScrollView(context) {
@@ -579,7 +588,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         if (busy) {
             (inFlightUser ?: chat.pendingUser)?.let { bubble(it, true) }
             val live = bubble(mainQuestion ?: liveText.ifBlank { "正在回复…" }, false)
-            renderLive = { text -> live.text = CompanionRichText.render(text, ui); panel.post { positionUpdater?.invoke() } }
+            renderLive = { text -> live.text = text; panel.post { positionUpdater?.invoke() } }
         }
         val input = EditText(context).apply {
             hint = ui.string(R.string.pet_ui_input); setTextColor(foreground); setHintTextColor(secondary)
@@ -849,6 +858,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 return@setOnClickListener
             }
             inFlightUser = message; failedUser = null; failedFollowup = null
+            if (replyingTo != null) runCatching { ContextFollowupEvents.answered(context,message) }
             if (initiativeQuestion != null) PetInitiative.clearOpening(context)
             initiativeQuestion = null
             if (!fromQueue && (typed == message || replyingTo != null)) input.text.clear()
@@ -858,7 +868,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             renderCompleted(sentBubble, message, true)
             val streamingBubble = bubble("正在输入…", false)
             liveText = ""
-            renderLive = { text -> streamingBubble.text = CompanionRichText.render(text, ui); panel.post { positionUpdater?.invoke() } }
+            renderLive = { text -> streamingBubble.text = text; panel.post { positionUpdater?.invoke() } }
             mainQuestion = null
             busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = chat.handoffSessionId() != null; sendLabel(); status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
@@ -993,6 +1003,25 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
         }
+        val toolView = PetInlineTool(context, back = {
+            inlineTool?.pause(); selectedTool = null
+            scroll.visibility = android.view.View.VISIBLE
+            shortcuts.visibility = android.view.View.VISIBLE
+            footer.visibility = android.view.View.VISIBLE
+            syncControls()
+            panel.post { positionUpdater?.invoke() }
+        }, sendResult = { result -> input.setText(result); input.setSelection(input.text.length) })
+        inlineTool = toolView
+        toolView.visibility = android.view.View.GONE
+        bodyHost.addView(toolView, android.widget.FrameLayout.LayoutParams(-1,-1))
+        presentTool = { tool ->
+            scroll.visibility = android.view.View.GONE
+            shortcuts.visibility = android.view.View.GONE
+            controlsScroll.visibility = android.view.View.GONE
+            footer.visibility = android.view.View.GONE
+            toolView.open(tool)
+            panel.post { positionUpdater?.invoke() }
+        }
         val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL, PixelFormat.TRANSLUCENT).apply {
@@ -1001,13 +1030,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         val updatePosition = {
             val metrics = context.resources.displayMetrics
+            val stableBounds = if (android.os.Build.VERSION.SDK_INT >= 30) wm.maximumWindowMetrics.bounds
+                else android.graphics.Rect(0,0,metrics.widthPixels,metrics.heightPixels)
             val currentPet = petBounds()
             val inset = panel.rootWindowInsets
             val keyboard = if (android.os.Build.VERSION.SDK_INT >= 30 && inset?.isVisible(android.view.WindowInsets.Type.ime()) == true)
                 inset.getInsets(android.view.WindowInsets.Type.ime()).bottom else 0
             val frame = android.graphics.Rect().also { panel.getWindowVisibleDisplayFrame(it) }
-            val screenWidth = if (panel.isAttachedToWindow && frame.width() > 0)
-                minOf(metrics.widthPixels, frame.width()) else metrics.widthPixels
+            val screenWidth = stableBounds.width()
             val nextWidth = windowWidth(screenWidth)
             val resized = nextWidth != width
             if (resized) {
@@ -1023,8 +1053,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     }
                 }
             }
-            val frameBottom = if (frame.bottom > 0) minOf(metrics.heightPixels, frame.bottom) else metrics.heightPixels
-            val usable = minOf(frameBottom, metrics.heightPixels - keyboard)
+            val bars = if (android.os.Build.VERSION.SDK_INT >= 30) inset?.getInsets(android.view.WindowInsets.Type.systemBars())?.bottom ?: 0 else 0
+            val usable = stableBounds.height() - maxOf(keyboard, bars)
             val gap = dp(8)
             val hasSideRoom = maxOf(currentPet[0], screenWidth - currentPet[0] - currentPet[2]) >= width + gap
             val availableHeight = if (hasSideRoom) usable else minOf(usable, maxOf(currentPet[1], usable - currentPet[1] - currentPet[3]) - gap)
@@ -1036,20 +1066,23 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             var chrome = panel.paddingTop + panel.paddingBottom
             for (i in 0 until panel.childCount) {
                 val child = panel.getChildAt(i)
-                if (child !== scroll && child.visibility != android.view.View.GONE) chrome += child.measuredHeight
+                if (child !== bodyHost && child.visibility != android.view.View.GONE) chrome += child.measuredHeight
             }
-            val natural = content.measuredHeight.takeIf { it > 0 } ?: dp(112)
+            val natural = if (toolView.visibility == android.view.View.VISIBLE) dp(390) else content.measuredHeight.takeIf { it > 0 } ?: dp(112)
             val available = (usable - frame.top.coerceAtLeast(0) - dp(8)).coerceAtLeast(1)
-            val targetHeight = when (heightMode) {
+            val targetHeight = if(toolView.visibility==android.view.View.VISIBLE)
+                minOf(availableHeight,(available*.86f).toInt(),chrome+dp(390))
+            else when (heightMode) {
                 "small" -> (available * .42f).toInt()
                 "large" -> (available * .86f).toInt()
                 else -> minOf(availableHeight, (available * .76f).toInt(), chrome + natural.coerceAtLeast(dp(72)))
             }
             val desiredScroll = (targetHeight - chrome).coerceIn(minOf(dp(44), (available - chrome).coerceAtLeast(1)), (available - chrome).coerceAtLeast(1))
-            val scrollParams = scroll.layoutParams as LinearLayout.LayoutParams
-            if (scrollParams.height != desiredScroll) { scrollParams.height = desiredScroll; scroll.layoutParams = scrollParams }
+            val scrollParams = bodyHost.layoutParams as LinearLayout.LayoutParams
+            val heightChanged = scrollParams.height != desiredScroll
+            if (heightChanged) { scrollParams.height = desiredScroll; bodyHost.layoutParams = scrollParams }
             panel.measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
-                android.view.View.MeasureSpec.makeMeasureSpec(metrics.heightPixels, android.view.View.MeasureSpec.AT_MOST))
+                android.view.View.MeasureSpec.makeMeasureSpec(usable, android.view.View.MeasureSpec.AT_MOST))
             val actualHeight = panel.measuredHeight.coerceIn(1, metrics.heightPixels)
             val point = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(screenWidth, usable.coerceAtLeast(actualHeight),
                 currentPet[0], currentPet[1], currentPet[2], currentPet[3], width, actualHeight, dp(2), gap)
@@ -1071,8 +1104,20 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
             val moved = params.x != point.x || params.y != point.y
             params.x = point.x; params.y = point.y
-            if (root === panel && (moved || resized)) runCatching { wm.updateViewLayout(panel, params) }
+            if (root === panel && (moved || resized || heightChanged)) runCatching { wm.updateViewLayout(panel, params) }
             Unit
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            panel.setWindowInsetsAnimationCallback(object : android.view.WindowInsetsAnimation.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                override fun onProgress(insets: android.view.WindowInsets, animations: MutableList<android.view.WindowInsetsAnimation>): android.view.WindowInsets {
+                    panel.post { if (root === panel) positionUpdater?.invoke() }
+                    return insets
+                }
+                override fun onEnd(animation: android.view.WindowInsetsAnimation) {
+                    panel.post { if (root === panel) positionUpdater?.invoke() }
+                    panel.postDelayed({ if (root === panel) positionUpdater?.invoke() }, 48)
+                }
+            })
         }
         panel.setOnApplyWindowInsetsListener { view, insets ->
             view.post { if (root === panel) positionUpdater?.invoke() }
@@ -1081,6 +1126,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         updatePosition()
         if (runCatching { wm.addView(panel, params) }.isSuccess) {
             root = panel; positionUpdater = updatePosition
+            selectedTool?.let { presentTool?.invoke(it) }
             showLivePartials = context.getSystemService(android.os.PowerManager::class.java).isInteractive
             if (showLivePartials) flushPartial?.invoke()
             workerInbox.markSeen(unseenReports.map { it.optString("id") })
@@ -1233,6 +1279,6 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     }
 
     fun followPet() { positionUpdater?.invoke() }
-    fun hide() { showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { toolWindows.destroy(); activeReply?.cancel(); activeReply=null; closed = true; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
+    fun hide() { inlineTool?.destroy(); inlineTool = null; presentTool = null; selectedTool = null; showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
+    fun destroy() { inlineTool?.destroy(); activeReply?.cancel(); activeReply=null; closed = true; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
 }

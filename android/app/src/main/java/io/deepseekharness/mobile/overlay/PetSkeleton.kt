@@ -56,6 +56,15 @@ internal class PetSkin(
     private val weights = FloatArray(count * 4)
     private val gaze = FloatArray(count)
     private val mouth = FloatArray(count)
+    private val drawn = FloatArray(count * 2)
+    private var hasDrawn = false
+
+    fun movedSinceDraw(scale: Float, threshold: Float): Boolean {
+        if (!hasDrawn) return true
+        for (i in vertices.indices) if (kotlin.math.abs(vertices[i]-drawn[i])*scale>=threshold) return true
+        return false
+    }
+    fun recordDraw() { vertices.copyInto(drawn); hasDrawn=true }
 
     init {
         for (row in 0..rows) for (col in 0..cols) {

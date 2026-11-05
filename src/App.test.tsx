@@ -161,7 +161,7 @@ describe('App conversation gate', () => {
     await arriveAtSettingsHome()
 
     // 首次配置未完成：点「打开 Harness」既不启动也不开门，而是送到密钥设置页并说明原因。
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
 
     expect(await screen.findByRole('heading', { name: '模型与密钥' })).toBeInTheDocument()
@@ -177,7 +177,7 @@ describe('App conversation gate', () => {
     await arriveAtSettingsHome()
 
     // 门禁先把用户送到「模型与密钥」；只有那里的放行按钮能跳过凭据检查。
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
     await screen.findByRole('heading', { name: '模型与密钥' })
     expect(bridge.openHarness).not.toHaveBeenCalled()
@@ -193,7 +193,7 @@ describe('App conversation gate', () => {
     render(<App />)
     await arriveAtSettingsHome()
 
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
 
     await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
@@ -218,7 +218,7 @@ describe('App conversation gate', () => {
     render(<App />)
     await arriveAtSettingsHome()
 
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
 
     await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
@@ -233,7 +233,7 @@ describe('App conversation gate', () => {
     render(<App />)
     await arriveAtSettingsHome()
 
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
 
     await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
@@ -364,7 +364,7 @@ describe('App conversation gate', () => {
     fireEvent.click(screen.getByRole('button', { name: '停止' }))
     await waitFor(() => expect(bridge.stopRuntime).toHaveBeenCalledTimes(1))
 
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /打开对话|打开 Harness/ }))
 
     // 关键：必须重新启动一次。若预启动留下的已完成 promise 没被清空，这里会误判为
@@ -426,7 +426,7 @@ describe('App conversation gate', () => {
     render(<App />)
     await arriveAtSettingsHome()
 
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
 
     await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
@@ -506,7 +506,7 @@ describe('App conversation gate', () => {
     render(<App />)
   await arriveAtSettingsHome()
 
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /Ubuntu 运行时/ }))
     fireEvent.click(await screen.findByRole('button', { name: '重置环境' }))
 
@@ -526,7 +526,7 @@ describe('App conversation gate', () => {
     render(<App />)
     await arriveAtSettingsHome()
 
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /Ubuntu 运行时/ }))
     fireEvent.click(await screen.findByRole('button', { name: '重置环境' }))
     bridge.getKeepAliveState.mockImplementation(() => new Promise(() => {}))
@@ -605,7 +605,7 @@ describe('App conversation gate', () => {
     await arriveAtSettingsHome()
 
     // 错误只在用户点了「打开 Harness」之后才会出现。
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
 
     const alert = await screen.findByRole('alert')
@@ -641,18 +641,21 @@ describe('应用语言', () => {
   it('设置切换立即生效且重新挂载后保留语言', async () => {
     const view = render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: '打开应用设置' }))
+    expandSettingsGroup('外观与语言')
     fireEvent.click(screen.getByRole('button', { name: /界面语言/ }))
     fireEvent.change(screen.getByLabelText('语言'), { target: { value: 'en' } })
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeVisible()
     // 不再有「开机自动启动」，因此徽章停在就绪/未启动，而不是 Running。
     expect(bridge.startHarness).not.toHaveBeenCalled()
     // 设置首页现在只保留分类入口，编辑项会自动保存。
+    expandSettingsGroup('Appearance and language')
     fireEvent.click(screen.getByRole('button', { name: /^Theme/ }))
     expect(await screen.findByRole('heading', { name: 'Theme' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull()
     view.unmount()
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Open app settings' }))
+    expandSettingsGroup('Appearance and language')
     fireEvent.click(screen.getByRole('button', { name: /Interface language|App language/i }))
     expect(screen.getByLabelText('Language')).toHaveValue('en')
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'zh-CN' } })
@@ -664,6 +667,7 @@ describe('应用语言', () => {
     bridge.setAppLanguage.mockRejectedValue(new Error('LANGUAGE_SAVE_FAILED'))
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: '打开应用设置' }))
+    expandSettingsGroup('外观与语言')
     fireEvent.click(screen.getByRole('button', { name: /界面语言/ }))
     fireEvent.change(screen.getByLabelText('语言'), { target: { value: 'en' } })
     expect(await screen.findByRole('alert')).toHaveTextContent('无法保存语言')

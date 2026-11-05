@@ -48,14 +48,19 @@ describe('设置首页：分组与分类筛选', () => {
 
   it('首页只展开助手设置，低频设置按目的聚合', async () => {
     await openSettingsHome()
+    expect(screen.getByRole('button', { name: /助手偏好/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /模型与密钥/ })).toBeNull()
+    expandSettingsGroup('模型连接')
     expect(screen.getByRole('button', { name: /模型与密钥/ })).toBeVisible()
     expect(screen.queryByRole('button', { name: /设备 Shell 设置/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Ubuntu 运行时/ })).toBeNull()
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     expect(screen.getByRole('button', { name: /Ubuntu 运行时/ })).toBeVisible()
     expect(screen.queryByRole('button', { name: /模型与密钥/ })).toBeNull()
-    expandSettingsGroup('设备与诊断')
+    expandSettingsGroup('设备控制')
     expect(screen.getByRole('button', { name: /设备 Shell 设置/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /诊断与日志/ })).toBeNull()
+    expandSettingsGroup('运行与数据')
     expect(screen.getByRole('button', { name: /诊断与日志/ })).toBeVisible()
   })
 
@@ -68,7 +73,7 @@ describe('设置首页：分组与分类筛选', () => {
     bridge.getShizukuState.mockResolvedValue(state)
     await openSettingsHome()
 
-    expandSettingsGroup('设备与诊断')
+    expandSettingsGroup('设备控制')
     const entry = screen.getByRole('button', { name: /设备 Shell 设置/ })
     expect(within(entry).getByText(`Shizuku 授权与设备命令 · ${badge}`)).toBeVisible()
   })
@@ -76,7 +81,7 @@ describe('设置首页：分组与分类筛选', () => {
   it('分类切换只影响展示，设备设置可进入原有页面', async () => {
     await openSettingsHome()
     const reads = bridge.getSettings.mock.calls.length
-    expandSettingsGroup('设备与诊断')
+    expandSettingsGroup('设备控制')
     expect(bridge.getSettings.mock.calls.length).toBe(reads)
     expect(bridge.saveSettings).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /自动化设置/ }))
@@ -86,8 +91,8 @@ describe('设置首页：分组与分类筛选', () => {
   it('「版本管理」是一级页：入口进得去，返回键回设置首页', async () => {
     await openSettingsHome()
 
-    expandSettingsGroup('运行与存储')
-    const versionsGroup = screen.getByRole('region', { name: '运行与存储' })
+    expandSettingsGroup('运行与数据')
+    const versionsGroup = screen.getByRole('region', { name: '运行与数据' })
     fireEvent.click(within(versionsGroup).getByRole('button', { name: /版本管理/ }))
 
     // 版本面板已经不在「运行与后台」页里：这一屏自己是标题，页内有版本列表与两个操作。
@@ -101,8 +106,8 @@ describe('设置首页：分组与分类筛选', () => {
   it('「文件管理」是一级页：投递区与共享目录在同一个浏览器里', async () => {
     await openSettingsHome()
 
-    expandSettingsGroup('运行与存储')
-    const filesGroup = screen.getByRole('region', { name: '运行与存储' })
+    expandSettingsGroup('运行与数据')
+    const filesGroup = screen.getByRole('region', { name: '运行与数据' })
     fireEvent.click(within(filesGroup).getByRole('button', { name: /文件管理/ }))
 
     // 进得去，而且是一个浏览器：标题是这一页自己的，投递区与共享目录都在里面。
@@ -118,24 +123,24 @@ describe('设置首页：分组与分类筛选', () => {
     render(<App />)
   await arriveAtSettingsHome()
 
-    await screen.findByRole('button', { name: 'Runtime and storage' })
-    expandSettingsGroup('Runtime and storage')
-    const runtimeGroup = screen.getByRole('region', { name: 'Runtime and storage' })
+    await screen.findByRole('button', { name: 'Runtime and data' })
+    expandSettingsGroup('Runtime and data')
+    const runtimeGroup = screen.getByRole('region', { name: 'Runtime and data' })
     expect(within(runtimeGroup).getByRole('button', { name: /Ubuntu runtime/ })).toBeVisible()
     expect(within(runtimeGroup).getByRole('button', { name: /Version management/ })).toBeVisible()
     expect(within(runtimeGroup).getByRole('button', { name: /File management/ })).toBeVisible()
     expect(runtimeGroup.textContent ?? '').not.toMatch(/[\u4e00-\u9fff]/)
-    expandSettingsGroup('Assistant and appearance')
+    expandSettingsGroup('Appearance and language')
     expect(screen.getByRole('button', { name: /^Theme/ })).toBeVisible()
-    expandSettingsGroup('Device and diagnostics')
+    expandSettingsGroup('Device control')
     expect(screen.getByText('Device Shell settings')).toBeVisible()
   })
 
   it('搜索能直接找到折叠的助手偏好，资料管理只打开主资料库', async () => {
     await openSettingsHome()
-    expandSettingsGroup('设备与诊断')
+    expandSettingsGroup('设备控制')
     const query = screen.getByRole('searchbox', { name: '搜索设置' })
-    fireEvent.change(query, { target: { value: '通知' } })
+    fireEvent.change(query, { target: { value: '记忆' } })
     fireEvent.click(screen.getByRole('button', { name: '搜索入口' }))
     fireEvent.click(screen.getByRole('button', { name: /助手偏好/ }))
     fireEvent.click(screen.getByRole('button', { name: '打开记忆' }))
@@ -151,12 +156,12 @@ describe('设置首页：分组与分类筛选', () => {
     // 只输入不确认：列表不筛选——输入法组合中途不能被列表刷新打断。
     fireEvent.change(searchInput, { target: { value: '主题' } })
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.getByRole('region', { name: '助手与外观' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '桌宠与主动跟进' })).toBeVisible()
 
     // 点搜索图标确认：应只保留外观与显示分组，隐藏其他分组如模型连接
     fireEvent.click(screen.getByRole('button', { name: '搜索入口' }))
     expect(screen.getByRole('status')).toHaveTextContent('找到 1 个匹配的入口')
-    expect(screen.getByRole('region', { name: '助手与外观' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '外观与语言' })).toBeVisible()
     expect(screen.getByRole('button', { name: /主题/ })).toBeVisible()
     expect(screen.queryByRole('button', { name: /模型与密钥/ })).toBeNull()
 
@@ -165,7 +170,7 @@ describe('设置首页：分组与分类筛选', () => {
     fireEvent.click(clearButton)
     expect(searchInput).toHaveValue('')
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.getByRole('region', { name: '助手与外观' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '桌宠与主动跟进' })).toBeVisible()
 
     // 回车确认无匹配词：显示空提示
     fireEvent.change(searchInput, { target: { value: '不存在的设置项xyz' } })
@@ -185,7 +190,7 @@ describe('设置首页：分组与分类筛选', () => {
     fireEvent.change(searchInput, { target: { value: '主' } })
     fireEvent.keyDown(searchInput, { key: 'Enter' })
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.getByRole('region', { name: '助手与外观' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '桌宠与主动跟进' })).toBeVisible()
 
     // 组合结束（候选词落定）后再回车，这才该提交。
     fireEvent.compositionEnd(searchInput, { target: { value: '主题' } })
@@ -224,7 +229,7 @@ describe('设置首页：分组与分类筛选', () => {
     // 启动链自己已经开过一次，先清空，才能看清这一次点击递了什么。
     bridge.openHarness.mockClear()
 
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     const launchButton = screen.getByRole('button', { name: /打开 Harness/ })
     // 忙锁没释放时按钮禁用，点了也只会在 JS 里早退，测不到这条路径。
     await waitFor(() => expect(launchButton).toBeEnabled())

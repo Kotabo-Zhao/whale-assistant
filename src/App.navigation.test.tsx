@@ -241,6 +241,7 @@ describe('返回键与视图历史', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '打开应用设置' }))
     expect(await screen.findByRole('heading', { name: '设置' })).toBeVisible()
+    expandSettingsGroup('模型连接')
     fireEvent.click(screen.getByRole('button', { name: /模型与密钥/ }))
     expect(await screen.findByRole('heading', { name: '模型与密钥' })).toBeVisible()
     expect(window.location.hash).toBe('#settings-models')
@@ -278,7 +279,9 @@ describe('返回键与视图历史', () => {
     await renderAtMainView()
 
     fireEvent.click(screen.getByRole('button', { name: '打开应用设置' }))
-    fireEvent.click(await screen.findByRole('button', { name: /模型与密钥/ }))
+    await screen.findByRole('heading', { name: '设置' })
+    expandSettingsGroup('模型连接')
+    fireEvent.click(screen.getByRole('button', { name: /模型与密钥/ }))
     expect(await screen.findByRole('heading', { name: '模型与密钥' })).toBeVisible()
 
     await pressBack()
@@ -304,7 +307,7 @@ describe('返回键与视图历史', () => {
     const pushState = vi.spyOn(window.history, 'pushState')
     // 设置页的「打开 Harness」在启动成功后还会再切到 settings（同一视图）：
     // 这属于同视图重复导航，不应再压一条历史记录。
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(screen.getByRole('button', { name: '打开 Harness' }))
     await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
 
@@ -331,6 +334,9 @@ describe('返回键与视图历史', () => {
     act(() => { window.dispatchEvent(new CustomEvent('dsh-native-tab', { detail: 'assistant-memory' })) })
     expect(await screen.findByRole('tab', { name: '资料' })).toHaveAttribute('aria-selected', 'true')
     const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
+    act(() => { window.dispatchEvent(new CustomEvent('dsh-native-tab', { detail: 'harness' })) })
+    await waitFor(() => expect(window.location.hash).toBe('#harness'))
+    expect(nav.getByRole('button', { name: '对话' })).toHaveAttribute('aria-current', 'page')
     fireEvent.click(nav.getByRole('button', { name: '工具' }))
     fireEvent.click(await screen.findByRole('button', { name: /插件管理.*Harness/ }))
     expect(await screen.findByRole('heading', { name: '插件管理' })).toBeVisible()
@@ -342,7 +348,9 @@ describe('返回键与视图历史', () => {
     await renderAtMainView()
 
     fireEvent.click(screen.getByRole('button', { name: '打开应用设置' }))
-    fireEvent.click(await screen.findByRole('button', { name: /模型与密钥/ }))
+    await screen.findByRole('heading', { name: '设置' })
+    expandSettingsGroup('模型连接')
+    fireEvent.click(screen.getByRole('button', { name: /模型与密钥/ }))
     expect(await screen.findByRole('heading', { name: '模型与密钥' })).toBeVisible()
 
     const pushState = vi.spyOn(window.history, 'pushState')
@@ -392,9 +400,9 @@ describe('返回键与视图历史', () => {
   it('底部标签切换页面并保持唯一选中项与返回历史', async () => {
     await renderAtMainView()
     const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
-    expect(nav.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['对话', '记忆', '事项', '工具', '我的'])
-    expect(nav.getAllByRole('button').map(button => button.textContent)).toEqual(['对话', '记忆', '事项', '工具', '我的'])
-    for (const [name, hash] of [['对话', '#harness'], ['记忆', '#assistant-memory'], ['事项', '#assistant-tasks'], ['工具', '#tools'], ['我的', '#settings']]) {
+    expect(nav.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['对话', '资料', '任务', '工具', '我的'])
+    expect(nav.getAllByRole('button').map(button => button.textContent)).toEqual(['对话', '资料', '任务', '工具', '我的'])
+    for (const [name, hash] of [['对话', '#harness'], ['资料', '#assistant-memory'], ['任务', '#assistant-tasks'], ['工具', '#tools'], ['我的', '#settings']]) {
       fireEvent.click(nav.getByRole('button', { name: new RegExp(`^${name}$`) }))
       await waitFor(() => expect(window.location.hash).toBe(hash))
       expect(nav.getAllByRole('button', { current: 'page' })).toHaveLength(1)

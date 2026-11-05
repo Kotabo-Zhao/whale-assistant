@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { delegationFixture } from './worker-test-host.mjs'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, readFileSync, statSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
@@ -9,7 +10,7 @@ import { feishuTrigger, githubReviewTrigger } from './runtime-profile/plugins/ds
 import { installWorkers } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/workers.js'
 import { SuperagentSourceRunner } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-runner.js'
 import { SuperagentChannels } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-channels.js'
-import { relatedFeishuTickets, hasEnabledSources } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-runtime.js'
+import { relatedFeishuTickets, hasEnabledSources, installSuperagent } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-runtime.js'
 import { readSuperagentResource } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-resources.js'
 
 test('domain resource pages preserve ticket ownership and restrict worker reads', t => {
@@ -261,7 +262,7 @@ test('a Feishu event is evaluated by the parent and executed by the existing Wor
     sessionController: { resolveAgent: async id => agents.has(id) ? { agent: agents.get(id) } : { error: { code: 'session/not-found' } },
       create: async req => { makeAgent(req.sessionId) } }, sessionPersistence: { flush: async () => {} },
     permissionPresets: { current: () => 'read-only', set() {} } }
-  const installed = installWorkers(ctx, { directory, defineTool: tool => tool, bridge: async () => ({ output: '[]' }) })
+  const installed = installWorkers(ctx, { delegation: delegationFixture(ctx,makeAgent), directory, defineTool: tool => tool, bridge: async () => ({ output: '[]' }) })
   t.after(() => events.get('dispose')())
   await tools.get('mobile_workers').execute({ action: 'status' }, { agent: parent, callId: 'parent' })
   installed.superagent.domain.configure({ version: 'v2', sources: { feishu: { enabled: true, chats: ['oc_test'], allowedActors: ['ou_person'] } } })
@@ -270,6 +271,9 @@ test('a Feishu event is evaluated by the parent and executed by the existing Wor
   await installed.superagent.coordinator.pump()
   assert.match(parent.inbox.nextTurn[0].content[0].text, /跨渠道待评估事件/)
   const candidate = installed.superagent.domain.engine.candidate(trigger.id)
+  const other = makeAgent('session-unrelated')
+  await tools.get('mobile_workers').execute({action:'status'},{agent:other,callId:'unrelated'})
+  await assert.rejects(tools.get('mobile_superagent_decide').execute({evalId:candidate.evalId,triggerId:trigger.id,decision:'ignore',reason:'wrong chat'},{agent:other}),/协调会话/)
   await tools.get('mobile_superagent_decide').execute({ evalId: candidate.evalId, triggerId: trigger.id, decision: 'accept', title: '查资料', scope: '读取蓝色资料', reason: '用户请求', mode: 'read' }, { agent: parent })
   await new Promise(resolve => setImmediate(resolve)); await installed.superagent.coordinator.pump()
   const row = [...installed.queue.rows.values()].find(item => item.domainTicketId)
@@ -285,7 +289,8 @@ test('a Feishu event is evaluated by the parent and executed by the existing Wor
   assert.equal(await installed.superagent.controlPhone(row, 'cancel', '', 'mobile-cancel'), true)
   assert.equal(installed.superagent.domain.repo.tickets.get(row.domainTicketId).ended.by, 'human')
   events.get('dispose')()
-  const restarted = installWorkers(ctx, { directory, defineTool: tool => tool, bridge: async () => ({ output: '[]' }) })
+  const restarted = installWorkers(ctx, { delegation: delegationFixture(ctx,makeAgent), directory, defineTool: tool => tool, bridge: async () => ({ output: '[]' }) })
+  assert.equal(restarted.superagent.domain.coordinators.get('ticket:'+row.domainTicketId),parent.id)
   const second = event('om_second', 'ou_person', '另一个请求', 'om_second')
   restarted.superagent.domain.receive(second)
   await restarted.superagent.coordinator.pump()
@@ -303,6 +308,33 @@ test('proactive work requires an enabled rule and auto mode', t => {
   assert.throws(() => domain.decide(trigger.id, { kind: 'accept', title: '整理', scope: '只读整理', reason: '规则', evalId: candidate.evalId, rules: ['unknown'] }))
   const accepted = domain.decide(trigger.id, { kind: 'accept', title: '整理', scope: '只读整理', reason: '规则', evalId: candidate.evalId, rules: ['rule-1'] })
   assert.equal(accepted.mandate.strength, 'inferred'); assert.deepEqual(accepted.mandate.basis.rules, ['rule-1'])
+})
+
+test('native follow-up observations stay passive and later requests continue one durable ticket', async t => {
+  const directory=mkdtempSync(join(tmpdir(),'dsh-matters-'));t.after(()=>rmSync(directory,{recursive:true,force:true}))
+  const started=[]
+  const host=installSuperagent({tools:{register(){}},on(){}},{directory,bridge:async()=>({output:'{}'}),defineTool:tool=>tool,
+    owner:()=> 'session-parent',workerForSession:()=>null,relay:async()=>{},
+    start:async value=>started.push(value.ticket.id),deliver:async()=>true,stop:async()=>{}})
+  const id='a'.repeat(64),event={id,eventId:'one',title:'交接日期',kind:'shown',text:'新的安排是否会影响交接？',noteId:'note',at:Date.now()}
+  host.domain.recordMatter(event);host.domain.recordMatter(event)
+  assert.equal(host.domain.matters.get(id).events.length,1)
+  assert.equal(host.domain.repo.tickets.list().length,0)
+  assert.equal(started.length,0)
+  const first=await host.acceptPhone('session-parent','first',{task:'请核对交接日期',mode:'read',matterId:id})
+  const ticket=host.domain.repo.tickets.get(first)
+  host.domain.engine.inputsDelivered(first,ticket.assignments.at(-1).id,ticket.undelivered)
+  host.read(first,ticket.inputs.map(row=>row.id))
+  host.report(first,{state:'waiting',summary:'需要日期',question:'哪一天？'})
+  const second=await host.acceptPhone('session-parent','second',{task:'六月八日，请继续核对',mode:'read',matterId:id})
+  assert.equal(second,first)
+  assert.equal(host.domain.repo.tickets.list().length,1)
+  assert.ok(host.domain.repo.tickets.get(first).inputs.some(row=>row.triggerId?.endsWith(':second')))
+  const restored=new SuperagentDomain(join(directory,'superagent'))
+  assert.equal(restored.matters.get(id).ticketId,first)
+  restored.revokeTicket(first)
+  host.domain.revokeTicket(first)
+  await assert.rejects(host.acceptPhone('session-parent','third',{task:'继续',mode:'read',matterId:id}),/撤回/)
 })
 
 

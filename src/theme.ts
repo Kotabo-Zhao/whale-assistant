@@ -103,7 +103,8 @@ export function systemPrefersDark(): boolean {
 function syncThemeColorMeta(theme: ResolvedTheme): void {
   const meta = document.querySelector("meta[name='theme-color']")
   if (!meta) return
-  meta.setAttribute('content', THEME_COLORS[theme])
+  const background = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+  meta.setAttribute('content', /^#[0-9a-f]{6}$/i.test(background) ? background : THEME_COLORS[theme])
 }
 
 /** 将已校验的强调色写入 DOM 数据属性，由 CSS 统一切换整套语义色。 */

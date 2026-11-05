@@ -1,0 +1,30 @@
+<resources>
+    <style name="WhaleFamilyMoonLight">
+        <item name="android:colorAccent">#78608e</item>
+        <item name="colorAccent">#78608e</item>
+        <item name="android:textColorPrimary">#332d3d</item>
+        <item name="android:textColorSecondary">#71657a</item>
+        <item name="android:colorBackground">#fffdf9</item>
+    </style>
+    <style name="WhaleFamilyMoonDark">
+        <item name="android:colorAccent">#d5b8e9</item>
+        <item name="colorAccent">#d5b8e9</item>
+        <item name="android:textColorPrimary">#f4eff8</item>
+        <item name="android:textColorSecondary">#c3b7cc</item>
+        <item name="android:colorBackground">#2b2839</item>
+    </style>
+    <style name="WhaleFamilySeaLight">
+        <item name="android:colorAccent">#006e80</item>
+        <item name="colorAccent">#006e80</item>
+        <item name="android:textColorPrimary">#172b40</item>
+        <item name="android:textColorSecondary">#5d7080</item>
+        <item name="android:colorBackground">#ffffff</item>
+    </style>
+    <style name="WhaleFamilySeaDark">
+        <item name="android:colorAccent">#80d3dc</item>
+        <item name="colorAccent">#80d3dc</item>
+        <item name="android:textColorPrimary">#eef5fa</item>
+        <item name="android:textColorSecondary">#a1b4c5</item>
+        <item name="android:colorBackground">#172838</item>
+    </style>
+</resources>

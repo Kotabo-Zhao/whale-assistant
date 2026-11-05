@@ -95,7 +95,7 @@ class HarnessActivity : AppCompatActivity() {
     }
 
     override fun attachBaseContext(newBase: android.content.Context) {
-        super.attachBaseContext(AppLanguage.localizedContext(newBase))
+        super.attachBaseContext(AppThemePreference.palette(AppLanguage.localizedContext(newBase)))
     }
 
     override fun onResume() {

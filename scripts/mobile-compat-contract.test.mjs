@@ -373,7 +373,7 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
   assert.equal(packageJson.name, '@deepseek-harness/dsh-mobile-shizuku')
   assert.equal(packageJson.dsh?.bundle?.patch, './cordis.patch.yml')
   assert.match(patch, /name: '@deepseek-harness\/dsh-mobile-shizuku'/)
-  assert.match(plugin, /export const inject = \['tools', 'systemPrompt', 'attachments', 'llm', 'sessionController', 'sessionPersistence', 'permissionPresets'\]/)
+  assert.match(plugin, /export const inject = \['tools', 'systemPrompt', 'attachments', 'llm', 'sessionController', 'sessionPersistence', 'permissionPresets', 'agents'\]/)
   for (const tool of [
     'mobile_device_background_tasks',
     'mobile_device_screenshot',
@@ -472,6 +472,7 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
       'mobile_device_screenshot',
       'mobile_device_shell',
       'mobile_virtual_screen_shell',
+      'mobile_screen_observe',
       'mobile_device_ui_dump',
       'mobile_accessibility_tree',
       'mobile_accessibility_action',
@@ -602,7 +603,7 @@ test('Shizuku UserService uses the reserved removal transaction and stops with t
   }
   assert.match(aidl, /void destroy\(\)\s*=\s*16777114;/)
   // UserService 版本号必须在改动 AIDL 时有意提升：这里钉死当前值，改接口就得同步改这条断言。
-  assert.match(shizukuRuntime, /private const val USER_SERVICE_VERSION = 6/)
+  assert.match(shizukuRuntime, /private const val USER_SERVICE_VERSION = 7/)
   assert.match(shizukuRuntime, /fun disconnect\(\)/)
   assert.match(shizukuRuntime, /activeServiceGeneration = serviceGeneration\.incrementAndGet\(\)/)
   assert.match(shizukuRuntime, /if \(tryPingBinder\(\)\)[\s\S]*?activeServiceGeneration = serviceGeneration\.incrementAndGet\(\)[\s\S]*?activeConnection = null/)

@@ -41,7 +41,7 @@ class WhaleShellUiTest {
     private fun native(name: String): View? {
         var out: View? = null
         val id = app.resources.getIdentifier(name, "id", app.packageName)
-        if (id != 0) inst.runOnMainSync { out = host.findViewById<View>(id)?.takeIf { it.isShown } }
+        if (id != 0) inst.runOnMainSync { out = host.findViewById<View>(id)?.takeIf { it.isShown && it.alpha>.99f } }
         return out
     }
     private fun bounds(view: View): Rect {
@@ -57,7 +57,14 @@ class WhaleShellUiTest {
             try { check(inst.uiAutomation.injectInputEvent(event,true)) } finally { event.recycle() }
         }
     }
-    private fun itemsVisible() = listOf("harness_tab_active","harness_tab_memory","harness_tab_tasks","harness_tab_plugins","harness_tab_settings").count { native(it) != null }
+    private fun sharedNav(label:String)="Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label')==="+JSONObject.quote(label)+" && e.getBoundingClientRect().width)"
+    private fun webRect(element:String):Rect {
+        val values=JSONArray(js("(()=>{const r=("+element+").getBoundingClientRect();return [r.x,r.y,r.width,r.height,innerWidth]})()"))
+        val hostBox=bounds(host.bridge.webView);val scale=hostBox.width()/values.getDouble(4)
+        val left=hostBox.left+(values.getDouble(0)*scale).toInt();val top=hostBox.top+(values.getDouble(1)*scale).toInt()
+        return Rect(left,top,left+(values.getDouble(2)*scale).toInt(),top+(values.getDouble(3)*scale).toInt())
+    }
+    private fun itemsVisible()=js("Array.from(document.querySelectorAll('.bottom-navigation-item,.sidebar-nav .sidebar-item')).filter(e=>e.getBoundingClientRect().width>0).length").toInt()
     private fun tap(view: View) = bounds(view).let { touch(it.centerX(),it.centerY()) }
     private fun dismissKeyboardIfVisible() {
         fun shown(): Boolean {
@@ -72,8 +79,14 @@ class WhaleShellUiTest {
     }
     private fun webTap(element: String) {
         js("($element).scrollIntoView({block:'nearest'})")
-        until("触摸目标未就绪") {
-            js("(()=>{const e=($element);if(!e || e.disabled)return false;const r=e.getBoundingClientRect();return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()")=="true"
+        try {
+            until("触摸目标未就绪") {
+                js("(()=>{const e=($element);if(!e || e.disabled)return false;const r=e.getBoundingClientRect();return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()")=="true"
+            }
+        } catch(error:Throwable) {
+            inst.sendStatus(0,Bundle().apply { putString("touchGeometry",js("(()=>{const e=($element);const r=e?.getBoundingClientRect();const hit=r?document.elementFromPoint(r.x+r.width/2,r.y+r.height/2):null;return JSON.stringify({hash:location.hash,target:r?[r.x,r.y,r.width,r.height]:null,hit:hit?.className,viewport:[innerWidth,innerHeight]})})()")) })
+            shot(host.window.decorView,"ui-touch-failure.png")
+            throw error
         }
         inst.uiAutomation.waitForIdle(150,1500)
         val p = JSONArray(js("(()=>{const r=($element).getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2,innerWidth]})()"))
@@ -113,21 +126,17 @@ class WhaleShellUiTest {
                 }
             }
             val chat = requireNotNull(native("harness_web_view"))
-            val navTab = requireNotNull(native("harness_tab_active"))
-            val bar = navTab.parent as View
-            shot(bar,if(baseline) "ui-native-before.png" else "ui-native$suffix.png")
-            val geometry = bounds(bar)
-            if (!baseline) {
-                val mark = bounds(navTab)
-                check(mark.width() >= 44*app.resources.displayMetrics.density && mark.height() >= 44*app.resources.displayMetrics.density)
-                check((bounds(chat).left > bounds(chat.parent as View).left) == !portrait) { "chat=" + bounds(chat) + " shell=" + bounds(chat.parent as View) }
-                check(itemsVisible() == 5)
+            val geometry=if(baseline) bounds(requireNotNull(native("harness_manage"))) else webRect(sharedNav("对话"))
+            shot(host.bridge.webView,if(baseline) "ui-native-before.png" else "ui-native$suffix.png")
+            if(!baseline) {
+                check(geometry.width()>=44*app.resources.displayMetrics.density && geometry.height()>=44*app.resources.displayMetrics.density)
+                check(bounds(chat).bottom<=geometry.top+2 || bounds(chat).left>=geometry.right-2) { "对话内容覆盖了 App 导航" }
+                check(bounds(chat).bottom<=bounds(host.bridge.webView).bottom+2) { "对话内容超出可用窗口" }
+                check(itemsVisible()==5)
+                check(native("harness_tab_active")==null) { "不应再创建另一套原生标签" }
             }
-            inst.sendStatus(0,Bundle().apply {
-                putString("nativeBar",geometry.toShortString());putString("chatBounds",bounds(chat).toShortString())
-                putBoolean("directMemory",native("harness_tab_memory")!=null);putBoolean("directTasks",native("harness_tab_tasks")!=null)
-            })
-            if (baseline) tap(requireNotNull(native("harness_manage"))) else tap(requireNotNull(native("harness_tab_memory")))
+            inst.sendStatus(0,Bundle().apply {putString("sharedNavigation",geometry.toShortString());putString("chatBounds",bounds(chat).toShortString())})
+            if(baseline) tap(requireNotNull(native("harness_manage"))) else webTap(sharedNav("资料"))
             if (baseline) {
                 until("工作台未显示") { native("harness_web_view")==null && js("!!document.querySelector('button[aria-label=记忆]')")=="true" }
                 webTap("Array.from(document.querySelectorAll('button[aria-label=记忆]')).find(e=>e.getBoundingClientRect().width)")
@@ -146,7 +155,7 @@ class WhaleShellUiTest {
                 check(screen.getInt(2) <= screen.getInt(0)+1) { "主界面横向溢出 $fit" }
                 if (portrait) check(kotlin.math.abs(screen.getDouble(1)-screen.getDouble(3)) < 2) { "竖屏底栏未贴底 $fit" }
                 inst.sendStatus(0,Bundle().apply { putString("viewportFit",fit) })
-                webTap("Array.from(document.querySelectorAll('.library-command-row button')).find(b=>b.textContent==='记一笔')")
+                webTap("document.querySelector('button[aria-label=记一笔]')")
                 until("记一笔未聚焦到输入框") { js("document.activeElement===document.querySelector('.library-editor textarea') && !!document.querySelector('.library-editor textarea')")=="true" }
                 Thread.sleep(450)
                 dismissKeyboardIfVisible()
@@ -161,12 +170,12 @@ class WhaleShellUiTest {
             // Only the unique synthetic match may appear in the collection screenshot.
             shot(host.bridge.webView,if(baseline) "ui-library-before.png" else "ui-library$suffix.png")
             if (!baseline) {
-                fun nav(label:String) = "Array.from(document.querySelectorAll('button[aria-label='+ "+JSONObject.quote(label)+" +']')).find(e=>e.getBoundingClientRect().width)"
+                fun nav(label:String) = sharedNav(label)
                 webTap("document.querySelector('.library-result')")
                 until("没有进入单项资料详情") { js("!!document.querySelector('#knowledge-detail-title')") == "true" }
                 inst.uiAutomation.executeShellCommand("input keyevent 4").close()
                 until("返回时搜索位置丢失") { js("!document.querySelector('#knowledge-detail-title') && document.querySelector('.library-search input')?.value===$token")=="true" }
-                webTap(nav("事项"))
+                webTap(nav("任务"))
                 val manual = "document.querySelector('.worker-manual-actions button')"
                 until("后台任务的手动入口未出现") { js("!!($manual) && !document.querySelector('.worker-dispatch')")=="true" }
                 webTap(manual)
@@ -183,20 +192,21 @@ class WhaleShellUiTest {
                 until("插件返回没有回到工具 " + js("[location.hash,history.state?.dshView,history.state?.toolsParent]")) { js("!!document.querySelector('.tools-workspace')") == "true" }
                 webTap(nav("我的"))
                 until("设置搜索未显示") { js("!!document.querySelector('.account-workspace .settings-search input')") == "true" }
-                check(js("document.querySelectorAll('.account-group-toggle').length")=="3")
+                check(js("document.querySelectorAll('.account-group-toggle').length")=="6")
                 check(js("document.querySelectorAll('.account-group-toggle[aria-expanded=true]').length")=="1")
                 shot(host.bridge.webView,"ui-settings$suffix.png")
-                webTap("Array.from(document.querySelectorAll('.account-group-toggle')).find(b=>b.getAttribute('aria-label')==='设备与诊断')")
+                webTap("Array.from(document.querySelectorAll('.account-group-toggle')).find(b=>b.getAttribute('aria-label')==='运行与数据')")
                 until("没有显示诊断入口") { js("document.querySelector('.settings-directory').innerText.includes('诊断与日志')")=="true" }
                 val search = "document.querySelector('.settings-search input')"
-                js("(()=>{const i=($search);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'通知');i.dispatchEvent(new Event('input',{bubbles:true}))})()")
+                js("(()=>{const i=($search);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'记忆');i.dispatchEvent(new Event('input',{bubbles:true}))})()")
                 webTap("document.querySelector('.settings-search-go')")
                 val preference = "Array.from(document.querySelectorAll('.account-preference > button')).find(b=>b.innerText.includes('助手偏好'))"
                 until("跨组搜索没有找到助手偏好") { js("!!($preference)")=="true" }
                 webTap(preference)
                 val preferencesMonitor = inst.addMonitor(CompanionActivity::class.java.name, null, false)
                 try {
-                    webTap("Array.from(document.querySelectorAll('.companion-settings button')).find(b=>b.innerText==='全部助手偏好')")
+                    webTap("document.querySelector('.companion-settings-advanced > summary')")
+                    webTap("Array.from(document.querySelectorAll('.companion-settings button')).find(b=>b.textContent.trim()==='全部助手偏好')")
                     val prefs = requireNotNull(inst.waitForMonitorWithTimeout(preferencesMonitor, 10000)) as CompanionActivity
                     fun descendant(view: View): Sequence<View> = sequence {
                         yield(view)
@@ -220,10 +230,10 @@ class WhaleShellUiTest {
                 webTap("Array.from(document.querySelectorAll('.companion-settings button')).find(b=>b.textContent==='打开记忆')")
                 until("设置入口未回到统一资料库") { js("!!document.querySelector('.memory-workspace .library-search')")=="true" }
                 webTap(nav("对话")); until("未恢复原对话") { native("harness_web_view")===chat }
-                tap(requireNotNull(native("harness_tab_tasks")))
+                webTap(sharedNav("任务"))
                 until("对话未直达事项") { js("location.hash==='#assistant-tasks'")=="true" && native("harness_web_view")==null }
                 webTap(nav("对话")); until("返回工作台前没有恢复对话") { native("harness_web_view")===chat }
-                tap(requireNotNull(native("harness_manage")))
+                webTap(sharedNav("工作台"))
                 until("工作台启动区未出现") { js("!!document.querySelector('.conversation-gate .launch-panel')")=="true" && native("harness_web_view")==null }
                 js("document.querySelector('.app-main').scrollTop=0;window.scrollTo(0,0);void 0")
                 val homeEnd = js("Math.min(document.querySelector('.desk-shortcuts').getBoundingClientRect().bottom,innerHeight)/innerHeight").toDouble()

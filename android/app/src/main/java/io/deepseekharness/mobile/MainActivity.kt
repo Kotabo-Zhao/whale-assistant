@@ -41,6 +41,9 @@ import java.util.concurrent.Executors
  * `onBackPressed()`，避免「既 goBack 又 finish」的两条路径同时生效。
  */
 class MainActivity : BridgeActivity() {
+    override fun attachBaseContext(base: android.content.Context) {
+        super.attachBaseContext(AppThemePreference.palette(AppLanguage.localizedContext(base)))
+    }
     private val harnessSurface = MainHarnessSurface(this)
     private val importExecutor = Executors.newSingleThreadExecutor()
     private var fallbackMimeTypes = arrayOf(ANY_MIME_TYPE)
@@ -134,7 +137,9 @@ class MainActivity : BridgeActivity() {
     /** Only the native bridge dispatches this after publishing the current session authorization. */
     internal fun openHarnessSurface(sessionId: String?): Boolean {
         val access = AppAuthenticationState.harnessAccess() ?: return false
-        return harnessSurface.open(access, sessionId)
+        val opened=harnessSurface.open(access, sessionId)
+        if(opened) navigateFromHarness("harness")
+        return opened
     }
 
     /** The check runs on the UI thread immediately before showing the isolated surface. */
@@ -143,6 +148,7 @@ class MainActivity : BridgeActivity() {
     /** Fixed tab names only; no values from the isolated Harness page cross this boundary. */
     internal fun navigateFromHarness(tab: String) {
         val target = when (tab) {
+            "harness" -> "harness"
             "conversation" -> "conversation"
             "assistant-memory" -> "assistant-memory"
             "assistant-tasks" -> "assistant-tasks"
@@ -158,6 +164,10 @@ class MainActivity : BridgeActivity() {
 
 
     internal fun discardHarnessSurface() { harnessSurface.discard() }
+    internal fun refreshHarnessTheme() { harnessSurface.refreshTheme() }
+    internal fun updateHarnessViewport(visible:Boolean,x:Double,y:Double,width:Double,height:Double,viewportWidth:Double) {
+        harnessSurface.updateViewport(visible,x,y,width,height,viewportWidth)
+    }
 
     /** Called after a user edits and chooses a task in the local management UI. */
     internal fun insertTaskDraft(text: String): Boolean {
@@ -253,10 +263,10 @@ class MainActivity : BridgeActivity() {
         if (bytes == null) { showImportToast("分享文字为空或超过大小限制。") ; return }
         val text = String(bytes, Charsets.UTF_8)
         val preview = text.take(600) + if (text.length > 600) "\n…（预览已截断，保存的是完整内容）" else ""
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("处理分享的文字")
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(AppThemePreference.palette(this)).setTitle("处理分享的文字")
             .setMessage("$preview\n\n保存到本机收件箱后，运行环境及当前或后续对话可能读取并发送给模型。放入草稿后请核对，再自行发送。")
             .setNegativeButton("取消", null).setPositiveButton("保存…") { _, _ ->
-                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择保存位置")
+                androidx.appcompat.app.AlertDialog.Builder(AppThemePreference.palette(this)).setTitle("选择保存位置")
                     .setMessage("本地资料支持最长 200 万字并自动分段保存；开启对话资料访问后，匹配内容可能发送给模型。收件箱可供运行环境读取。")
                     .setPositiveButton("本地资料库") { _, _ -> saveSharedKnowledge(text) }
                     .setNeutralButton("收件箱") { _, _ -> saveSharedTextToInbox(bytes) }

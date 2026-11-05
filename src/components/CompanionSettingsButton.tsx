@@ -21,7 +21,7 @@ const options: { key: keyof CompanionQuickSettings; title: string; hint: string 
   { key: 'quietHoursEnabled', title: '启用免打扰', hint: '免打扰时段内暂停气泡和休息提示；时间可在更多设置中调整。' },
 ]
 
-export function CompanionSettingsButton({ disabled, openMemory }: { disabled: boolean; openMemory?: () => void }) {
+export function CompanionSettingsButton({ disabled, openMemory, section = 'all' }: { disabled: boolean; openMemory?: () => void; section?: 'all' | 'information' | 'notifications' }) {
   const [settings, setSettings] = useState<CompanionQuickSettings | null>(null)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState('')
@@ -39,7 +39,7 @@ export function CompanionSettingsButton({ disabled, openMemory }: { disabled: bo
     finally { setWorking(false) }
   }
   return <section className="companion-settings" aria-label={t('助手偏好')}>
-    {['记忆与资料', '通知与提醒'].map((group, index) => <details key={group} className="companion-settings-group"><summary><strong>{t(group)}</strong><small>{t(index === 0 ? '管理助手能记住和使用的信息' : '选择哪些提醒可以出现')}</small></summary>
+    {['记忆与资料', '通知与提醒'].map((group, index) => ({group, index})).filter(({index}) => section === 'all' || (section === 'information' ? index === 0 : index === 1)).map(({group, index}) => <details key={group} className="companion-settings-group"><summary><strong>{t(group)}</strong><small>{t(index === 0 ? '管理助手能记住和使用的信息' : '选择哪些提醒可以出现')}</small></summary>
     {options.filter(option => ['memoryEnabled', 'bubbleMemoryAccess', 'knowledgeModelAccess', 'knowledgeModelWrite', 'contextFollowup', 'automaticAssistantMemory', 'automaticUsageMemory', 'automaticNotificationMemory'].includes(option.key) === (index === 0)).map(option => <label className="toggle-row" key={option.key}>
       <span><strong>{t(option.title)}</strong><small>{t(option.hint)}</small></span>
       <input type="checkbox" role="switch" checked={settings?.[option.key] ?? false} disabled={disabled || working || settings === null}
@@ -49,9 +49,9 @@ export function CompanionSettingsButton({ disabled, openMemory }: { disabled: bo
     {settings?.contextFollowup && !settings.knowledgeModelAccess && <p className="workspace-hint" role="status">{t('开启「允许对话检索本地资料」后，桌宠才能根据资料跟进。')}</p>}
     {settings?.memoryEnabled && !settings.bubbleMemoryAccess && <p className="workspace-hint" role="status">长期记忆已开启，但桌宠尚未获准访问。请在“记忆与资料”中开启“允许桌宠访问长期记忆”。</p>}
     {openMemory && <button className="button button-secondary" type="button" onClick={openMemory}>{t('打开记忆')}</button>}
-    <button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => {
+    <details className="companion-settings-advanced"><summary>{t('高级助手设置')}</summary><button className="button button-secondary" type="button" disabled={disabled || working} onClick={() => {
       setMessage(''); void runtimeBridge.openCompanionSettings().catch(() => setMessage('无法打开助手设置，请在安卓应用中重试'))
-    }}>{t('全部助手偏好')}</button>
+    }}>{t('全部助手偏好')}</button></details>
     {message && <p className="status-text-error" role="alert">{t(message)}</p>}
   </section>
 }

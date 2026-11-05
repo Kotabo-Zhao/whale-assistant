@@ -116,6 +116,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
       <div><strong>{row.text}</strong><small className="worker-card-status">{states[String(row.state)] || '状态待确认'} · {row.mode === 'create' ? '创作工具' : row.mode === 'device' ? '手机操作' : '读取与整理'}</small>
         {typeof row.group === 'string' && row.group !== '' && <small>所属目标 · {row.group}</small>}
         {row.authorizationRevoked === true && <small>任务授权已撤回</small>}
+        {typeof row.goalState === 'string' && <small>{row.goalState === 'verified' ? '目标已核验' : row.goalState === 'verification' ? '子任务已返回 · 目标待核验' : row.goalState === 'budget' ? '目标预算待处理' : '目标正在推进'}</small>}
         {row.authoredDraft && typeof row.authoredDraft === 'object' && 'revision' in row.authoredDraft && typeof row.authoredDraft.revision === 'string' ?
           <button type="button" onClick={() => {
             void runtimeBridge.companionDashboard({ operation: 'workerPreviewDraft', id: row.id, revision: (row.authoredDraft as { revision: string }).revision })

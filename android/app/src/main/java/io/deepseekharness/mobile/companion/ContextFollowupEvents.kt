@@ -57,7 +57,7 @@ internal object ContextFollowupEvents {
 
     @Synchronized fun cancel(ctx: Context) {
         val prefs = prefs(ctx)
-        prefs.edit().remove("changes").remove("context_proposals").putLong("context_epoch", prefs.getLong("context_epoch", 0) + 1).apply()
+        prefs.edit().remove("changes").remove("context_proposals").remove("matter_events").remove("last_matter_reply").putLong("context_epoch", prefs.getLong("context_epoch", 0) + 1).apply()
     }
 
     private fun normalized(text: String) = text.lowercase(Locale.ROOT).filter(Char::isLetterOrDigit)
@@ -121,12 +121,39 @@ internal object ContextFollowupEvents {
         notes(ctx, listOf(proposal.getString("note")))
     }
 
+    private fun matterEvent(opening: JSONObject, kind: String, text: String) = JSONObject()
+        .put("id",opening.getString("matterId")).put("eventId",java.util.UUID.randomUUID().toString())
+        .put("kind",kind).put("title",opening.getString("matter")).put("text",text.take(2000))
+        .put("noteId",opening.getString("note")).put("at",System.currentTimeMillis())
+
+    @Synchronized fun answered(ctx: Context, text: String) {
+        if(!PetContextFollowup.enabled(ctx)) return
+        val opening=prefs(ctx).getString("opening",null)?.let(::JSONObject) ?: return
+        if(!opening.has("context") || !opening.has("matterId")) return
+        val event=matterEvent(opening,"reply",text)
+        check(prefs(ctx).edit().putString("matter_events",JSONArray((rows(ctx,"matter_events")+event).takeLast(64)).toString())
+            .putString("last_matter_reply",JSONObject(opening.toString()).put("reply",text).toString()).commit())
+    }
+    @Synchronized fun matterForTask(ctx: Context, text: String): String? {
+        if(!PetContextFollowup.enabled(ctx)) return null
+        val value=prefs(ctx).getString("last_matter_reply",null)?.let(::JSONObject) ?: return null
+        if(System.currentTimeMillis()-value.optLong("time") !in 0L..86_400_000L) return null
+        return value.optString("matterId").takeIf { it.isNotBlank() && text.contains(value.getString("text")) }
+    }
+    @Synchronized fun pendingMatters(ctx: Context): JSONArray =
+        if(PetContextFollowup.enabled(ctx)) JSONArray(rows(ctx,"matter_events").take(16)) else JSONArray()
+    @Synchronized fun acknowledgeMatter(ctx: Context, id: String) {
+        check(prefs(ctx).edit().putString("matter_events",JSONArray(rows(ctx,"matter_events").filterNot { it.getString("eventId")==id }).toString()).commit())
+    }
+
     @Synchronized fun shown(ctx: Context, proposal: JSONObject) {
         val remaining = staged(ctx).filterNot { it.getString("signature") == proposal.getString("signature") }
-        val entry = JSONObject(proposal.toString()).apply { remove("context"); remove("signature") }
-        val opening = JSONObject(proposal.toString()).put("time", System.currentTimeMillis())
+        val matterId = CompanionBubbleChatPolicy.memoryDigest(normalized(proposal.getString("matter")) + "|" + proposal.getString("note"))
+        val entry = JSONObject(proposal.toString()).put("matterId",matterId).apply { remove("context"); remove("signature") }
+        val opening = JSONObject(proposal.toString()).put("matterId",matterId).put("time", System.currentTimeMillis())
         check(prefs(ctx).edit().putString("delivered_matters", JSONArray((delivered(ctx) + entry).takeLast(256)).toString())
             .putString("opening", opening.toString()).putString("context_proposals", JSONArray(remaining).toString())
+            .putString("matter_events",JSONArray((rows(ctx,"matter_events") + matterEvent(opening,"shown",opening.getString("text"))).takeLast(64)).toString())
             .putString("status", "已就新进展主动提问").putLong("status_at", System.currentTimeMillis()).commit())
     }
 }

@@ -61,6 +61,7 @@ object RootCommandRunner {
         timeoutMs: Long = DEFAULT_TIMEOUT_MS,
         hardened: Boolean = true,
         strictGuard: Boolean = false,
+        onStarted: ((Process) -> Unit)? = null,
     ): RootCommandResult {
         RootCommandGuard.verifySafe(script, strict = strictGuard)
         val wrapped = RootSecurityWrapper.wrapWithProtection(script, hardened)
@@ -71,6 +72,7 @@ object RootCommandRunner {
             return RootCommandResult(false, -1, "", false, ERROR_SU_UNAVAILABLE)
         }
 
+        onStarted?.invoke(process)
         val (text, truncated, completed) = readWithTimeout(process, timeoutMs)
         if (!completed) {
             process.destroyForcibly()

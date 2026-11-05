@@ -1,5 +1,13 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "桌宠与主动跟进": "Pet and proactive follow-up",
+  "外观与语言": "Appearance and language",
+  "设备控制": "Device control",
+  "运行与数据": "Runtime and data",
+  "通知摘要、提醒与安静时段": "Notification summaries, reminders and quiet hours",
+  "高级助手设置": "Advanced assistant settings",
+  "深海·专注": "Deep sea · Focus",
+  "月汐·陪伴": "Moon tide · Companion",
   "结合最近对话和资料主动跟进": "Follow up using recent chats and library notes",
   "新对话结束或资料更新后，桌宠会匹配近 7 天的对话，将最多 4 条对话摘录、1 段相关资料及已提醒的相关事项名交给后台模型判断。只在空闲时提醒，同一件事会去重。需开启资料检索。": "When a conversation ends or library material changes, the pet may send up to four excerpts from a chat in the past seven days, one matching library excerpt, and relevant previous reminder titles to the background model. It follows up when idle and skips matters already raised. Requires library search.",
   "开启「允许对话检索本地资料」后，桌宠才能根据资料跟进。": "Enable library search to let the pet follow up on related notes.",
@@ -2150,4 +2158,12 @@ export const english: Readonly<Record<string, string>> = {
   "没有符合筛选条件的插件": "No plugins match these filters",
   "可以更换关键词，或清除搜索与分类条件。": "Try another keyword or clear the search and category filters.",
   "清除筛选": "Clear filters",
+  "目标已核验": "Goal verified",
+  "子任务已返回 · 目标待核验": "Tasks returned · goal awaiting verification",
+  "目标预算待处理": "Goal budget needs attention",
+  "目标正在推进": "Goal in progress",
+
+  "背景与对话外观": "Background and conversation appearance",
+  "自定义配色与透明度": "Custom colors and opacity",
+
 }

@@ -64,7 +64,7 @@ internal object AppThemePreference {
     }
 
     fun systemNight(context: Context): Boolean =
-        (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+        (context.applicationContext.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
 
     /**
@@ -83,7 +83,7 @@ internal object AppThemePreference {
             uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
                 if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
         }
-        return context.createConfigurationContext(configuration)
+        return WhaleDesign.wrap(context.createConfigurationContext(configuration), WhaleDesign.of(context))
     }
 
     /**
@@ -102,8 +102,9 @@ internal object AppThemePreference {
         if (activity.isFinishing || activity.isDestroyed) return
         runCatching {
             val dark = isDark(current(activity), systemNight(activity))
+            activity.theme.applyStyle(WhaleDesign.of(activity).nativeStyle,true)
             val window = activity.window
-            val color = backgroundColor ?: if (dark) DARK_BAR_COLOR else LIGHT_BAR_COLOR
+            val color = backgroundColor ?: WhaleDesign.of(activity).canvas
             activity.findViewById<android.view.View>(android.R.id.content)?.setBackgroundColor(color)
             @Suppress("DEPRECATION")
             window.statusBarColor = color

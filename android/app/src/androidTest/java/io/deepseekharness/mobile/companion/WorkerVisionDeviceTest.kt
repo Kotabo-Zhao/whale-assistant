@@ -11,9 +11,37 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
+import android.os.SystemClock
 
 @RunWith(AndroidJUnit4::class)
 class WorkerVisionDeviceTest {
+    @Test fun guestUsesBundledOfficialDelegationAndDurableGoals() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val store=io.deepseekharness.mobile.runtime.RuntimeStore(context)
+        val resolver=io.deepseekharness.mobile.runtime.RuntimeLaunchResolver(context,store,includeCredentials=false)
+        val script="""
+            import assert from 'node:assert/strict'
+            import { delegationApi } from '/opt/dsh/plugins/dsh-mobile-shizuku/lib/worker-delegation.js'
+            import { WorkerGoals } from '/opt/dsh/plugins/dsh-mobile-shizuku/lib/worker-goals.js'
+            import { mkdtempSync,rmSync } from 'node:fs'
+            import { join } from 'node:path'
+            const api=await delegationApi()
+            assert.equal(typeof api.captureDelegatedPolicyOverrides,'function')
+            assert.equal(typeof api.appendDelegatedPolicyOverrides,'function')
+            const dir=mkdtempSync('/tmp/whale-goal-')
+            try {
+              const rows=new Map([['a',{id:'a',owner:'parent',group:'验收',state:'completed',revision:1,summary:'4729'}]])
+              const ledger=new WorkerGoals(dir,rows)
+              ledger.define('验收','parent',{outcome:'核对数字',criteria:['结果为 4729']})
+              const goal=ledger.view('验收');assert.equal(goal.state,'verification')
+              ledger.verify('验收','parent',goal.fingerprint,[{criterion:'结果为 4729',taskId:'a',passed:true,evidence:'复算结果 4729'}])
+              assert.equal(new WorkerGoals(dir,rows).view('验收').state,'verified')
+              console.log('WHALE_OFFICIAL_DELEGATION_AND_GOALS_OK')
+            } finally { rmSync(dir,{recursive:true,force:true}) }
+        """.trimIndent()
+        val result=io.deepseekharness.mobile.runtime.ProcessProbe.run(resolver.launch(listOf("/opt/node/bin/node","--input-type=module","-e",script)),store.currentRoot,45L,outputLimit=4096)
+        assertTrue("guest delegation: "+result.output.take(600),result.succeeded && "WHALE_OFFICIAL_DELEGATION_AND_GOALS_OK" in result.output)
+    }
     @Test fun guestSqliteWalRollsBackOnPrivateScratch() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = io.deepseekharness.mobile.runtime.RuntimeStore(context)
@@ -643,7 +671,7 @@ class WorkerVisionDeviceTest {
         client.command(session, "/permission read-only")
         val store = WorkerDashboardStore(context)
         fun rows() = store.list().getJSONArray("items").let { all -> (0 until all.length()).map(all::getJSONObject).filter { it.optString("owner") == session } }
-        send(client, session, "请派发一个 read Worker，标题重启恢复验收：阅读 /opt/dsh/plugins/dsh-mobile-shizuku/lib/workers.js 和 /opt/dsh/plugins/dsh-mobile-shizuku/lib/screen-watch.js，总结调度和屏幕陪看的源码证据，最终回执里写标记 恢复678。派发后立刻结束本轮。")
+        send(client, session, "请派发一个 read Worker，标题重启恢复验收：实际读取 /opt/dsh/plugins/dsh-mobile-shizuku/package.json 和 /opt/dsh/plugins/dsh-mobile-shizuku/cordis.patch.yml。最终回执只给出前者的 main 值、后者的 id 值和标记 恢复678。派发后立刻结束本轮。")
         val deadline = System.currentTimeMillis() + 60000
         var row: JSONObject? = null
         while (System.currentTimeMillis() < deadline) {
@@ -651,7 +679,8 @@ class WorkerVisionDeviceTest {
             if (row != null) break
             Thread.sleep(100)
         }
-        println("RECOVERY_TASK " + requireNotNull(row) { "未观察到运行中的只读任务" }.getString("id"))
+        val recoveryId = requireNotNull(row) { "未观察到运行中的只读任务" }.getString("id")
+        InstrumentationRegistry.getInstrumentation().sendStatus(0, android.os.Bundle().apply { putString("recoveryTask", recoveryId) })
     }
     @Test fun readTaskContinuesAfterProcessRestart() = withClient { _ ->
         val id = InstrumentationRegistry.getArguments().getString("taskId")!!
@@ -661,6 +690,7 @@ class WorkerVisionDeviceTest {
         while (System.currentTimeMillis() < deadline) {
             val all = store.list().getJSONArray("items")
             row = (0 until all.length()).map(all::getJSONObject).firstOrNull { it.optString("id") == id }
+            if (row?.optString("state") in setOf("blocked", "failed", "cancelled")) break
             val inputs = row?.optJSONArray("inputs")
             if (row?.optString("state") == "completed" && inputs != null &&
                 (0 until inputs.length()).any { inputs.getJSONObject(it).optString("kind") == "recovery" && inputs.getJSONObject(it).optLong("readAt") > 0 }) break
@@ -671,7 +701,8 @@ class WorkerVisionDeviceTest {
         val inputs = result.getJSONArray("inputs")
         val recovery = (0 until inputs.length()).map(inputs::getJSONObject).first { it.optString("kind") == "recovery" }
         assertEquals("delivered", recovery.getString("delivery")); assertTrue(recovery.optLong("readAt") > 0)
-        assertTrue(result.toString(), result.optString("summary").contains("恢复678"))
+        val summary = result.optString("summary")
+        assertTrue(summary, listOf("恢复678", "lib/index.js", "mobile-shizuku-tools").all(summary::contains))
     }
     @Test fun taskUpdateAfterProcessRestart() = withClient { _ ->
         val args = InstrumentationRegistry.getArguments()
@@ -748,6 +779,63 @@ class WorkerVisionDeviceTest {
             println("REAL_SUMMARY " + JSONObject().put("text",summary.getOrNull()?.text ?: "").put("tools",JSONArray(summary.getOrNull()?.tools?.toList() ?: emptyList<String>())).put("error",summary.exceptionOrNull()?.javaClass?.simpleName ?: "").put("at",System.currentTimeMillis()))
         } finally { println("REAL_END " + JSONObject().put("session",session).put("at",System.currentTimeMillis())) }
     }
+    @Test fun realGoalVerificationKeepsItsOriginalCoordinator() = withClient { client ->
+        val app=InstrumentationRegistry.getInstrumentation().targetContext
+        val owner=client.call("session/create",JSONObject()).getString("sessionId")
+        client.command(owner,"/permission read-only")
+        val group="目标核验-"+UUID.randomUUID().toString().take(8)
+        val first=send(client,owner,"请执行一次隔离验收。先调用 mobile_goals define，group="+group+"，outcome=核对两个加法，criteria 严格为 [123+456=579,20+22=42]。再调用 mobile_workers start 两次，group 均为 "+group+"，mode=read，分别独立计算这两个加法并用 mobile_worker_report completed 报告。派发后结束本轮，不轮询，不自己代替 Worker。")
+        assertTrue("目标未定义",first.tools.contains("mobile_goals"))
+        val store=WorkerDashboardStore(app)
+        fun rows():List<JSONObject> {
+            val all=store.list().getJSONArray("items")
+            return (0 until all.length()).map(all::getJSONObject).filter{it.optString("group")==group}
+        }
+        val end=SystemClock.elapsedRealtime()+180000
+        while(SystemClock.elapsedRealtime()<end && (rows().size!=2 || rows().any{it.optString("state")!="completed"})) Thread.sleep(250)
+        assertEquals(2,rows().size);assertTrue("目标工单未完成",rows().all{it.optString("state")=="completed"})
+        val other=client.call("session/create",JSONObject()).getString("sessionId")
+        send(client,other,"本次只是另一个会话，请只回复收到，不创建任务。")
+        send(client,owner,"请核验 group="+group+" 的目标。调用 mobile_goals status 与 mobile_workers status 读取完整报告，独立复算两项加法；每项给出具体证据和对应 taskId，再调用 mobile_goals verify。criteria 顺序必须保留，使用刚读到的 fingerprint。")
+        val file=java.io.File(app.noBackupFilesDir,"dsh-runtime/current/root/.dsh/mobile-workers/goals/ledger.json")
+        val all=JSONArray(file.readText(Charsets.UTF_8))
+        val goal=(0 until all.length()).map(all::getJSONArray).single{it.getString(0)==group}.getJSONObject(1)
+        assertEquals("协调会话不能漂移到最近对话",owner,goal.getString("owner"))
+        assertTrue("目标没有经过独立证据核验",goal.getJSONObject("verification").getBoolean("passed"))
+        assertEquals(2,goal.getJSONObject("verification").getJSONArray("checks").length())
+        InstrumentationRegistry.getInstrumentation().sendStatus(0,android.os.Bundle().apply {putString("goal",group);putBoolean("criteriaVerified",true);putBoolean("coordinatorPinned",true)})
+    }
+
+    @Test fun realSourcePermissionChangeBlocksAndResumesTheSameWorker() = withClient { client ->
+        val app=InstrumentationRegistry.getInstrumentation().targetContext
+        val owner=client.call("session/create",JSONObject()).getString("sessionId")
+        client.command(owner,"/permission workspace-write")
+        val title="权限续接-"+UUID.randomUUID().toString().take(8)
+        send(client,owner,"请只派发一个 mode=read 的独立 Worker，标题为 "+title+"。任务：先连续调用三次 mobile_device_wait，每次 millis=10000，仅作无副作用等待；之后计算123+456并报告完成。派发后结束本轮，不轮询。")
+        val store=WorkerDashboardStore(app)
+        fun row():JSONObject? {
+            val all=store.list().getJSONArray("items")
+            return (0 until all.length()).map(all::getJSONObject).singleOrNull{it.optString("owner")==owner && it.optString("title")==title}
+        }
+        fun waitState(states:Set<String>,timeout:Long):JSONObject {
+            val end=SystemClock.elapsedRealtime()+timeout
+            while(SystemClock.elapsedRealtime()<end) { val current=row();if(current?.optString("state") in states) return requireNotNull(current);Thread.sleep(80) }
+            error("权限验收状态不符："+row()?.optString("state"))
+        }
+        val started=waitState(setOf("starting","running"),30000)
+        val id=started.getString("id");val child=started.getString("sessionId")
+        client.command(owner,"/permission read-only")
+        val blocked=waitState(setOf("blocked"),15000)
+        assertTrue(blocked.getString("summary").contains("权限"))
+        store.command(JSONObject().put("id",id).put("action","resume").put("task","用户已确认只读权限。继续原任务，跳过剩余等待，直接计算123+456并用mobile_worker_report completed报告。"))
+        val done=waitState(setOf("completed"),120000)
+        assertEquals(id,done.getString("id"));assertEquals(child,done.getString("sessionId"))
+        assertEquals("read-only",done.getJSONObject("delegatedPolicy").getString("sandboxMode"))
+        assertTrue(done.getString("summary").contains("579"))
+        assertTrue(done.getJSONObject("budgetUsage").getLong("tokens")>0)
+        InstrumentationRegistry.getInstrumentation().sendStatus(0,android.os.Bundle().apply {putBoolean("sourceRevocationBlocked",true);putBoolean("sameWorkerResumedReadOnly",true)})
+    }
+
     @Test fun responseBaseline() = withClient { client ->
         val session = client.call("session/create", JSONObject()).getString("sessionId")
         val t = System.currentTimeMillis()

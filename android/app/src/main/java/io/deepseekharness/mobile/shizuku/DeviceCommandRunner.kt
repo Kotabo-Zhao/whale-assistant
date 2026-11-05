@@ -193,7 +193,9 @@ class DeviceCommandRunner(
             throw RuntimeFailure("DEVICE_COMMAND_INVALID", "Shell 脚本为空、过长或包含非法控制字符")
         }
         val capabilities = RootSandboxProbe.detect()
-        val result = RootCommandRunner.run(param, timeoutMs, strictGuard = !capabilities.namespaceIsolation)
+        val result = RootCommandRunner.run(param, timeoutMs, strictGuard = !capabilities.namespaceIsolation, onStarted = { process ->
+            io.deepseekharness.mobile.DeviceControlState.cancellation { process.destroyForcibly() }
+        })
         val degradations = result.diagnostics.filter { it.substringBefore(':') in RootSecurityWrapper.DEGRADATION_CODES }
         val body = buildString {
             append(result.output)

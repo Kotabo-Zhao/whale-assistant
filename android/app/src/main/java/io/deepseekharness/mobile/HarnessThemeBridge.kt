@@ -120,6 +120,14 @@ internal object HarnessThemeBridge {
     internal fun allowsBackgroundAutoplay(kind: String?, syncBackground: Boolean): Boolean =
         syncBackground && kind == KIND_VIDEO
 
+    fun saveFamily(context: Context): Boolean {
+        val prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+        val payload=WhaleDesign.of(context).webTheme()
+        for((key,fallback) in listOf(KEY_OPACITY to 100,KEY_CONTROL_OPACITY to 100,KEY_SIDEBAR_OPACITY to 100,KEY_RIGHT_PANEL_OPACITY to 100))
+            payload.put(key,prefs.getInt(key,fallback))
+        return save(context,payload)
+    }
+
     /** 校验并保存；任何一项不合格都整体拒绝，避免半套主题落盘。 */
     fun save(context: Context, payload: JSONObject): Boolean {
         val mode = payload.optString(KEY_MODE, "")
@@ -355,10 +363,12 @@ internal object HarnessThemeBridge {
         } catch (_: Exception) {
             return null
         }
-        val mode = prefs.getString(KEY_MODE, null) ?: return null
-        val accent = prefs.getString(KEY_ACCENT, null) ?: return null
-        val background = prefs.getString(KEY_BACKGROUND, null) ?: return null
-        val surface = prefs.getString(KEY_SURFACE, null) ?: return null
+        val design=WhaleDesign.of(context)
+        val defaults = design.webTheme()
+        val mode = prefs.getString(KEY_MODE, null) ?: defaults.getString(KEY_MODE)
+        val accent = prefs.getString(KEY_ACCENT, null) ?: defaults.getString(KEY_ACCENT)
+        val background = prefs.getString(KEY_BACKGROUND, null) ?: defaults.getString(KEY_BACKGROUND)
+        val surface = prefs.getString(KEY_SURFACE, null) ?: defaults.getString(KEY_SURFACE)
         val opacity = prefs.getInt(KEY_OPACITY, 100)
         val controlOpacity = prefs.getInt(KEY_CONTROL_OPACITY, 100).coerceIn(40, 100)
         val sidebarOpacity = prefs.getInt(KEY_SIDEBAR_OPACITY, 100).coerceIn(0, 100)
@@ -374,6 +384,10 @@ internal object HarnessThemeBridge {
               if (!root) { return false; }
               root.dataset.dshTheme = '$mode';
               root.dataset.dshThemeSource = 'shell';
+              var family=document.getElementById('whale-family-design');
+              if(!family) { family=document.createElement('style'); family.id='whale-family-design'; (document.head||root).appendChild(family); }
+              family.textContent=':root,body{--dsw-alias-label-primary:${design.hex(design.ink)}!important;--dsw-alias-label-secondary:${design.hex(design.muted)}!important;--dsw-alias-label-tertiary:${design.hex(design.muted)}!important;}button:not([role=switch]),textarea,input:not([type=checkbox]):not([type=radio]){border-radius:${design.radius}px!important;}';
+
               root.style.setProperty('--dsh-theme-accent', '$accent');
               root.style.setProperty('--dsh-theme-background', '$background');
               root.style.setProperty('--dsh-theme-surface', '$surface');

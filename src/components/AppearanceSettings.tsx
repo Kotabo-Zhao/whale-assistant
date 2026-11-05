@@ -267,7 +267,7 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
           <p>{t('立即生效，下次打开仍使用此主题。')}</p>
           <div className="appearance-options" role="group" aria-label={t('界面风格')}>
             {(['simple', 'cute'] as const).map(value => <button type="button" key={value} aria-pressed={style === value}
-              onClick={() => { saveInterfaceStyle(value); setStyle(value) }}>{t(value === 'simple' ? '简约' : '可爱')}</button>)}
+              onClick={() => { saveInterfaceStyle(value); setStyle(value) }}>{t(value === 'simple' ? '深海·专注' : '月汐·陪伴')}</button>)}
           </div>
           <div className="appearance-options" role="radiogroup" aria-labelledby="appearance-title">
             {OPTIONS.map(({ value, label, Icon }) => (
@@ -289,6 +289,7 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
             * 按钮与输入框是同一组：它们都是可直接操作的控件，透明度必须一起调，
             * 否则会出现「按钮半透明、输入框还是实底」的割裂感。选中态的强调色是另一组设置。
             */}
+          <details className="appearance-details"><summary>{t('自定义配色与透明度')}</summary>
           <div className="appearance-customization">
             <div className="appearance-accent-heading">
               <strong>{t('按钮与输入框')}</strong>
@@ -331,6 +332,7 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
               if (saveCustomAccentColor(value)) setCustomAccent(value)
             }} /><button type="button" className="compact-button" onClick={() => { clearCustomAccentColor(); setCustomAccent('') }}>{t('使用默认')}</button></label>
           </div>
+          </details>
           {failed !== null && <p role="alert">{t(failed === 'accent' ? '无法保存强调色，请重试。' : '无法保存主题，请重试。')}</p>}
         </>
       )}

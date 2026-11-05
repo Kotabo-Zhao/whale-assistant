@@ -1650,6 +1650,7 @@ export interface CompanionQuickSettings {
 }
 
 export interface RuntimeBridge {
+  setHarnessViewport?(viewport: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
   listHarnessReleases: () => Promise<HarnessReleaseList>
   manageHarnessVersions: (operation: HarnessVersionOperation, version?: string) => Promise<HarnessVersionsState>
   /** Harness 包安装的阶段进度；只有安装会上报，其它操作没有事件。 */

@@ -1,0 +1,12 @@
+<resources>
+    <color name="whale_moon_canvas">#201e2c</color>
+    <color name="whale_moon_surface">#2b2839</color>
+    <color name="whale_moon_ink">#f4eff8</color>
+    <color name="whale_moon_muted">#c3b7cc</color>
+    <color name="whale_moon_accent">#d5b8e9</color>
+    <color name="whale_sea_canvas">#101d2b</color>
+    <color name="whale_sea_surface">#172838</color>
+    <color name="whale_sea_ink">#eef5fa</color>
+    <color name="whale_sea_muted">#a1b4c5</color>
+    <color name="whale_sea_accent">#80d3dc</color>
+</resources>

@@ -124,6 +124,7 @@ import {
 } from './validation'
 
 interface NativeRuntimePlugin {
+  setHarnessViewport(options: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
   listHarnessReleases(): Promise<unknown>
   manageHarnessVersions(options: { operation: HarnessVersionOperation; version?: string }): Promise<unknown>
   managePlugins(options: PluginRequest): Promise<PluginCatalog>
@@ -360,6 +361,7 @@ function createNativeBridge(): RuntimeBridge {
       }
       return NativeRuntime.setAppTheme(style ? { mode, style } : { mode })
     },
+    setHarnessViewport: viewport => NativeRuntime.setHarnessViewport(viewport),
     applyHarnessTheme: theme => {
       // 与原生侧同一套校验：非法配置在过桥之前就拒掉，原生不负责猜测。
       const checked = validateSyncedTheme(theme)

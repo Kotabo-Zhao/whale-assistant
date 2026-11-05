@@ -855,7 +855,7 @@ class ShizukuRuntime(
         private const val BINDER_TIMEOUT_SECONDS = 8L
         private const val SERVICE_TIMEOUT_SECONDS = 10L
         private const val SERVICE_EXIT_TIMEOUT_SECONDS = 5L
-        private const val USER_SERVICE_VERSION = 6
+        private const val USER_SERVICE_VERSION = 7
         private const val MAX_SESSIONS = 4
 
         /**

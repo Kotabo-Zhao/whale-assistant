@@ -3,6 +3,7 @@ import { ToolsWorkspace } from './components/ToolsWorkspace'
 import { AssistantOverview } from './components/AssistantOverview'
 import type { AppView } from './ui/appNavigation'
 import { AppSidebar, BottomNavigation } from './components/AppNavigation'
+import { useHarnessViewport } from './useHarnessViewport'
 import { Capacitor } from '@capacitor/core'
 import appMark from './assets/app-mark.png'
 import whaleWave from './assets/whale-wave.svg'
@@ -208,16 +209,19 @@ function isSettingsView(view: AppView): boolean {
 }
 
 /** 按用户用途分类；分类只影响入口展示，不改动设置草稿。 */
-type SettingsHomeGroup = 'assistant' | 'workspace' | 'device'
+type SettingsHomeGroup = 'assistant' | 'workspace' | 'device' | 'models' | 'appearance' | 'notifications'
 
 const SETTINGS_HOME_GROUPS: { id: SettingsHomeGroup; label: string }[] = [
-  { id: 'assistant', label: '助手与外观' },
-  { id: 'workspace', label: '运行与存储' },
-  { id: 'device', label: '设备与诊断' },
+  { id: 'models', label: '模型连接' },
+  { id: 'assistant', label: '桌宠与主动跟进' },
+  { id: 'notifications', label: '通知与免打扰' },
+  { id: 'appearance', label: '外观与语言' },
+  { id: 'device', label: '设备控制' },
+  { id: 'workspace', label: '运行与数据' },
 ]
 
 /** 入口点下去要去哪：设置二级页，或外壳一级页。 */
-type SettingsHomeTarget = { kind: 'page'; page: SettingsPage } | { kind: 'view'; view: AppView } | { kind: 'preference'; key: 'assistant' | 'language' }
+type SettingsHomeTarget = { kind: 'page'; page: SettingsPage } | { kind: 'view'; view: AppView } | { kind: 'preference'; key: 'assistant' | 'language' | 'notifications' }
 
 interface SettingsHomeEntry {
   /** 稳定标识：只用于 React key、图标与测试定位；改标题不影响它，也不参与匹配。 */
@@ -243,7 +247,7 @@ interface SettingsHomeEntry {
 const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   {
     id: 'models',
-    group: 'assistant',
+    group: 'models',
     title: '模型与密钥',
     hint: '供应商、API Key 与自定义模型',
     keywords: ['模型', '密钥', 'key', 'api', 'apikey', 'api key', '供应商', 'provider', 'token', '凭据', '自定义模型', 'deepseek', 'openai', 'anthropic'],
@@ -302,7 +306,7 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   // —— 配置入口按模型、外观、设备与诊断分别归类。
   {
     id: 'terminal-settings',
-    group: 'assistant',
+    group: 'appearance',
     title: '主题',
     hint: '字号配色与背景',
     keywords: ['主题', '外观', '字号', '字体', '深色', '浅色', '背景', '壁纸', '视频', '图片', '透明度', '卡片', '颜色', '强调色', 'theme', 'font', 'appearance', 'background', 'color'],
@@ -329,7 +333,7 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   },
   {
     id: 'diagnostics',
-    group: 'device',
+    group: 'workspace',
     title: '诊断与日志',
     hint: '日志与采集、设备能力与反馈',
     keywords: ['诊断', '日志', 'log', 'logs', '采集', '保留', '导出', '排查', '报错', '错误', '崩溃', '重启', '自检', 'self check', '浏览器', '外置浏览器', 'browser', 'chrome', 'webview'],
@@ -338,8 +342,10 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
   },
   { id: 'assistant-preference', group: 'assistant', title: '助手偏好', hint: '记忆、通知与提醒',
     keywords: ['助手', '记忆', '通知', '提醒', 'memory', 'notifications'], icon: <Bell size={20}/>, target: { kind: 'preference', key: 'assistant' } },
-  { id: 'app-language', group: 'assistant', title: '界面语言', hint: '选择应用显示语言',
+  { id: 'app-language', group: 'appearance', title: '界面语言', hint: '选择应用显示语言',
     keywords: ['语言', '中文', '英语', 'language', 'english'], icon: <Languages size={20}/>, target: { kind: 'preference', key: 'language' } },
+  { id: 'notification-preference', group: 'notifications', title: '通知与免打扰', hint: '通知摘要、提醒与安静时段',
+    keywords: ['通知', '提醒', '免打扰', 'notification', 'quiet'], icon: <Bell size={20}/>, target: { kind: 'preference', key: 'notifications' } },
 ]
 
 /**
@@ -1359,7 +1365,7 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
       {!searching && <nav className="account-sections" aria-label={t('设置分类')}>
         {SETTINGS_HOME_GROUPS.map(group => <button key={group.id} type="button" className="account-group-toggle"
           aria-label={t(group.label)} aria-expanded={expanded === group.id} aria-controls={'settings-group-' + group.id} onClick={() => toggleGroup(group.id)}>
-          {group.id === 'assistant' ? <Bot size={18}/> : group.id === 'workspace' ? <HardDrive size={18}/> : <SlidersHorizontal size={18}/>}
+          {group.id === 'assistant' ? <Bot size={18}/> : group.id === 'workspace' ? <HardDrive size={18}/> : group.id === 'models' ? <KeyRound size={18}/> : group.id === 'notifications' ? <Bell size={18}/> : group.id === 'appearance' ? <Image size={18}/> : <SlidersHorizontal size={18}/>}
           <strong>{t(group.label)}</strong></button>)}
       </nav>}
       <div className="settings-directory">
@@ -1372,7 +1378,7 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
               <span className="management-icon">{entry.icon}</span><span className="management-copy"><strong>{t(entry.title)}</strong>
               <small>{t(entry.hint)}</small></span><ChevronRight size={18}/></button>
             {preference === entry.id && (entry.target.key === 'language' ? <LanguageSettings /> :
-              <CompanionSettingsButton disabled={busy !== null} openMemory={() => onOpenView('assistant-memory')} />)}
+              <CompanionSettingsButton disabled={busy !== null} section={entry.target.key === 'notifications' ? 'notifications' : 'information'} openMemory={entry.target.key === 'assistant' ? () => onOpenView('assistant-memory') : undefined} />)}
           </div> : (
             <button className="management-row" key={entry.id} type="button" onClick={() => openEntry(entry)}>
               <span className="management-icon">{entry.icon}</span>
@@ -2565,19 +2571,9 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         </section>
 
         )}
-        {page === 'terminal' && (
-        <div className="settings-subsection" aria-labelledby="terminal-subpages">
-          <div className="section-title">
-            <span className="section-icon"><Settings2 size={19} /></span>
-            <div><h3 id="terminal-subpages">{t("外观")}</h3><p>{t("字号配色写在应用壳里，背景与卡片另开一页")}</p></div>
-          </div>
-          <SettingsPageRow icon={<Settings2 size={20} />} page="terminal-typography" onOpen={onOpenSubpage} />
-          <SettingsPageRow icon={<Image size={20} />} page="terminal-background" onOpen={onOpenSubpage} />
-          <SettingsPageRow icon={<RefreshCw size={20} />} page="terminal-dsh-background" onOpen={onOpenSubpage} />
-        </div>
-        )}
-        {page === 'terminal-typography' && (
+        {(page === 'terminal' || page === 'terminal-typography') && (
         <>
+        <AppearanceSettings scope="appearance" />
         <section className="settings-section" aria-labelledby="terminal-settings">
           <div className="section-title">
             <span className="section-icon"><SquareTerminal size={19} /></span>
@@ -2609,8 +2605,10 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             />
           </label>
         </section>
-        {/* 明暗模式与强调色：存储与 DOM 落地全在 src/theme.ts，这里只负责挂载。 */}
-        <AppearanceSettings scope="appearance" />
+        {page === 'terminal' && <details className="appearance-details"><summary>{t("背景与对话外观")}</summary>
+          <SettingsPageRow icon={<Image size={20} />} page="terminal-background" onOpen={onOpenSubpage} />
+          <SettingsPageRow icon={<RefreshCw size={20} />} page="terminal-dsh-background" onOpen={onOpenSubpage} />
+        </details>}
         </>
         )}
         {page === 'terminal-background' && <AppearanceSettings scope="background" />}
@@ -3811,7 +3809,7 @@ export function App() {
   useEffect(() => {
     const navigate = (event: Event) => {
       const target = (event as CustomEvent<unknown>).detail
-      if (target === 'conversation' || target === 'assistant-memory' || target === 'assistant-tasks' || target === 'tools' || target === 'plugins' || target === 'settings') setActiveView(target)
+      if (target === 'harness' || target === 'conversation' || target === 'assistant-memory' || target === 'assistant-tasks' || target === 'tools' || target === 'plugins' || target === 'settings') setActiveView(target)
     }
     window.addEventListener('dsh-native-tab', navigate)
     return () => window.removeEventListener('dsh-native-tab', navigate)
@@ -5448,6 +5446,7 @@ export function App() {
     }
   })()
 
+  useHarnessViewport(activeView, booting || resetOpen || permissionGuide !== null || pendingInstall !== null || onboardingOpen || appUpdateReminder.available !== null)
   if (booting) {
     return (
       <div className="boot-screen">

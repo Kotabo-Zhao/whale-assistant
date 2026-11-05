@@ -231,7 +231,7 @@ describe('设置分类卡片：DOM 与样式表对得上', () => {
   await arriveAtSettingsHome()
       await screen.findByRole('heading', { name: '设置' }, { timeout: 5_000 })
 
-    const toggles = ['助手与外观','运行与存储','设备与诊断'].map(name => screen.getByRole('button', { name }))
+    const toggles = ['桌宠与主动跟进','运行与数据','设备控制','模型连接','外观与语言','通知与免打扰'].map(name => screen.getByRole('button', { name }))
     expect(toggles.every(button => button.matches(CHIP_SELECTOR))).toBe(true)
     expect(toggles.filter(button => button.getAttribute('aria-expanded') === 'true')).toHaveLength(1)
     fireEvent.click(toggles[2])

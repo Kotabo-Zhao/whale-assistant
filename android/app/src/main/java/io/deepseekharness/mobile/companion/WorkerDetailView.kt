@@ -61,6 +61,23 @@ internal class WorkerDetailView(context: Context, row: JSONObject) : ScrollView(
             val value = row.optString(key)
             if (value.isNotBlank()) { heading(label); paragraph(value,4,label) }
         }
+        row.optString("goalOutcome").takeIf { it.isNotBlank() }?.let {
+            heading("目标与完成条件"); paragraph(it,3,"目标")
+            val criteria=row.optJSONArray("goalCriteria")
+            for(index in 0 until (criteria?.length() ?: 0)) content.addView(text("• " + criteria!!.getString(index),14f))
+            content.addView(text(when(row.optString("goalState")) {
+                "verified" -> "协调会话已逐项核验"
+                "verification" -> "子任务已返回，目标尚待协调会话核验"
+                "budget" -> "总预算已用完，请检查进展后继续"
+                else -> "目标仍在推进"
+            },13f,muted=true))
+        }
+        row.optJSONObject("budgetUsage")?.let { used ->
+            val limit=row.optJSONObject("budget")
+            heading("本工单资源")
+            content.addView(text("已记录 "+used.optLong("tokens")+" tokens · "+used.optLong("calls")+" 次工具调用 · "+used.optLong("milliseconds")/60000+" 分钟",13f,muted=true))
+            if(limit!=null) content.addView(text("预算 "+limit.optLong("tokens")+" tokens · "+limit.optLong("calls")+" 次 · "+limit.optLong("milliseconds")/60000+" 分钟",13f,muted=true))
+        }
         val mandate = row.optString("scope")
         val scope = listOf(row.optString("title").takeUnless { mandate.startsWith(it) }.orEmpty(), mandate,
             row.optString("decisionReason"), row.optString("decisionEvidence")).filter { it.isNotBlank() }.distinct().joinToString("\n\n")

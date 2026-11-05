@@ -644,7 +644,7 @@ describe('运行时版本管理', () => {
    */
   async function openVersionsPage(): Promise<void> {
     await screen.findByRole('heading', { name: '设置' }, { timeout: 5_000 })
-    expandSettingsGroup('运行与存储')
+    expandSettingsGroup('运行与数据')
     fireEvent.click(await screen.findByRole('button', { name: /版本管理/ }, { timeout: 5_000 }))
     await screen.findByRole('heading', { name: '版本管理' }, { timeout: 5_000 })
   }

@@ -133,7 +133,11 @@ class DeepSeekAccessibilityService : AccessibilityService() {
 
     @Synchronized
     fun execute(command: String, param: String): DeviceCommandResult {
-        val result = executeChecked(command, param)
+        val observed = command in setOf("accessibilityTree", "automationTask")
+        val result = io.deepseekharness.mobile.DeviceControlState.execute(this, observed,
+            if(observed) "读取控件" else when(command) { "inputText" -> "输入"; "accessibilityBack" -> "返回"; else -> "操作" }) {
+            executeChecked(command, param)
+        }
         val event = if (command in setOf("accessibilityAction", "accessibilityBack", "tap", "inputText")) AuditEvent.ACCESSIBILITY_ACTION else AuditEvent.ACCESSIBILITY_READ
         val auditResult = when {
             result.ok -> AuditResult.SUCCEEDED
@@ -243,10 +247,13 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     }
 
     private fun tree(root: AccessibilityNodeInfo, packageName: String): DeviceCommandResult {
-        val result = JSONObject().put("packageName", packageName)
+        val metrics=resources.displayMetrics
+        val result = JSONObject().put("packageName",packageName).put("coordinateSpace","display_pixels")
+            .put("observedAtMs",System.currentTimeMillis()).put("width",metrics.widthPixels).put("height",metrics.heightPixels)
+            .put("truncated",false)
         val nodes = JSONArray()
         appendNodes(root, nodes, 0)
-        result.put("nodes", nodes)
+        result.put("nodes", nodes).put("truncated",nodes.length()>=MAX_TREE_NODES)
         return DeviceCommandResult(true, 0, result.toString(), nodes.length() >= MAX_TREE_NODES, null)
     }
 

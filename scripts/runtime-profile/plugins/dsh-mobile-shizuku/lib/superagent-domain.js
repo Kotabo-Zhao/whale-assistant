@@ -13,6 +13,8 @@ export class SuperagentDomain {
     this.repo = new MemoryRepositories()
     this.effects = new Map()
     this.messages = new Map()
+    this.coordinators = new Map()
+    this.matters = new Map()
     const fields = ['triggerRows', 'dispositions', 'threadRows', 'ticketRows', 'decisionRows']
     if (existsSync(this.path)) {
       const text = readFileSync(this.path, 'utf8')
@@ -21,6 +23,8 @@ export class SuperagentDomain {
       for (const field of fields) this.repo[field] = new Map(state[field] ?? [])
       this.effects = new Map(state.effects ?? [])
       this.messages = new Map(state.messages ?? [])
+      this.coordinators = new Map(state.coordinators ?? [])
+      this.matters = new Map(state.matters ?? [])
       this.policyConfig = state.policy ?? this.policyConfig
     }
     const atomic = this.repo.atomic.bind(this.repo)
@@ -28,6 +32,8 @@ export class SuperagentDomain {
     this.repo.atomic = fn => {
       const effects = structuredClone(this.effects)
       const messages = structuredClone(this.messages)
+      const coordinators = structuredClone(this.coordinators)
+      const matters = structuredClone(this.matters)
       const policy = this.policyConfig
       depth++
       try {
@@ -39,6 +45,8 @@ export class SuperagentDomain {
       } catch (error) {
         this.effects = effects
         this.messages = messages
+        this.coordinators = coordinators
+        this.matters = matters
         this.policyConfig = policy
         throw error
       } finally { depth-- }
@@ -96,13 +104,27 @@ export class SuperagentDomain {
   }
   persist(fields = ['triggerRows', 'dispositions', 'threadRows', 'ticketRows', 'decisionRows']) {
     const state = Object.fromEntries(fields.map(field => [field, [...this.repo[field]]]))
-    state.effects = [...this.effects]; state.messages = [...this.messages]; state.policy = this.policyConfig
+    state.effects = [...this.effects]; state.messages = [...this.messages]; state.coordinators = [...this.coordinators]; state.matters = [...this.matters]; state.policy = this.policyConfig
     const text = JSON.stringify(state)
     const digest = createHash('sha256').update(text).digest('hex')
     if (digest === this.committedDigest) return
     writeFileSync(`${this.path}.tmp`, text, { mode: 0o600, flush: true })
     renameSync(`${this.path}.tmp`, this.path)
     this.committedDigest = digest
+  }
+  recordMatter(event) {
+    if(!event || typeof event.id!=='string' || !/^[a-f0-9]{64}$/.test(event.id) ||
+      typeof event.eventId!=='string' || !['shown','reply'].includes(event.kind) || typeof event.text!=='string' || event.text.length>2000 ||
+      typeof event.title!=='string' || event.title.length>64) throw new Error('跟进事项格式无效')
+    return this.repo.atomic(()=>{
+      const matter=this.matters.get(event.id)||{id:event.id,title:event.title,noteId:event.noteId,events:[]}
+      if(!matter.events.some(row=>row.eventId===event.eventId)) matter.events=matter.events.concat(event).slice(-32)
+      this.matters.set(event.id,matter)
+      if(this.matters.size>512) for(const [id,row] of this.matters) {
+        if(!row.ticketId && id!==event.id) { this.matters.delete(id); break }
+      }
+      return matter
+    })
   }
   configure(policy) {
     if (!policy?.version || !policy.sources || typeof policy.sources !== 'object') throw new Error('无效的来源策略')
