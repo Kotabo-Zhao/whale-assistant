@@ -208,12 +208,27 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         fun bar() = ui.shape(ui.surface, 12)
         val metrics = context.resources.displayMetrics
         val fontScale = context.resources.configuration.fontScale
-        val width = minOf(dp((340 * fontScale.coerceIn(1f,1.4f)).toInt()), (metrics.widthPixels - dp(16)).coerceAtLeast(1))
+        val sizeStore = CompanionStore(context)
+        var widthMode = sizeStore.chatWidthMode
+        var heightMode = sizeStore.chatHeightMode
+        fun windowWidth(screen: Int): Int {
+            val available = (screen - dp(16)).coerceAtLeast(1)
+            return when (widthMode) {
+                "small" -> minOf(dp(340), (available * .82f).toInt())
+                "large" -> available
+                else -> minOf(dp(620), (available * .94f).toInt())
+            }.coerceAtLeast(1)
+        }
+        var width = windowWidth(metrics.widthPixels)
         val pet = petBounds()
         var petOnRight = pet[0] + pet[2] / 2 >= metrics.widthPixels / 2
         // This estimate only selects the order before measuring; the final coordinates use actual height.
         var showAbove = pet[1] >= dp(175) || pet[1] + pet[3] + dp(175) > metrics.heightPixels
         val panel = object : LinearLayout(context) {
+            override fun onConfigurationChanged(config: android.content.res.Configuration) {
+                super.onConfigurationChanged(config)
+                post { if (root === this) positionUpdater?.invoke() }
+            }
             override fun onScreenStateChanged(screenState: Int) {
                 super.onScreenStateChanged(screenState)
                 if (root === this) {
@@ -258,6 +273,38 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(2), dp(8), 0)
         }
         val toolShelf = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        fun sizeRow(label: String, choices: List<String>, selected: String, change: (String) -> Unit) {
+            val row = LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), 0, dp(8), 0)
+                addView(ui.text(label, 13f, secondary))
+            }
+            val modes = listOf("small", "auto", "large")
+            val buttons = choices.mapIndexed { index, title ->
+                ui.text(title, 13f, foreground).apply {
+                    gravity = Gravity.CENTER; minHeight = dp(44); isFocusable = true
+                    contentDescription = "$label$title"
+                    row.addView(this, LinearLayout.LayoutParams(0, -2, 1f))
+                }
+            }
+            fun select(mode: String) {
+                buttons.forEachIndexed { index, button ->
+                    button.isSelected = modes[index] == mode
+                    button.background = ui.action(if (button.isSelected) ui.soft else ui.surface, 10)
+                    button.setTextColor(if (button.isSelected) accent else foreground)
+                }
+            }
+            select(selected)
+            buttons.forEachIndexed { index, button -> button.setOnClickListener {
+                val mode = modes[index]
+                change(mode)
+                select(mode)
+                positionUpdater?.invoke()
+            } }
+            sessionActions.addView(row)
+        }
+        sizeRow("宽度", listOf("窄", "自动", "宽"), widthMode) { widthMode = it; sizeStore.chatWidthMode = it }
+        sizeRow("高度", listOf("低", "自动", "高"), heightMode) { heightMode = it; sizeStore.chatHeightMode = it }
         fun shortcut(label: String, icon: Int, description: String, click: () -> Unit) {
             shortcuts.addView(ui.text(label, 13f, foreground).apply {
                 gravity = Gravity.CENTER; minHeight = dp(44); contentDescription = description
@@ -364,6 +411,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     }
                 }
                 visibility = android.view.View.INVISIBLE
+                addOnLayoutChangeListener { v, left, _, right, _, oldLeft, _, oldRight, _ ->
+                    if (v.visibility == android.view.View.VISIBLE && right - left != oldRight - oldLeft) {
+                        evaluateJavascript("Math.ceil(document.getElementById('message').getBoundingClientRect().height)") { raw ->
+                            val pixels = raw.toIntOrNull()?.takeIf { it > 0 } ?: return@evaluateJavascript
+                            if (root === panel) layoutParams = layoutParams.apply { height = dp(pixels + 22) }
+                        }
+                    }
+                }
             }
             richViews.add(web)
             content.addView(web, content.indexOfChild(view) + 1, LinearLayout.LayoutParams(width - dp(45), dp(1)).apply {
@@ -901,28 +956,53 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
         val updatePosition = {
+            val metrics = context.resources.displayMetrics
             val currentPet = petBounds()
             val inset = panel.rootWindowInsets
             val keyboard = if (android.os.Build.VERSION.SDK_INT >= 30 && inset?.isVisible(android.view.WindowInsets.Type.ime()) == true)
                 inset.getInsets(android.view.WindowInsets.Type.ime()).bottom else 0
             val frame = android.graphics.Rect().also { panel.getWindowVisibleDisplayFrame(it) }
+            val screenWidth = if (panel.isAttachedToWindow && frame.width() > 0)
+                minOf(metrics.widthPixels, frame.width()) else metrics.widthPixels
+            val nextWidth = windowWidth(screenWidth)
+            val resized = nextWidth != width
+            if (resized) {
+                width = nextWidth
+                params.width = width
+                workerBadge.maxWidth = minOf((width * .43f).toInt(), dp((134 * fontScale.coerceAtLeast(1f)).toInt()))
+                val bodyWidth = (width - dp(45)).coerceAtLeast(1)
+                for (index in 0 until content.childCount) {
+                    when (val child = content.getChildAt(index)) {
+                        is TextView -> child.maxWidth = bodyWidth
+                        is android.widget.ImageView -> child.maxWidth = bodyWidth
+                        is android.webkit.WebView -> child.layoutParams = child.layoutParams.apply { this.width = bodyWidth }
+                    }
+                }
+            }
             val frameBottom = if (frame.bottom > 0) minOf(metrics.heightPixels, frame.bottom) else metrics.heightPixels
             val usable = minOf(frameBottom, metrics.heightPixels - keyboard)
             val gap = dp(8)
-            val hasSideRoom = maxOf(currentPet[0], metrics.widthPixels - currentPet[0] - currentPet[2]) >= width + gap
+            val hasSideRoom = maxOf(currentPet[0], screenWidth - currentPet[0] - currentPet[2]) >= width + gap
             val availableHeight = if (hasSideRoom) usable else minOf(usable, maxOf(currentPet[1], usable - currentPet[1] - currentPet[3]) - gap)
             val nextLimit = (usable / 3).coerceIn(dp(48),dp(208))
             if (controlLimit != nextLimit) { controlLimit = nextLimit; controlsScroll.requestLayout() }
-            val chrome = if (panel.measuredHeight > scroll.measuredHeight) panel.measuredHeight - scroll.measuredHeight else dp(110)
+            val measureWidth = android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY)
+            panel.measure(measureWidth, android.view.View.MeasureSpec.UNSPECIFIED)
+            val chrome = panel.measuredHeight - scroll.measuredHeight
             val natural = content.measuredHeight.takeIf { it > 0 } ?: dp(112)
-            val desiredScroll = minOf(dp(400), (metrics.heightPixels * .55f).toInt(), natural.coerceAtLeast(dp(72)),
-                (availableHeight - chrome - dp(4)).coerceAtLeast(dp(44)))
+            val available = (usable - frame.top.coerceAtLeast(0) - dp(8)).coerceAtLeast(1)
+            val targetHeight = when (heightMode) {
+                "small" -> (available * .42f).toInt()
+                "large" -> (available * .86f).toInt()
+                else -> minOf(availableHeight, (available * .76f).toInt(), chrome + natural.coerceAtLeast(dp(72)))
+            }
+            val desiredScroll = (targetHeight - chrome).coerceIn(minOf(dp(44), (available - chrome).coerceAtLeast(1)), (available - chrome).coerceAtLeast(1))
             val scrollParams = scroll.layoutParams as LinearLayout.LayoutParams
             if (scrollParams.height != desiredScroll) { scrollParams.height = desiredScroll; scroll.layoutParams = scrollParams }
             panel.measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
                 android.view.View.MeasureSpec.makeMeasureSpec(metrics.heightPixels, android.view.View.MeasureSpec.AT_MOST))
             val actualHeight = panel.measuredHeight.coerceIn(1, metrics.heightPixels)
-            val point = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(metrics.widthPixels, usable.coerceAtLeast(actualHeight),
+            val point = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(screenWidth, usable.coerceAtLeast(actualHeight),
                 currentPet[0], currentPet[1], currentPet[2], currentPet[3], width, actualHeight, dp(2), gap)
             val placedAbove = point.y + actualHeight <= currentPet[1]
             val right = currentPet[0] + currentPet[2] / 2 >= metrics.widthPixels / 2
@@ -942,7 +1022,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
             val moved = params.x != point.x || params.y != point.y
             params.x = point.x; params.y = point.y
-            if (root === panel && moved) runCatching { wm.updateViewLayout(panel, params) }
+            if (root === panel && (moved || resized)) runCatching { wm.updateViewLayout(panel, params) }
             Unit
         }
         panel.setOnApplyWindowInsetsListener { view, insets ->

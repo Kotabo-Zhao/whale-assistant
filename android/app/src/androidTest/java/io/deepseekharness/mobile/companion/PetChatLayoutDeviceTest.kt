@@ -50,6 +50,42 @@ class PetChatLayoutDeviceTest {
                 }
                 try {
                     inst.waitForIdleSync()
+                    fun chooseSize(width: String, height: String): Pair<Int, Int> {
+                        inst.runOnMainSync {
+                            val nodes = all(panel).filterIsInstance<TextView>()
+                            val menu = nodes.single { it.contentDescription == "会话选项" }
+                            menu.performClick()
+                            nodes.single { it.contentDescription == "宽度$width" }.performClick()
+                            nodes.single { it.contentDescription == "高度$height" }.performClick()
+                            menu.performClick()
+                        }
+                        inst.waitForIdleSync()
+                        var size = 0 to 0
+                        inst.runOnMainSync { size = panel.width to panel.height }
+                        return size
+                    }
+                    val small = chooseSize("窄", "低")
+                    val wide = chooseSize("宽", "低")
+                    assertTrue("宽度设置未生效 $small $wide", wide.first > small.first)
+                    val tall = chooseSize("宽", "高")
+                    assertEquals(wide.first, tall.first)
+                    assertTrue("高度设置未生效 $wide $tall", tall.second > wide.second)
+                    assertEquals("large", CompanionStore(ctx).chatWidthMode)
+                    assertEquals("large", CompanionStore(ctx).chatHeightMode)
+                    val auto = chooseSize("自动", "自动")
+                    assertTrue(auto.first in (small.first + 1) until wide.first)
+                    inst.runOnMainSync {
+                        val message = all(panel).filterIsInstance<TextView>().single { it.text.toString() == "今天想一起做点什么？" }
+                        message.text = List(36) { "测试一行会换行的对话内容。" }.joinToString("\n")
+                    }
+                    inst.waitForIdleSync()
+                    inst.runOnMainSync {
+                        assertTrue("自动高度没有随长消息增长", panel.height > auto.second)
+                        val message = all(panel).filterIsInstance<TextView>().single { it.text.startsWith("测试一行") }
+                        message.text = "今天想一起做点什么？"
+                    }
+                    inst.waitForIdleSync()
+                    inst.runOnMainSync { assertEquals("短消息应恢复紧凑高度", auto.second, panel.height) }
                     val countsEnd = android.os.SystemClock.elapsedRealtime()+5000
                     var readable = false
                     while (!readable && android.os.SystemClock.elapsedRealtime()<countsEnd) {

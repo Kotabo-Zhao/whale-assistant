@@ -13,6 +13,13 @@ class CompanionStore(context: Context) {
         get() = prefs.getString("bubble_permission_preset", "default")?.takeIf { it in setOf("default", "read-only", "workspace-write", "danger-full-access") } ?: "default"
         set(value) { require(value in setOf("default", "read-only", "workspace-write", "danger-full-access")); prefs.edit().putString("bubble_permission_preset", value).apply() }
 
+    var chatWidthMode: String
+        get() = prefs.getString("chat_width_mode", null) ?: "auto"
+        set(value) { prefs.edit().putString("chat_width_mode", value).apply() }
+    var chatHeightMode: String
+        get() = prefs.getString("chat_height_mode", null) ?: "auto"
+        set(value) { prefs.edit().putString("chat_height_mode", value).apply() }
+
     var bubbleMemoryAccess: Boolean
         get() = prefs.getBoolean("bubble_memory_access", false)
         set(value) { prefs.edit().putBoolean("bubble_memory_access", value).apply() }
