@@ -222,11 +222,12 @@ internal class CompanionBubbleChat(
         sessionScope = CompanionBubbleChatPolicy.memoryDigest("pet-direct")
     }
 
-    fun preserveDirectInput(previous: List<Message>, text: String) {
-        if (handoffSessionId() != null || pending != null) return
+    fun preserveDirectInput(previous: List<Message>, text: String, queueId: String? = null) {
+        if (pending != null) return
         val user = CompanionBubbleChatPolicy.validateMessage(text)
-        directSession()
-        val request = JSONObject().put("kind","direct").put("requestId",java.util.UUID.randomUUID().toString())
+        if (handoffSessionId() == null) directSession()
+        else if (sessionScope == null) sessionScope = CompanionBubbleChatPolicy.memoryDigest("handoff")
+        val request = JSONObject().put("kind","direct").put("requestId",queueId ?: java.util.UUID.randomUUID().toString())
             .put("user",user).put("prompt",user)
         historyStore.save(requireNotNull(snapshot(previous.takeLast(18))).copy(pending=request.toString()), requireWritable=true)
         pending = request

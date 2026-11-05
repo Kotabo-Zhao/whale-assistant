@@ -7,10 +7,10 @@ import org.json.JSONObject
 import java.io.File
 
 /** A bounded private copy of recent messages for restoring the pet after service restart. */
-internal class CompanionBubbleHistory(context: Context) {
+internal class CompanionBubbleHistory(context: Context, private val writer: TaskStateWriter = TaskStateWriter()) {
     data class Snapshot(val sessionId: String, val scope: String, val messages: List<CompanionBubbleChat.Message>, val pending: String? = null, val continuedMain: Boolean = false)
     private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "companion-bubble-history-v1.json"))
-    val followups = PetFollowupJournal(File(file.baseFile.parentFile, "pet-followups-v1.json"))
+    val followups = PetFollowupJournal(File(file.baseFile.parentFile, "pet-followups-v1.json"), writer)
     private var writable: Boolean? = null
 
     fun load(): Snapshot? = synchronized(lock) {
@@ -24,9 +24,7 @@ internal class CompanionBubbleHistory(context: Context) {
         if (writable == null) load()
         if (writable != true) { check(!requireWritable) { "对话记录不可写，未交办新任务。" }; return@synchronized }
         val bytes = encode(snapshot)
-        var output: java.io.FileOutputStream? = null
-        try { output = file.startWrite(); output.write(bytes); file.finishWrite(output) }
-        catch (e: Exception) { if (output != null) file.failWrite(output); throw e }
+        writer.replace(file.baseFile, bytes)
     }
     fun exportArchive(): ByteArray? = load()?.copy(pending = null)?.let(::encode)
     /** Never overwrites a current local conversation during restore. */

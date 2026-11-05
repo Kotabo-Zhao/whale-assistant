@@ -8,7 +8,7 @@ import java.io.File
 import java.util.UUID
 
 /** Native view and user commands; the guest scheduler remains the authoritative executor. */
-internal class WorkerDashboardStore(private val context: Context) {
+internal class WorkerDashboardStore(private val context: Context, private val commandWriter: TaskStateWriter = TaskStateWriter()) {
     private val notifications = WorkerReportInbox(context)
     private val dir = File(context.noBackupFilesDir, "worker-dashboard").apply { mkdirs() }
     private val guestDir = File(context.noBackupFilesDir.canonicalFile, "dsh-runtime/current/root/.dsh/mobile-workers")
@@ -334,7 +334,10 @@ internal class WorkerDashboardStore(private val context: Context) {
     fun pending(): JSONArray = synchronized(commandLock) {
         val file = AtomicFile(File(dir, "commands.json"))
         try { JSONArray(file.openRead().bufferedReader().use { it.readText() }) }
-        catch (_: java.io.FileNotFoundException) { JSONArray() }
+        catch (error: java.io.FileNotFoundException) {
+            if (file.baseFile.exists() || File(file.baseFile.path + ".bak").exists()) throw error
+            JSONArray()
+        }
     }
     fun batch(skip: Int, sourceSessionSupported: Boolean = false, sourceCreationSupported: Boolean = false): JSONArray = synchronized(lock) { synchronized(commandLock) {
         require(skip >= 0)
@@ -460,9 +463,7 @@ internal class WorkerDashboardStore(private val context: Context) {
         result
     }
     private fun write(path: File, text: String) {
-        val file = AtomicFile(path); val output = file.startWrite()
-        try { output.write(text.toByteArray(Charsets.UTF_8)); file.finishWrite(output) }
-        catch (error: Exception) { file.failWrite(output); throw error }
+        commandWriter.replace(path, text.toByteArray(Charsets.UTF_8))
     }
     companion object {
         private val lock = Any()

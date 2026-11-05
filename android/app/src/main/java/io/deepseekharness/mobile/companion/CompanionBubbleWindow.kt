@@ -19,6 +19,14 @@ import androidx.core.widget.doAfterTextChanged
 /** Native floating chat; recent completed messages are restored across service restarts. */
 internal class CompanionBubbleWindow(private val context: Context, private val wm: WindowManager, private val onState: (String) -> Unit = {}, private val openSession: (String) -> Unit = {}, private val onWorkerCounts: (Int, Int, Int) -> Unit = { _, _, _ -> }, private val autoOpenOnDelivery: Boolean = true, private val onBackgroundReport: ((String) -> Unit)? = null, private val historyStore: CompanionBubbleHistory = CompanionBubbleHistory(context),
     private val replyRunner: (CompanionBubbleChat, List<CompanionBubbleChat.Message>, String, Boolean, Boolean, (String) -> Unit) -> CompanionBubbleChat.Reply = { chat, history, scope, memory, knowledge, partial -> chat.fusedReply(history, scope, memory, knowledge, partial) },
+    private val classifyWaiting: (List<CompanionBubbleChat.Message>) -> PetIntentRouter.Decision? = { messages ->
+        val runtime = io.deepseekharness.mobile.runtime.RuntimeStore(context)
+        runtime.readModelCredential("deepseek")?.takeIf { it.isNotBlank() }?.let { key ->
+            val model = runtime.settings().defaultModels[io.deepseekharness.mobile.runtime.ModelProvider.DEEPSEEK] ?: "deepseek-flash"
+            PetIntentRouter.classify(key, model, messages, whileWaiting = true)
+        }
+    },
+    private val receiveTask: ((String, String, String, String, String) -> org.json.JSONObject)? = null,
     private val petBounds: () -> IntArray) {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -39,11 +47,20 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var request = 0L
     private var busy = false
     private var activeReply: PetReplyOperation? = null
-    private class Followup(val text: String, val id: String, var deciding: Boolean = false, var receipt: String? = null)
+    private class Followup(val text: String, val id: String, var deciding: Boolean = false, var receipt: String? = null) {
+        val classification = PetReplyOperation(30_000)
+        var handingOff = false
+        var parked = false
+    }
+    private val intakeLock = Any()
     private val journal = historyStore.followups
     private val recovery = runCatching { journal.entries() }
-    private val recovered = recovery.getOrDefault(emptyList()).toMutableList()
-    private var failedFollowup: Followup? = null
+    private val restoredRequestId = restored?.pending?.let { org.json.JSONObject(it).optString("requestId") }
+    private val recovered = recovery.getOrDefault(emptyList()).filterNot { it.id == restoredRequestId && it.stage in setOf("queued", "reply") }.toMutableList()
+    private var failedFollowup: Followup? = recovery.getOrNull()?.firstOrNull {
+        it.id == restoredRequestId && it.stage in setOf("queued", "reply")
+    }?.let { Followup(it.text, it.id) }
+    private val recoveringDispatch = mutableSetOf<String>()
     private val followups = ArrayDeque<Followup>()
     private val intake = java.util.concurrent.ThreadPoolExecutor(0, 1, 30, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue())
     private var sendNext: (() -> Unit)? = null
@@ -81,7 +98,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     val visible: Boolean get() = root != null
 
     fun toggle() { if (visible) hide() else show() }
-    private fun dispatchTask(task: String, mode: String, id: String, title: String, needs: String): org.json.JSONObject = workerPanel.submit(task, mode, id, title, needs)
+    private fun dispatchTask(task: String, mode: String, id: String, title: String, needs: String): org.json.JSONObject =
+        receiveTask?.invoke(task, mode, id, title, needs) ?: workerPanel.submit(task, mode, id, title, needs)
     fun composeTask() { if (!closed) workerPanel.compose() }
     fun openTaskInbox() { if (!closed) workerPanel.open() }
     fun refreshWorkerStatus() { workerPanel.refreshStatus() }
@@ -94,10 +112,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             var receipt: String? = null
             runCatching {
                 if (closed) return@runCatching
-                val runtime = io.deepseekharness.mobile.runtime.RuntimeStore(context)
-                val key = runtime.readModelCredential("deepseek")?.takeIf { it.isNotBlank() } ?: return@runCatching
-                val model = runtime.settings().defaultModels[io.deepseekharness.mobile.runtime.ModelProvider.DEEPSEEK] ?: "deepseek-flash"
-                val decision = PetIntentRouter.classify(key, model, messages, whileWaiting = true)
+                val decision = item.classification.run { classifyWaiting(messages) } ?: return@runCatching
 
                 val mode = when (decision.intent) {
                     PetIntentRouter.Intent.BACKGROUND_READ -> "read"
@@ -106,24 +121,27 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
                 if (closed || !decision.independent || sourceSession != chat.handoffSessionId()) return@runCatching
                 sourceSession?.let { BubbleSessionRegistry(context).record(it) }
-                val prefs = CompanionStore(context)
-                val denial = chat.deniedBackground(mode, decision.needs,
-                    prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled, prefs.knowledgeModelAccess)
                 val title = decision.title(item.text)
                 val id = item.id
-                journal.advance(id,"handoff")
-                receipt = "「$title」的接取状态尚未确认，请在后台任务中核对。"
-                if (denial != null) {
-                    receipt = WorkerDashboardStore(context).hold(id,item.text,mode,decision.needs,title,denial,sourceSession)
-                    return@runCatching
+                synchronized(intakeLock) {
+                    if (item.parked) return@runCatching
+                    item.handingOff = true
                 }
-                // An uncertain acknowledgement must not send the same instruction to a second router.
-                val accepted = if (sourceSession == null) dispatchTask(item.text, mode, id, title, decision.needs)
-                    else WorkerRuntimeWake.submit(context,item.text,mode,commandId=id,title=title,needs=decision.needs,sourceSession=sourceSession)
-                if (accepted.getString("commandId") == id)
-                    receipt = "「$title」已交给后台处理，进度可在后台任务中查看。"
+                val plan = org.json.JSONObject().put("mode",mode).put("needs",decision.needs).put("title",title)
+                sourceSession?.let { plan.put("sourceSession",it) }
+                journal.advance(id,"dispatch",plan = plan)
+                try { receipt = deliverPlan(id, item.text, plan) }
+                catch (error: Exception) {
+                    handler.post {
+                        if (!closed) {
+                            followups.remove(item)
+                            recovered.add(PetFollowupJournal.Entry(id,item.text,"dispatch","","",plan))
+                            if (visible) { hide(); show() }
+                        }
+                    }
+                    throw error
+                }
             }.onFailure { android.util.Log.d("whale-intake", "intake unavailable: ${it.javaClass.simpleName}") }
-            if (receipt != null) runCatching { journal.advance(item.id,"handoff",receipt.orEmpty()) }
             handler.post {
                 if (!closed) {
                     item.receipt = receipt
@@ -133,6 +151,24 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
         }
+    }
+
+    private fun deliverPlan(id: String, text: String, plan: org.json.JSONObject): String {
+        val mode = plan.getString("mode"); val needs = plan.getString("needs"); val title = plan.getString("title")
+        val source = plan.optString("sourceSession").takeIf(String::isNotBlank)
+        val prefs = CompanionStore(context)
+        val denial = chat.deniedBackground(mode, needs, prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled, prefs.knowledgeModelAccess)
+        val dashboard = WorkerDashboardStore(context)
+        val receipt = if (denial != null) dashboard.hold(id,text,mode,needs,title,denial,source)
+        else if (dashboard.isHeld(id)) "「$title」正在等待授权确认，可在后台任务中继续。"
+        else {
+            val accepted = if (source == null) dispatchTask(text,mode,id,title,needs)
+                else WorkerRuntimeWake.submit(context,text,mode,commandId=id,title=title,needs=needs,sourceSession=source)
+            check(accepted.getString("commandId") == id)
+            "「$title」已交给后台处理，进度可在后台任务中查看。"
+        }
+        journal.advance(id,"handoff",receipt)
+        return receipt
     }
     /**
      * Start the pet UI on a main-workspace session selected by the user.  Its local bubble
@@ -491,10 +527,16 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             isEnabled = !busy && (history.isNotEmpty() || lastError != null)
             setOnClickListener {
                 if (busy || (history.isEmpty() && lastError == null)) return@setOnClickListener
-                if (followups.any { it.deciding }) {
-                    android.widget.Toast.makeText(context, "仍在判断后续消息，请等待判断结束后开启新话题。", android.widget.Toast.LENGTH_SHORT).show()
+                val canPark = synchronized(intakeLock) {
+                    if (followups.any { it.deciding && it.handingOff } || recoveringDispatch.isNotEmpty()) false
+                    else { followups.forEach { it.parked = true }; true }
+                }
+                if (!canPark) {
+                    android.widget.Toast.makeText(context, "正在保存交办回执，请稍后再试。", android.widget.Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
+                followups.filter { it.deciding }.forEach { it.classification.cancel() }
+                val unsentDraft = draft.takeUnless { it == chat.pendingUser || it == failedUser }.orEmpty()
                 busy = true; send.isEnabled = false; input.isEnabled = false; isEnabled = false; continueButton.isEnabled = false
                 val generation = ++request
                 executor.execute {
@@ -508,7 +550,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         if (closed || request != generation) return@post
                         busy = false
                         result.onSuccess { retained ->
-                            history.clear(); draft = ""; lastError = null; failedUser = null; failedFollowup = null
+                            history.clear(); draft = unsentDraft; lastError = null; failedUser = null; failedFollowup = null
                             followups.clear(); recovered.clear(); recovered.addAll(retained)
                             pendingQuestion = null; mainQuestion = null
                         }
@@ -560,6 +602,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         recoveryChip.setOnClickListener {
             val entry = recovered.firstOrNull() ?: return@setOnClickListener
             val note = when (entry.stage) {
+                "dispatch" -> "上次交办回执尚未保存，可以使用原任务编号恢复交办。"
                 "queued" -> "这条消息尚未接取，可继续放回对话。"
                 "handoff" -> entry.receipt.ifBlank { "已开始交办，请到后台任务核对接取状态。" }
                 else -> "已开始回复，可在对话记录中核对。"
@@ -576,7 +619,23 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         handler.post { if (root === panel) recoveryChip.performClick() }
                     }
                 }
-            if (entry.stage == "queued") {
+            if (entry.stage == "dispatch" && entry.plan != null) {
+                builder.setPositiveButton("恢复交办") { _,_ ->
+                    if (!recoveringDispatch.add(entry.id)) return@setPositiveButton
+                    intake.execute {
+                        val result = runCatching { deliverPlan(entry.id,entry.text,entry.plan) }
+                        handler.post {
+                            recoveringDispatch.remove(entry.id)
+                            if (!closed) {
+                                result.onSuccess { receipt ->
+                                    recovered.remove(entry); recovered.add(entry.copy(stage="handoff",receipt=receipt))
+                                }.onFailure { android.widget.Toast.makeText(context,"交办尚未确认，原任务仍可恢复。",android.widget.Toast.LENGTH_SHORT).show() }
+                                if (visible) { hide(); show() }
+                            }
+                        }
+                    }
+                }
+            } else if (entry.stage == "queued") {
                 builder.setPositiveButton("继续这条消息") { _,_ ->
                     recovered.remove(entry); recoveryLabel()
                     followups.addLast(Followup(entry.text,entry.id))
@@ -657,9 +716,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (busy || (newInput && (pendingTurn != null || followups.isNotEmpty()))) {
                 if (busy && inFlightUser == null) return@setOnClickListener
                 val next = runCatching { CompanionBubbleChatPolicy.validateMessage(input.text.toString()) }.getOrNull() ?: return@setOnClickListener
-                if (followups.size >= 12) { android.widget.Toast.makeText(context, "已有 12 条消息等待发送", android.widget.Toast.LENGTH_SHORT).show(); return@setOnClickListener }
                 val id = runCatching { journal.accept(next,followups.lastOrNull()?.text ?: pendingTurn.orEmpty()) }.getOrElse {
-                    android.widget.Toast.makeText(context,it.message?.takeIf { note -> note.startsWith("有 12 条") } ?: "无法保存待处理消息，输入已保留",android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(context,it.message?.takeIf { note -> note.startsWith("待处理消息已满") } ?: "无法保存待处理消息，输入已保留",android.widget.Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
                 val item = Followup(next,id)
@@ -683,16 +741,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 status.text = "上一条消息需要恢复，点此重试。"; status.visibility = android.view.View.VISIBLE
                 return@setOnClickListener
             }
-            if (item != null && item.receipt == null && runCatching { journal.advance(item.id,"reply") }.isFailure) {
-                followups.addFirst(item)
-                renderFollowups?.invoke()
-                status.text = "待处理消息无法写入，请重新打开桌宠后继续。"
-                status.visibility = android.view.View.VISIBLE
-                return@setOnClickListener
-            }
-            if (item?.receipt == null && runCatching { chat.preserveDirectInput(history,message) }.isFailure) {
-                if (fromQueue && item != null) { followups.addFirst(item); renderFollowups?.invoke() }
-                status.text = "无法保存这条消息，输入已保留。"
+            if (item?.receipt == null && runCatching {
+                chat.preserveDirectInput(history,message,item?.id)
+                if (item != null) journal.advance(item.id,"reply")
+            }.isFailure) {
+                failedFollowup = item; failedUser = message
+                lastError = "对话记录写入失败，请检查存储空间。输入已保留，点此重试。"
+                status.text = lastError
                 status.visibility = android.view.View.VISIBLE
                 return@setOnClickListener
             }
