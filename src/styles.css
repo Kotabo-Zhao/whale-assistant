@@ -213,9 +213,9 @@
 }
 
 /* 强调色主题：只覆盖语义色令牌，背景与文本对比度仍由明暗主题统一管理。 */
-:root[data-style='simple'] { --radius-control: 6px; --radius-card: 8px; --shadow-card: none; }
-:root[data-style='cute'] { --radius-control: 16px; --radius-card: 22px; --bg: #f6f2fa; --surface-muted: #f0eaf7; }
-:root[data-style='cute'][data-theme='dark'] { --bg: #191724; --surface-muted: #302b3d; }
+:root[data-style='simple'] { --radius-control: 6px; --radius-inner: 8px; --radius-card: 10px; --shadow-card: none; }
+:root[data-style='cute'] { --radius-control: 12px; --radius-inner: 16px; --radius-card: 24px; --bg: #f6f2fa; --surface: #fffcff; --surface-muted: #f0eaf7; --surface-hover: #f8f3fc; --line: #e2dcea; --line-alt: #e2dcea; }
+:root[data-style='cute'][data-theme='dark'] { --bg: #191724; --surface: #242131; --surface-muted: #302b3d; --surface-hover: #342f43; --line: #494157; --line-alt: #494157; }
 .appearance-options button[aria-pressed] { min-height: 44px; min-width: 6em; background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius-control); }
 .appearance-options button[aria-pressed='true'] { color: var(--accent); border-color: currentColor; font-weight: var(--weight-bold); }
 :root[data-style='cute'] .worker-card { border-radius: var(--radius-card); }
@@ -436,7 +436,7 @@ button:disabled {
   min-height: 44px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: var(--radius-inner);
   color: var(--muted);
   background: transparent;
   cursor: pointer;
@@ -529,7 +529,7 @@ button:disabled {
   width: 32px;
   height: 32px;
   margin-right: 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--on-solid);
   background: linear-gradient(145deg, var(--brand-bg), color-mix(in srgb, var(--blue) 45%, var(--brand-bg)));
   box-shadow: 0 5px 14px color-mix(in srgb, var(--blue) 18%, transparent);
@@ -543,7 +543,7 @@ button:disabled {
 .brand-badge {
   margin-left: 7px;
   padding: 3px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: var(--on-solid);
   background: var(--brand-bg);
   font-size: 0.5625rem;
@@ -1890,7 +1890,7 @@ button:disabled {
 .connectivity-result {
   font-size: 0.8125rem;
   padding: 5px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   margin-top: 8px;
   display: inline-flex;
   align-items: center;
@@ -1913,11 +1913,11 @@ button:disabled {
 
 /* 状态卡片同时作为供应商切换入口，沿用卡片文字与主题强调色。 */
 .provider-status { display: grid; gap: 6px; margin: 4px 0 14px; }
-.provider-account-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 10px 0 14px; padding: 12px; border: 1px solid var(--line-alt); border-radius: 10px; background: color-mix(in srgb, var(--blue-soft) 55%, transparent); }
+.provider-account-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 10px 0 14px; padding: 12px; border: 1px solid var(--line-alt); border-radius: var(--radius-control); background: color-mix(in srgb, var(--blue-soft) 55%, transparent); }
 .provider-account-card > div { display: grid; gap: 4px; min-width: 0; }
 .provider-account-card span { color: var(--card-muted, var(--muted)); font-size: 0.82rem; }
 @media (max-width: 560px) { .provider-account-card { align-items: stretch; flex-direction: column; } .provider-account-card .button { align-self: flex-start; } }
-.provider-status-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line-alt); border-radius: 8px; background: transparent; color: inherit; text-align: left; }
+.provider-status-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line-alt); border-radius: var(--radius-control); background: transparent; color: inherit; text-align: left; }
 .provider-status-row:hover { border-color: var(--blue); }
 .provider-status-row.is-selected { border-color: var(--blue); background: var(--blue-soft); }
 .provider-status-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1929,7 +1929,7 @@ button:disabled {
 .provider-status-current { flex: 0 0 auto; color: var(--blue); font-size: 0.75rem; }
 
 .device-capability-list { display: grid; gap: 8px; }
-.device-capability-row { margin: 0; padding: 10px 12px; border: 1px solid var(--line-alt); border-radius: 10px; font-size: 0.875rem; line-height: 1.6; }
+.device-capability-row { margin: 0; padding: 10px 12px; border: 1px solid var(--line-alt); border-radius: var(--radius-control); font-size: 0.875rem; line-height: 1.6; }
 .device-capability-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
 .device-capability-actions p { margin: 0; color: var(--red-text); }
 .device-capability-row > strong { margin-right: 4px; }
@@ -2516,7 +2516,7 @@ button:disabled {
     min-height: 54px;
     padding: 5px 2px;
     border: 1px solid transparent;
-    border-radius: 12px;
+    border-radius: var(--radius-inner);
     background: transparent;
     color: var(--muted);
     font-size: 0.6875rem;
@@ -3055,7 +3055,7 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
 .mailbox-breadcrumb button {
   min-height: 26px;
   padding: 3px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   color: var(--ink);
   font-size: inherit;
 }
@@ -3082,7 +3082,7 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
   width: 100%;
   min-height: 36px;
   padding: 7px 8px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   text-align: left;
 }
 
@@ -3730,19 +3730,19 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
 .credential-save-status.error { color: var(--red); }
 
 /* 首页：欢迎区与对话入口形成清晰的主次层级。 */
-.home-welcome { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 25px 24px; margin-bottom: 24px; border-radius: 22px; color: var(--assistant-brand-1); background: radial-gradient(circle at 90% 0%, var(--assistant-brand-2) 0, transparent 40%), linear-gradient(125deg, var(--assistant-brand-3), var(--assistant-brand-4) 68%, var(--assistant-brand-5)); box-shadow: 0 14px 30px var(--assistant-brand-6); }
+.home-welcome { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 25px 24px; margin-bottom: 24px; border-radius: var(--radius-card); color: var(--assistant-brand-1); background: radial-gradient(circle at 90% 0%, var(--assistant-brand-2) 0, transparent 40%), linear-gradient(125deg, var(--assistant-brand-3), var(--assistant-brand-4) 68%, var(--assistant-brand-5)); box-shadow: 0 14px 30px var(--assistant-brand-6); }
 .home-welcome::after { content: ''; position: absolute; width: 180px; height: 180px; right: -65px; bottom: -120px; border: 1px solid var(--assistant-brand-7); border-radius: 50%; }
 .home-welcome-copy { position: relative; z-index: 1; min-width: 0; }
 .home-kicker { margin: 0 0 10px; color: var(--assistant-brand-8); font-size: 10px; font-weight: 700; letter-spacing: .13em; }
 .home-welcome h2 { margin: 0; font-size: clamp(1.25rem, 4.8vw, 1.7rem); line-height: 1.3; letter-spacing: -.02em; }
 .home-welcome-copy > p:last-child { margin: 9px 0 0; color: var(--assistant-brand-9); font-size: .8125rem; line-height: 1.6; }
-.home-welcome-mark { flex: none; display: grid; place-items: center; width: 76px; height: 76px; border: 1px solid var(--assistant-brand-10); border-radius: 24px; background: var(--assistant-brand-11); box-shadow: 0 10px 25px var(--assistant-brand-12); transform: rotate(7deg); }
+.home-welcome-mark { flex: none; display: grid; place-items: center; width: 76px; height: 76px; border: 1px solid var(--assistant-brand-10); border-radius: var(--radius-card); background: var(--assistant-brand-11); box-shadow: 0 10px 25px var(--assistant-brand-12); transform: rotate(7deg); }
 .home-welcome-mark img { width: 52px; height: 52px; object-fit: contain; transform: rotate(-7deg); }
 .home-section-heading { margin-bottom: 14px; }
-.conversation-gate .launch-panel { border-radius: 20px; padding: 22px; box-shadow: 0 12px 30px var(--shadow-color); }
-.conversation-gate .launch-icon { border-radius: 16px; background: linear-gradient(135deg, var(--assistant-brand-13), var(--assistant-brand-14)); }
+.conversation-gate .launch-panel { border-radius: var(--radius-card); padding: 22px; box-shadow: 0 12px 30px var(--shadow-color); }
+.conversation-gate .launch-icon { border-radius: var(--radius-inner); background: linear-gradient(135deg, var(--assistant-brand-13), var(--assistant-brand-14)); }
 .conversation-gate .launch-actions .button-primary { min-height: 48px; padding-inline: 24px; }
-@media (max-width: 360px) { .home-welcome { padding: 20px; } .home-welcome-mark { width: 58px; height: 58px; border-radius: 18px; } .home-welcome-mark img { width: 40px; height: 40px; } }
+@media (max-width: 360px) { .home-welcome { padding: 20px; } .home-welcome-mark { width: 58px; height: 58px; border-radius: var(--radius-inner); } .home-welcome-mark img { width: 40px; height: 40px; } }
 
 /* 手机优先保留信息宽度；长标题和状态允许换行。 */
 @media (max-width: 620px) {
@@ -3755,7 +3755,13 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
 }
 
 /* Shared hierarchy for both appearance styles; no expensive visual effects. */
-.capability-technical { margin: 12px 0; padding: 0 12px; border: 1px solid var(--line-alt); border-radius: 12px; }
+.capability-technical { margin: 12px 0; padding: 0 12px; border: 1px solid var(--line-alt); border-radius: var(--radius-inner); }
 .capability-technical > summary { min-height: 44px; padding: 11px 0; cursor: pointer; color: var(--muted); font-size: .875rem; line-height: 1.5; overflow-wrap: anywhere; }
 .capability-technical[open] > summary { border-bottom: 1px solid var(--line-alt); }
 .capability-technical .settings-note { overflow-wrap: anywhere; }
+
+/* Both appearance styles share density, keyboard focus and touch targets. */
+:where(.workspace-card, .worker-card, .assistant-overview, .assistant-tasks, .authored-tools, .settings-subsection) { box-shadow: var(--shadow-card); }
+:where(.workspace-card-actions, .task-actions, .library-command-row) button { min-height:44px; }
+:where(.desk-heading, .workspace-heading) > div { min-width:0; }
+:where(.desk-heading, .workspace-heading) :is(h1,h2,p) { overflow-wrap:anywhere; }

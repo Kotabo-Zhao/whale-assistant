@@ -1,6 +1,6 @@
 .plugin-screen { max-width: 920px; margin: 0 auto; }
 .plugin-market { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding: 20px; border-radius: var(--radius-card); border: 1px solid color-mix(in srgb, var(--blue) 25%, var(--line)); background: linear-gradient(135deg, var(--blue-soft), var(--surface)); color: var(--card-ink, var(--ink)); box-shadow: var(--shadow-card); }
-.plugin-market-icon { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 48px; border-radius: 16px; color: var(--blue); background: var(--surface); }
+.plugin-market-icon { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 48px; border-radius: var(--radius-inner); color: var(--blue); background: var(--surface); }
 .plugin-market-copy { flex: 1; min-width: 0; }
 .plugin-market-copy h2 { margin: 3px 0 5px; font-size: 1.05rem; }
 .plugin-market-copy p, .plugin-market-copy small { margin: 0; color: var(--card-muted, var(--muted)); line-height: 1.5; }
@@ -66,10 +66,10 @@
 .mobile-market > p { color: var(--muted); line-height: 1.55; }
 .mobile-market > .plugin-hint { padding: 0; margin: 8px 0 14px; }
 .mobile-market-search { display: grid; gap: 8px; margin-top: 20px; font-size: .875rem; font-weight: 650; }
-.mobile-market-search input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 46px; padding: 10px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 400; }
+.mobile-market-search input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 46px; padding: 10px 13px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface); color: var(--ink); font: inherit; font-weight: 400; }
 .mobile-market-search input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .mobile-market-list { display: grid; gap: 10px; list-style: none; padding: 0; margin: 12px 0 0; }
-.mobile-market-list li { display: flex; gap: 12px; justify-content: space-between; align-items: start; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.mobile-market-list li { display: flex; gap: 12px; justify-content: space-between; align-items: start; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface); }
 .mobile-market-list li > div { min-width: 0; }
 .mobile-market-list code { display: block; overflow-wrap: anywhere; color: var(--muted); margin-top: 4px; }
 .mobile-market-list p { margin: 6px 0 0; color: var(--muted); overflow-wrap: anywhere; font-size: .85rem; }
@@ -87,7 +87,7 @@
 
 /* 插件卡片分层状态与错误高亮 */
 .plugin-dual-status { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.plugin-status-badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 0.6875rem; font-weight: 500; line-height: 1.4; }
+.plugin-status-badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: var(--radius-control); font-size: 0.6875rem; font-weight: 500; line-height: 1.4; }
 .status-active { background: var(--green-soft); color: var(--green); }
 .status-unlinked { background: color-mix(in srgb, var(--card-color, var(--surface-muted)) var(--card-opacity, 80%), transparent); color: var(--card-muted, var(--muted)); border: 1px solid var(--line); }
 .status-preserved { background: var(--blue-soft); color: var(--blue); }
@@ -126,11 +126,11 @@
 
 .mobile-market-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .mobile-market-filters label { display: grid; gap: 6px; min-width: 0; color: var(--muted); font-size: .8rem; font-weight: 600; }
-.mobile-market-filters select { width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; }
+.mobile-market-filters select { width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface); color: var(--ink); font: inherit; }
 .mobile-market-list a { flex-shrink: 0; min-height: 44px; }
 
 .plugin-workspace-nav { display: flex; gap: 8px; margin: 14px 0; }
-.plugin-workspace-nav button { flex: 1; min-height: 44px; border: 1px solid var(--blue-line); border-radius: 12px; background: var(--blue-soft); color: var(--blue); font: inherit; font-weight: 600; cursor: pointer; }
+.plugin-workspace-nav button { flex: 1; min-height: 44px; border: 1px solid var(--blue-line); border-radius: var(--radius-inner); background: var(--blue-soft); color: var(--blue); font: inherit; font-weight: 600; cursor: pointer; }
 
 .plugin-screen [hidden] { display: none !important; }
 .plugin-workspace-nav button[aria-selected="false"] { background: var(--surface-muted); color: var(--muted); border-color: var(--line); }

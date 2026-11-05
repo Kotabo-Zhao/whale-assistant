@@ -14,4 +14,14 @@
     <color name="pet_honey">#FFF0D4</color>
     <color name="pet_pink">#D9759B</color>
     <color name="pet_gold">#C48425</color>
+    <color name="pet_simple_surface">#FFFFFF</color>
+    <color name="pet_simple_canvas">#F3F5F8</color>
+    <color name="pet_simple_ink">#17202B</color>
+    <color name="pet_simple_muted">#667181</color>
+    <color name="pet_simple_accent">#315FCF</color>
+    <color name="pet_simple_soft">#E8EFFF</color>
+    <color name="pet_simple_primary">#315FCF</color>
+    <color name="pet_simple_on_primary">#FFFFFF</color>
+    <color name="pet_simple_line">#DCE2E9</color>
+    <color name="pet_simple_answer">#FFFFFF</color>
 </resources>

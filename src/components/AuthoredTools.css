@@ -1,10 +1,10 @@
-.authored-tools { margin: 14px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); color: var(--ink); }
+.authored-tools { margin: 14px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface); color: var(--ink); }
 .authored-tools-heading, .authored-tools-heading h3, .authored-tools-heading button { display: flex; align-items: center; gap: 8px; }
 .authored-tools-heading { justify-content: space-between; }
 .authored-tools-heading h3 { margin: 0; font-size: .96rem; }
 .authored-tools button { font: inherit; color: var(--blue); cursor: pointer; }
 .authored-tools-heading button, .authored-tool-create { background: transparent; border: 0; min-height: 40px; }
 .authored-tool-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-.authored-tool-links button { padding: 8px 12px; max-width: 100%; overflow-wrap: anywhere; min-height: 44px; background: var(--blue-soft); border: 1px solid var(--blue-line, var(--line)); border-radius: 12px; }
+.authored-tool-links button { padding: 8px 12px; max-width: 100%; overflow-wrap: anywhere; min-height: 44px; background: var(--blue-soft); border: 1px solid var(--blue-line, var(--line)); border-radius: var(--radius-inner); }
 .authored-tool-links .authored-tool-more { background: transparent; }
 .authored-tools p, .authored-tools small { display: block; font-size: .82rem; color: var(--muted); margin: 4px 0; }

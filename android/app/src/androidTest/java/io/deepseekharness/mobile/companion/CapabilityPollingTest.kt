@@ -47,6 +47,18 @@ class CapabilityPollingTest {
                 try { File(app.getExternalFilesDir(null),name).outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) } }
                 finally { bitmap.recycle() }
             }
+            val priorStyle = js("document.documentElement.dataset.style")
+            val priorTheme = js("document.documentElement.dataset.theme")
+            try {
+                for (style in listOf("simple","cute")) for (mode in listOf("light","dark")) {
+                    js("document.documentElement.dataset.style='$style';document.documentElement.dataset.theme='$mode'")
+                    Thread.sleep(150)
+                    assertEquals("true",js("document.documentElement.scrollWidth<=window.innerWidth"))
+                    capture("ui-matrix-$style-$mode.png")
+                }
+            } finally {
+                js("document.documentElement.dataset.style=$priorStyle;document.documentElement.dataset.theme=$priorTheme")
+            }
             capture("capability-collapsed.png")
             js("document.querySelector('.capability-technical summary').click()")
             assertEquals("true",js("document.querySelector('.capability-technical').open"))
