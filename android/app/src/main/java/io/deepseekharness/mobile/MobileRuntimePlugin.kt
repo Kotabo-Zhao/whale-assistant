@@ -4176,6 +4176,7 @@ class MobileRuntimePlugin : Plugin() {
         val store = io.deepseekharness.mobile.companion.CompanionStore(context)
         val memory = io.deepseekharness.mobile.companion.CompanionMemoryStore(context)
         return JSObject().put("memoryEnabled", memory.enabled)
+            .put("bubbleMemoryAccess", store.bubbleMemoryAccess)
             .put("notificationBubbles", store.notificationBubbles)
             .put("candidateNotifications", store.candidateNotifications)
             .put("notificationCapture", store.notificationCapture)
@@ -4195,13 +4196,14 @@ class MobileRuntimePlugin : Plugin() {
     fun setCompanionQuickSetting(call: PluginCall) {
         val field = call.getString("field")
         val value = call.getBoolean("value")
-        if (value == null || field !in setOf("memoryEnabled", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled", "knowledgeModelAccess", "notificationMemorySuggestions", "automaticNotificationMemory", "automaticUsageMemory", "automaticAssistantMemory")) {
+        if (value == null || field !in setOf("memoryEnabled", "bubbleMemoryAccess", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled", "knowledgeModelAccess", "notificationMemorySuggestions", "automaticNotificationMemory", "automaticUsageMemory", "automaticAssistantMemory")) {
             call.reject("无效的助手设置", "COMPANION_SETTING_INVALID"); return
         }
         execute(call) {
             val store = io.deepseekharness.mobile.companion.CompanionStore(context)
             when (field) {
                 "memoryEnabled" -> io.deepseekharness.mobile.companion.CompanionMemoryStore(context).enabled = value
+                "bubbleMemoryAccess" -> store.bubbleMemoryAccess = value
                 "notificationBubbles" -> store.notificationBubbles = value
                 "candidateNotifications" -> store.candidateNotifications = value
                 "notificationCapture" -> store.notificationCapture = value

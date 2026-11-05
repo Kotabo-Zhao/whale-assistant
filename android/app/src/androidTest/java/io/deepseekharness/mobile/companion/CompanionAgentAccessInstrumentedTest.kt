@@ -14,6 +14,55 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class CompanionAgentAccessInstrumentedTest {
+    @Test fun authorizedPetCanSaveSearchCorrectAndDeleteLocalMemory() {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefix = "memory-tools-${UUID.randomUUID()}-"
+        val directory = java.io.File(base.cacheDir, prefix).apply { check(mkdirs()) }
+        val opened = mutableSetOf<String>()
+        val context = object : ContextWrapper(base) {
+            override fun getApplicationContext(): Context = this
+            override fun getNoBackupFilesDir() = directory
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences {
+                opened.add(prefix + name)
+                return base.getSharedPreferences(prefix + name, mode)
+            }
+        }
+        try {
+            val session = UUID.randomUUID().toString()
+            BubbleSessionRegistry(context).record(session)
+            val access = CompanionAgentAccess(context, JSONObject().put("callerSession", session))
+            val store = CompanionStore(context)
+            val memory = CompanionMemoryStore(context)
+            fun execute(request: JSONObject): JSONObject {
+                access.requireMemory()
+                return JSONObject(memory.execute(request.toString()))
+            }
+            val save = JSONObject().put("op", "save").put("text", "我喜欢蓝色")
+            assertEquals("MEMORY_BUBBLE_DISABLED", assertThrows(RuntimeFailure::class.java) { execute(save) }.code)
+            assertEquals(0, memory.listForUser().length())
+            store.bubbleMemoryAccess = true
+            val saved = execute(save)
+            assertTrue(saved.getBoolean("pending"))
+            val id = saved.getString("id")
+            // Consent to access does not silently enable automatic approval of model proposals.
+            assertTrue(memory.approveForUser(id, "我喜欢蓝色"))
+            val row = execute(JSONObject().put("op", "search").put("query", "蓝色")).getJSONArray("items").getJSONObject(0)
+            assertEquals(id, row.getString("id"))
+            assertTrue(execute(JSONObject().put("op", "update").put("id", id)
+                .put("expectedRevision", row.getString("revision")).put("text", "我喜欢绿色")).getBoolean("updated"))
+            store.bubbleMemoryAccess = false
+            val remove = JSONObject().put("op", "delete").put("id", id)
+            assertEquals("MEMORY_BUBBLE_DISABLED", assertThrows(RuntimeFailure::class.java) { execute(remove) }.code)
+            assertEquals(1, memory.listForUser().length())
+            store.bubbleMemoryAccess = true
+            assertTrue(execute(remove).getBoolean("removed"))
+            assertEquals(0, memory.listForUser().length())
+        } finally {
+            opened.forEach(base::deleteSharedPreferences)
+            directory.deleteRecursively()
+        }
+    }
+
     @Test fun persistedBubbleScopeAndRevocationAreEnforced() {
         val base = InstrumentationRegistry.getInstrumentation().targetContext
         val prefix = "agent-access-${UUID.randomUUID()}-"

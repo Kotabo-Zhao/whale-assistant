@@ -17,7 +17,9 @@ import io.deepseekharness.mobile.R
 import androidx.core.widget.doAfterTextChanged
 
 /** Native floating chat; recent completed messages are restored across service restarts. */
-internal class CompanionBubbleWindow(private val context: Context, private val wm: WindowManager, private val onState: (String) -> Unit = {}, private val openSession: (String) -> Unit = {}, private val onWorkerCounts: (Int, Int, Int) -> Unit = { _, _, _ -> }, private val autoOpenOnDelivery: Boolean = true, private val onBackgroundReport: ((String) -> Unit)? = null, private val historyStore: CompanionBubbleHistory = CompanionBubbleHistory(context), private val petBounds: () -> IntArray) {
+internal class CompanionBubbleWindow(private val context: Context, private val wm: WindowManager, private val onState: (String) -> Unit = {}, private val openSession: (String) -> Unit = {}, private val onWorkerCounts: (Int, Int, Int) -> Unit = { _, _, _ -> }, private val autoOpenOnDelivery: Boolean = true, private val onBackgroundReport: ((String) -> Unit)? = null, private val historyStore: CompanionBubbleHistory = CompanionBubbleHistory(context),
+    private val replyRunner: (CompanionBubbleChat, List<CompanionBubbleChat.Message>, String, Boolean, Boolean, (String) -> Unit) -> CompanionBubbleChat.Reply = { chat, history, scope, memory, knowledge, partial -> chat.fusedReply(history, scope, memory, knowledge, partial) },
+    private val petBounds: () -> IntArray) {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val anchorStore = CompanionSessionAnchorStore(context)
@@ -36,6 +38,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var flushPartial: (() -> Unit)? = null
     private var request = 0L
     private var busy = false
+    private var activeReply: PetReplyOperation? = null
     private class Followup(val text: String, val id: String, var deciding: Boolean = false, var receipt: String? = null)
     private val journal = historyStore.followups
     private val recovery = runCatching { journal.entries() }
@@ -518,6 +521,17 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         footer.addView(send)
         val status = ui.text("",12f,secondary).apply { setPadding(dp(12),dp(4),dp(12),dp(4)) }
         controls.addView(status)
+        val endWait = ui.text("结束等待", 13f, accent).apply {
+            minHeight=dp(44); gravity=Gravity.CENTER
+            contentDescription="结束等待并保留原消息；已提交的后台任务不会取消"
+            visibility=if (busy && activeReply != null) android.view.View.VISIBLE else android.view.View.GONE
+            background=ui.action(ui.soft,12)
+            setOnClickListener {
+                activeReply?.cancel()
+                text="正在结束等待…"; isEnabled=false
+            }
+        }
+        controls.addView(endWait)
         val progress = ui.text("", 12f, secondary).apply {
             setPadding(dp(12), dp(4), dp(12), dp(5))
             accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
@@ -730,8 +744,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
             flushPartial = ::schedulePartial
+            val operation = PetReplyOperation()
+            activeReply = operation
+            endWait.visibility=android.view.View.VISIBLE; endWait.isEnabled=true; endWait.text="结束等待"
             executor.execute {
-                val result = runCatching {
+                val result = runCatching { operation.run {
                     val settings = CompanionStore(context)
                     val memoryStore = CompanionMemoryStore(context)
                     val memoryAllowed = settings.bubbleMemoryAccess && memoryStore.enabled
@@ -750,15 +767,17 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     }
                     val answer = item?.receipt?.let { receipt ->
                         val finished = requireNotNull(chat.snapshot((prior + CompanionBubbleChat.Message("assistant",receipt)).takeLast(18)))
-                        historyStore.save(finished,requireWritable=true)
+                        PetReplyOperation.commitReply { historyStore.save(finished,requireWritable=true) }
                         CompanionBubbleChat.Reply(receipt, emptyList(), emptyList())
-                    } ?: chat.fusedReply(prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
+                    } ?: replyRunner(chat, prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
                     // A failed cleanup leaves a reviewable entry. The completed turn must not be retried.
                     if (item != null) runCatching { journal.remove(item.id) }
                     answer
-                }
+                } }
                 handler.post {
                     if (closed || request != generation) return@post
+                    if (activeReply === operation) activeReply=null
+                    endWait.visibility=android.view.View.GONE
                     acceptingPartials.set(false); latestPartial.set(null)
                     flushPartial = null
                     val samePanel = root === panel
@@ -1018,5 +1037,5 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
 
     fun followPet() { positionUpdater?.invoke() }
     fun hide() { showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { closed = true; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
+    fun destroy() { activeReply?.cancel(); activeReply=null; closed = true; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
 }

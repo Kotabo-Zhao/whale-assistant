@@ -4,8 +4,6 @@ import io.deepseekharness.mobile.runtime.ModelProvider
 import io.deepseekharness.mobile.runtime.RuntimeStore
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 /** Character dialogue delegates actual actions to the existing permission-checked agent. */
 internal class PetDirectChat(private val context: android.content.Context) {
@@ -66,6 +64,7 @@ internal class PetDirectChat(private val context: android.content.Context) {
             messages.put(JSONObject().put("role", "assistant").put("content", if (turn.text.isBlank()) JSONObject.NULL else turn.text).put("tool_calls", calls))
             for (call in turn.calls) {
                 val task = runCatching { JSONObject(call.arguments.toString()).getString("task").trim() }.getOrDefault("")
+                PetReplyOperation.checkpoint()
                 val result = if (task.isBlank() || task.length > 2000) "工具请求无效，未执行。"
                     else runCatching { trace.measure(PetReplyTrace.Stage.HANDOFF) { delegate(task, false) } }.getOrElse { "工具执行失败：${it.message?.take(200) ?: "请检查本机服务"}" }
                 results.add(result)
@@ -79,17 +78,7 @@ internal class PetDirectChat(private val context: android.content.Context) {
         val body = JSONObject().put("model", model).put("messages", messages).put("tools", tools).put("stream", true)
             .put("max_tokens", 2048).put("temperature", 0.85).put("thinking", JSONObject().put("type", "disabled"))
         if (alreadySearched) body.put("tool_choice", "none")
-        val connection = URL("https://api.deepseek.com/chat/completions").openConnection() as HttpURLConnection
-        try {
-            connection.instanceFollowRedirects = false; connection.connectTimeout = 20_000; connection.readTimeout = 120_000
-            connection.requestMethod = "POST"; connection.doOutput = true
-            connection.setRequestProperty("Authorization", "Bearer $key")
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
-            if (status !in 200..299) error("模型请求失败（HTTP $status），请检查配置或稍后重试。")
-            return connection.inputStream.bufferedReader(Charsets.UTF_8).use { readStream(it,onPartial) }
-        } finally { connection.disconnect() }
+        return PetModelHttp.post(key,body.toString(),120_000) { readStream(it,onPartial) }
     }
     companion object {
         /** DONE terminates the SSE response even when its HTTP connection remains open. */
@@ -97,6 +86,7 @@ internal class PetDirectChat(private val context: android.content.Context) {
             val answer = StringBuilder(); val calls = sortedMapOf<Int, ToolCall>()
             var finish = ""; var done = false
             while (true) {
+                PetReplyOperation.checkpoint()
                 val line = reader.readLine() ?: break
                 if (!line.startsWith("data:")) continue
                 val data = line.substringAfter(':').trim()

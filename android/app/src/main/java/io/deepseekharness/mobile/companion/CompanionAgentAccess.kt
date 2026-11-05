@@ -16,7 +16,7 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
     fun requireMemory() {
         if (!memory.enabled) throw RuntimeFailure("MEMORY_DISABLED", "用户已关闭长期记忆")
         if (bubble && !store.bubbleMemoryAccess)
-            throw RuntimeFailure("MEMORY_BUBBLE_DISABLED", "用户已关闭此桌宠会话的记忆访问")
+            throw RuntimeFailure("MEMORY_BUBBLE_DISABLED", "桌宠尚未获准访问长期记忆，请在助手偏好的记忆与资料中开启桌宠访问")
     }
 
     fun requireKnowledge() {
@@ -39,7 +39,8 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
                     !memory.enabled -> "MEMORY_DISABLED"
                     !canReadMemory -> "MEMORY_BUBBLE_DISABLED"
                     else -> JSONObject.NULL
-                }).put("searchTool", "mobile_memory_search").put("updateTool", "mobile_memory_update")
+                }).put("searchTool", "mobile_memory_search").put("saveTool", "mobile_memory_save")
+                    .put("updateTool", "mobile_memory_update").put("deleteTool", "mobile_memory_delete")
                     .put("semanticAllowed", canReadMemory && semantic.memoryEnabled))
             .put("knowledge", JSONObject().put("allowed", canReadKnowledge)
                 .put("errorCode", if (canReadKnowledge) JSONObject.NULL else "KNOWLEDGE_MODEL_DISABLED")

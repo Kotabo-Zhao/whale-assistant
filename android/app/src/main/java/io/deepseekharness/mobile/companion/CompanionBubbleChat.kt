@@ -90,7 +90,7 @@ internal object CompanionBubbleChatPolicy {
     }
 
     fun knowledgeToolGuidance(): String = "需要查看用户保存的图片理解或文档资料时，可按需使用 mobile_knowledge_search；不知道关键词时用 mobile_knowledge_recent 查询最近资料。返回结果的 id、revision 与 location 可用于核对和引用；location 仅表示已保存文本记录，未知页、段落、工作表和表格坐标不得推断。需要完整内容时用 mobile_knowledge_read 并带回 id/revision 分段读取；需要确认后台进度时用 mobile_knowledge_status。根据资料回答时，请写出实际采用资料的完整文件名，不要列出无关候选。处理完成不等于原文件已被完整解析。"
-    fun memoryToolGuidance(): String = "需要回忆时可按需使用 mobile_memory_search 查询长期记忆；结果若带 sourceRecordId/sourceRevision，只是关联资料的受控引用，需在资料访问已授权时再用 mobile_knowledge_read 按该 ID/版本核对，不能把记忆当作原文。"
+    fun memoryToolGuidance(): String = "需要回忆时按需使用 mobile_memory_search 查询长期记忆；用户要求记住时用 mobile_memory_save 并按返回的 pending 状态说明，要求纠正时先搜索取得 id/revision 再用 mobile_memory_update，要求忘记时搜索核对后用 mobile_memory_delete。记忆写入由当前主会话处理，不交给只读 Worker；结果若带 sourceRecordId/sourceRevision，只是关联资料的受控引用，需在资料访问已授权时再用 mobile_knowledge_read 按该 ID/版本核对，不能把记忆当作原文。"
 
 }
 
@@ -237,6 +237,7 @@ internal class CompanionBubbleChat(
 
     /** The same saved request ID is used after a process restart or an uncertain acknowledgement. */
     private fun sendPendingWorker(history: List<Message>, memoryAllowed: Boolean, knowledgeAllowed: Boolean): Reply {
+        PetReplyOperation.checkpoint()
         val request = requireNotNull(pending)
         val user = CompanionBubbleChatPolicy.validateMessage(history.last().text)
         check(request.getString("user") == user) { "对话还有一项交办待恢复，请先恢复原请求。" }
@@ -260,11 +261,12 @@ internal class CompanionBubbleChat(
             }
         }
         val finished = requireNotNull(snapshot((history + Message("assistant", answer)).takeLast(18))).copy(pending = null)
-        store.save(finished, requireWritable = true); pending = null
+        PetReplyOperation.commitReply { store.save(finished, requireWritable = true); pending = null }
         return Reply(answer, emptyList(), emptyList())
     }
 
     fun fusedReply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit): Reply {
+        PetReplyOperation.checkpoint()
         if (pending?.optString("kind") == "worker") return sendPendingWorker(history, memoryAllowed, knowledgeAllowed)
         fun harness(): Reply {
             val sink = object : io.deepseekharness.mobile.runtime.RuntimeEventSink {
@@ -294,6 +296,7 @@ internal class CompanionBubbleChat(
             pending = JSONObject().put("kind","worker").put("requestId",direct.getString("requestId"))
                 .put("mode",mode).put("needs",decision.needs).put("user",history.last().text)
                 .put("title",decision.title(history.last().text)).put("prompt",decision.workerTask(history.last().text))
+            PetReplyOperation.checkpoint()
             sendPendingWorker(history, memoryAllowed, knowledgeAllowed).also { delegated = it }.text
         }) { _, knowledgeQuery ->
             if (knowledgeQuery && !knowledgeAllowed) "本地资料访问尚未授权，请先在桌宠资料设置中开启；尚未检索资料。"
@@ -301,9 +304,9 @@ internal class CompanionBubbleChat(
         }
         delegated?.let { return it }
         check(pendingDirect) { "原请求已转入主对话，请核对原会话。" }
+        PetReplyOperation.checkpoint()
         val finished = requireNotNull(snapshot((history + Message("assistant",result)).takeLast(18))).copy(pending=null)
-        historyStore.save(finished, requireWritable=true)
-        pending = null
+        PetReplyOperation.commitReply { historyStore.save(finished, requireWritable=true); pending = null }
         return Reply(result, emptyList(), emptyList())
     }
 
@@ -341,7 +344,7 @@ internal class CompanionBubbleChat(
             append(CompanionBubbleChatPolicy.capabilityGuidance()).append('\n')
             append(CompanionBubbleChatPolicy.workerGuidance()).append('\n')
             if (memoryAllowed) append(CompanionBubbleChatPolicy.memoryToolGuidance()).append('\n')
-            else append("桌宠记忆访问已关闭，不要查询长期记忆。\n")
+            else append("桌宠记忆访问尚未开启，不能读取或写入长期记忆。用户需要时说明：在“我的 → 助手偏好 → 记忆与资料”同时开启长期记忆和桌宠访问；这不表示软件没有记忆工具，可用 mobile_companion_capabilities 核对权限。\n")
             if (memoryAllowed && SemanticControl(context).memoryEnabled) append("可用 mobile_memory_hybrid_search，区分确认事实与待核实内容。\n")
             if (knowledgeAllowed) append("本地资料访问已授权；用户询问已保存资料时先核对能力并调用资料工具，不得只凭 Shizuku 状态或猜测回复。\n").append(CompanionBubbleChatPolicy.knowledgeToolGuidance()).append('\n')
             else append("本地资料对话访问已关闭，不要查询本地资料。\n")
@@ -369,10 +372,10 @@ internal class CompanionBubbleChat(
                 .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", submission.getString("prompt")))))
         }
         } catch (error: Exception) { state(if (error is BubbleTurnFailed) "failed" else "interrupted"); throw error }
+        PetReplyOperation.checkpoint()
         state("completed")
         val finished = requireNotNull(snapshot((history + Message("assistant",answer.text,answer.images,answer.citations)).takeLast(18))).copy(pending=null)
-        store.save(finished,requireWritable=true)
-        pending = null
+        PetReplyOperation.commitReply { store.save(finished,requireWritable=true); pending = null }
         return answer
 
     }
@@ -403,7 +406,9 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
         val cookies = mutableListOf<String>()
         repeat(2) {
             val conn = URL("http", base.host, base.port, path).openConnection() as HttpURLConnection
+            val cancellation=PetReplyOperation.bind(conn::disconnect)
             try {
+                PetReplyOperation.checkpoint()
                 conn.instanceFollowRedirects = false; conn.connectTimeout = timeoutMillis; conn.readTimeout = timeoutMillis
                 val basic = java.util.Base64.getEncoder().encodeToString("${access.username}:${access.password}".toByteArray(Charsets.UTF_8))
                 conn.setRequestProperty("Authorization", "Basic $basic")
@@ -415,7 +420,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                 val next = java.net.URI("http://${base.host}:${base.port}/").resolve(conn.getHeaderField("Location") ?: error("本机对话认证失败"))
                 require(next.scheme == "http" && next.host == base.host && next.port == base.port && next.userInfo == null && next.path == "/")
                 path = next.rawPath + (next.rawQuery?.let { query -> "?$query" } ?: "")
-            } finally { conn.disconnect() }
+            } finally { cancellation.close(); conn.disconnect() }
         }
         return cookies.joinToString("; ")
     }
@@ -427,7 +432,9 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
     private fun rpc(method: String, args: JSONObject): JSONObject {
         require(method in setOf("session/create", "session/prompt", "session/page", "commands/execute", "userQuestions/answer", "\$events/result"))
         val connection = URL("http", base.host, base.port, "/api/$method").openConnection() as HttpURLConnection
+        val cancellation=PetReplyOperation.bind(connection::disconnect)
         try {
+            PetReplyOperation.checkpoint()
             connection.requestMethod = "POST"; connection.doOutput = true; connection.instanceFollowRedirects = false
             connection.connectTimeout = 10_000; connection.readTimeout = 20_000
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -445,7 +452,7 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
             val result = JSONObject(String(bytes, Charsets.UTF_8)).getJSONObject("result")
             if (!result.optBoolean("ok")) error("对话请求失败，请检查主对话中的模型和登录状态")
             return result.optJSONObject("value") ?: JSONObject().put("accepted", result.opt("value") ?: true)
-        } finally { connection.disconnect() }
+        } finally { cancellation.close(); connection.disconnect() }
     }
     fun answerQuestion(sessionId: String, callId: String, answers: JSONArray) {
         foregroundQuestions[callId]?.let { delivery ->
@@ -550,7 +557,9 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                     if (done.count > 0) { failure.set("本机对话连接已关闭"); ready.countDown(); done.countDown() }
                 }
             })
+            val cancellation=PetReplyOperation.bind(socket::cancel)
             try {
+                PetReplyOperation.checkpoint()
                 check(ready.await(15, java.util.concurrent.TimeUnit.SECONDS)) { "本机对话连接超时" }
                 failure.get()?.let { error(it) }
                 // Host deduplicates the ID against both the inbox and Session history.
@@ -581,10 +590,11 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                     CompanionBubbleChat.Reply(parsed.text, (images + parsed.images).distinct().take(6), CompanionBubbleChatPolicy.citedSources(parsed.text, citations), tools, fold.turn)
                 }
             } catch (error: Exception) {
+                PetReplyOperation.checkpoint()
                 latestError = error.message ?: latestError
                 if (synchronized(fold) { fold.finished != null } || error is InterruptedException || latestError.startsWith("回复仍在后台")) throw error
                 if (reconnect < 2) onQuestion("连接中断，正在恢复原会话…")
-            } finally { foregroundQuestions.clear(); socket.cancel() }
+            } finally { cancellation.close(); foregroundQuestions.clear(); socket.cancel() }
         }
         error(latestError)
     }

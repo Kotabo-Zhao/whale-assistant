@@ -9,7 +9,7 @@ const bridge = vi.hoisted(() => ({
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { CompanionSettingsButton } from './CompanionSettingsButton'
 
-const defaults = { memoryEnabled: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, automaticNotificationMemory: false, automaticUsageMemory: false, automaticAssistantMemory: false, reminders: false, quietHoursEnabled: false }
+const defaults = { memoryEnabled: false, bubbleMemoryAccess: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, notificationMemorySuggestions: false, automaticNotificationMemory: false, automaticUsageMemory: false, automaticAssistantMemory: false, reminders: false, quietHoursEnabled: false }
 beforeEach(() => {
   saveLanguage('zh-CN'); vi.clearAllMocks()
   bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] })
@@ -40,4 +40,21 @@ describe('助手设置', () => {
     await waitFor(() => expect(bridge.openCompanionSettings).toHaveBeenCalledOnce())
   })
 
+})
+
+it('总开关开启不冒充桌宠已授权，允许后保存独立访问开关', async () => {
+  bridge.getCompanionQuickSettings.mockResolvedValue({ ...defaults, memoryEnabled: true })
+  bridge.setCompanionQuickSetting.mockResolvedValue({ ...defaults, memoryEnabled: true, bubbleMemoryAccess: true })
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+  try {
+    render(<CompanionSettingsButton disabled={false} />)
+    await screen.findByText(/长期记忆已开启，但桌宠尚未获准访问/)
+    const toggle = screen.getByRole('switch', { name: /允许桌宠访问长期记忆/ })
+    fireEvent.click(toggle)
+    expect(bridge.setCompanionQuickSetting).not.toHaveBeenCalled()
+    fireEvent.click(toggle)
+    await waitFor(() => expect(bridge.setCompanionQuickSetting).toHaveBeenCalledWith('bubbleMemoryAccess', true))
+    await waitFor(() => expect(toggle).toBeChecked())
+    expect(screen.queryByText(/长期记忆已开启，但桌宠尚未获准访问/)).toBeNull()
+  } finally { confirm.mockRestore() }
 })

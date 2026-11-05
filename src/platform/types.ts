@@ -1634,6 +1634,7 @@ export interface MarketProposal { id: string; packageName: string; createdAt: nu
 
 export interface CompanionQuickSettings {
   memoryEnabled: boolean
+  bubbleMemoryAccess: boolean
   notificationBubbles: boolean
   candidateNotifications: boolean
   notificationCapture: boolean
