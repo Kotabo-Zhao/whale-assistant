@@ -438,6 +438,8 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
       'mobile_reminder_list',
       'mobile_reminder_create',
       'mobile_reminder_delete',
+      'mobile_knowledge_save',
+      'mobile_knowledge_update',
       'mobile_knowledge_search',
       'mobile_knowledge_recent',
       'mobile_knowledge_hybrid_search',

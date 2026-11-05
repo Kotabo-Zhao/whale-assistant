@@ -120,6 +120,9 @@ class CompanionStore(context: Context) {
                 SemanticIndexJobs.cancel(app)
             }
         }
+    var knowledgeModelWrite: Boolean
+        get() = prefs.getBoolean("knowledge_model_write", false)
+        set(value) { check(prefs.edit().putBoolean("knowledge_model_write", value).commit()) }
     /** Explicit separate consent for sharing calendar titles with the configured model. */
     var calendarModelAccess: Boolean
         get() = prefs.getBoolean("calendar_model_access", false)

@@ -14,6 +14,62 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class CompanionAgentAccessInstrumentedTest {
+    @Test fun conversationCanSaveWithWriteOnlyAndEditAfterReadingTheCurrentVersion() {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefix = "knowledge-write-${UUID.randomUUID()}-"
+        val directory = java.io.File(base.cacheDir, prefix).apply { check(mkdirs()) }
+        val opened = mutableSetOf<String>()
+        val context = object : ContextWrapper(base) {
+            override fun getApplicationContext(): Context = this
+            override fun getNoBackupFilesDir() = directory
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences {
+                opened.add(prefix + name)
+                return base.getSharedPreferences(prefix + name, mode)
+            }
+        }
+        try {
+            val session = UUID.randomUUID().toString()
+            val request = JSONObject().put("callerSession", session).put("op", "save").put("text", "清单 A\\n第二行")
+            val access = CompanionAgentAccess(context, request)
+            val store = CompanionStore(context)
+            val library = CompanionKnowledgeStore(context)
+            fun write() = CompanionKnowledgeWrite.execute(context, request.toString())
+            fun denied(code: String) = assertEquals(code, assertThrows(RuntimeFailure::class.java) { write() }.code)
+            denied("KNOWLEDGE_WRITE_DISABLED")
+            store.knowledgeModelAccess = true
+            denied("KNOWLEDGE_WRITE_DISABLED")
+            store.knowledgeModelAccess = false
+            store.knowledgeModelWrite = true
+            val caps = JSONObject(access.capabilities()).getJSONObject("knowledge")
+            assertTrue(caps.getBoolean("writeAllowed"))
+            assertFalse(caps.getBoolean("allowed"))
+            val saved = write()
+            val id = saved.getString("id")
+            BubbleSessionRegistry(context).record(session)
+            assertEquals(id, write().getString("id"))
+            assertEquals(1L, library.count())
+            assertEquals(request.getString("text"), library.findById(id)!!.getString("text"))
+            val firstText = request.getString("text")
+            request.put("op", "update").put("id", id).put("text", "新的清单").put("editRevision", saved.getString("editRevision"))
+            denied("KNOWLEDGE_MODEL_DISABLED")
+            store.knowledgeModelAccess = true
+            val changedCase = firstText.replace("A", "a")
+            assertTrue(library.edit(id, firstText, changedCase))
+            denied("KNOWLEDGE_CHANGED")
+            val read = JSONObject(CompanionKnowledgeModel.execute(true, JSONObject().put("id", id).put("query", "").toString(),
+                library::findById, library::recent, library::exactPage) { library.search(it) })
+            request.put("editRevision", read.getString("editRevision"))
+            assertTrue(write().getBoolean("saved"))
+            assertTrue(write().getBoolean("saved"))
+            assertEquals("新的清单", library.findById(id)!!.getString("text"))
+            store.knowledgeModelWrite = false
+            denied("KNOWLEDGE_WRITE_DISABLED")
+        } finally {
+            directory.deleteRecursively()
+            opened.forEach { base.deleteSharedPreferences(it) }
+        }
+    }
+
     @Test fun authorizedPetCanSaveSearchCorrectAndDeleteLocalMemory() {
         val base = InstrumentationRegistry.getInstrumentation().targetContext
         val prefix = "memory-tools-${UUID.randomUUID()}-"

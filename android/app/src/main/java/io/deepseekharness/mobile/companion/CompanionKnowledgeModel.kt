@@ -91,6 +91,7 @@ internal object CompanionKnowledgeModel {
                 }
             }
             return JSONObject().put("schemaVersion", 2).put("id", id).put("documentId", row.optString("documentId")).put("originalId", row.optString("originalId")).put("chunkIndex", row.optInt("chunkIndex",0)).put("chunkCount",row.optInt("chunkCount",1)).put("revision", revision).put("text", text.substring(offset, end))
+                .apply { if (CompanionKnowledgeWrite.editable(row)) put("editRevision", CompanionKnowledgeWrite.revision(text)) }
                 .put("nextOffset", if (end < text.length) end else JSONObject.NULL)
                 .put("coverage", "stored_text_only").put("parsingCoverage", row.optString("coverage", "unknown")).put("displayName", row.optString("displayName"))
                 .put("attachments", references).put("nextAttachmentOffset", attached?.second ?: JSONObject.NULL)

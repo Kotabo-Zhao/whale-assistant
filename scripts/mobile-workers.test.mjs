@@ -184,6 +184,11 @@ test('worker tool policy: read mode can query device status but never touch the 
     'mobile_device_ui_dump', 'mobile_device_shell', 'mobile_device_file_write', 'mobile_device_battery'])
     assert.equal(workerToolAllowed('device', name), true, name)
   // 未知工具默认拒绝，报告工具始终允许。
+  for (const mode of ['read', 'device', 'create']) {
+    for (const tool of ['mobile_knowledge_save', 'mobile_knowledge_update']) {
+      assert.equal(workerToolAllowed(mode, tool), false)
+    }
+  }
   assert.equal(workerToolAllowed('device', 'bash'), false)
   assert.equal(workerToolAllowed('read', 'mobile_worker_report'), true)
 })

@@ -1639,6 +1639,7 @@ export interface CompanionQuickSettings {
   candidateNotifications: boolean
   notificationCapture: boolean
   knowledgeModelAccess: boolean
+  knowledgeModelWrite: boolean
   notificationMemorySuggestions: boolean
   automaticNotificationMemory: boolean
   automaticUsageMemory: boolean

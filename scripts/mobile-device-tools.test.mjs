@@ -102,6 +102,26 @@ test('日历工具通过只读本机桥查询，使用空参数', async t => {
   assert.deepEqual(f.requests.map(r => [r.command, r.param]), [['companionCalendar', '']])
 })
 
+test('文字笔记写入经过会话桥并保留正文，拒绝无效写入', async t => {
+  const f = fixture(t, () => ok('{"saved":true}'))
+  const save = f.tools.get('mobile_knowledge_save')
+  const update = f.tools.get('mobile_knowledge_update')
+  const text = '  交接\n第二行'
+  const id = 'a'.repeat(36)
+  const editRevision = 'a'.repeat(64)
+  await save.execute({ text, callerSession: 'forged' }, memoryExec)
+  await update.execute({ text, id, editRevision }, memoryExec)
+  assert.deepEqual(f.requests.map(r => [r.command, JSON.parse(r.param)]), [
+    ['companionKnowledgeWrite', { op: 'save', text, callerSession: virtualSession }],
+    ['companionKnowledgeWrite', { op: 'update', text, id, editRevision, callerSession: virtualSession }],
+  ])
+  for (const invalid of [' ', 'x'.repeat(8001), '\0', '\ud800']) {
+    await assert.rejects(save.execute({ text: invalid }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
+  }
+  await assert.rejects(update.execute({ text, id, editRevision: '' }, memoryExec), /KNOWLEDGE_INPUT_INVALID/)
+  assert.equal(f.requests.length, 2)
+})
+
 test('本地资料工具按关键词经过设备桥并拒绝无效查询', async t => {
   const f = fixture(t, () => ok('{"items":[],"truncated":false}'))
   const tool = f.tools.get('mobile_knowledge_search')

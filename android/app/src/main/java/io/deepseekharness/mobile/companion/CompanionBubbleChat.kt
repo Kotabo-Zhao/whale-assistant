@@ -300,7 +300,7 @@ internal class CompanionBubbleChat(
             PetReplyOperation.checkpoint()
             sendPendingWorker(history, memoryAllowed, knowledgeAllowed).also { delegated = it }.text
         }) { _, knowledgeQuery ->
-            if (knowledgeQuery && !knowledgeAllowed) "本地资料访问尚未授权，请先在桌宠资料设置中开启；尚未检索资料。"
+            if (knowledgeQuery && !knowledgeAllowed && !CompanionStore(context).knowledgeModelWrite) "本地资料访问尚未授权，请先在桌宠资料设置中开启；尚未检索资料。"
             else harness().also { delegated = it }.text
         }
         delegated?.let { return it }
@@ -349,6 +349,7 @@ internal class CompanionBubbleChat(
             if (memoryAllowed && SemanticControl(context).memoryEnabled) append("可用 mobile_memory_hybrid_search，区分确认事实与待核实内容。\n")
             if (knowledgeAllowed) append("本地资料访问已授权；用户询问已保存资料时先核对能力并调用资料工具，不得只凭 Shizuku 状态或猜测回复。\n").append(CompanionBubbleChatPolicy.knowledgeToolGuidance()).append('\n')
             else append("本地资料对话访问已关闭，不要查询本地资料。\n")
+            append("按用户要求保存文字资料时，先用 mobile_companion_capabilities 核对 knowledge.writeAllowed，再用 mobile_knowledge_save；修改已有文字笔记先读取 editRevision，再用 mobile_knowledge_update。仅在工具回执成功后确认，写资料不要改用长期记忆。\n")
             append("事项修改先 mobile_task_search 取得 id 和 expectedState，冲突时重新读取。\n")
             if (knowledgeAllowed && SemanticControl(context).enabled) append("可用 mobile_knowledge_hybrid_search，再读取原文核对。\n")
             append(CompanionBubbleChatPolicy.compressedContext(history.dropLast(1))).append('\n')

@@ -1,5 +1,7 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  "允许对话写入资料库": "Allow chats to write to the library",
+  "主对话和桌宠可按你的要求保存文字。修改已有笔记还需开启资料检索。": "Chat and the pet can save text on request. Editing existing notes also requires library search access.",
   "高级设备权限，默认关闭。": "Advanced device access. Off by default.",
   "启用后允许 AI 以 root 权限执行设备命令，可能改动系统；不确定时请保持关闭。": "Allows AI to run device commands as root, which can modify the system. Leave off if unsure.",
   "检测与权限说明": "Detection and permission details",

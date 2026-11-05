@@ -301,6 +301,12 @@ class DeviceBridgeServer(
                         respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                         return
                     }
+                    if (commandName == "companionKnowledgeWrite") {
+                        val context = appContext ?: throw RuntimeFailure("KNOWLEDGE_UNAVAILABLE", "资料服务不可用")
+                        val result = io.deepseekharness.mobile.companion.CompanionKnowledgeWrite.execute(context, param)
+                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
+                        return
+                    }
                     if (commandName == "companionKnowledge") {
                         if (param.length > 1024) throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料查询参数过长")
                         val context = appContext ?: throw RuntimeFailure("KNOWLEDGE_UNAVAILABLE", "资料服务不可用")

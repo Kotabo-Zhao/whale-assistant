@@ -22,6 +22,10 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
     fun requireKnowledge() {
         if (!store.knowledgeModelAccess) throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
     }
+    fun requireKnowledgeWrite() {
+        if (!store.knowledgeModelWrite) throw RuntimeFailure("KNOWLEDGE_WRITE_DISABLED", "请在我的 → 助手偏好 → 记忆与资料中开启「允许对话写入资料库」")
+    }
+
     fun requireTasks() {
         if (!store.notificationModelAccess) throw RuntimeFailure("TASK_MODEL_DISABLED", "用户未允许对话访问通知事项")
     }
@@ -44,6 +48,8 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
                     .put("semanticAllowed", canReadMemory && semantic.memoryEnabled))
             .put("knowledge", JSONObject().put("allowed", canReadKnowledge)
                 .put("errorCode", if (canReadKnowledge) JSONObject.NULL else "KNOWLEDGE_MODEL_DISABLED")
+                .put("writeAllowed", store.knowledgeModelWrite)
+                .put("saveTool", "mobile_knowledge_save").put("updateTool", "mobile_knowledge_update")
                 .put("recentTool", "mobile_knowledge_recent")
                 .put("readTool", "mobile_knowledge_read").put("imageTool", "mobile_knowledge_image")
                 .put("statusTool", "mobile_knowledge_status")

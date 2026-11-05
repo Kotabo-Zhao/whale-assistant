@@ -655,6 +655,7 @@ class CompanionActivity : AppCompatActivity() {
             android.widget.Toast.makeText(this, if (result.isSuccess) "已请求后台整理。" else "无法安排后台整理，请稍后重试。", android.widget.Toast.LENGTH_SHORT).show()
         } }
         paragraph("可从分享或文本文件保存资料，并在这里查看、搜索和删除。对话访问默认关闭；开启后助手检索到的资料可能发送给模型服务。")
+        toggle("允许对话写入资料库", store.knowledgeModelWrite) { enabled -> store.knowledgeModelWrite = enabled }
         toggle("允许助手对话访问本地资料", store.knowledgeModelAccess) { enabled ->
             if (!enabled) runMemoryIo("正在关闭资料访问…", { store.knowledgeModelAccess = false }) { result ->
                 if (result.isFailure) android.widget.Toast.makeText(this, "关闭资料访问时遇到问题，请重新检查设置。", android.widget.Toast.LENGTH_LONG).show()
