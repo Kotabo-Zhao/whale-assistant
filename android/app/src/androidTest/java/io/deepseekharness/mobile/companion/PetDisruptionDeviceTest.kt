@@ -97,6 +97,97 @@ class PetDisruptionDeviceTest {
         while (!test()) { check(SystemClock.elapsedRealtime()<end) { "设备状态等待超时" }; Thread.sleep(40) }
     }
 
+    @Test fun floatingPublishedToolKeepsFormWhilePetAcceptsAnotherOrder() {
+        Pet(fresh()).use { pet ->
+            val catalog = io.deepseekharness.mobile.features.WhaleFeatureStore(pet.context)
+            val title = "浮窗计算器"
+            val id = "floating-test"
+            val html = """<input id="n" value="4"><button onclick="out.textContent=Number(n.value)*2">计算</button><output id="out"></output>"""
+            val revision = catalog.draft(JSONObject().put("id", id).put("title", title).put("html", html)).getString("latest")
+            catalog.activate(id, revision, "")
+            pet.open({ null })
+            pet.click("我的工具")
+            until { runCatching { pet.click("打开工具 · $title"); true }.getOrDefault(false) }
+            fun toolRoot() = android.view.inspector.WindowInspector.getGlobalWindowViews().singleOrNull {
+                (it.layoutParams as? WindowManager.LayoutParams)?.title == "桌宠工具 · $title"
+            }
+            fun nodes(v: View): List<View> = listOf(v) + if (v is ViewGroup)
+                (0 until v.childCount).flatMap { nodes(v.getChildAt(it)) } else emptyList()
+            lateinit var web: android.webkit.WebView
+            fun eval(code: String): String {
+                val done = CountDownLatch(1)
+                var result = ""
+                inst.runOnMainSync { web.evaluateJavascript(code) { result = it; done.countDown() } }
+                check(done.await(3, TimeUnit.SECONDS))
+                return result
+            }
+            fun tap(x: Float, y: Float) {
+                val down = SystemClock.uptimeMillis()
+                for (action in listOf(android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_UP)) {
+                    val event = android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0)
+                    event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                    try { check(inst.uiAutomation.injectInputEvent(event, true)) } finally { event.recycle() }
+                }
+            }
+            until {
+                var found = false
+                inst.runOnMainSync { toolRoot()?.let(::nodes)?.filterIsInstance<android.webkit.WebView>()?.singleOrNull()?.let { web = it; found = true } }
+                found && eval("!!document.querySelector('#n')") == "true"
+            }
+            val button = org.json.JSONArray(eval("""(() => { n.value='9'; const r=document.querySelector('button').getBoundingClientRect();
+                return [(r.x+r.width/2)*devicePixelRatio,(r.y+r.height/2)*devicePixelRatio] })()"""))
+            val location = IntArray(2)
+            inst.runOnMainSync { web.getLocationOnScreen(location) }
+            tap(location[0] + button.getDouble(0).toFloat(), location[1] + button.getDouble(1).toFloat())
+            until { eval("Number(out.textContent)") == "18" }
+            pet.send("第一条消息保持等待")
+            assertTrue(pet.firstReply.await(3, TimeUnit.SECONDS))
+            pet.send("插件开着时接收的下一条消息")
+            assertEquals("插件开着时接收的下一条消息", pet.history.followups.entries().single().text)
+            pet.assignFromPet("浮窗打开期间的独立后台工单")
+            until { pet.desk.pending().length() == 1 }
+            inst.runOnMainSync {
+                pet.window.hide()
+                val panel = checkNotNull(toolRoot())
+                assertTrue(((panel.layoutParams as WindowManager.LayoutParams).flags and WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL) != 0)
+                nodes(panel).filterIsInstance<TextView>().single { it.text == "收起" }.performClick()
+                nodes(panel).filterIsInstance<TextView>().single { it.text == "展开" }.performClick()
+            }
+            assertEquals("18", eval("Number(out.textContent)"))
+            if (InstrumentationRegistry.getArguments().getString("testUnderlyingBrowser") == "yes") {
+                val automation = inst.uiAutomation
+                val info = automation.serviceInfo
+                val flags = info.flags
+                try {
+                    info.flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+                    automation.serviceInfo = info
+                    val addressBar = android.graphics.Rect()
+                    fun visibleAddressBar() = automation.windows.mapNotNull { it.root }
+                        .firstOrNull { it.packageName == "com.android.chrome" }
+                        ?.findAccessibilityNodeInfosByViewId("com.android.chrome:id/url_bar")?.firstOrNull { it.isVisibleToUser }
+                    until {
+                        visibleAddressBar()?.getBoundsInScreen(addressBar)
+                        !addressBar.isEmpty
+                    }
+                    val tool = android.graphics.Rect()
+                    inst.runOnMainSync {
+                        val root = checkNotNull(toolRoot())
+                        val xy = IntArray(2).also(root::getLocationOnScreen)
+                        tool.set(xy[0], xy[1], xy[0] + root.width, xy[1] + root.height)
+                    }
+                    check(!tool.contains(addressBar.centerX(), addressBar.centerY()))
+                    check(visibleAddressBar()?.isFocused == false) { "浏览器地址栏已提前获得焦点" }
+                    tap(addressBar.exactCenterX(), addressBar.exactCenterY())
+                    until { visibleAddressBar()?.isFocused == true }
+                    automation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                } finally { info.flags = flags; automation.serviceInfo = info }
+            }
+            assertEquals("20", eval("n.value=String(Number(n.value)+1);document.querySelector('button').click();Number(out.textContent)"))
+            catalog.activate(id, "", revision)
+            until { var gone = false; inst.runOnMainSync { gone = toolRoot() == null }; gone }
+        }
+    }
+
     @Test fun diskFullPreservesInputOldCommandsAndRetryIdentity() {
         val full = AtomicBoolean(false)
         val writer = TaskStateWriter { output, bytes ->

@@ -1799,7 +1799,7 @@ class OverlayBallService : Service() {
         if (ballView == null) return
         if (bubbleChat.visible) bubbleChat.hide()
         val menu = PetActionMenu(overlayPalette(), page, { DeepSeekAccessibilityService.current() != null },
-            ::runPetAction, ::layoutPetMenu, ::dismissPetMenu)
+            ::runPetAction, ::layoutPetMenu, ::dismissPetMenu, bubbleChat::openTool)
         val params = WindowManager.LayoutParams(0, 0, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,

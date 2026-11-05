@@ -16,6 +16,8 @@ internal class BubbleSessionStream(private val requestId: String) {
         private set
     var received = false
         private set
+    var currentTurnOwned = false
+        private set
     var finished: String? = null
         private set
     var question: JSONObject? = null
@@ -24,7 +26,7 @@ internal class BubbleSessionStream(private val requestId: String) {
     val records: List<JSONObject> get() = events.values.toList()
 
     fun snapshot(value: JSONObject) {
-        events.clear(); blocks.clear(); attempt = null; turn = null; received = false; finished = null; question = null
+        events.clear(); blocks.clear(); attempt = null; turn = null; received = false; currentTurnOwned = false; finished = null; question = null
         value.optJSONArray("records")?.objects()?.forEach { event(it.getJSONObject("event")) }
         val active = value.optJSONObject("projections")?.optJSONObject("values")?.optJSONObject("userQuestions")?.optJSONArray("active")
         active?.objects()?.lastOrNull { it.optString("callId") == questionCall }?.let { question = it; finished = null }
@@ -62,6 +64,7 @@ internal class BubbleSessionStream(private val requestId: String) {
             }
         }
         turn = owned
+        currentTurnOwned = current >= 0 && owned == current
         val data = event.optJSONObject("data") ?: return
         when (event.optString("type")) {
             "tool/call" -> if (data.optString("name") == "ask_user_question" && data.optInt("turn", current) == turn) {

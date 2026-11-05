@@ -17,6 +17,7 @@ internal class PetActionMenu(
     private val dispatch: (Action) -> Unit,
     private val resized: () -> Unit,
     private val dismiss: () -> Unit,
+    private val openTool: (io.deepseekharness.mobile.features.WhaleFeatureStore.Tool) -> Unit,
 ) : ScrollView(context) {
     enum class Page(val title: Int) { HOME(R.string.pet_menu_home), SAVE(R.string.pet_menu_capture), TOOLS(R.string.pet_menu_tools), DEVICE(R.string.pet_menu_device) }
     enum class Action(val label: Int) {
@@ -149,7 +150,7 @@ internal class PetActionMenu(
                 sourceRow(Action.WRITE, R.drawable.ic_pet_assign, R.string.pet_source_note)
             }
             Page.TOOLS -> {
-                body.addView(WhalePetToolShelf(context, resized, dismiss))
+                body.addView(WhalePetToolShelf(context, resized, { tool -> openTool(tool); dismiss() }, dismiss))
             }
             Page.DEVICE -> {
                 listOf(Action.HARNESS, Action.DISPLAY, Action.APP, Action.HIDE).forEach(::row)

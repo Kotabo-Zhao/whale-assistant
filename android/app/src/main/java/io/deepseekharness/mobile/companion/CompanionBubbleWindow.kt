@@ -97,6 +97,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var deliveryWatcher: CompanionDeliveryWatcher? = null
     val visible: Boolean get() = root != null
 
+    private val toolWindows = PetToolWindows(context, wm)
+    fun openTool(tool: io.deepseekharness.mobile.features.WhaleFeatureStore.Tool) = toolWindows.open(tool)
     fun toggle() { if (visible) hide() else show() }
     private fun dispatchTask(task: String, mode: String, id: String, title: String, needs: String): org.json.JSONObject =
         receiveTask?.invoke(task, mode, id, title, needs) ?: workerPanel.submit(task, mode, id, title, needs)
@@ -273,6 +275,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(2), dp(8), 0)
         }
         val toolShelf = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        lateinit var controlsScroll: ScrollView
+        fun syncControls() {
+            controlsScroll.visibility = if (sessionActions.visibility == android.view.View.VISIBLE || toolShelf.childCount > 0)
+                android.view.View.VISIBLE else android.view.View.GONE
+        }
         fun sizeRow(label: String, choices: List<String>, selected: String, change: (String) -> Unit) {
             val row = LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
@@ -317,6 +324,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             setPadding(dp(12), 0, dp(12), 0); ui.leadingIcon(this, R.drawable.ic_pet_letter)
             contentDescription = "交办独立后台任务"; setOnClickListener {
                 sessionActions.visibility = android.view.View.GONE
+                syncControls()
                 panel.post { positionUpdater?.invoke() }
                 composeTask()
             }
@@ -325,7 +333,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         shortcut(ui.string(R.string.pet_menu_tools), R.drawable.ic_whale_nav_plugins, ui.string(R.string.pet_menu_tools)) {
             sessionActions.visibility = android.view.View.GONE
             if (toolShelf.childCount > 0) toolShelf.removeAllViews()
-            else toolShelf.addView(WhalePetToolShelf(context, { panel.post { positionUpdater?.invoke() } }, ::hide))
+            else toolShelf.addView(WhalePetToolShelf(context, { panel.post { positionUpdater?.invoke() } }, ::openTool, ::hide))
+            syncControls()
             panel.post { positionUpdater?.invoke() }
         }
         val content = LinearLayout(context).apply {
@@ -337,7 +346,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         panel.addView(scroll, LinearLayout.LayoutParams(-1, dp(120)))
         val controls = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         var controlLimit = dp(180)
-        val controlsScroll = object : ScrollView(context) {
+        controlsScroll = object : ScrollView(context) {
             override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
                 val cap = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) controlLimit
                     else minOf(controlLimit,MeasureSpec.getSize(heightMeasureSpec))
@@ -346,6 +355,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         controls.addView(toolShelf); controls.addView(sessionActions)
         controlsScroll.addView(controls)
+        syncControls()
         panel.addView(shortcuts); panel.addView(controlsScroll)
         content.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
             if (bottom - top != oldBottom - oldTop) panel.post { if (root === panel) positionUpdater?.invoke() }
@@ -625,6 +635,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         shortcut(ui.string(R.string.pet_menu_session), R.drawable.ic_whale_nav_chat, ui.string(R.string.pet_menu_session)) {
             toolShelf.removeAllViews()
             sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
+            syncControls()
             controlsScroll.scrollTo(0,0)
             panel.post { positionUpdater?.invoke() }
         }
@@ -988,7 +999,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (controlLimit != nextLimit) { controlLimit = nextLimit; controlsScroll.requestLayout() }
             val measureWidth = android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY)
             panel.measure(measureWidth, android.view.View.MeasureSpec.UNSPECIFIED)
-            val chrome = panel.measuredHeight - scroll.measuredHeight
+            // WRAP_CONTENT can still report the expanded menu's cached height during collapse.
+            var chrome = panel.paddingTop + panel.paddingBottom
+            for (i in 0 until panel.childCount) {
+                val child = panel.getChildAt(i)
+                if (child !== scroll && child.visibility != android.view.View.GONE) chrome += child.measuredHeight
+            }
             val natural = content.measuredHeight.takeIf { it > 0 } ?: dp(112)
             val available = (usable - frame.top.coerceAtLeast(0) - dp(8)).coerceAtLeast(1)
             val targetHeight = when (heightMode) {
@@ -1185,5 +1201,5 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
 
     fun followPet() { positionUpdater?.invoke() }
     fun hide() { showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { activeReply?.cancel(); activeReply=null; closed = true; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
+    fun destroy() { toolWindows.destroy(); activeReply?.cancel(); activeReply=null; closed = true; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
 }

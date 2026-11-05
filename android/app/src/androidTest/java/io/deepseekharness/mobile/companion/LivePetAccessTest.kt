@@ -31,7 +31,24 @@ class LivePetAccessTest {
 
     @Test fun grantedPetReadsUserConfirmedFactWithExistingSavePolicy() = verifyMemory(writeViaAgent = false)
 
-    private fun verifyMemory(writeViaAgent: Boolean) {
+    @Test fun requestedMemoryRoundTripWhileAutomaticSourcesPaused() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("livePetChecks") == "yes")
+        val prefs = InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("companion_private_v1", Context.MODE_PRIVATE)
+        val key = "automatic_memory_suppressed_all"
+        val existed = prefs.contains(key)
+        val paused = prefs.getBoolean(key, false)
+        try {
+            check(prefs.edit().putBoolean(key, true).commit())
+            verifyMemory(writeViaAgent = true, checkDeleted = true)
+            assertTrue(prefs.getBoolean(key, false))
+        } finally {
+            val restore = prefs.edit()
+            if (existed) restore.putBoolean(key, paused) else restore.remove(key)
+            check(restore.commit())
+        }
+    }
+
+    private fun verifyMemory(writeViaAgent: Boolean, checkDeleted: Boolean = false) {
         assumeTrue(InstrumentationRegistry.getArguments().getString("livePetChecks")=="yes")
         val inst = InstrumentationRegistry.getInstrumentation()
         val context = inst.targetContext
@@ -48,7 +65,8 @@ class LivePetAccessTest {
         try {
             if (!wasEnabled) memory.enabled = true
             settings.bubbleMemoryAccess = true
-            withLivePetRuntime(context) {
+            withLivePetRuntime(context) { host ->
+                var lastSession = ""
                 fun askInFreshPet(prompt: String): CompanionBubbleChat.Reply {
                     val dir = java.io.File(context.cacheDir,"live-pet-"+UUID.randomUUID()).apply { check(mkdir()) }
                     val isolated = object : android.content.ContextWrapper(context) {
@@ -62,7 +80,10 @@ class LivePetAccessTest {
                     try {
                         return PetReplyOperation(100_000).run {
                             chat.fusedReply(listOf(CompanionBubbleChat.Message("user",prompt)),scope,memoryAllowed,false) { }
-                        }.also { check(BubbleSessionRegistry(context).contains(checkNotNull(chat.handoffSessionId()))) }
+                        }.also {
+                            lastSession = checkNotNull(chat.handoffSessionId())
+                            check(BubbleSessionRegistry(context).contains(lastSession))
+                        }
                     } finally { dir.deleteRecursively() }
                 }
                 if (writeViaAgent) {
@@ -80,6 +101,22 @@ class LivePetAccessTest {
                     created+" 到 "+(created+1)+" 毫秒。请原样告诉我图案。")
                 assertTrue("模型回合缺少成功的记忆检索回执","mobile_memory_search" in answer.tools)
                 assertTrue("新会话未读回随机图案",answer.text.replace(" ","").contains(value))
+                if (checkDeleted) {
+                    val confirmed = fixtureRows().single()
+                    check(memory.deleteForUser(confirmed.getString("id"), confirmed.toString()))
+                    val replay = askInFreshPet("请帮我把这句话原样记进长期记忆：「"+fact+"」。")
+                    assertFalse("已删除内容被重新保存", "mobile_memory_save" in replay.tools)
+                    assertTrue("测试记忆被重新写回", fixtureRows().isEmpty())
+                    val events = host.recentRecords(lastSession).objects().map { it.getJSONObject("event") }
+                    val ids = events.filter { it.optString("type") == "tool/call" && it.getJSONObject("data").optString("name") == "mobile_memory_save" }
+                        .map { it.getJSONObject("data").getString("callId") }.toSet()
+                    assertTrue("缺少保存工具的删除保护回执", events.any {
+                        val message = it.optJSONObject("data")?.optJSONObject("message")
+                        it.optString("type") == "tool/result" && message != null && message.optString("toolCallId") in ids &&
+                            message.toString().contains("MEMORY_SUPPRESSED")
+                    })
+                    inst.sendStatus(0, android.os.Bundle().apply { putString("deletedReplay", "save rejected; no local record") })
+                }
                 inst.sendStatus(0,android.os.Bundle().apply {
                     putString("liveMemory",if (writeViaAgent) "save and search verified" else "user fixture, model search receipt and random value verified")
                     putBoolean("confirmationRequired",pending)

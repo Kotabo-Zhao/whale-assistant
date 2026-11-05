@@ -25,9 +25,13 @@ class CompanionMemoryStore(context: Context) {
             }
         }
 
-    fun execute(param: String): String = synchronized(lock) {
+    fun execute(param: String, fromPetTurn: Boolean = false): String = synchronized(lock) {
         if (!enabled) throw RuntimeFailure("MEMORY_DISABLED", "用户已关闭长期记忆")
         val request = runCatching { JSONObject(param) }.getOrNull()
+        if (request?.optString("op") in setOf("save", "update") && !fromPetTurn &&
+            prefs.getBoolean("automatic_memory_suppressed_all", false)) {
+            throw RuntimeFailure("MEMORY_SUPPRESSED", "自动整理已暂停；可在桌宠对话中明确要求保存新记忆")
+        }
         // JSON was capped for safe file writes.  The first real Agent memory operation
         // promotes it to the verified SQLite store, which has no record-count limit.
         if (request != null && !usesDatabase()) migrateToDatabase()
@@ -44,7 +48,9 @@ class CompanionMemoryStore(context: Context) {
             if (!path.isFile) throw RuntimeFailure("MEMORY_READ_FAILED", "记忆数据库不可用")
             return@synchronized MemoryMigrationDatabase(path).use { it.search(query, offset.toInt()).toString() }
         }
-        CompanionMemoryEngine(::load, ::write, prefs.getBoolean("automatic_assistant_memory", false), !usesDatabase(), ::isSuppressed, ::rememberDeleted).execute(param)
+        // Conversation tools follow the user's approval policy. Pausing background sources
+        // is independent; a conversation still cannot reintroduce a deleted fact.
+        CompanionMemoryEngine(::load, ::write, prefs.getBoolean("automatic_assistant_memory", false), !usesDatabase(), ::matchesDeletedMemory, ::rememberDeleted).execute(param)
     }
 
     /** UI management remains available even when model access is disabled. */
@@ -165,7 +171,7 @@ class CompanionMemoryStore(context: Context) {
         val rows = load()
         if (prefs.getBoolean("automatic_memory_suppressed_all", false) ||
             prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().contains("notification:$packageName")) return@synchronized false
-        val changed = CompanionNotificationMemory.upsert(rows, packageName, title, text, now, !usesDatabase())
+        val changed = CompanionNotificationMemory.upsert(rows, packageName, title, text, now, !usesDatabase(), ::matchesDeletedMemory)
         if (changed) write(rows)
         changed
     }
@@ -174,7 +180,8 @@ class CompanionMemoryStore(context: Context) {
         if (!usesDatabase()) migrateToDatabase()
         val rows = load()
         if (prefs.getBoolean("automatic_memory_suppressed_all", false) ||
-            prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().contains("usage")) return@synchronized false
+            prefs.getStringSet("automatic_memory_suppressed_sources", emptySet()).orEmpty().contains("usage") ||
+            matchesDeletedMemory(text)) return@synchronized false
         val changed = CompanionUsageMemory.upsert(rows, text, now, !usesDatabase())
         if (changed) write(rows)
         changed
@@ -246,7 +253,10 @@ class CompanionMemoryStore(context: Context) {
     fun resumeAutomaticSources() = synchronized(lock) {
         check(prefs.edit().remove("automatic_memory_suppressed_all").remove("automatic_memory_suppressed_sources").commit()) { "无法恢复自动整理" }
     }
-    private fun isSuppressed(text: String): Boolean = prefs.getBoolean("automatic_memory_suppressed_all", false) ||
+    private fun suppressAutomaticMemory(text: String): Boolean =
+        prefs.getBoolean("automatic_memory_suppressed_all", false) || matchesDeletedMemory(text)
+
+    private fun matchesDeletedMemory(text: String): Boolean =
         prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty().contains(CompanionMemorySuppression.digest(text)) ||
         CompanionMemorySuppression.matches(text, prefs.getStringSet("memory_deleted_signatures", emptySet()).orEmpty())
     private fun rememberDeleted(row: JSONObject) {
@@ -331,7 +341,7 @@ class CompanionMemoryStore(context: Context) {
         if (!enabled || CompanionMemorySuppression.digest("event:$eventId") in prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty()) return@synchronized 0
         if (!usesDatabase()) migrateToDatabase()
         val rows = load()
-        val added = CompanionSharedMemory.add(rows, eventId, claims, System.currentTimeMillis(), !usesDatabase(), ::isSuppressed)
+        val added = CompanionSharedMemory.add(rows, eventId, claims, System.currentTimeMillis(), !usesDatabase(), ::suppressAutomaticMemory)
         if (added > 0) write(rows)
         added
     }
@@ -342,7 +352,7 @@ class CompanionMemoryStore(context: Context) {
         val rows = load()
         val beforeIds = (0 until rows.length()).map { rows.getJSONObject(it).getString("id") }.toSet()
         if (CompanionMemorySuppression.digest("event:${job.event}") !in prefs.getStringSet("memory_deleted_events", emptySet()).orEmpty()) {
-            CompanionSharedMemory.add(rows, job.event, claims, System.currentTimeMillis(), false, ::isSuppressed, job.id, job.hash)
+            CompanionSharedMemory.add(rows, job.event, claims, System.currentTimeMillis(), false, ::suppressAutomaticMemory, job.id, job.hash)
         }
         val additions = (0 until rows.length()).map { rows.getJSONObject(it).getString("id") }.filterNot { it in beforeIds }.toSet()
         MemoryMigrationDatabase(UnifiedUnderstandingStore.path(app)).use { it.commitSharedJob(rows, job, result) }.also { committed ->
@@ -616,7 +626,7 @@ internal class CompanionMemoryEngine(private val load: () -> JSONArray, private 
             "save" -> {
                 val text = (request.opt("text") as? String)?.trim() ?: throw invalid()
                 if (text.isBlank() || text.length > 600 || CompanionStore.sensitive(text)) throw invalid()
-                if (suppressed(text)) throw RuntimeFailure("MEMORY_SUPPRESSED", "该记忆已被删除或暂停自动整理")
+                if (suppressed(text)) throw RuntimeFailure("MEMORY_SUPPRESSED", "该内容与已删除记忆匹配；如需恢复，请在记忆管理中手动添加")
                 val rows = load()
                 val existing = (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.getString("text") == text }
                 if (existing != null) return JSONObject().put("id", existing.getString("id")).put("alreadyExists", true)

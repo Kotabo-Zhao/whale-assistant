@@ -517,15 +517,20 @@ class WhaleAuthoredDeviceTest {
             waitFor("桌宠没有挂载工具页面") {
                 var found = false
                 inst.runOnMainSync {
-                    val root = CompanionBubbleWindow::class.java.getDeclaredField("root").apply { isAccessible = true }.get(pet) as View
-                    val shelf = views(root).filterIsInstance<WhalePetToolShelf>().firstOrNull()
-                    shelf?.let(::views)?.filterIsInstance<WebView>()?.firstOrNull()?.let { inline = it; found = true }
+                    val root = android.view.inspector.WindowInspector.getGlobalWindowViews().firstOrNull {
+                        (it.layoutParams as? android.view.WindowManager.LayoutParams)?.title == "桌宠工具 · $title"
+                    }
+                    root?.let(::views)?.filterIsInstance<WebView>()?.firstOrNull()?.let { inline = it; found = true }
                 }
                 found
             }
             enter(inline, "桌宠直接打开同一份启用版本")
             assertEquals("true", js(inline, "typeof window.Android === 'undefined' && typeof window.Capacitor === 'undefined'"))
             inst.runOnMainSync { pet!!.hide() }
+            enter(inline, "关闭桌宠对话后继续操作同一工具")
+            inst.runOnMainSync {
+                views(inline.rootView).single { it.contentDescription == app.getString(io.deepseekharness.mobile.R.string.pet_menu_close) }.performClick()
+            }
             waitFor("桌宠工具关闭后没有返回原浏览器") { inst.uiAutomation.rootInActiveWindow?.packageName == "com.android.chrome" }
             inst.sendStatus(0, Bundle().apply { putString("entryPoints", "main management, pet above Chrome, Chrome resumed"); putString("savedSource", "自建功能 · $title") })
         } finally { inst.runOnMainSync { pet?.destroy() } }

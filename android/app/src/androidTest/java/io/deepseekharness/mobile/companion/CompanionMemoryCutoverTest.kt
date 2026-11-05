@@ -55,6 +55,32 @@ class CompanionMemoryCutoverTest {
         assertEquals(3, store.listForUser().length())
     }
 
+    @Test fun pausedSourcesAndDeletedFactsRemainIndependentFromPetWrites() {
+        val store = CompanionMemoryStore(testContext)
+        val old = "我最喜欢的散步路线是沿着溪边经过蓝色石桥再去公园"
+        val fresh = "下次读书会请提醒我带上周末借的几本诗集"
+        fun save(text: String, foreground: Boolean) = org.json.JSONObject(store.execute(
+            org.json.JSONObject().put("op", "save").put("text", text).toString(), fromPetTurn = foreground))
+        fun blocked(text: String, foreground: Boolean) {
+            val failure = org.junit.Assert.assertThrows(io.deepseekharness.mobile.runtime.RuntimeFailure::class.java) { save(text, foreground) }
+            assertEquals("MEMORY_SUPPRESSED", failure.code)
+        }
+        store.addForUser(old, "user_edit")
+        store.clearForUser()
+        blocked(fresh, false)
+        blocked(old, true)
+        blocked(old + "。", true)
+        assertTrue(save(fresh, true).getBoolean("pending"))
+        assertFalse(store.updateUsageSummary("新的使用统计", 123))
+        val event = "share:" + "a".repeat(64)
+        fun claim(text: String) = org.json.JSONArray().put(org.json.JSONObject().put("text", text))
+        assertEquals(0, store.saveSharedFacts(event, claim("另外一项新的资料摘要")))
+        store.resumeAutomaticSources()
+        blocked(old, true)
+        assertEquals(0, store.saveSharedFacts(event, claim(old)))
+        assertEquals(1, store.saveSharedFacts(event, claim("另外一项新的资料摘要")))
+    }
+
     @Test fun missingDatabaseFailsClosedWithoutFallingBackToStaleFile() {
         val store = CompanionMemoryStore(testContext)
         store.addForUser("旧快照", "user_edit")

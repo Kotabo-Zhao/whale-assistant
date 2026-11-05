@@ -7,7 +7,8 @@ import java.util.UUID
 /** A bounded local rollup of observed notifications, not a conclusion about the user. */
 internal object CompanionNotificationMemory {
     private const val MAX_EVENTS = 4
-    fun upsert(rows: JSONArray, packageName: String, title: String, body: String, now: Long, legacyLimit: Boolean = true): Boolean {
+    fun upsert(rows: JSONArray, packageName: String, title: String, body: String, now: Long, legacyLimit: Boolean = true,
+               matchesDeleted: (String) -> Boolean = { false }): Boolean {
         if (now <= 0 || CompanionAutomaticMemory.fromNotification(packageName, title, body) == null) return false
         val event = CompanionNotificationRecords.truncate(listOf(title.trim(), body.trim()).filter { it.isNotEmpty() }.distinct().joinToString("："), 100)
         if (event.isBlank()) return false
@@ -26,6 +27,7 @@ internal object CompanionNotificationMemory {
         while (events.size > MAX_EVENTS) events.removeAt(0)
         val prefix = "来自 $packageName 的近期通知（未经核实）："
         val summary = CompanionNotificationRecords.truncate(prefix + events.joinToString("；"), 600)
+        if (matchesDeleted(summary) || matchesDeleted(event) || matchesDeleted(body)) return false
         if (existing != null) {
             existing.put("events", JSONArray(events)).put("text", summary).put("updatedAt", now)
         } else {

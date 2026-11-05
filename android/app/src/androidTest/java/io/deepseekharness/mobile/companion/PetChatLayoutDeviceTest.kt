@@ -59,9 +59,19 @@ class PetChatLayoutDeviceTest {
                             nodes.single { it.contentDescription == "高度$height" }.performClick()
                             menu.performClick()
                         }
+                        val laidOut = java.util.concurrent.CountDownLatch(1)
+                        panel.postOnAnimation { panel.postOnAnimation { laidOut.countDown() } }
+                        assertTrue("未收到布局帧", laidOut.await(3, java.util.concurrent.TimeUnit.SECONDS))
                         inst.waitForIdleSync()
                         var size = 0 to 0
-                        inst.runOnMainSync { size = panel.width to panel.height }
+                        inst.runOnMainSync {
+                            size = panel.width to panel.height
+                            val frame = android.graphics.Rect().also(panel::getWindowVisibleDisplayFrame)
+                            val scroll = panel.getChildAt(1)
+                            inst.sendStatus(0, android.os.Bundle().apply {
+                                putString("geometry", "$width/$height $size frame=$frame scroll=${scroll.height}/${scroll.layoutParams.height} ime=${panel.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime())}")
+                            })
+                        }
                         return size
                     }
                     val small = chooseSize("窄", "低")

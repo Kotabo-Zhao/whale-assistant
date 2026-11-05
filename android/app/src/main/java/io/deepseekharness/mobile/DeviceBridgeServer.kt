@@ -471,7 +471,8 @@ class DeviceBridgeServer(
                         access.requireMemory()
                         val result = if (request.optString("op") == "hybrid")
                             io.deepseekharness.mobile.companion.SemanticMemorySearch.execute(context, param)
-                        else io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(param)
+                        else io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(param,
+                            io.deepseekharness.mobile.companion.HarnessBubbleClient.isPetMemoryTurn(request.optString("callerSession")))
                         // A remote embedding query can finish after the user revokes access.
                         access.requireMemory()
                         if (io.deepseekharness.mobile.companion.CompanionMemoryHint.shouldNotify(param, result)) {
