@@ -27,7 +27,11 @@ internal fun withLivePetRuntime(context: Context, block: (HarnessBubbleClient) -
 }
 
 class LivePetAccessTest {
-    @Test fun grantedPetWritesAndFreshPetReadsSameLocalFact() {
+    @Test fun grantedPetWritesAndFreshPetReadsSameLocalFact() = verifyMemory(writeViaAgent = true)
+
+    @Test fun grantedPetReadsUserConfirmedFactWithExistingSavePolicy() = verifyMemory(writeViaAgent = false)
+
+    private fun verifyMemory(writeViaAgent: Boolean) {
         assumeTrue(InstrumentationRegistry.getArguments().getString("livePetChecks")=="yes")
         val inst = InstrumentationRegistry.getInstrumentation()
         val context = inst.targetContext
@@ -61,8 +65,12 @@ class LivePetAccessTest {
                         }.also { check(BubbleSessionRegistry(context).contains(checkNotNull(chat.handoffSessionId()))) }
                     } finally { dir.deleteRecursively() }
                 }
-                val saved = askInFreshPet("请帮我把这句话原样记进长期记忆：「"+fact+"」。")
-                assertTrue("模型回合缺少成功的记忆保存回执", "mobile_memory_save" in saved.tools)
+                if (writeViaAgent) {
+                    val saved = askInFreshPet("请帮我把这句话原样记进长期记忆：「"+fact+"」。")
+                    assertTrue("模型回合缺少成功的记忆保存回执", "mobile_memory_save" in saved.tools)
+                } else {
+                    assertEquals(UserMemoryResult.ADDED, memory.addForUser(fact,"user_edit"))
+                }
                 val row = fixtureRows().single()
                 assertEquals(fact,row.getString("text"))
                 val pending = row.optString("status")=="pending"
@@ -73,7 +81,7 @@ class LivePetAccessTest {
                 assertTrue("模型回合缺少成功的记忆检索回执","mobile_memory_search" in answer.tools)
                 assertTrue("新会话未读回随机图案",answer.text.replace(" ","").contains(value))
                 inst.sendStatus(0,android.os.Bundle().apply {
-                    putString("liveMemory","save receipt + database row + fresh session search receipt + random value matched")
+                    putString("liveMemory",if (writeViaAgent) "save and search verified" else "user fixture, model search receipt and random value verified")
                     putBoolean("confirmationRequired",pending)
                 })
             }
