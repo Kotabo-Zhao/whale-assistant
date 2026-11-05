@@ -18,7 +18,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class PetReplyRecoveryDeviceTest {
-    @Test fun stalledBackendCanBeDetachedAndNewTopicAcceptsAnotherMessage() {
+    @Test fun stalledBackendCanBeDetachedAndNewTopicAcceptsAnotherMessage() = recovery(false)
+    @Test fun queuedFollowupDoesNotTrapUserInFailedTopic() = recovery(true)
+
+    private fun recovery(withQueuedMessage: Boolean) {
         val inst=InstrumentationRegistry.getInstrumentation(); val app=inst.targetContext
         val key="pet-recovery-"+java.util.UUID.randomUUID()
         val directory=File(app.cacheDir,key).apply { check(mkdirs()) }
@@ -59,6 +62,13 @@ class PetReplyRecoveryDeviceTest {
                 nodes().single { it.text=="发送" }.performClick()
             }
             assertTrue(accepted.await(5,TimeUnit.SECONDS))
+            if (withQueuedMessage) {
+                inst.runOnMainSync {
+                    nodes().filterIsInstance<EditText>().single().setText("随后补充的消息")
+                    nodes().single { it.text=="继续发送" }.performClick()
+                }
+                until { nodes().any { it.text.toString().contains("等待对话 1") } }
+            }
             inst.runOnMainSync {
                 assertTrue(busy()); assertTrue(nodes().filterIsInstance<EditText>().single().isEnabled)
                 window.hide(); window.show()
@@ -72,6 +82,11 @@ class PetReplyRecoveryDeviceTest {
                 val next=nodes().single { it.text=="新话题" }; assertTrue(next.isEnabled); next.performClick()
             }
             until { !busy() && nodes().filterIsInstance<EditText>().single().text.isEmpty() }
+            if (withQueuedMessage) {
+                assertEquals("随后补充的消息", CompanionBubbleHistory(ctx).followups.entries().single().text)
+                inst.runOnMainSync { assertTrue(nodes().any { it.text.toString().contains("待处理消息 · 1") }) }
+                assertEquals(1, calls.get()) // Switching topics must not silently replay the old followup.
+            }
             inst.runOnMainSync {
                 nodes().filterIsInstance<EditText>().single().setText("恢复后的新消息")
                 nodes().single { it.text=="发送" }.performClick()

@@ -20,9 +20,31 @@ internal object PetModelHttp {
         val cancellation=PetReplyOperation.bind(call::cancel)
         try {
             return call.execute().use { response ->
-                check(response.isSuccessful) { "模型请求失败（HTTP ${response.code}），请检查配置或稍后重试。" }
-                requireNotNull(response.body).charStream().buffered().use(read)
+                check(response.isSuccessful) { when (response.code) {
+                    401, 403 -> "模型凭据无效或访问被拒绝（HTTP ${response.code}），请检查模型设置。"
+                    429 -> "模型请求过于频繁（HTTP 429），请稍后重试。"
+                    in 500..599 -> "模型服务暂时不可用（HTTP ${response.code}），请稍后重试。"
+                    in 300..399 -> "模型接口发生重定向（HTTP ${response.code}），请检查接口配置。"
+                    else -> "模型请求失败（HTTP ${response.code}），请检查配置或稍后重试。"
+                } }
+                // Bound total decoded HTTP bytes, including a single enormous SSE line or JSON body.
+                val bounded = object : java.io.FilterInputStream(requireNotNull(response.body).byteStream()) {
+                    private var count = 0
+                    private fun account(size: Int) { if (size > 0) count += size; check(count <= 512 * 1024) { "模型响应超过大小上限，未保存为完整回复。" } }
+                    override fun read(): Int = `in`.read().also { account(if (it < 0) 0 else 1) }
+                    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+                        `in`.read(buffer, offset, minOf(length, 512 * 1024 - count + 1)).also(::account)
+                }
+                bounded.bufferedReader(Charsets.UTF_8).use(read)
             }.also { PetReplyOperation.checkpoint() }
+        } catch (error: java.io.IOException) {
+            PetReplyOperation.checkpoint()
+            val message = when (error) {
+                is java.io.InterruptedIOException -> "模型回复等待超时，原消息已保留，请稍后重试。"
+                is java.net.UnknownHostException, is java.net.ConnectException -> "模型服务连接失败，请检查网络后重试。"
+                else -> "模型连接中断，回复未完成，原消息已保留。"
+            }
+            throw IllegalStateException(message, error)
         } finally { cancellation.close() }
     }
 }

@@ -84,31 +84,42 @@ internal class PetDirectChat(private val context: android.content.Context) {
         /** DONE terminates the SSE response even when its HTTP connection remains open. */
         internal fun readStream(reader: java.io.BufferedReader, onPartial: (String) -> Unit = {}): Turn {
             val answer = StringBuilder(); val calls = sortedMapOf<Int, ToolCall>()
-            var finish = ""; var done = false
+            var finish = ""
             while (true) {
                 PetReplyOperation.checkpoint()
                 val line = reader.readLine() ?: break
                 if (!line.startsWith("data:")) continue
                 val data = line.substringAfter(':').trim()
-                if (data == "[DONE]") { done = true; break }
+                if (data == "[DONE]") break
                 if (data.isEmpty()) continue
-                val choice = JSONObject(data).optJSONArray("choices")?.optJSONObject(0) ?: continue
+                val payload = try { JSONObject(data) } catch (error: org.json.JSONException) {
+                    throw IllegalStateException("模型返回了无效数据，回复未完成，请重试。", error)
+                }
+                if (payload.has("error")) error("模型流式响应报告错误，回复未完成，请稍后重试。")
+                val choice = payload.optJSONArray("choices")?.optJSONObject(0) ?: continue
                 val delta = choice.optJSONObject("delta")
                 val token = delta?.opt("content") as? String ?: ""
+                check(answer.length + token.length <= 64_000) { "模型回复超过可显示上限，未保存为完整回复。" }
                 if (token.isNotEmpty()) { answer.append(token); onPartial(answer.toString()) }
                 val chunks = delta?.optJSONArray("tool_calls")
                 if (chunks != null) for (i in 0 until chunks.length()) {
-                    val chunk = chunks.getJSONObject(i); val call = calls.getOrPut(chunk.getInt("index")) { ToolCall() }
+                    val chunk = chunks.getJSONObject(i)
+                    val index = chunk.getInt("index")
+                    check(index in 0..7) { "模型工具调用数量异常，未执行。" }
+                    val call = calls.getOrPut(index) { ToolCall() }
                     (chunk.opt("id") as? String)?.let { call.id += it }
                     chunk.optJSONObject("function")?.let { f ->
                         (f.opt("name") as? String)?.let { call.name += it }
                         (f.opt("arguments") as? String)?.let { call.arguments.append(it) }
                     }
+                    check(call.arguments.length <= 8192 && call.id.length <= 256 && call.name.length <= 128) { "模型工具参数超过上限，未执行。" }
                 }
                 (choice.opt("finish_reason") as? String)?.takeIf(String::isNotBlank)?.let { finish = it }
             }
             if (finish == "content_filter") error("模型服务未返回完整回复（内容过滤）。")
-            if (!done && finish.isBlank()) error("模型流式连接中断，请重试。")
+            if (finish == "length") error("模型回复达到长度限制，内容未完成，请缩小范围后重试。")
+            check(finish in setOf("stop", "tool_calls")) { "模型流式回复未完整结束，请重试。" }
+            check(answer.isNotBlank() || calls.isNotEmpty()) { "模型服务没有返回文本，请重试。" }
             return Turn(answer.toString(), calls.values.toList())
         }
     }

@@ -490,15 +490,28 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             contentDescription = "开始新话题并保留之前的聊天记录"
             isEnabled = !busy && (history.isNotEmpty() || lastError != null)
             setOnClickListener {
-                if (busy || followups.isNotEmpty() || (history.isEmpty() && lastError == null)) return@setOnClickListener
+                if (busy || (history.isEmpty() && lastError == null)) return@setOnClickListener
+                if (followups.any { it.deciding }) {
+                    android.widget.Toast.makeText(context, "仍在判断后续消息，请等待判断结束后开启新话题。", android.widget.Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 busy = true; send.isEnabled = false; input.isEnabled = false; isEnabled = false; continueButton.isEnabled = false
                 val generation = ++request
                 executor.execute {
-                    val result = runCatching { historyStore.archiveAndClear(); deliveryInbox.clear(); chat.startNewTopic() }
+                    val result = runCatching {
+                        // Preserve queued inputs for explicit review, never replay them into a different topic.
+                        val retained = journal.entries()
+                        historyStore.archiveAndClear(); deliveryInbox.clear(); chat.startNewTopic()
+                        retained
+                    }
                     handler.post {
                         if (closed || request != generation) return@post
                         busy = false
-                        result.onSuccess { history.clear(); draft = ""; lastError = null; failedUser = null }
+                        result.onSuccess { retained ->
+                            history.clear(); draft = ""; lastError = null; failedUser = null; failedFollowup = null
+                            followups.clear(); recovered.clear(); recovered.addAll(retained)
+                            pendingQuestion = null; mainQuestion = null
+                        }
                             .onFailure { lastError = "无法开启新话题，原聊天记录已保留" }
                         if (root != null) { hide(); show() }
                     }
@@ -540,7 +553,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val recoveryChip = ui.text("", 13f, accent).apply { minHeight = dp(44); gravity = Gravity.CENTER }
         controls.addView(recoveryChip)
         fun recoveryLabel() {
-            recoveryChip.text = if (recovery.isFailure) "待处理消息暂时无法读取" else "上次退出时的消息 · ${recovered.size}"
+            recoveryChip.text = if (recovery.isFailure) "待处理消息暂时无法读取" else "待处理消息 · ${recovered.size}"
             recoveryChip.visibility = if (recovered.isEmpty() && recovery.isSuccess) android.view.View.GONE else android.view.View.VISIBLE
         }
         recoveryLabel()
@@ -555,7 +568,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 if (runCatching { journal.remove(entry.id) }.isSuccess) { recovered.remove(entry); recoveryLabel() }
                 else android.widget.Toast.makeText(context,"暂时无法更新记录",android.widget.Toast.LENGTH_SHORT).show()
             }
-            val builder = android.app.AlertDialog.Builder(context).setTitle("上次退出时的消息")
+            val builder = android.app.AlertDialog.Builder(context).setTitle("待处理消息")
                 .setMessage(listOfNotNull(entry.after.takeIf(String::isNotBlank)?.let { "接在这句话之后：$it" }, entry.text, note).joinToString("\n\n"))
                 .setNegativeButton(if (recovered.size > 1) "查看下一条" else "稍后") { _,_ ->
                     if (recovered.size > 1) {
