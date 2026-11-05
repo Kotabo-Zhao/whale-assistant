@@ -59,3 +59,7 @@
 .worker-card label button { min-height:44px; border:0; border-radius:var(--radius-control); padding:8px 12px; background:var(--blue); color:var(--on-accent); cursor:pointer; }
 .worker-card label button:disabled { opacity:.5; cursor:default; }
 @media(max-width:640px) { .worker-card .assistant-task-actions { flex-direction:row; flex-wrap:wrap; } .worker-status-tabs { width:100%; } .worker-status-tabs button { flex:1 1 40%; } }
+
+.worker-priority-question .worker-card { align-items: flex-start; border-left-color: var(--amber-text); }
+.worker-priority-question .worker-card > div:first-child { flex: 1; }
+.worker-priority-question label button { font-weight: 650; }

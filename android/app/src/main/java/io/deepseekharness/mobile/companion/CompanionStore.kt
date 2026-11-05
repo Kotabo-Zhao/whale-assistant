@@ -26,7 +26,12 @@ class CompanionStore(context: Context) {
     var proactiveMemoryChat: Boolean
         get() = prefs.getBoolean("proactive_memory_chat", false)
         set(value) { prefs.edit().putBoolean("proactive_memory_chat", value).apply() }
-    /** Frequency applies only to the opt-in local proactive-memory bubble. */
+    var modelInitiative: Boolean
+        get() = prefs.getBoolean("model_initiative", false)
+        set(value) {
+            prefs.edit().putBoolean("model_initiative", value).apply()
+            if (!value) PetInitiative.clearOpening(app)
+        }
     var proactiveMemoryFrequency: String
         get() = prefs.getString("proactive_memory_frequency", "daily")?.takeIf { it in setOf("daily", "weekly") } ?: "daily"
         set(value) { require(value in setOf("daily", "weekly")); prefs.edit().putString("proactive_memory_frequency", value).apply() }

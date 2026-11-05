@@ -17,27 +17,23 @@ internal class CustomUnderstandingModel(
     private val key: String,
     private val provider: CustomModelProvider,
     private val model: String,
-) : UnderstandingModel {
-    override fun analyze(eventId: String, body: String): String {
+) : CompanionJsonModel {
+    override fun complete(prompt: UnderstandingPrompt.Value, tokenLimit: Int): String {
         require(key.isNotBlank() && !key.contains('\n') && !key.contains('\r'))
         require(model.isNotBlank() && model.length <= 200 && model.none { it.isISOControl() })
-        val prompt = UnderstandingPrompt.forEvent(eventId, body)
-        val raw = when (provider.api) {
+        return when (provider.api) {
             CustomProviderApi.OPENAI_COMPLETIONS -> error("Chat Completions must use DeepSeekUnderstandingModel")
-            CustomProviderApi.OPENAI_RESPONSES -> requestResponses(prompt)
-            CustomProviderApi.ANTHROPIC_MESSAGES -> requestAnthropic(prompt)
+            CustomProviderApi.OPENAI_RESPONSES -> requestResponses(prompt, tokenLimit)
+            CustomProviderApi.ANTHROPIC_MESSAGES -> requestAnthropic(prompt, tokenLimit)
         }
-        UnderstandingModelContract.validate(raw, eventId, body)
-        require(JSONObject(raw).optInt("version") == 2) { "model assessment version missing" }
-        return raw
     }
 
-    private fun requestResponses(prompt: UnderstandingPrompt.Value): String {
+    private fun requestResponses(prompt: UnderstandingPrompt.Value, tokenLimit: Int): String {
         val payload = JSONObject()
             .put("model", model)
             .put("instructions", prompt.system)
             .put("input", JSONArray().put(JSONObject().put("role", "user").put("content", prompt.user)))
-            .put("max_output_tokens", 4096)
+            .put("max_output_tokens", tokenLimit)
             .put("text", JSONObject().put("format", JSONObject().put("type", "json_object")))
         val response = CustomUnderstandingHttp.post(endpoint("/responses"), mapOf("Authorization" to "Bearer $key"), payload)
         val direct = response.opt("output_text") as? String
@@ -56,12 +52,12 @@ internal class CustomUnderstandingModel(
         return text
     }
 
-    private fun requestAnthropic(prompt: UnderstandingPrompt.Value): String {
+    private fun requestAnthropic(prompt: UnderstandingPrompt.Value, tokenLimit: Int): String {
         val payload = JSONObject()
             .put("model", model)
             .put("system", prompt.system)
             .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", prompt.user)))
-            .put("max_tokens", 4096)
+            .put("max_tokens", tokenLimit)
             .put("temperature", 0)
         val response = CustomUnderstandingHttp.post(endpoint("/messages"), mapOf(
             "x-api-key" to key,

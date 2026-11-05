@@ -93,7 +93,7 @@ class RuntimeInstaller(
             if (source.libraryId != null) {
                 RuntimeLibrary(store).copyArchive(source.libraryId, workspace.archivePart)
             } else if (source.isBundled) {
-                copyBundledRootfs(workspace.archivePart, manifest.rootfs) { copied ->
+                copyBundledRootfs(workspace.archivePart, manifest.rootfs, source.openSelectedRootfs ?: store::openBundledRootfs) { copied ->
                     status.update(
                         RuntimePhase.PREPARING,
                         downloaded = copied,
@@ -331,12 +331,13 @@ class RuntimeInstaller(
     private fun copyBundledRootfs(
         destination: File,
         artifact: RootfsArtifact,
+        openArchive: () -> java.io.InputStream,
         onProgress: (Long) -> Unit,
     ) {
         val digest = MessageDigest.getInstance("SHA-256")
         var written = 0L
         try {
-            store.openBundledRootfs().use { input ->
+            openArchive().use { input ->
                 FileChannel.open(
                     destination.toPath(),
                     StandardOpenOption.CREATE_NEW,

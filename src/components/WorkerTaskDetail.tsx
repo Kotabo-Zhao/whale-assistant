@@ -32,6 +32,7 @@ export function WorkerTaskDetail({ row, label = '任务详情', children }: { ro
     return () => { current = false }
   }, [open, row.id, row.writeSeq, offset, retry])
   const events = parts(detail?.events)
+  const usage = detail?.modelUsage as { reported?: number; tokens?: number; retries?: number } | undefined
   return <details onToggle={event => {
     const expanded = event.currentTarget.open
     setOpen(expanded)
@@ -40,6 +41,8 @@ export function WorkerTaskDetail({ row, label = '任务详情', children }: { ro
     {open && failed && <p>无法读取此工单。 <button type="button" onClick={() => setRetry(n => n + 1)}>重试</button></p>}
     {open && !failed && !detail && <p>正在读取任务记录…</p>}
     {open && detail && <>
+      {usage && Number.isSafeInteger(usage.retries) && <p>最近执行回合 · 模型重试 {usage.retries} 次 ·
+        {usage.reported && Number.isSafeInteger(usage.tokens) ? ` 已上报 ${usage.tokens} token（${usage.reported} 条用量记录）` : ' 供应商未上报总用量'}</p>}
       {([['summary','完整结果'], ['scope','任务范围'], ['decisionReason','接取依据'], ['decisionEvidence','判断依据'], ['question','待回答'], ['progress','当前进展']] as const)
         .map(([key,label]) => typeof detail[key] === 'string' && detail[key] !== '' && <div key={key}><strong>{label}</strong><p className="worker-text">{detail[key]}</p></div>)}
       {events.length > 0 && <><strong>任务记录</strong><ol>{events.map((event,index) => <li key={typeof event.id === 'string' ? event.id : index}>

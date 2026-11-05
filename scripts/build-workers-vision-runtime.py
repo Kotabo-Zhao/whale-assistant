@@ -16,6 +16,7 @@ source = assets / 'rootfs.bundle'
 def open_source():
     return archive.open('assets/runtime/rootfs.bundle') if archive else source.open('rb')
 expected_bases = {
+    '0.3.58-whale-bound-creation': '9ba659261da490ad0f403dc4ab656a28aefcc136bbf0b65cdc54f4737fb232b1',
     '0.3.57-whale-bound-session': '1f6b88bc1eaca93add37e3dcfb0f4b0353af0ba88c524479fb6793c769cf50ff',
     '0.3.56-whale-dependencies': 'aacb80466a27768139a0f6886b5302eab4def68f44ec0b2c05894818bc03021d',
     '0.3.55-whale-pet-modes': 'dc3f0010aa819df93e6165dfba18960f8588d20e95045bd7481084ed31a5cc4c',

@@ -54,6 +54,17 @@ internal fun interface UnderstandingModel {
     fun analyze(eventId: String, body: String): String
 }
 
+internal interface CompanionJsonModel : UnderstandingModel {
+    fun complete(prompt: UnderstandingPrompt.Value, tokenLimit: Int): String
+
+    override fun analyze(eventId: String, body: String): String {
+        val raw = complete(UnderstandingPrompt.forEvent(eventId, body), 4096)
+        UnderstandingModelContract.validate(raw, eventId, body)
+        require(JSONObject(raw).optInt("version") == 2) { "model assessment version missing" }
+        return raw
+    }
+}
+
 internal class UnderstandingRequestException(val code: String, message: String) : IllegalStateException(message)
 
 /** Configured OpenAI-compatible client; never follows redirects or logs content or credentials. */
@@ -62,15 +73,14 @@ internal class DeepSeekUnderstandingModel(
     private val model: String,
     private val endpoint: String = "https://api.deepseek.com/chat/completions",
     private val allowCustomEndpoint: Boolean = false,
-) : UnderstandingModel {
-    override fun analyze(eventId: String, body: String): String {
+) : CompanionJsonModel {
+    override fun complete(prompt: UnderstandingPrompt.Value, tokenLimit: Int): String {
         require(key.isNotBlank() && !key.contains('\n') && !key.contains('\r'))
         require(model.isNotBlank() && model.length <= 200 && model.none { it.isISOControl() })
-        val prompt = UnderstandingPrompt.forEvent(eventId, body)
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", prompt.system))
             .put(JSONObject().put("role", "user").put("content", prompt.user))
         val payload = JSONObject().put("model", model).put("messages", messages).put("temperature", 0)
-            .put("max_tokens", 4096).put("response_format", JSONObject().put("type", "json_object"))
+            .put("max_tokens", tokenLimit).put("response_format", JSONObject().put("type", "json_object"))
         val target = java.net.URI(endpoint)
         // DeepSeek defaults to thinking mode, which can consume this small extraction
         // budget before producing JSON. Classification needs the final answer instead.
@@ -105,8 +115,6 @@ internal class DeepSeekUnderstandingModel(
             }
             val response = JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString())
             val content = response.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
-            UnderstandingModelContract.validate(content, eventId, body)
-            require(JSONObject(content).optInt("version") == 2) { "model assessment version missing" }
             return content
         } finally { connection.disconnect() }
     }

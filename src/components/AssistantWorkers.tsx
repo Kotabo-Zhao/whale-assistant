@@ -109,8 +109,53 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
       setRevision(value => value + 1)
     } catch { setMessage('屏幕陪看设置未能保存。') }
   }
+  const question = listState === 'ready' && offset === 0 && (filter === 'all' || filter === 'attention')
+    ? rows.find(row => row.state === 'waiting' && row.question && !row.authorizationRevoked && !row.missingLedger)
+    : undefined
+  const renderTask = (row: CompanionRow) => <article key={row.id} className="assistant-task-card worker-card" data-state={String(row.state)}>
+      <div><strong>{row.text}</strong><small className="worker-card-status">{states[String(row.state)] || '状态待确认'} · {row.mode === 'create' ? '创作工具' : row.mode === 'device' ? '手机操作' : '读取与整理'}</small>
+        {typeof row.group === 'string' && row.group !== '' && <small>所属目标 · {row.group}</small>}
+        {row.authorizationRevoked === true && <small>任务授权已撤回</small>}
+        {row.authoredDraft && typeof row.authoredDraft === 'object' && 'revision' in row.authoredDraft && typeof row.authoredDraft.revision === 'string' ?
+          <button type="button" onClick={() => {
+            void runtimeBridge.companionDashboard({ operation: 'workerPreviewDraft', id: row.id, revision: (row.authoredDraft as { revision: string }).revision })
+              .catch(() => setMessage('草稿已变化，请刷新任务卡。'))
+          }}>预览工具草稿</button> : null}
+        {typeof row.progress === 'string' && row.progress && <p>进展：{row.progress}</p>}
+        {row.state === 'queued' && typeof row.waitReason === 'string' && row.waitReason && <p>{row.waitReason}</p>}
+        {typeof row.question === 'string' && row.question && <p>{row.question}</p>}
+        {typeof row.summary === 'string' && row.summary !== '' && <p className="worker-text worker-result-preview" aria-label={row.state === 'completed' ? '结果摘要' : '任务说明'}>{row.summary}</p>}
+        {row.hasPermissionSettings === true && row.mode === 'read' && typeof row.writeSeq === 'number' &&
+          <button type="button" disabled={busy !== null} onClick={() => {
+            setBusy(row.id)
+            void runtimeBridge.companionDashboard({ operation: 'workerResumeAuthorizedRead', id: row.id, writeSeq: Number(row.writeSeq) })
+              .then(result => { setMessage(String(result.message)); setRevision(v => v + 1) })
+              .catch(() => setMessage('工单已变化，请刷新查看')).finally(() => setBusy(null))
+          }}>继续原任务</button>}
+        {row.hasPermissionSettings === true && <button type="button" onClick={() => {
+          void runtimeBridge.companionDashboard({ operation: 'workerBlockedSettings', id: row.id })
+            .catch(() => setMessage('任务状态已变化，请刷新查看'))
+        }}>权限设置</button>}
+        {row.state === 'waiting' && resumeForm(row)}
+        {row.recordUnreadable !== true && <WorkerTaskDetail row={row} />}
+        <WorkerDependencyDetail target={row.dependencyTarget} action={resumeForm} />
+        {typeof row.uiError === 'string' && row.uiError && <p>{row.uiError}</p>}
+        {addingTo === row.id && row.missingLedger !== true && row.authorizationRevoked !== true && ['queued', 'starting', 'running', 'completed'].includes(String(row.state)) && <label>追加任务信息（当前轮结束后处理）
+          <textarea value={answers[row.id] || ''} onChange={event => setAnswers(old => ({ ...old, [row.id]: event.target.value }))} />
+          <button type="button" disabled={busy !== null || !answers[row.id]?.trim()} onClick={() => { void control(row, 'add') }}>提交补充</button></label>}
+        {row.state !== 'waiting' && resumeForm(row)}
+      </div>
+      <div className="assistant-task-actions">
+        {row.missingLedger !== true && row.authorizationRevoked !== true && ['queued','starting','running','completed'].includes(String(row.state)) &&
+          <button type="button" aria-expanded={addingTo === row.id} onClick={() => setAddingTo(value => value === row.id ? null : row.id)}>
+            {addingTo === row.id ? '收起补充' : '追加信息'}</button>}
+        <button type="button" disabled={typeof row.sessionId !== 'string'} onClick={() => { if (typeof row.sessionId === 'string') onOpenSession(row.sessionId) }}>查看任务会话</button>
+        {row.missingLedger !== true && !['completed', 'failed', 'cancelled', 'cancelling'].includes(String(row.state)) && <button type="button" disabled={busy !== null} onClick={() => { void control(row, 'cancel') }}>取消任务</button>}
+      </div>
+    </article>
   return <section className="worker-workspace" aria-label="后台协作与屏幕陪看">
     <header className="worker-flow-heading"><div><h3>交给后台，随时回来看看</h3><p>直接在对话中说出需求。这里查看进度、回答追问和领取结果。</p></div></header>
+    {question && <div className="assistant-task-list worker-priority-question" aria-label="等待你回答">{renderTask(question)}</div>}
     <div className="worker-overview" role="group" aria-label="全部目标的任务概况">
       {([['running','执行与排队'],['attention','待我处理']] as const).map(([key,label]) => <button type="button" key={key}
         className={`worker-overview-item ${key}`} onClick={() => { setGroup(''); setFilter(key); setOffset(0) }}>
@@ -165,46 +210,7 @@ export function AssistantWorkers({ onOpenSession, visible = true }: { onOpenSess
     {listState === 'loading' && <p>正在读取任务…</p>}
     {listState === 'failed' && <p role="status">暂时无法读取任务，请刷新重试。</p>}
     {listState === 'ready' && total === 0 && <p>当前筛选下没有任务。</p>}
-    <div className="assistant-task-list">{rows.map(row => <article key={row.id} className="assistant-task-card worker-card" data-state={String(row.state)}>
-      <div><strong>{row.text}</strong><small className="worker-card-status">{states[String(row.state)] || '状态待确认'} · {row.mode === 'create' ? '创作工具' : row.mode === 'device' ? '手机操作' : '读取与整理'}</small>
-        {typeof row.group === 'string' && row.group !== '' && <small>所属目标 · {row.group}</small>}
-        {row.authorizationRevoked === true && <small>任务授权已撤回</small>}
-        {row.authoredDraft && typeof row.authoredDraft === 'object' && 'revision' in row.authoredDraft && typeof row.authoredDraft.revision === 'string' ?
-          <button type="button" onClick={() => {
-            void runtimeBridge.companionDashboard({ operation: 'workerPreviewDraft', id: row.id, revision: (row.authoredDraft as { revision: string }).revision })
-              .catch(() => setMessage('草稿已变化，请刷新任务卡。'))
-          }}>预览工具草稿</button> : null}
-        {typeof row.progress === 'string' && row.progress && <p>进展：{row.progress}</p>}
-        {row.state === 'queued' && typeof row.waitReason === 'string' && row.waitReason && <p>{row.waitReason}</p>}
-        {typeof row.question === 'string' && row.question && <p>{row.question}</p>}
-        {typeof row.summary === 'string' && row.summary !== '' && <p className="worker-text worker-result-preview" aria-label={row.state === 'completed' ? '结果摘要' : '任务说明'}>{row.summary}</p>}
-        {row.hasPermissionSettings === true && row.mode === 'read' && typeof row.writeSeq === 'number' &&
-          <button type="button" disabled={busy !== null} onClick={() => {
-            setBusy(row.id)
-            void runtimeBridge.companionDashboard({ operation: 'workerResumeAuthorizedRead', id: row.id, writeSeq: Number(row.writeSeq) })
-              .then(result => { setMessage(String(result.message)); setRevision(v => v + 1) })
-              .catch(() => setMessage('工单已变化，请刷新查看')).finally(() => setBusy(null))
-          }}>继续原任务</button>}
-        {row.hasPermissionSettings === true && <button type="button" onClick={() => {
-          void runtimeBridge.companionDashboard({ operation: 'workerBlockedSettings', id: row.id })
-            .catch(() => setMessage('任务状态已变化，请刷新查看'))
-        }}>权限设置</button>}
-        {row.recordUnreadable !== true && <WorkerTaskDetail row={row} />}
-        <WorkerDependencyDetail target={row.dependencyTarget} action={resumeForm} />
-        {typeof row.uiError === 'string' && row.uiError && <p>{row.uiError}</p>}
-        {addingTo === row.id && row.missingLedger !== true && row.authorizationRevoked !== true && ['queued', 'starting', 'running', 'completed'].includes(String(row.state)) && <label>追加任务信息（当前轮结束后处理）
-          <textarea value={answers[row.id] || ''} onChange={event => setAnswers(old => ({ ...old, [row.id]: event.target.value }))} />
-          <button type="button" disabled={busy !== null || !answers[row.id]?.trim()} onClick={() => { void control(row, 'add') }}>提交补充</button></label>}
-        {resumeForm(row)}
-      </div>
-      <div className="assistant-task-actions">
-        {row.missingLedger !== true && row.authorizationRevoked !== true && ['queued','starting','running','completed'].includes(String(row.state)) &&
-          <button type="button" aria-expanded={addingTo === row.id} onClick={() => setAddingTo(value => value === row.id ? null : row.id)}>
-            {addingTo === row.id ? '收起补充' : '追加信息'}</button>}
-        <button type="button" disabled={typeof row.sessionId !== 'string'} onClick={() => { if (typeof row.sessionId === 'string') onOpenSession(row.sessionId) }}>查看任务会话</button>
-        {row.missingLedger !== true && !['completed', 'failed', 'cancelled', 'cancelling'].includes(String(row.state)) && <button type="button" disabled={busy !== null} onClick={() => { void control(row, 'cancel') }}>取消任务</button>}
-      </div>
-    </article>)}</div>
+    <div className="assistant-task-list">{rows.filter(row => row.id !== question?.id).map(renderTask)}</div>
     {total > 0 && <nav className="worker-page-nav" aria-label="任务分页">
       <span>{offset + 1}–{offset + rows.length} / {total}</span>
       {offset > 0 && <button type="button" onClick={() => setOffset(Math.max(0,offset-20))}>上一页</button>}

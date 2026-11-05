@@ -77,6 +77,7 @@ data class RuntimeSource(
     val manifestUrl: URI?,
     val manifestSha256: String?,
     val libraryId: String? = null,
+    val openSelectedRootfs: (() -> java.io.InputStream)? = null,
 ) {
     val isBundled: Boolean get() = manifestUrl == null && manifestSha256 == null && libraryId == null
 }

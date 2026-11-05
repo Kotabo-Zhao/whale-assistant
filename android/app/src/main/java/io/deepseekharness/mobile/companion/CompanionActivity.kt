@@ -620,6 +620,14 @@ class CompanionActivity : AppCompatActivity() {
                 .setMessage("解锁时可能在屏幕气泡展示一条已确认记忆，旁人或录屏可能看到。频率由下方设置，遵守免打扰。提示本身不会发送给模型。")
                 .setNegativeButton("取消") { _, _ -> render() }.setPositiveButton("允许") { _, _ -> store.proactiveMemoryChat = true; render() }.show()
         }
+        toggle("让鲸鱼娘思考是否主动聊聊", store.modelInitiative) { enabled ->
+            if (!enabled) { store.modelInitiative = false; render() }
+            else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("允许模型主动思考？")
+                .setMessage("初次可只根据时段搭话。若已允许桌宠访问长期记忆，每次可将一条已确认的简短记忆发给所选后台模型（${store.understandingProvider}），可能产生模型费用。模型可以保持安静，也可以在解锁时提出一个问题。每天或每周最多请求一次，遵守免打扰。")
+                .setNegativeButton("取消") { _, _ -> render() }
+                .setPositiveButton("开启") { _, _ -> store.modelInitiative = true; io.deepseekharness.mobile.OverlayBallService.checkInitiativeAfterOptIn(); render() }.show()
+        }
+        if (store.modelInitiative) paragraph(PetInitiative.lastStatus(this))
         button("设置主动搭话频率：${if (store.proactiveMemoryFrequency == "weekly") "每周最多一次" else "每天最多一次"}") {
             val choices = arrayOf("每天最多一次", "每周最多一次")
             val values = arrayOf("daily", "weekly")

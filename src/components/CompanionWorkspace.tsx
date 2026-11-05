@@ -156,7 +156,7 @@ function SharedOriginals({ note, open }: { note: Row; open: (row: Row) => void }
   </section>
 }
 
-export function CompanionWorkspace({ initialPanel = 'reminders', library = false }: { initialPanel?: Panel; library?: boolean }) {
+export function CompanionWorkspace({ initialPanel = 'reminders', library = false, firstNote }: { initialPanel?: Panel; library?: boolean; firstNote?: { current: boolean } }) {
   const [panel, setPanel] = useState<Panel>(initialPanel)
   const [items, setItems] = useState<Row[]>([])
   const [recurring, setRecurring] = useState<Row[]>([])
@@ -196,7 +196,9 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
   const [knowledgeSelectionMode, setKnowledgeSelectionMode] = useState(false)
   const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<Set<string>>(() => new Set())
   const [knowledgeProcessing, setKnowledgeProcessing] = useState<KnowledgeProcessing | null>(null)
-  const [writing, setWriting] = useState(false)
+  const [writing, setWriting] = useState(Boolean(firstNote?.current))
+  const [guidedSearch, setGuidedSearch] = useState(Boolean(firstNote?.current))
+  useEffect(() => { if (firstNote) firstNote.current = false }, [firstNote])
   const noteInput = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     if (library && (writing || editing)) noteInput.current?.focus()
@@ -293,7 +295,17 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
     if (pending.current) return null
     pending.current = true
     setBusy(true); setMessage('')
-    try { const result = await runtimeBridge.companionDashboard(request); if (result.result === 'STALE') { setMessage('记忆已变化，请重新核对。'); return null } if (result.ok === false || result.result === 'EXISTING_PENDING' || result.result === 'EXISTING_CONFIRMED') { setMessage('相同内容已存在或等待确认，未重复保存。'); return null } setWriting(false); setText(''); setEditing(null); setReview(null); setPreview(null); setRevision(v => v + 1); setMessage(success); return result }
+    try {
+      const result = await runtimeBridge.companionDashboard(request)
+      if (result.result === 'STALE') { setMessage('记忆已变化，请重新核对。'); return null }
+      const existingNote = request.operation === 'knowledgeAdd' && result.ok === false
+      if ((!existingNote && result.ok === false) || result.result === 'EXISTING_PENDING' || result.result === 'EXISTING_CONFIRMED') {
+        setMessage('相同内容已存在或等待确认，未重复保存。'); return null
+      }
+      setWriting(false); setText(''); setEditing(null); setReview(null); setPreview(null); setRevision(v => v + 1)
+      setMessage(existingNote ? '相同资料已保存在本机。' : success)
+      return result
+    }
     catch { setMessage('操作未完成，数据可能已变化或输入不符合要求；请刷新后重试。'); return null }
     finally { pending.current = false; setBusy(false) }
   }
@@ -526,7 +538,10 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
       <label>{panel === 'memory' ? '记忆内容' : '资料内容'}<textarea ref={noteInput} value={text} maxLength={panel === 'memory' ? 600 : 2000000} rows={3} onChange={e => setText(e.target.value)} placeholder={panel === 'memory' ? '写下希望助手记住的事实或偏好' : '输入或导入需要保存的资料（最长 200 万字，会自动分段）'} /></label>
       <div className="workspace-card-actions"><button className="button button-primary" type="button" disabled={busy || !text.trim()} onClick={() => {
         if (panel === 'memory') { void startMemoryReview(editing ? 'edit' : 'add', editing ?? undefined); return }
-        void run(editing ? { operation: 'knowledgeEdit', id: editing.id, expectedText: editing.text, text: text.trim() } : { operation: 'knowledgeAdd', text: text.trim() }, '资料已处理。')
+        const firstQuery = guidedSearch && !editing ? Array.from(text.trim()).slice(0, 10).join('').slice(0, 100) : ''
+        void run(editing ? { operation: 'knowledgeEdit', id: editing.id, expectedText: editing.text, text: text.trim() } : { operation: 'knowledgeAdd', text: text.trim() }, '资料已保存。').then(result => {
+          if (result && firstQuery) { setQuery(firstQuery); setGuidedSearch(false); setMessage('已用开头文字搜索，点开结果即可核对正文。') }
+        })
       }}>{editing ? '保存修改' : '添加'}</button>{(editing || library) && <button type="button" onClick={() => { setWriting(false); setEditing(null); setText(''); setReview(null) }}>取消编辑</button>}</div>
       </div>}
       {panel === 'knowledge' && runtimeBridge.addKnowledgeCapturesListener && !knowledgeQuery && knowledgeSource === 'all' && knowledgeCoverage === 'all' && <CaptureShelf revision={revision} active={!captureReader && !knowledgeDetail} open={row => showKnowledgeView(row, 'reader')} />}

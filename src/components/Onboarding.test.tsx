@@ -191,7 +191,7 @@ describe('Onboarding', () => {
   it('内置来源时说明不需要联网', () => {
     renderOnboarding({ settings: { ...settings, manifestUrl: '', manifestSha256: '' } })
     next()
-    expect(screen.getByText(/这次使用 APK 内置镜像/)).toBeDefined()
+    expect(screen.getByText(/完整版使用 APK 内置镜像/)).toBeDefined()
   })
 
   it('已装好运行环境时安装按钮禁用并说明装好即可对话', () => {

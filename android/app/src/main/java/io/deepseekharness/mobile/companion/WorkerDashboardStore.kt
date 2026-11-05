@@ -155,7 +155,7 @@ internal class WorkerDashboardStore(private val context: Context, private val co
         require(offset >= 0 && limit in 1..40)
         val row = worker(id)
         val detail = WorkerCardCatalog.compact(row)
-        for (key in listOf("scope","decisionReason","decisionEvidence","summary","question","progress","uiError"))
+        for (key in listOf("scope","decisionReason","decisionEvidence","summary","question","progress","uiError","modelUsage"))
             if (row.has(key)) detail.put(key,row.get(key))
         if (guestDir.isDirectory && !File(guestDir,"$id.json").isFile) WorkerCardCatalog.markMissing(detail)
         data class Event(val kind: String, val data: JSONObject, val phase: Int)

@@ -123,7 +123,7 @@ export function Onboarding({
 
   if (welcome && onOpenPet && onOpenLibrary) {
     const paths = [
-      { title:t('先使用本地资料'), hint:t('从其他 App 分享文字、图片或录音到资料库。'), icon:BookOpen, open:() => { onDone(); onOpenLibrary() } },
+      { title:t('先使用本地资料'), hint:t('记下第一条资料，保存后直接找回并阅读。'), icon:BookOpen, open:() => { onDone(); onOpenLibrary() } },
       { title:t('设置桌宠'), hint:t('允许显示在其他应用上层，即可在桌面呼出鲸鱼娘。'), icon:Sparkles, open:() => { onDone(); onOpenPet() } },
       { title:t('配置 AI 对话'), hint:t('连接模型，准备对话和后台任务。'), icon:MessageCircle, open:() => setWelcome(false) },
     ]
@@ -205,7 +205,7 @@ export function Onboarding({
                     {t("当前状态：")}{installed ? t("已安装") + (runtime.phase === 'running' ? t(" · 运行中") : '') : installing ? t("正在安装…") : t("未安装")}
                   </p>
                   <p className="onboarding-status">{usesBundledSource(settings)
-                    ? t("这次使用 APK 内置镜像，不联网也能装完。")
+                    ? t("完整版使用 APK 内置镜像；轻量版点击安装后，选择同版本配套的 .bundle 文件。")
                     : t("这次从你设置的在线地址下载，建议连 Wi-Fi。")}</p>
                   <button className="button button-primary" type="button" disabled={busy !== null || installed || installing} onClick={onInstall}>
                     {busy === 'install' ? <Loader2 className="spin" size={18} /> : <Blocks size={18} />}

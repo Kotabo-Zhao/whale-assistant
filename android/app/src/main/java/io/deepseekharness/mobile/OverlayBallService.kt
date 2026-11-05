@@ -3,6 +3,11 @@ package io.deepseekharness.mobile
 import io.deepseekharness.mobile.overlay.PetAction
 import io.deepseekharness.mobile.overlay.PetActing
 import io.deepseekharness.mobile.overlay.PetPose
+import io.deepseekharness.mobile.companion.PetInitiative
+import io.deepseekharness.mobile.companion.CompanionProactiveChatPolicy
+import io.deepseekharness.mobile.companion.CompanionMemoryStore
+import io.deepseekharness.mobile.companion.CompanionBubbleChatPolicy
+import io.deepseekharness.mobile.companion.configuredUnderstandingModel
 import io.deepseekharness.mobile.companion.WorkerDashboardStore
 import io.deepseekharness.mobile.companion.WhaleDirectCaptureActivity
 import io.deepseekharness.mobile.companion.WhaleMemoryShareActivity
@@ -155,6 +160,8 @@ class OverlayBallService : Service() {
         showCompanionHint(text) { if (!bubbleChat.visible) bubbleChat.show() }
     }
 
+    private val initiativeExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var nextTopicScanAt = 0L
     private var proactiveMemoryRunning = false
     private var calendarQueryRunning = false
     private var usageQueryRunning = false
@@ -391,6 +398,7 @@ class OverlayBallService : Service() {
         }
         avatarExecutor.shutdownNow()
         calendarExecutor.shutdownNow()
+        initiativeExecutor.shutdownNow()
         hintHandler.removeCallbacksAndMessages(null)
         bubbleChat.destroy()
         removeCompanionHint()
@@ -516,30 +524,66 @@ class OverlayBallService : Service() {
             }) store.dailyBriefLastDay = io.deepseekharness.mobile.companion.CompanionDailyBriefPolicy.dayKey(now)
     }
 
+    private fun initiativeScreenReady(): Boolean =
+        !calendarServiceDestroyed && ballAttached && bubbleChat.canReceiveInitiative && conversationView == null &&
+            !conversationOpening && !CompanionStore(this).inQuietHours() && hintView == null &&
+            getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == false &&
+            getSystemService(PowerManager::class.java)?.isInteractive == true
+
     private fun checkProactiveMemoryChat() {
         val settings = CompanionStore(this)
-        if (proactiveMemoryRunning || !settings.proactiveMemoryChat || settings.inQuietHours() || !ballAttached || bubbleChat.visible || conversationView != null ||
-            getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false ||
-            getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return
+        val modeled = settings.modelInitiative
+        if ((!modeled && !settings.proactiveMemoryChat) || proactiveMemoryRunning || !initiativeScreenReady()) return
+        if (SystemClock.elapsedRealtime() < nextTopicScanAt) return
         val prefs = getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
         val now = java.util.Calendar.getInstance()
-        val lastKey = prefs.getString("key", null) ?: io.deepseekharness.mobile.companion.CompanionProactiveChatPolicy.migrateLegacyDailyKey(prefs.getString("day", null), now)
-        if (!io.deepseekharness.mobile.companion.CompanionProactiveChatPolicy.due(settings.proactiveMemoryFrequency, lastKey, now)) return
-        val previous = prefs.getString("last", null)
+        val frequency = settings.proactiveMemoryFrequency
+        val key = CompanionProactiveChatPolicy.key(frequency, now)
+        val lastKey = prefs.getString("key", null) ?: CompanionProactiveChatPolicy.migrateLegacyDailyKey(prefs.getString("day", null), now)
+        if (lastKey == key || (modeled && prefs.getString("attempt_" + frequency, null) == key)) return
+        val previous = prefs.getString(if (modeled) "last_considered" else "last", null)
         proactiveMemoryRunning = true
-        calendarExecutor.execute {
-            val memory = runCatching {
-                val store = io.deepseekharness.mobile.companion.CompanionMemoryStore(applicationContext)
-                if (!store.enabled) null else io.deepseekharness.mobile.companion.CompanionBubbleChatPolicy.proactiveMemory(store.listForUser(), previous)
+        initiativeExecutor.execute {
+            var candidate: PetInitiative.Topic? = null
+            val opening = runCatching {
+                val store = CompanionMemoryStore(this)
+                val readMemory = store.enabled && (!modeled || settings.bubbleMemoryAccess)
+                val database = readMemory && store.usesDatabase()
+                val rows = when {
+                    !readMemory -> org.json.JSONArray()
+                    database -> store.pageForUser(null, null).rows
+                    else -> store.listForUser()
+                }
+                val indices = if (database) 0 until rows.length() else rows.length() - 1 downTo 0
+                val topic = indices.asSequence().mapNotNull(rows::optJSONObject)
+                    .filter { modeled || CompanionBubbleChatPolicy.proactiveMemory(org.json.JSONArray().put(it)) != null }
+                    .mapNotNull(PetInitiative::topic)
+                    .firstOrNull { CompanionBubbleChatPolicy.memoryDigest(it.text) != previous }
+                    ?: if (modeled && !prefs.getBoolean("met", false) && rows.length() == 0) PetInitiative.firstMeeting else return@runCatching null
+                candidate = topic
+                if (!modeled) return@runCatching "你之前提到：${topic.text}。最近还想聊聊吗？"
+                PetInitiative.think(this, topic, frequency, now, { configuredUnderstandingModel(this) }) {
+                    !calendarServiceDestroyed && getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == false &&
+                        getSystemService(PowerManager::class.java)?.isInteractive == true
+                }
             }.getOrNull()
             hintHandler.post {
                 proactiveMemoryRunning = false
-                if (calendarServiceDestroyed || memory == null || !CompanionStore(this).proactiveMemoryChat || bubbleChat.visible) return@post
-                val digest = io.deepseekharness.mobile.companion.CompanionBubbleChatPolicy.memoryDigest(memory)
-                val opening = "你之前提到：$memory。最近还想聊聊吗？"
-                if (showCompanionHint(opening) { bubbleChat.show(opening) }) prefs.edit()
-                    .putString("key", io.deepseekharness.mobile.companion.CompanionProactiveChatPolicy.key(CompanionStore(this).proactiveMemoryFrequency, java.util.Calendar.getInstance()))
-                    .putString("last", digest).apply()
+                val topic = candidate ?: run {
+                    nextTopicScanAt = SystemClock.elapsedRealtime() + 30 * 60_000L
+                    return@post
+                }
+                if (opening == null || !initiativeScreenReady() || settings.modelInitiative != modeled ||
+                    settings.proactiveMemoryFrequency != frequency ||
+                    (topic != PetInitiative.firstMeeting && !CompanionMemoryStore(this).enabled) ||
+                    (if (modeled) topic != PetInitiative.firstMeeting && !settings.bubbleMemoryAccess else !settings.proactiveMemoryChat)) return@post
+                if (showCompanionHint(opening) {
+                    if (!modeled) { if (settings.proactiveMemoryChat) bubbleChat.show(opening) }
+                    else if (settings.modelInitiative && initiativeScreenReady()) bubbleChat.show()
+                }) {
+                    if (modeled) PetInitiative.rememberOpening(this, topic, opening)
+                    prefs.edit().putString("key", key).putString("last", CompanionBubbleChatPolicy.memoryDigest(topic.text)).apply()
+                }
             }
         }
     }
@@ -2088,6 +2132,12 @@ class OverlayBallService : Service() {
             }
         }
         /** Opens only the local notification list on an explicit bubble tap. */
+        internal fun checkInitiativeAfterOptIn() {
+            Handler(Looper.getMainLooper()).postDelayed({
+                activeService?.let { service -> service.nextTopicScanAt = 0; service.checkProactiveMemoryChat() }
+            }, 1200)
+        }
+
         internal fun applyCompanionSizePreference(): Boolean = activeService?.applyCompanionSize() == true
 
         /** Apply the app-level reduced-motion setting immediately when the floating companion exists. */

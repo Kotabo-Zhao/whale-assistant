@@ -3544,6 +3544,7 @@ export function App() {
   const [lastMailboxExport, setLastMailboxExport] = useState<MailboxExportResult | null>(null)
   const [diagnostic, setDiagnostic] = useState<DiagnosticLogState>(EMPTY_DIAGNOSTIC)
   const [booting, setBooting] = useState(true)
+  const firstNote = useRef(false)
   const [onboardingOpen, setOnboardingOpen] = useState(() => {
     try { return window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === null } catch { return true }
   })
@@ -5388,7 +5389,7 @@ export function App() {
       case 'sessions':
         return <SessionManager onBack={() => backToView('conversation')} onOpenHarness={launchHarness} />
       case 'assistant-memory':
-        return <CompanionWorkspace initialPanel="knowledge" library />
+        return <CompanionWorkspace initialPanel="knowledge" library firstNote={firstNote} />
       case 'assistant-tasks':
         return <AssistantTasks onOpenSession={launchHarness} />
       case 'assistant-persona':
@@ -5516,7 +5517,7 @@ export function App() {
             setOnboardingOpen(false)
             setActiveView('versions')
           }}
-          onOpenLibrary={() => setActiveView('assistant-memory')}
+          onOpenLibrary={() => { firstNote.current = true; setActiveView('assistant-memory') }}
           onOpenPet={() => setActiveView('settings-runtime')}
           onDone={() => {
             try {

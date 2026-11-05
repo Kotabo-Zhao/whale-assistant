@@ -60,7 +60,7 @@ private fun isHttpsBaseUrl(provider: CustomModelProvider): Boolean =
     }.getOrDefault(false)
 
 /** Both background pipelines resolve the same explicit provider and encrypted credential. */
-internal fun configuredUnderstandingModel(context: Context): UnderstandingModel {
+internal fun configuredUnderstandingModel(context: Context): CompanionJsonModel {
     val settings = RuntimeStore(context)
     val provider = CompanionStore(context).understandingProvider
     val runtimeSettings = settings.settings()

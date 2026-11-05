@@ -11,7 +11,7 @@ function fixture(t) {
   return { queue: new WorkerQueue(dir), dir }
 }
 
-for (const [mode, permission] of [['read', 'read-only'], ['create', 'workspace-write'], ['create', 'read-only']])
+for (const [mode, permission] of [['read', 'read-only'], ['create', 'workspace-write'], ['create', '团队创作'], ['create', 'read-only']])
 test(`bound ${mode}/${permission} submissions retain their parent and enforce its creation permission`, async t => {
   const { dir } = fixture(t)
   const events = new Map(), agents = new Map(), inherited = new Map(), created = [], registered = new Map()
@@ -34,6 +34,7 @@ test(`bound ${mode}/${permission} submissions retain their parent and enforce it
       create: async ({ sessionId }) => { created.push(sessionId); makeAgent(sessionId) } },
     sessionPersistence: { flush: async () => {} },
     permissionPresets: { current: session => { assert.equal(session.id, 'session-bound'); return preset },
+      resolve: name => ({ sandbox: name === '团队创作' ? 'workspace-write' : name }),
       set: (session, permission) => inherited.set(session.id, permission) } }
   const installed = installWorkers(ctx, { directory: dir, defineTool: tool => tool, bridge: async (name, input) => {
     const req = JSON.parse(input || '{}')
@@ -77,6 +78,20 @@ test(`bound ${mode}/${permission} submissions retain their parent and enforce it
     }
   }
   assert.deepEqual(created, [row.sessionId])
+  if (mode === 'read') {
+    const emit = events.get('session/event')
+    const session = agents.get(row.sessionId).session
+    emit(session, { type: 'llm/retry', data: { delayMs: 30000 } })
+    emit(session, { type: 'assistant/message', data: { usage: { totalTokens: 123 } } })
+    await registered.get('mobile_workers').execute({ action: 'start', task: 'Another read during provider backoff', mode: 'read' },
+      { agent: agents.get('session-bound'), callId: 'more-work' })
+    await installed.pump()
+    const next = [...installed.queue.rows.values()].find(item => item.id !== row.id)
+    assert.equal(next.state, 'queued')
+    assert.match(next.waitReason, /模型服务正在重试/)
+    emit(session, { type: 'turn/end', data: { reason: { kind: 'completed' } } })
+    assert.deepEqual(row.modelUsage, { reported: 1, tokens: 123, retries: 1 })
+  }
 })
 test('heartbeat tier: active rows/pending deliveries 5 s, channels 15 s, idle 60 s', () => {
   assert.equal(HEARTBEAT_ACTIVE_MS, 5000)

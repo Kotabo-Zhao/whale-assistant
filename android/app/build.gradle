@@ -45,6 +45,8 @@ def loadTeamSigning() {
     return null
 }
 def teamSigning = loadTeamSigning()
+def separateRuntime = providers.gradleProperty('whaleSeparateRuntime').orNull == 'true'
+if (separateRuntime) layout.buildDirectory.set(rootProject.layout.buildDirectory.dir('whale-light-app'))
 
 def appSourceRoot = rootProject.projectDir.parentFile.canonicalFile
 def legalAssetSources = [
@@ -149,6 +151,12 @@ def downloadBgeBaseAssets = tasks.register('downloadBgeBaseAssets') {
     }
 }
 
+def lightAssets = layout.buildDirectory.dir('generated/assets/whaleLight')
+def collectLightAssets = tasks.register('collectLightAssets', Sync) {
+    from('src/main/assets') { exclude 'runtime/rootfs.bundle' }
+    into(lightAssets)
+}
+
 android {
     namespace 'io.deepseekharness.mobile'
     compileSdk 35
@@ -169,8 +177,9 @@ android {
         applicationId 'io.deepseekharness.mobile'
         minSdk 26
         targetSdk 35
-        versionCode 101
-        versionName '0.3.8-preview.56'
+        buildConfigField 'boolean', 'SEPARATE_RUNTIME', separateRuntime.toString()
+        versionCode 102
+        versionName '0.3.8-preview.57'
 
         buildConfigField 'String', 'DEFAULT_MANIFEST_URL', envBuildValue('DSH_RUNTIME_MANIFEST_URL')
         buildConfigField 'String', 'DEFAULT_MANIFEST_SHA256', envBuildValue('DSH_RUNTIME_MANIFEST_SHA256')
@@ -196,6 +205,7 @@ android {
 
     sourceSets {
         main {
+            if (separateRuntime) assets.setSrcDirs([lightAssets])
             assets.srcDir(generatedLegalAssetsDirectory)
             assets.srcDir(generatedBgeAssetsDirectory)
             assets.srcDir(generatedRichChatAssets)
@@ -264,6 +274,7 @@ kotlin {
 }
 
 tasks.named('preBuild').configure {
+    if (separateRuntime) dependsOn(collectLightAssets)
     dependsOn(generateLegalAssets)
     dependsOn(downloadBgeBaseAssets)
     dependsOn(generateRichChatAssets)

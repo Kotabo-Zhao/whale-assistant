@@ -1215,11 +1215,39 @@ class MobileRuntimePlugin : Plugin() {
 
     @PluginMethod
     fun install(call: PluginCall) {
+        if (BuildConfig.SEPARATE_RUNTIME && call.getString("libraryId").isNullOrBlank()) {
+            val settings = controller.store.settings()
+            if ((call.getString("manifestUrl") ?: settings.manifestUrl).isBlank() &&
+                (call.getString("manifestSha256") ?: settings.manifestSha256).isBlank()) {
+                val host = activity ?: run { call.reject("无法打开系统文件选择器"); return }
+                host.runOnUiThread {
+                    val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE)
+                    try { startActivityForResult(call, pick, "runtimeArchiveSelected") }
+                    catch (_: Exception) { call.reject("无法选择配套运行环境文件") }
+                }
+                return
+            }
+        }
+        installSelectedSource(call)
+    }
+
+    @ActivityCallback
+    private fun runtimeArchiveSelected(call: PluginCall?, result: ActivityResult) {
+        if (call == null) return
+        val uri = result.data?.data
+        if (result.resultCode != android.app.Activity.RESULT_OK || uri?.scheme != "content") {
+            call.reject("已取消选择运行环境"); return
+        }
+        installSelectedSource(call) { context.contentResolver.openInputStream(uri) ?: error("无法读取运行环境文件") }
+    }
+
+    private fun installSelectedSource(call: PluginCall, archive: (() -> java.io.InputStream)? = null) {
         execute(call) {
             audited(AuditEvent.RUNTIME_INSTALL) {
                 val settings = controller.store.settings()
                 val libraryId = call.getString("libraryId")
-                val source = if (!libraryId.isNullOrBlank()) {
+                val source = if (archive != null) RuntimeSource(null, null, openSelectedRootfs = archive)
+                else if (!libraryId.isNullOrBlank()) {
                     RuntimeSource(null, null, libraryId = RuntimeLibrary.requireId(libraryId.trim()))
                 } else {
                     RuntimeValidation.source(

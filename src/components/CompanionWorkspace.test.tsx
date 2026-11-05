@@ -6,6 +6,22 @@ import { CompanionWorkspace } from './CompanionWorkspace'
 
 beforeEach(() => { vi.clearAllMocks(); bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] }); bridge.exportCompanionBackup.mockResolvedValue(undefined); bridge.insertTaskDraft.mockResolvedValue(undefined); bridge.openCompanionKnowledge.mockResolvedValue(undefined) })
 describe('助手工作台', () => {
+  it('首次从欢迎页进入时保存用户自己的文字，再用真实查询入口找回', async () => {
+    const note = '明天要带蓝色笔记本'
+    const firstNote = { current: true }
+    bridge.companionDashboard.mockImplementation((req: { operation: string; query?: string }) => Promise.resolve(req.operation === 'knowledgeAdd'
+      ? { ok: true } : { items: req.query === note ? [{ id: 'first-note', text: note, source: 'text_file' }] : [] }))
+    const view = render(<CompanionWorkspace library initialPanel="knowledge" firstNote={firstNote} />)
+    fireEvent.change(await screen.findByLabelText('资料内容'), { target: { value: note } })
+    fireEvent.click(screen.getByRole('button', { name: '添加' }))
+    await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'knowledgeList', query: note, offset: 0 }))
+    expect(screen.getByRole('searchbox')).toHaveValue(note)
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(note) }))
+    expect(within(await screen.findByRole('dialog')).getAllByText(note).length).toBeGreaterThan(0)
+    view.unmount()
+    render(<CompanionWorkspace library initialPanel="knowledge" firstNote={firstNote} />)
+    expect(screen.queryByLabelText('资料内容')).toBeNull()
+  })
   it('标签关联唯一内容面板并向辅助技术报告加载状态', async () => {
     render(<CompanionWorkspace />)
     const memoryTab = screen.getByRole('tab', { name: '长期记忆' })

@@ -188,7 +188,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 if (closed || request != generation) return@post
                 busy = false
                 result.onSuccess {
-                    history.clear(); draft = ""; lastError = null; failedUser = null
+                    history.clear(); draft = ""; PetInitiative.clearOpening(context); initiativeQuestion = null; lastError = null; failedUser = null
                     show("已接续主对话会话；主对话正文不会复制到桌宠。现在可以继续发送消息。")
                 }.onFailure {
                     lastError = "无法切换到主对话会话，原桌宠记录已保留。"
@@ -198,8 +198,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         return true
     }
+    private var initiativeQuestion: String? = null
+    private var initiativeUsesMemory = false
+    val canReceiveInitiative: Boolean get() = !closed && !visible && !busy && draft.isBlank() &&
+        chat.pendingUser == null && followups.isEmpty() && failedUser == null
+
     fun show(opening: String? = null) {
         if (closed || visible) return
+        val resumeInitiativeDraft = initiativeQuestion != null
+        initiativeQuestion = null
         val density = context.resources.displayMetrics.density
         fun dp(n: Int) = (n * density).toInt()
         val ui = PetUi(context)
@@ -525,6 +532,22 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val user = it.role == "user"
             bubble(parsed.text, user).also { view -> renderCompleted(view, parsed.text, user) }; (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (!user) CompanionBubbleChatPolicy.citedSources(parsed.text, it.citations).forEach(::citationCard)
         }
+        if (history.isNotEmpty() && opening != null) bubble(opening, false)
+        if (initiativeQuestion == null && opening == null && !busy && chat.pendingUser == null && (draft.isBlank() || resumeInitiativeDraft) &&
+            CompanionStore(context).modelInitiative) {
+            executor.execute {
+                val pending = runCatching { PetInitiative.pendingOpening(context) }.getOrNull()
+                handler.post {
+                    if (pending != null && !closed && root === panel && !busy && (draft.isBlank() || resumeInitiativeDraft) &&
+                        CompanionStore(context).modelInitiative && (!pending.usesMemory || CompanionStore(context).bubbleMemoryAccess)) {
+                        initiativeQuestion = pending.text
+                        initiativeUsesMemory = pending.usesMemory
+                        bubble(pending.text, false)
+                        scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
+                    }
+                }
+            }
+        }
         fun workerReport(report: org.json.JSONObject) {
             val state = when (report.optString("state")) {
                 "completed" -> "已完成"
@@ -617,7 +640,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         result.onSuccess { retained ->
                             history.clear(); draft = unsentDraft; lastError = null; failedUser = null; failedFollowup = null
                             followups.clear(); recovered.clear(); recovered.addAll(retained)
-                            pendingQuestion = null; mainQuestion = null
+                            PetInitiative.clearOpening(context); initiativeQuestion = null; pendingQuestion = null; mainQuestion = null
                         }
                             .onFailure { lastError = "无法开启新话题，原聊天记录已保留" }
                         if (root != null) { hide(); show() }
@@ -800,7 +823,16 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
             val item = queued ?: failedFollowup?.takeIf { it.text == (retryText ?: input.text.toString().trim()) }
             val fromQueue = queued != null
-            val message = runCatching { CompanionBubbleChatPolicy.validateMessage(item?.text ?: retryText ?: input.text.toString()) }.getOrNull() ?: return@setOnClickListener
+            val typed = input.text.toString().trim()
+            val replyingTo = initiativeQuestion?.takeIf { item == null && retryText == null &&
+                CompanionStore(context).modelInitiative && (!initiativeUsesMemory ||
+                    (CompanionStore(context).bubbleMemoryAccess && CompanionMemoryStore(context).enabled)) }
+            val raw = item?.text ?: retryText ?: if (replyingTo != null && typed.isNotEmpty())
+                "鲸鱼娘问：「$replyingTo」\n我的回答：$typed" else typed
+            val message = runCatching { CompanionBubbleChatPolicy.validateMessage(raw) }.getOrElse {
+                if (raw.length > 2000) input.error = "带上提问后回答过长，请缩短一些。"
+                return@setOnClickListener
+            }
             queued = null
             retryText = null
             if (chat.pendingUser?.let { it != message } == true) {
@@ -818,7 +850,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 return@setOnClickListener
             }
             inFlightUser = message; failedUser = null; failedFollowup = null
-            if (!fromQueue && input.text.toString().trim() == message) input.text.clear()
+            if (initiativeQuestion != null) PetInitiative.clearOpening(context)
+            initiativeQuestion = null
+            if (!fromQueue && (typed == message || replyingTo != null)) input.text.clear()
             failedMessage?.let { content.removeView(it) }; failedMessage = null
             lastError = null
             val sentBubble = bubble(message, true)
