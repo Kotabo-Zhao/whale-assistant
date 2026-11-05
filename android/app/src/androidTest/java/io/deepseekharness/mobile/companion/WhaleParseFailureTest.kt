@@ -7,6 +7,43 @@ import org.junit.Test
 import java.io.File
 
 class WhaleParseFailureTest {
+    @Test fun finalExhaustedTicketNotifiesOnceAfterStateIsCommitted() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val key = "parse-exhaustion-"+java.util.UUID.randomUUID()
+        val root = File(app.cacheDir,key).apply { check(mkdirs()) }
+        val ctx = object : ContextWrapper(app) {
+            override fun getApplicationContext() = this
+            override fun getNoBackupFilesDir() = root
+            override fun getSharedPreferences(name: String,mode: Int) = app.getSharedPreferences(key+name,mode)
+        }
+        val states = mutableListOf<String>()
+        val store = CompanionKnowledgeStore(ctx)
+        val original = store.registerOriginal("a".repeat(64),"中断的录音.wav","audio/wav")
+        val id = original.getString("id")
+        val listener: () -> Unit = { states.add(store.findById(id)!!.getString("parseState")) }
+        try {
+            store.withParseDatabase { it.appendRecordIfAbsent(original,explicitReimport=true,reserveParse={}) }
+            CompanionKnowledgeStore.subscribeCaptures(listener)
+            repeat(3) { assertNotNull(store.claimParse()) }
+            assertEquals(listOf("processing","processing","processing"),states)
+            assertNull(store.claimParse())
+            assertEquals("needs_retry",states.last())
+            assertEquals(4,states.size)
+            assertEquals("INTERRUPTED",store.findById(id)!!.getString("parseFailure"))
+            assertFalse(store.withParseDatabase { it.hasPendingParse() })
+            repeat(5) { assertNull(store.claimParse()) }
+            assertEquals("空队列不应持续唤醒界面",4,states.size)
+            val retry = store.findById(id)!!
+            assertTrue(store.withParseDatabase { it.retryParse(id,retry.toString()) {} })
+            assertNotNull(store.claimParse())
+            assertEquals("processing",states.last())
+            assertFalse(store.findById(id)!!.has("parseFailure"))
+        } finally {
+            CompanionKnowledgeStore.unsubscribeCaptures(listener)
+            root.walkBottomUp().forEach { it.delete() }
+        }
+    }
+
     @Test fun failedOriginalKeepsSourceAndRetryClearsReason() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val key = "parse-reason-"+java.util.UUID.randomUUID()

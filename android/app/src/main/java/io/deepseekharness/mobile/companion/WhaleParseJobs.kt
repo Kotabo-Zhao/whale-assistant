@@ -88,9 +88,8 @@ class WhaleParseJobService : JobService() {
                 while (!stopped.get()) {
                     val anchor = synchronized(CompanionKnowledgeStore.lock) {
                         if (stopped.get()) return@execute
-                        store.withParseDatabase { it.claimParse() }.also {
+                        store.claimParse().also {
                             if (it == null) { WhaleParseJobs.ended(params); jobFinished(params, false) }
-                            else CompanionKnowledgeStore.captureChanged()
                         }
                     } ?: break
                     WhaleParseJobs.process(app, anchor, stopped)

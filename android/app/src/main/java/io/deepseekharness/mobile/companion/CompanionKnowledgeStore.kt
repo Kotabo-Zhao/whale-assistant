@@ -113,6 +113,15 @@ internal class CompanionKnowledgeStore(context: Context) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use(action)
     }
 
+    internal fun claimParse(): JSONObject? = synchronized(lock) {
+        var changed = false
+        try { withParseDatabase { it.claimParse { changed = true } } }
+        finally {
+            // Notify committed changes even if a later ticket cannot be read.
+            if (changed) captureChanged()
+        }
+    }
+
     internal fun commitParsed(ticket: String, parsed: WhaleParsedContent?, failure: WhaleParseFailure? = null): JSONArray = synchronized(lock) {
         if (parsed != null) semanticChange()
         withParseDatabase { it.finishParse(ticket, parsed, failure) }.also { if (it.length() > 0) scheduleSemantic(); captureChanged() }

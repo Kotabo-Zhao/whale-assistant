@@ -345,7 +345,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         return id?.let(::findById)?.takeIf { it.optString("source") == "original" && it.optString("parseTicket") == ticket }
     }
 
-    fun claimParse(): JSONObject? {
+    fun claimParse(onChanged: () -> Unit = {}): JSONObject? {
         while (true) {
             val ticket = db.rawQuery("SELECT key FROM knowledge_meta WHERE key GLOB 'parse:*' ORDER BY key LIMIT 1", null).use {
                 if (it.moveToFirst()) it.getString(0) else null
@@ -353,9 +353,14 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
             val anchor = ticketAnchor(ticket)
             if (anchor == null) { db.delete("knowledge_meta", "key=?", arrayOf(ticket)); continue }
             val attempts = anchor.optInt("parseAttempts")
-            if (attempts >= 3) { finishParse(ticket, null, WhaleParseFailure.INTERRUPTED); continue }
+            if (attempts >= 3) {
+                finishParse(ticket, null, WhaleParseFailure.INTERRUPTED)
+                onChanged()
+                continue
+            }
             anchor.put("parseState", "processing").put("parseAttempts", attempts + 1)
             updateRecord(anchor.getString("id"), anchor)
+            onChanged()
             return anchor
         }
     }
