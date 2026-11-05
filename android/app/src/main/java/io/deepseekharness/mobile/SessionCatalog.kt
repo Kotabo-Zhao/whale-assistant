@@ -212,14 +212,16 @@ class SessionCatalog(context: Context, private val store: RuntimeStore) {
      * 逐层拒绝符号链接、临时文件独占创建、`Os.rename` 原子替换，每次都覆盖（脚本必须与宿主同版本）。
      */
     /** Native opt-in only. Contents never use the owner-facing WebView catalog payload. */
-    internal fun initiativeChats(): JSONArray {
+    internal fun initiativeChats(digests: List<String> = emptyList(), includeRecent: Boolean = true): JSONArray {
         if (store.installedManifest() == null) return JSONArray()
         val name = "initiative-chat.cjs"
         prepareScript()
         prepareScript(name)
-        val result = ProcessProbe.run(resolver.launch(listOf(NODE_BINARY, "/root/.dsh-mobile/$name")),
-            store.currentRoot, TIMEOUT_SECONDS, outputLimit = 32_000)
-        if (!result.succeeded || result.timedOut) return JSONArray()
+        require(digests.size <= 8 && digests.all { it.matches(Regex("[0-9a-f]{16}")) })
+        val result = ProcessProbe.run(resolver.launch(listOf(NODE_BINARY, "/root/.dsh-mobile/$name",
+            digests.joinToString(","), includeRecent.toString())),
+            store.currentRoot, TIMEOUT_SECONDS, outputLimit = 96_000)
+        check(result.succeeded && !result.timedOut) { "暂时无法读取最近对话" }
         return JSONObject(result.output.trim().lineSequence().last()).getJSONArray("chats")
     }
 

@@ -142,6 +142,9 @@ internal object TaskNotification {
                 queued = false,
             )
         }
+        // One completed user turn may matter even when back-to-back system notifications are coalesced.
+        if (context != null && parsed is TurnCompletionPolicy.Parsed.Valid)
+            runCatching { io.deepseekharness.mobile.companion.ContextFollowupEvents.chat(context, parsed.session?.let { "main:$it" } ?: "all") }
         val now = SystemClock.elapsedRealtime()
         val dropped = synchronized(turnCompletedLock) { turnCompletionState.claim(now) }
         if (dropped != null) {

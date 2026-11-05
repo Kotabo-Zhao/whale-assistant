@@ -3,6 +3,7 @@ package io.deepseekharness.mobile
 import io.deepseekharness.mobile.overlay.PetAction
 import io.deepseekharness.mobile.overlay.PetActing
 import io.deepseekharness.mobile.overlay.PetPose
+import io.deepseekharness.mobile.companion.ContextFollowupEvents
 import io.deepseekharness.mobile.companion.PetContextFollowup
 import io.deepseekharness.mobile.companion.PetInitiative
 import io.deepseekharness.mobile.companion.CompanionProactiveChatPolicy
@@ -213,6 +214,7 @@ class OverlayBallService : Service() {
      */
     private val screenVisibility = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_USER_PRESENT) scheduleContext(1200)
             runCatching { applyCompanionMotionPreference() }
         }
     }
@@ -548,11 +550,89 @@ class OverlayBallService : Service() {
             ?: if (modeled && !met && rows.length() == 0) PetInitiative.firstMeeting else null
     }
 
+    private var nextContextTick = Long.MAX_VALUE
+    private val contextWake = Runnable { nextContextTick = Long.MAX_VALUE; checkContextFollowup() }
+    private var contextRunning = false
+    private var contextRetryAfter = 0L
+    private var contextFailureDelay = 30_000L
+
+    private fun scheduleContext(delay: Long) {
+        if (calendarServiceDestroyed) return
+        val at = SystemClock.uptimeMillis() + delay.coerceAtLeast(500L)
+        if (nextContextTick <= at) return
+        nextContextTick = at
+        hintHandler.removeCallbacks(contextWake)
+        hintHandler.postAtTime(contextWake, at)
+    }
+
+    private fun checkContextFollowup() {
+        if (contextRunning || calendarServiceDestroyed || !PetContextFollowup.enabled(this)) return
+        val batch = ContextFollowupEvents.batch(this).entries.take(8).associate { it.toPair() }
+        val staged = ContextFollowupEvents.staged(this)
+        val pending = staged.firstOrNull()
+        if (batch.isEmpty() && pending == null) return
+        if (!initiativeScreenReady()) {
+            // Unlock wakes us directly. A draft, open chat or quiet hours can also end without a new turn.
+            if (getSystemService(PowerManager::class.java)?.isInteractive == true &&
+                !CompanionStore(this).inQuietHours()) scheduleContext(15_000)
+            return
+        }
+        val wait = contextRetryAfter - SystemClock.elapsedRealtime()
+        if (wait > 0) { scheduleContext(wait); return }
+        val untilDisplay = if (lastHintAt == 0L) 0 else lastHintAt +
+            io.deepseekharness.mobile.companion.CompanionHintPolicy.ROUTINE_INTERVAL_MS - SystemClock.elapsedRealtime()
+        if (pending != null && untilDisplay > 0 && (batch.isEmpty() || staged.size >= 16)) {
+            scheduleContext(untilDisplay + 200)
+            return
+        }
+        contextRunning = true
+        initiativeExecutor.execute {
+            val result = runCatching {
+                if (pending != null && !PetContextFollowup.current(this, pending.getJSONObject("context"))) {
+                    ContextFollowupEvents.discard(this, pending)
+                    null
+                } else if (pending != null && untilDisplay <= 0) pending
+                else {
+                    val evidence = PetContextFollowup.find(this, batch.keys)
+                    if (evidence == null) { ContextFollowupEvents.finish(this, batch); null }
+                    else ContextFollowupEvents.decide(this, evidence, configuredUnderstandingModel(this)) {
+                        !calendarServiceDestroyed && getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == false &&
+                            getSystemService(PowerManager::class.java)?.isInteractive == true
+                    }
+                }
+            }
+            hintHandler.post {
+                contextRunning = false
+                if (calendarServiceDestroyed || !PetContextFollowup.enabled(this)) return@post
+                if (result.isFailure) {
+                    PetInitiative.status(this, "上下文跟进暂时失败，稍后重试")
+                    contextRetryAfter = SystemClock.elapsedRealtime() + contextFailureDelay
+                    contextFailureDelay = minOf(contextFailureDelay * 2, 5 * 60_000L)
+                    scheduleContext(contextRetryAfter - SystemClock.elapsedRealtime())
+                    return@post
+                }
+                contextFailureDelay = 30_000L
+                val proposal = result.getOrNull()
+                var delay = 2500L
+                if (proposal != null && initiativeScreenReady() &&
+                    ContextFollowupEvents.proposed(this)?.optString("signature") == proposal.optString("signature")) {
+                    val remaining = if (lastHintAt == 0L) 0 else lastHintAt +
+                        io.deepseekharness.mobile.companion.CompanionHintPolicy.ROUTINE_INTERVAL_MS - SystemClock.elapsedRealtime()
+                    if (remaining > 0 && ContextFollowupEvents.batch(this).isEmpty()) delay = remaining + 200
+                    else if (remaining > 0) delay = 2500
+                    else if (showCompanionHint(proposal.getString("text")) {
+                        if (PetContextFollowup.enabled(this) && initiativeScreenReady()) bubbleChat.show()
+                    }) ContextFollowupEvents.shown(this, proposal)
+                }
+                scheduleContext(delay)
+            }
+        }
+    }
+
     private fun checkProactiveMemoryChat() {
         val settings = CompanionStore(this)
-        val contextual = settings.contextFollowup
-        val modeled = contextual || settings.modelInitiative
-        if (contextual && !settings.knowledgeModelAccess) return
+        if (settings.contextFollowup) { checkContextFollowup(); return }
+        val modeled = settings.modelInitiative
         if ((!modeled && !settings.proactiveMemoryChat) || proactiveMemoryRunning || !initiativeScreenReady()) return
         if (SystemClock.elapsedRealtime() < nextTopicScanAt) return
         val prefs = getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
@@ -566,10 +646,7 @@ class OverlayBallService : Service() {
         initiativeExecutor.execute {
             var candidate: PetInitiative.Topic? = null
             val opening = runCatching {
-                val topic = if (contextual) PetContextFollowup.find(this)?.let {
-                    PetInitiative.Topic("context", it.signature, it)
-                } else memoryChatTopic(settings, modeled, previous, prefs.getBoolean("met", false))
-                if (topic == null) return@runCatching null
+                val topic = memoryChatTopic(settings, modeled, previous, prefs.getBoolean("met", false)) ?: return@runCatching null
                 candidate = topic
                 if (!modeled) return@runCatching "你之前提到：${topic.text}。最近还想聊聊吗？"
                 PetInitiative.think(this, topic, frequency, now, { configuredUnderstandingModel(this) }) {
@@ -583,19 +660,15 @@ class OverlayBallService : Service() {
                     nextTopicScanAt = SystemClock.elapsedRealtime() + 30 * 60_000L
                     return@post
                 }
-                if (contextual) nextTopicScanAt = SystemClock.elapsedRealtime() + 15 * 60_000L
-                if (opening == null || !initiativeScreenReady() || settings.contextFollowup != contextual ||
+                if (opening == null || !initiativeScreenReady() || settings.contextFollowup ||
                     settings.proactiveMemoryFrequency != frequency) return@post
-                val permission = when {
-                    contextual -> PetContextFollowup.enabled(this)
-                    modeled -> settings.modelInitiative && (topic == PetInitiative.firstMeeting ||
-                        (settings.bubbleMemoryAccess && CompanionMemoryStore(this).enabled))
-                    else -> !settings.modelInitiative && settings.proactiveMemoryChat && CompanionMemoryStore(this).enabled
-                }
+                val permission = if (modeled) settings.modelInitiative && (topic == PetInitiative.firstMeeting ||
+                    (settings.bubbleMemoryAccess && CompanionMemoryStore(this).enabled))
+                    else !settings.modelInitiative && settings.proactiveMemoryChat && CompanionMemoryStore(this).enabled
                 if (!permission) return@post
                 if (showCompanionHint(opening) {
                     if (!modeled) { if (settings.proactiveMemoryChat) bubbleChat.show(opening) }
-                    else if ((if (contextual) PetContextFollowup.enabled(this) else settings.modelInitiative) && initiativeScreenReady()) bubbleChat.show()
+                    else if (settings.modelInitiative && initiativeScreenReady()) bubbleChat.show()
                 }) {
                     if (modeled) PetInitiative.rememberOpening(this, topic, opening)
                     prefs.edit().putString("key", key).putString("last", CompanionBubbleChatPolicy.memoryDigest(topic.text)).apply()
@@ -2148,6 +2221,12 @@ class OverlayBallService : Service() {
             }
         }
         /** Opens only the local notification list on an explicit bubble tap. */
+        internal fun wakeForContextChange(context: Context) {
+            val service = activeService ?: return
+            if (service.noBackupFilesDir != context.applicationContext.noBackupFilesDir) return
+            service.hintHandler.post { if (activeService === service) service.scheduleContext(4_000) }
+        }
+
         internal fun checkInitiativeAfterOptIn() {
             Handler(Looper.getMainLooper()).postDelayed({
                 activeService?.let { service -> service.nextTopicScanAt = 0; service.checkProactiveMemoryChat() }

@@ -36,7 +36,7 @@ class CompanionStore(context: Context) {
         get() = prefs.getBoolean("context_followup", false)
         set(value) {
             check(prefs.edit().putBoolean("context_followup", value).commit())
-            if (!value) PetInitiative.clearContextOpening(app)
+            if (!value) { ContextFollowupEvents.cancel(app); PetInitiative.clearContextOpening(app) }
         }
     var proactiveMemoryFrequency: String
         get() = prefs.getString("proactive_memory_frequency", "daily")?.takeIf { it in setOf("daily", "weekly") } ?: "daily"
@@ -122,6 +122,7 @@ class CompanionStore(context: Context) {
         set(value) {
             check(prefs.edit().putBoolean("knowledge_model_access", value).commit())
             if (!value) {
+                ContextFollowupEvents.cancel(app)
                 PetInitiative.clearContextOpening(app)
                 SemanticControl(app).setEnabled(false)
                 SemanticIndexJobs.cancel(app)

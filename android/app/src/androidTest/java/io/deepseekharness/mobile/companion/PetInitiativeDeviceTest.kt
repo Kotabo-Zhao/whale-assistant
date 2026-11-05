@@ -76,11 +76,9 @@ class PetInitiativeDeviceTest {
         assertNull(PetContextFollowup.find(ctx))
         settings.knowledgeModelAccess = true
         val evidence = requireNotNull(PetContextFollowup.find(ctx))
-        val topic = PetInitiative.Topic("context", evidence.signature, evidence)
-        val raw = """{"speak":true,"chatQuote":"白鲸桌游","noteQuote":"周六可以领取","question":"白鲸桌游的样卡到了，你想周六去取吗？"}"""
+        val raw = """{"speak":true,"matter":"白鲸桌游样卡领取安排","chatQuote":"白鲸桌游","noteQuote":"周六可以领取","question":"白鲸桌游的样卡到了，你想周六去取吗？"}"""
         assertNotNull(PetContextFollowup.question(raw, evidence))
         assertNull(PetContextFollowup.question(raw.replace("周六可以领取", "周五可以领取"), evidence))
-        val now = Calendar.getInstance()
         var calls = 0
         val client = object : CompanionJsonModel {
             override fun complete(prompt: UnderstandingPrompt.Value, tokenLimit: Int): String {
@@ -88,24 +86,64 @@ class PetInitiativeDeviceTest {
                 return raw
             }
         }
-        fun think() = PetInitiative.think(ctx, topic, "daily", now, { client }) { true }
-        val question = requireNotNull(think())
-        now.add(Calendar.DATE, 1)
+        fun think() = ContextFollowupEvents.decide(ctx, evidence, client) { true }
+        val proposal = requireNotNull(think())
+        val question = proposal.getString("text")
         assertNull(think())
         assertEquals(1, calls)
         assertNull(PetContextFollowup.find(ctx))
         val another = knowledge.saveText("白鲸桌游周日还有样卡演示。", "text_file", null).recordIds.single()
         assertEquals(another, PetContextFollowup.find(ctx)?.id)
-        PetInitiative.rememberOpening(ctx, topic, question)
+        ContextFollowupEvents.shown(ctx, proposal)
         assertEquals(question, PetInitiative.pendingOpening(ctx)?.text)
         assertTrue(knowledge.edit(id, text, "白鲸桌游的样卡取消领取。"))
         assertNull(PetInitiative.pendingOpening(ctx))
         settings.knowledgeModelAccess = false
-        assertFalse(PetInitiative.stillAllowed(ctx, topic))
+        assertFalse(PetContextFollowup.current(ctx, evidence.reference()))
         assertNull(PetContextFollowup.find(ctx))
         settings.knowledgeModelAccess = true
         petTurn(ctx, "厨房水龙头漏水，要找师傅。", "先关阀门。")
         assertNull(PetContextFollowup.find(ctx))
+    }
+
+    @Test fun overlappingEventsAndQueuedDistinctMattersSurviveSeparateHandles() = isolated { ctx ->
+        val settings = CompanionStore(ctx)
+        settings.contextFollowup = true
+        settings.knowledgeModelAccess = true
+        val notes = CompanionKnowledgeStore(ctx)
+        val first = notes.saveText("白鲸奖杯确认用珊瑚橙，请备好绶带。", "text_file", null).recordIds.single()
+        petTurn(ctx, "白鲸奖杯的绶带等颜色确定再选。", "好的，等确认。")
+        val oldBatch = ContextFollowupEvents.batch(ctx)
+        assertTrue("note:$first" in oldBatch && "pet" in oldBatch)
+        ContextFollowupEvents.chat(ctx, "pet")
+        ContextFollowupEvents.finish(ctx, oldBatch)
+        assertEquals(setOf("pet"), ContextFollowupEvents.batch(ctx).keys)
+
+        fun decide(id: String, matter: String, userQuote: String, noteQuote: String, question: String): org.json.JSONObject? {
+            val evidence = requireNotNull(PetContextFollowup.find(ctx, setOf("note:$id")))
+            val client = object : CompanionJsonModel {
+                override fun complete(prompt: UnderstandingPrompt.Value, tokenLimit: Int): String =
+                    org.json.JSONObject().put("speak", true).put("matter", matter).put("chatQuote", userQuote)
+                        .put("noteQuote", noteQuote).put("question", question).toString()
+            }
+            return ContextFollowupEvents.decide(ctx, evidence, client) { true }
+        }
+        val prize = "白鲸奖杯绶带配色"
+        val a = requireNotNull(decide(first, prize, "白鲸奖杯", "珊瑚橙", "要备珊瑚橙的绶带吗？"))
+        val copy = notes.saveText("主办方再确认白鲸奖杯的颜色是珊瑚橙。", "text_file", null).recordIds.single()
+        assertNull(decide(copy, prize, "白鲸奖杯", "珊瑚橙", "绶带按珊瑚橙准备好吗？"))
+        val second = notes.saveText("松针乐团已选定降E大调，请按此调分谱。", "text_file", null).recordIds.single()
+        petTurn(ctx, "松针乐团定调之后我想确认分谱。", "好的。")
+        val b = requireNotNull(decide(second, "松针乐团分谱", "松针乐团", "降E大调", "要按降E大调分谱吗？"))
+        assertEquals(listOf(first, second), ContextFollowupEvents.staged(ctx).map { it.getString("note") })
+        // The newer conversation invalidates the first proposal. Dropping it leaves the second intact.
+        assertFalse(PetContextFollowup.current(ctx, a.getJSONObject("context")))
+        ContextFollowupEvents.discard(ctx, a)
+        assertEquals(second, ContextFollowupEvents.proposed(ctx)?.getString("note"))
+        ContextFollowupEvents.shown(ctx, b)
+        assertTrue(ContextFollowupEvents.staged(ctx).isEmpty())
+        settings.contextFollowup = false
+        assertTrue(ContextFollowupEvents.batch(ctx).isEmpty())
     }
 
     @Test fun configuredModelStaysQuietForAnAlreadyClosedConversation() = isolated { ctx ->
@@ -125,8 +163,7 @@ class PetInitiativeDeviceTest {
                 return raw
             }
         }
-        val topic = PetInitiative.Topic("context", evidence.signature, evidence)
-        assertNull(PetInitiative.think(ctx, topic, "daily", Calendar.getInstance(), { checkedModel }) { true })
+        assertNull(ContextFollowupEvents.decide(ctx, evidence, checkedModel) { true })
         assertTrue("需要模型明确选择保持安静", declined)
         assertNull(PetInitiative.pendingOpening(ctx))
         inst.sendStatus(0, android.os.Bundle().apply { putString("closedFollowup", "model chose silence") })

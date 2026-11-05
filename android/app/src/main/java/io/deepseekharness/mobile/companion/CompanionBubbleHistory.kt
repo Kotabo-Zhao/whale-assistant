@@ -9,6 +9,7 @@ import java.io.File
 /** A bounded private copy of recent messages for restoring the pet after service restart. */
 internal class CompanionBubbleHistory(context: Context, private val writer: TaskStateWriter = TaskStateWriter()) {
     data class Snapshot(val sessionId: String, val scope: String, val messages: List<CompanionBubbleChat.Message>, val pending: String? = null, val continuedMain: Boolean = false)
+    private val app = context.applicationContext
     private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "companion-bubble-history-v1.json"))
     internal val sourceFile: File get() = file.baseFile
     val followups = PetFollowupJournal(File(file.baseFile.parentFile, "pet-followups-v1.json"), writer)
@@ -26,6 +27,7 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
         if (writable != true) { check(!requireWritable) { "对话记录不可写，未交办新任务。" }; return@synchronized }
         val bytes = encode(snapshot)
         writer.replace(file.baseFile, bytes)
+        if (snapshot.pending == null && snapshot.messages.lastOrNull()?.role == "assistant") ContextFollowupEvents.chat(app, "pet")
     }
     fun exportArchive(): ByteArray? = load()?.copy(pending = null)?.let(::encode)
     /** Never overwrites a current local conversation during restore. */

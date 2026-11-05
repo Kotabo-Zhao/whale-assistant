@@ -19,6 +19,9 @@ internal class CompanionKnowledgeStore(context: Context) {
     }
     private fun scheduleSemantic() { if (SemanticControl(app).enabled) runCatching { SemanticIndexJobs.schedule(app, 5_000) } }
 
+    private fun signalRows(rows: JSONArray) = ContextFollowupEvents.notes(app,
+        (0 until rows.length()).map { rows.getJSONObject(it).getString("id") })
+
     fun search(query: String): JSONArray = synchronized(lock) { CompanionKnowledgeData.search(load(), query) }
     fun count(): Long = synchronized(lock) { UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.count() } }
     fun exactPage(query: String, offset: Int, limit: Int, accepts: (JSONObject) -> Boolean) = synchronized(lock) {
@@ -51,7 +54,7 @@ internal class CompanionKnowledgeStore(context: Context) {
         val additions = JSONArray(plan.additions)
         for (i in 0 until additions.length()) current.put(additions.getJSONObject(i))
         CompanionKnowledgeData.validateRows(current, false)
-        if (additions.length() > 0) { semanticChange(); write(current); scheduleSemantic() }
+        if (additions.length() > 0) { semanticChange(); write(current); scheduleSemantic(); signalRows(additions) }
         additions.length()
     }
     data class SavedText(val added: Boolean, val recordIds: List<String>)
@@ -74,7 +77,7 @@ internal class CompanionKnowledgeStore(context: Context) {
                 SavedText(added.length() > 0, chunks.indices.map { KnowledgeChunks.recordId(documentId, it) })
             }
         }
-        if (saved.added) scheduleSemantic()
+        if (saved.added) { scheduleSemantic(); ContextFollowupEvents.notes(app, saved.recordIds) }
         if (origin != null) captureChanged()
         saved
     }
@@ -85,7 +88,7 @@ internal class CompanionKnowledgeStore(context: Context) {
         val displayName = name.replace(Regex("[\\p{Cc}\\p{Cf}]"), " ").trim().take(200)
         val coverage = if (text.contains("[内容过长，已截取]") || text.contains("[仅提取前")) "partial" else "extracted_text"
         semanticChange()
-        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.appendDocument(documentId, chunks, displayName, coverage, requireOriginal, origin, mediaKind) }.also { if (it.length() > 0) scheduleSemantic() }
+        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.appendDocument(documentId, chunks, displayName, coverage, requireOriginal, origin, mediaKind) }.also { if (it.length() > 0) { scheduleSemantic(); signalRows(it) } }
     }
     /** Records an original even if parsing or image understanding is unavailable. */
     internal fun registerOriginal(originalId: String, name: String, mime: String, origin: WhaleShareSource? = null, captionIds: List<String> = emptyList(), queueParse: Boolean = false): JSONObject = synchronized(lock) {
@@ -107,7 +110,7 @@ internal class CompanionKnowledgeStore(context: Context) {
             .put("createdAt", System.currentTimeMillis()).put("originalId", originalId).put("coverage", "model_description")
         origin?.annotate(row)
         semanticChange()
-        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.appendRecordIfAbsent(row) }.also { scheduleSemantic() }
+        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.appendRecordIfAbsent(row) }.also { scheduleSemantic(); ContextFollowupEvents.notes(app, listOf(id)) }
     }
     internal fun <T> withParseDatabase(action: (UnifiedKnowledgeDatabase) -> T): T = synchronized(lock) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use(action)
@@ -124,7 +127,7 @@ internal class CompanionKnowledgeStore(context: Context) {
 
     internal fun commitParsed(ticket: String, parsed: WhaleParsedContent?, failure: WhaleParseFailure? = null): JSONArray = synchronized(lock) {
         if (parsed != null) semanticChange()
-        withParseDatabase { it.finishParse(ticket, parsed, failure) }.also { if (it.length() > 0) scheduleSemantic(); captureChanged() }
+        withParseDatabase { it.finishParse(ticket, parsed, failure) }.also { if (it.length() > 0) { scheduleSemantic(); signalRows(it) }; captureChanged() }
     }
 
     internal fun attachmentPage(id: String, expectedText: String, offset: Int, limit: Int): Pair<JSONArray, Int?> = synchronized(lock) {
@@ -158,7 +161,7 @@ internal class CompanionKnowledgeStore(context: Context) {
             if (expectedText != newText) CompanionMemoryStore(app).forgetSharedMaterial(expectedText, id)
             row.put("text", newText)
             db.updateRecord(id, row)
-            if (expectedText != newText) { scheduleSemantic(); captureChanged() }
+            if (expectedText != newText) { scheduleSemantic(); captureChanged(); ContextFollowupEvents.notes(app, listOf(id)) }
             true
         }
     }
@@ -178,7 +181,7 @@ internal class CompanionKnowledgeStore(context: Context) {
             if (row.getString("text") != expectedText) return@synchronized false
             semanticChange(id)
             CompanionMemoryStore(app).forgetSharedMaterial(expectedText, id)
-            db.trashRecord(id, expectedText, System.currentTimeMillis()).also { if (it) captureChanged() }
+            db.trashRecord(id, expectedText, System.currentTimeMillis()).also { if (it) { captureChanged(); ContextFollowupEvents.notes(app, listOf(id)) } }
         }
     }
     /** Ordinary record removal only: original-object deletion remains a separate irreversible action. */
@@ -197,7 +200,7 @@ internal class CompanionKnowledgeStore(context: Context) {
             semanticChange(row.getString("id"))
             CompanionMemoryStore(app).forgetSharedMaterial(row.getString("text"), row.getString("id"))
         }
-        if (removed.length() > 0) captureChanged()
+        if (removed.length() > 0) { captureChanged(); signalRows(removed) }
         removed
     }
     /** Whole-original removal is irreversible locally: it tombstones all associated records before deleting the object. */
@@ -214,6 +217,7 @@ internal class CompanionKnowledgeStore(context: Context) {
                 CompanionMemoryStore(app).forgetSharedMaterial(row.getString("text"), row.getString("id"))
             }
             captureChanged()
+            ContextFollowupEvents.notes(app, ids.toList())
             OriginalRemoval(removed.length(), runCatching { KnowledgeObjects(app).deleteVerified(originalId) }.getOrDefault(false))
         }
     }
@@ -221,12 +225,12 @@ internal class CompanionKnowledgeStore(context: Context) {
     internal fun undoRemove(id: String): Boolean = synchronized(lock) {
         require(id.matches(Regex("[a-f0-9-]{36}")))
         semanticChange()
-        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.undoTrash(id, System.currentTimeMillis(), 10 * 60_000L) }.also { if (it) { scheduleSemantic(); captureChanged() } }
+        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.undoTrash(id, System.currentTimeMillis(), 10 * 60_000L) }.also { if (it) { scheduleSemantic(); captureChanged(); ContextFollowupEvents.notes(app, listOf(id)) } }
     }
     internal fun undoMany(ids: List<String>): Boolean = synchronized(lock) {
         require(ids.size in 1..20 && ids.all { it.matches(Regex("[a-f0-9-]{36}")) })
         semanticChange()
-        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.undoTrashes(ids, System.currentTimeMillis(), 10 * 60_000L) }.also { if (it) { scheduleSemantic(); captureChanged() } }
+        UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.undoTrashes(ids, System.currentTimeMillis(), 10 * 60_000L) }.also { if (it) { scheduleSemantic(); captureChanged(); ContextFollowupEvents.notes(app, ids) } }
     }
     internal fun recentTrash(): JSONArray = synchronized(lock) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.recentTrash(System.currentTimeMillis(), 10 * 60_000L) }

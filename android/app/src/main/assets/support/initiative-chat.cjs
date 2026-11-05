@@ -83,24 +83,29 @@ function messages(text) {
   return result.some(r => r.role === 'user') ? result : []
 }
 
-function recent(root) {
+function recent(root, digests = [], includeRecent = true) {
   const floor = Date.now() - 7 * 86400000
   const entries = collectCandidates(root).candidates.filter(c => c.updatedAt >= floor)
-    .sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+  const tracked = new Set(digests)
+  const targets = entries.filter(c => tracked.has(createHash('sha256').update(c.id).digest('hex').slice(0, 16)))
+  const recentIds = new Set()
   const result = []
-  for (const candidate of entries) {
+  for (const candidate of new Set([...targets, ...(includeRecent ? entries.slice(0, 6) : [])])) {
+    const selected = targets.includes(candidate)
+    if (!selected && recentIds.size >= 3) continue
     const stamp = tail(candidate.log.full, candidate.log.compressed)
     if (!stamp) continue
     const turns = messages(stamp.text)
     if (turns.length) result.push({ id: candidate.id, file: path.relative(root, candidate.log.full),
       at: stamp.at, size: stamp.size, tailHash: stamp.tailHash, turns })
-    if (result.length === 3) break
+    if (turns.length && !selected) recentIds.add(candidate.id)
   }
   return result
 }
 
 if (require.main === module) {
-  try { process.stdout.write(JSON.stringify({ chats: recent('/root/.dsh/sessions') })) }
+  try { process.stdout.write(JSON.stringify({ chats: recent('/root/.dsh/sessions', (process.argv[2] || '').split(',').filter(Boolean), process.argv[3] !== 'false') })) }
   catch { process.exitCode = 1 }
 }
 module.exports = { tail, messages, recent }

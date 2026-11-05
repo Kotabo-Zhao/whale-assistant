@@ -630,13 +630,13 @@ class CompanionActivity : AppCompatActivity() {
         toggle("结合最近对话和资料主动跟进", store.contextFollowup) { enabled ->
             if (!enabled) { store.contextFollowup = false; render() }
             else androidx.appcompat.app.AlertDialog.Builder(this).setTitle("结合最近对话和资料主动跟进")
-                .setMessage("需开启资料检索。桌宠空闲时，将近 7 天一段对话的最多 4 条短摘录和 1 段相关资料发给后台模型；每天或每周最多判断一次。可随时关闭。")
+                .setMessage("新对话结束或资料更新后，桌宠会匹配近 7 天的对话，将最多 4 条对话摘录、1 段相关资料及已提醒的相关事项名交给后台模型判断。只在空闲时提醒，同一件事会去重。需开启资料检索。可随时关闭。")
                 .setNegativeButton("取消") { _, _ -> render() }
                 .setPositiveButton("开启") { _, _ -> store.contextFollowup = true; io.deepseekharness.mobile.OverlayBallService.checkInitiativeAfterOptIn(); render() }.show()
         }
         if (store.contextFollowup && !store.knowledgeModelAccess) paragraph("请开启对话资料检索以启用主动跟进。")
         if (store.modelInitiative || store.contextFollowup) paragraph(PetInitiative.lastStatus(this))
-        button("设置主动搭话频率：${if (store.proactiveMemoryFrequency == "weekly") "每周最多一次" else "每天最多一次"}") {
+        button("设置记忆搭话频率：${if (store.proactiveMemoryFrequency == "weekly") "每周最多一次" else "每天最多一次"}") {
             val choices = arrayOf("每天最多一次", "每周最多一次")
             val values = arrayOf("daily", "weekly")
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择主动搭话频率")
