@@ -176,7 +176,7 @@ internal object WhaleAudioTranscript {
 
         fun finish(allowEmpty: Boolean): String {
             endUtterance()
-            check(allowEmpty || text.isNotBlank()) { "没有识别到语音" }
+            if (!allowEmpty && text.isBlank()) throw WhaleParseFailure.Error(WhaleParseFailure.EMPTY_CONTENT)
             return text.toString().trim()
         }
 

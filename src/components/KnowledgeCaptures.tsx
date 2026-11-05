@@ -1,3 +1,4 @@
+import { knowledgeParseFailure } from '../knowledgeParseFailure'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, ChevronDown, FileAudio, FileText, Image, Inbox } from 'lucide-react'
 import { companionRows, type CompanionRow } from '../platform/companion'
@@ -109,12 +110,13 @@ export function CaptureReader({ reference, onClose, manage }: { reference: Row; 
         <button type="button" className="button button-secondary" ref={closeButton} onClick={onClose}>关闭</button></header>
       {problem ? <p role="status">{problem} <button type="button" onClick={() => setReload(v => v + 1)}>重新读取</button></p>
         : !row || !page ? <p role="status">正在读取资料…</p> : <>
+          {row.parseState === 'needs_retry' && <p role="status">{knowledgeParseFailure(row)}</p>}
           <h5>{heading}</h5>
           {page.parts.length ? page.parts.map(part => <article key={part.id} className="capture-part">
             {typeof part.chunkCount === 'number' && part.chunkCount > 1 && <small>第 {Number(part.chunkIndex) + 1} / {part.chunkCount} 段</small>}
             {part.mediaKind === 'audio_transcript' ? <Transcript value={part.text} /> : <p className="knowledge-detail-content">{part.text}</p>}</article>)
             : row.source === 'original' ? <p>{row.audioFromSeconds === 600 || row.canContinueAudio === true ? '前十分钟的已有转写仍可检索，后续进度可在原件详情查看。'
-              : row.parseState === 'needs_retry' ? '本次未提取到正文，可在资料详情中重新解析。'
+              : row.parseState === 'needs_retry' ? ''
               : row.parseState === 'queued' || row.parseState === 'processing' ? '原件已保存。后台解析完成后，正文会显示在这里。'
                 : '这份原件还没有可阅读的文字。'}</p> : <p className="knowledge-detail-content">{row.text}</p>}
           {(pages.length > 1 || page.next !== null || page.start > 0) && <nav aria-label="正文分页" className="workspace-card-actions">

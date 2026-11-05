@@ -1,3 +1,4 @@
+import { knowledgeParseFailure } from '../knowledgeParseFailure'
 import { companionRows, type CompanionRow, type CompanionRequest } from '../platform/companion'
 import { useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
@@ -598,6 +599,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
       {runtimeBridge.addKnowledgeCapturesListener && typeof knowledgeDetail.createdAt === 'number' && (knowledgeDetail.source === 'original' || typeof knowledgeDetail.documentId === 'string') && <button type="button" className="button button-secondary" onClick={() => showKnowledgeView(knowledgeDetail, 'reader')}>阅读提取内容</button>}
       {knowledgeDetailMeta(knowledgeDetail) && <p className="knowledge-detail-meta">{knowledgeDetailMeta(knowledgeDetail)}</p>}
       <KnowledgeOrigins history={knowledgeDetail.shareOrigins} />
+      {knowledgeDetail.parseState === 'needs_retry' && <p role="status">{knowledgeParseFailure(knowledgeDetail)}</p>}
       {typeof knowledgeDetail.sourceUrl === 'string' && /^https?:\/\//i.test(knowledgeDetail.sourceUrl) && knowledgeDetail.mediaKind !== 'web_article' &&
         <button type="button" className="button button-secondary" disabled={busy} onClick={() => {
           setBusy(true)

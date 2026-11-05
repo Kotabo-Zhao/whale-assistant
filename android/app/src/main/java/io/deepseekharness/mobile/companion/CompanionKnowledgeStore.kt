@@ -113,9 +113,9 @@ internal class CompanionKnowledgeStore(context: Context) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use(action)
     }
 
-    internal fun commitParsed(ticket: String, parsed: WhaleParsedContent?): JSONArray = synchronized(lock) {
+    internal fun commitParsed(ticket: String, parsed: WhaleParsedContent?, failure: WhaleParseFailure? = null): JSONArray = synchronized(lock) {
         if (parsed != null) semanticChange()
-        withParseDatabase { it.finishParse(ticket, parsed) }.also { if (it.length() > 0) scheduleSemantic(); captureChanged() }
+        withParseDatabase { it.finishParse(ticket, parsed, failure) }.also { if (it.length() > 0) scheduleSemantic(); captureChanged() }
     }
 
     internal fun attachmentPage(id: String, expectedText: String, offset: Int, limit: Int): Pair<JSONArray, Int?> = synchronized(lock) {

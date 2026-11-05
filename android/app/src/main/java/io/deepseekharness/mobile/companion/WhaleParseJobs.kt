@@ -47,18 +47,20 @@ internal object WhaleParseJobs {
     fun process(app: Context, anchor: org.json.JSONObject, stopped: AtomicBoolean) {
         val store = CompanionKnowledgeStore(app)
         val ticket = anchor.getString("parseTicket")
-        val parsed = runCatching {
+        val attempt = runCatching {
             val file = KnowledgeObjects(app).getVerified(anchor.getString("originalId"))
             val mime = anchor.optString("mime")
             if (mime.startsWith("image/")) WhaleImageImport.parse(app, file)
             else WhaleDocumentImport.parse(app, file, WhaleOriginalImport.extension(anchor.optString("displayName"), mime),
                 mime, anchor.optInt("audioFromSeconds",0), stopped::get)
-        }.getOrNull()
+        }
+        val parsed = attempt.getOrNull()
+        val failure = if (parsed == null) WhaleParseFailure.from(attempt.exceptionOrNull()) else null
         synchronized(CompanionKnowledgeStore.lock) {
             if (stopped.get()) return
-            val rows = try { store.commitParsed(ticket, parsed) }
-                catch (_: IllegalArgumentException) { store.commitParsed(ticket, null) }
-                catch (_: IllegalStateException) { store.commitParsed(ticket, null) }
+            val rows = try { store.commitParsed(ticket, parsed, failure) }
+                catch (_: IllegalArgumentException) { store.commitParsed(ticket, null, WhaleParseFailure.PARSE_FAILED) }
+                catch (_: IllegalStateException) { store.commitParsed(ticket, null, WhaleParseFailure.PARSE_FAILED) }
             for (i in 0 until rows.length()) {
                 val row = rows.getJSONObject(i)
                 val text = row.getString("text")

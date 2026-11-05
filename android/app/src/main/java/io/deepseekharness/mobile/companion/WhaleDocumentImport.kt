@@ -11,8 +11,11 @@ internal object WhaleDocumentImport {
         require(fromSeconds == 0)
         val text = WhaleDocumentText.extract(file, ext, mime)
         if (!text.isNullOrBlank()) return WhaleParsedContent.document(text, null)
-        if (ext != "pdf" && mime != "application/pdf") return null
-        val key = RuntimeStore(app).readModelCredential("deepseek")?.takeIf { it.isNotBlank() } ?: return null
+        if (ext != "pdf" && mime != "application/pdf") {
+            val supported = mime.startsWith("text/") || ext in setOf("txt","md","csv","tsv","json","xml","log","yaml","yml","html","htm","docx","pptx","odt","xlsx")
+            throw WhaleParseFailure.Error(if (supported) WhaleParseFailure.EMPTY_CONTENT else WhaleParseFailure.UNSUPPORTED_FORMAT)
+        }
+        val key = RuntimeStore(app).readModelCredential("deepseek")?.takeIf { it.isNotBlank() } ?: throw WhaleParseFailure.Error(WhaleParseFailure.MODEL_REQUIRED)
         val (pages, total) = WhaleDocumentText.renderPdfPages(file)
         if (pages.isEmpty()) return null
         val descriptions = pages.mapIndexed { index, jpeg -> "第 ${index + 1} 页：\n" + DeepSeekVisionModel(key).analyze(jpeg) }

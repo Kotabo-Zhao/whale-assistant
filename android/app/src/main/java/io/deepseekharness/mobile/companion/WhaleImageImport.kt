@@ -23,7 +23,7 @@ internal object WhaleImageImport {
             try {
                 val words = WhaleImageText.read(rotated)
                 if (words.isNotBlank()) return WhaleParsedContent.document(words, "image_ocr")
-                val key = RuntimeStore(app).readModelCredential("deepseek")?.takeIf { it.isNotBlank() } ?: return null
+                val key = RuntimeStore(app).readModelCredential("deepseek")?.takeIf { it.isNotBlank() } ?: throw WhaleParseFailure.Error(WhaleParseFailure.MODEL_REQUIRED)
                 val bytes = java.io.ByteArrayOutputStream()
                 check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, bytes))
                 return WhaleParsedContent(DeepSeekVisionModel(key).analyze(bytes.toByteArray()), "model_description", description = true)

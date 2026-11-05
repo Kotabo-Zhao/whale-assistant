@@ -303,6 +303,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         if (anchor.has("parseTicket") && ticketAnchor(anchor.getString("parseTicket")) != null) return
         val ticket = "parse:${System.currentTimeMillis()}:${java.util.UUID.randomUUID()}"
         db.execSQL("INSERT INTO knowledge_meta(key,value) VALUES (?,?)", arrayOf(ticket, anchor.getString("id")))
+        anchor.remove("parseFailure")
         anchor.put("parseTicket", ticket).put("parseState", "queued").put("parseAttempts", 0)
         updateRecord(anchor.getString("id"), anchor)
     }
@@ -352,7 +353,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
             val anchor = ticketAnchor(ticket)
             if (anchor == null) { db.delete("knowledge_meta", "key=?", arrayOf(ticket)); continue }
             val attempts = anchor.optInt("parseAttempts")
-            if (attempts >= 3) { finishParse(ticket, null); continue }
+            if (attempts >= 3) { finishParse(ticket, null, WhaleParseFailure.INTERRUPTED); continue }
             anchor.put("parseState", "processing").put("parseAttempts", attempts + 1)
             updateRecord(anchor.getString("id"), anchor)
             return anchor
@@ -360,7 +361,7 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
     }
 
     /** Chunks, coverage and ticket removal share a transaction. A deleted/reimported anchor has a new ticket. */
-    fun finishParse(ticket: String, parsed: WhaleParsedContent?): JSONArray {
+    fun finishParse(ticket: String, parsed: WhaleParsedContent?, failure: WhaleParseFailure? = null): JSONArray {
         val rows = JSONArray()
         db.beginTransaction()
         try {
@@ -398,6 +399,8 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
             }
             anchor.remove("parseTicket")
             anchor.remove("parseAttempts")
+            if (parsed == null) anchor.put("parseFailure",(failure ?: WhaleParseFailure.EMPTY_CONTENT).name)
+            else anchor.remove("parseFailure")
             anchor.put("parseState", if (parsed == null) "needs_retry" else "complete")
             updateRecord(anchor.getString("id"), anchor)
             db.delete("knowledge_meta", "key=?", arrayOf(ticket))

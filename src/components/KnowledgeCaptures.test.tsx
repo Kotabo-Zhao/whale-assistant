@@ -6,6 +6,22 @@ const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn(), addKnowledgeCapt
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 const audio = { id: 'audio', createdAt: 4, generation: 'given', text: '[原件]', source: 'original', mime: 'audio/wav', displayName: '会议.wav' }
 
+it('shows a fixed failure hint and removes it after successful parsing', async () => {
+  let notify = () => {}
+  let failed = true
+  bridge.addKnowledgeCapturesListener.mockImplementation((listener: () => void) => { notify = listener; return Promise.resolve({ remove:vi.fn() }) })
+  bridge.companionDashboard.mockImplementation(() => Promise.resolve({
+    row: {...audio, parseState:failed ? 'needs_retry' : 'complete', parseFailure:'NETWORK_TIMEOUT'},
+    items:failed ? [] : [{id:'text',text:'完成的正文'}],nextOffset:null,
+  }))
+  render(<CaptureReader reference={audio} onClose={vi.fn()} manage={vi.fn()} />)
+  expect(await screen.findByText(/模型解析请求超时/)).toHaveAttribute('role','status')
+  failed = false
+  act(() => notify())
+  await screen.findByText('完成的正文')
+  expect(screen.queryByText(/模型解析请求超时/)).not.toBeInTheDocument()
+})
+
 it('在正文完成时响应原生事件，按续页位置翻阅，删除后撤下已读正文', async () => {
   let notify = () => {}
   let phase = 'queued'
