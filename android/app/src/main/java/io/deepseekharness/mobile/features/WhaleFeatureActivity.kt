@@ -271,18 +271,22 @@ open class WhaleFeatureActivity : Activity() {
             if (requested != version) Toast.makeText(this, "已打开当前启用的版本", Toast.LENGTH_SHORT).show()
             releasePage()
             val body = column().apply { setBackgroundColor(ui.surface) }
-            val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, dp(6)) }
-            bar.addView(button(if (direct) "返回" else "返回工坊") { if (direct) finish() else library() })
-            bar.addView(label(content.getString("title"), 18f).apply {
+            body.addView(label(content.getString("title"), 18f).apply {
                 maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(0, -2, 1f))
+                androidx.core.view.ViewCompat.setAccessibilityHeading(this,true)
+            }, LinearLayout.LayoutParams(-1,-2))
+            val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, dp(6)) }
+            fun addAction(action: Button) = bar.addView(action,LinearLayout.LayoutParams(0,-2,1f).apply {
+                if (bar.childCount > 0) marginStart = dp(8)
+            })
+            addAction(button(if (direct) "返回" else "返回工坊") { if (direct) finish() else library() })
             val collect = button("使用结果") { reviewResult(id, version, content.getString("title")) }.apply {
                 visibility = if (!isPreview && content.getString("html").contains("data-whale-result", ignoreCase = true))
                     android.view.View.VISIBLE else android.view.View.GONE
             }
-            bar.addView(collect)
+            addAction(collect)
             if (direct && isPreview && version != previousActive) {
-                bar.addView(button("启用草稿") {
+                addAction(button("启用草稿") {
                     read({ store.publishPreview(id, version, previousActive) }, failed = {
                         Toast.makeText(this, "草稿或启用版本已变化，请回工坊核对", Toast.LENGTH_LONG).show()
                         library()
