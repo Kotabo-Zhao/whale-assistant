@@ -100,7 +100,6 @@ class OverlayBallService : Service() {
     private lateinit var windowManager: WindowManager
     private var ballView: View? = null
     private var companionFrame: Runnable? = null
-    private var petDragLean = 0f
     private var petDrawable: io.deepseekharness.mobile.overlay.CompanionPetDrawable? = null
     private val petActing = PetActing()
     private val controlListener: (DeviceControlState.Snapshot) -> Unit = {
@@ -110,8 +109,6 @@ class OverlayBallService : Service() {
     private fun refreshControlPose() {
         val state=DeviceControlState.current
         petActing.control(state.phase,SystemClock.uptimeMillis())
-        val ui=io.deepseekharness.mobile.companion.PetUi(this)
-        petDrawable?.phonePalette(ui.accent,ui.soft)
         ballView?.contentDescription = if(state.phase=="idle") overlayString(R.string.overlay_ball_content_description)
             else io.deepseekharness.mobile.companion.PetControlLabels.description(overlayPalette(),state.phase)
         actionMenu?.refreshControl()
@@ -129,8 +126,6 @@ class OverlayBallService : Service() {
         hintHandler.post { if (!avatarDestroyed) { petActing.react(PetAction.ACCEPT, SystemClock.uptimeMillis());wakePetMotion() } }
         Unit
     }
-    private val petBlink = io.deepseekharness.mobile.overlay.PetBlinkClock()
-    private var petLastFrameAt=0L
     private var petPowerSave=false
     private val motionSettingObserver=object:android.database.ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange:Boolean) { if(!avatarDestroyed) configureCompanionMotion() }
@@ -1024,22 +1019,19 @@ class OverlayBallService : Service() {
         return true
     }
 
-    private fun configureCompanionMotion() {
+    private fun configureCompanionMotion(resumeTimeline: Boolean = true) {
         val wasRunning=companionFrame!=null
         companionFrame?.let(hintHandler::removeCallbacks)
         companionFrame = null
         val drawable=petDrawable ?: return
         if (!companionMotionAllowed()) {
-            drawable.blinkAmount=0f
             if(!companionMotionEnabled()) drawable.setPose(petActing.still())
             return
         }
         val resumedAt=SystemClock.uptimeMillis()
-        if(!wasRunning) {
+        if(!wasRunning && resumeTimeline) {
             petActing.resume(resumedAt,drawable.currentPose)
-            petBlink.reset(resumedAt)
         }
-        petLastFrameAt=resumedAt
         petPowerSave=getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
         companionFrame = object : Runnable {
             override fun run() {
@@ -1048,15 +1040,12 @@ class OverlayBallService : Service() {
                     companionFrame=null;return
                 }
                 val now = SystemClock.uptimeMillis()
-                // Time-based damping has the same feel at every refresh budget.
-                petDragLean *= kotlin.math.exp(-(now-petLastFrameAt).coerceIn(0,250)/210.0).toFloat()
-                petLastFrameAt=now
-                val pose=petActing.sample(now, petDragLean)
+                val pose=petActing.sample(now)
                 drawable.setPose(pose)
-                drawable.blinkAmount=petBlink.sample(now,maxOf(pose.eyeClose,pose.wink,pose.face.happyEyes)>.3f)
-                val delay=io.deepseekharness.mobile.overlay.PetFramePolicy.delay(petActing.action,petActing.actionElapsed,
-                    petActing.transitioning,petBlink.blinking(now),petPowerSave)
-                hintHandler.postAtTime(this,now+minOf(delay,petBlink.untilNext(now)))
+                // Held cels sleep until their next boundary. No mesh, separate blink tick or idle FPS loop.
+                val celDelay=drawable.nextFrameDelayMs.coerceAtLeast(if(petPowerSave) 200L else 1L)
+                val delay=minOf(celDelay,petActing.untilStateChange(now)).coerceIn(1L,60_000L)
+                hintHandler.postAtTime(this,now+delay)
             }
         }
         companionFrame?.run()
@@ -1067,23 +1056,12 @@ class OverlayBallService : Service() {
         companionFrame?.let { hintHandler.removeCallbacks(it);hintHandler.post(it) }
     }
 
-    /** Decode both aligned expression frames at overlay resolution, off the UI thread. */
+    /** Decode only the idle cel atlas off the UI thread; other actions enter the bounded async cache. */
     private fun loadCompanionAvatar(view: View, size: Int) {
         val generation = ++avatarGeneration
         avatarExecutor.execute {
             val next = runCatching {
-                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true; inScaled = false }
-                android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_open_v2, bounds)
-                val sample = io.deepseekharness.mobile.overlay.CompanionAvatarSizing.sample(bounds.outWidth, bounds.outHeight, size)
-                val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample; inScaled = false }
-                val open = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_open_v2, options) ?: error("open frame unavailable")
-                val closed = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_blink_v2, options)
-                if (closed == null || open.width != closed.width || open.height != closed.height) {
-                    open.recycle(); closed?.recycle(); error("blink frame unavailable")
-                }
-                val body = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.whale_maid_body_v3, options)
-                if (body == null || body.width != open.width || body.height != open.height) { open.recycle(); closed.recycle(); body?.recycle(); error("body frame unavailable") }
-                io.deepseekharness.mobile.overlay.CompanionPetDrawable(open, closed, body)
+                io.deepseekharness.mobile.overlay.CompanionPetDrawable(resources,size,avatarExecutor,hintHandler)
             }.getOrNull() ?: return@execute
             if (avatarDestroyed) { next.close(); return@execute }
             val posted = hintHandler.post {
@@ -1091,12 +1069,12 @@ class OverlayBallService : Service() {
                     val old = petDrawable
                     companionFrame?.let(hintHandler::removeCallbacks);companionFrame=null
                     petDrawable = next
-                    val ui=io.deepseekharness.mobile.companion.PetUi(this@OverlayBallService)
-                    next.phonePalette(ui.accent,ui.soft)
                     next.setPose(if(companionMotionAllowed()) petActing.sample(SystemClock.uptimeMillis()) else petActing.still())
                     view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
                     old?.close()
-                    configureCompanionMotion()
+                    // Replacing a decoded image (initial load/resize) is not a lifecycle resume:
+                    // keep an active acceptance/reply cue and its original clock.
+                    configureCompanionMotion(resumeTimeline = false)
                 } else { next.close() }
             }
             if (!posted) { next.close() }
@@ -1206,7 +1184,6 @@ class OverlayBallService : Service() {
                         initialY + deltaY.toInt(),
                         metrics.widthPixels, metrics.heightPixels, size,
                     )
-                    petDragLean = ((x - layoutParams.x) / (size * .25f)).coerceIn(-1f, 1f)
                     layoutParams.x = x
                     layoutParams.y = y
                     runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
@@ -1260,7 +1237,7 @@ class OverlayBallService : Service() {
                 }
                 return true
             }
-            MotionEvent.ACTION_CANCEL -> {petActing.dragging=false;petDragLean=0f;wakePetMotion();return true}
+            MotionEvent.ACTION_CANCEL -> {petActing.dragging=false;wakePetMotion();return true}
         }
         return false
     }

@@ -92,3 +92,5 @@ video/
 
 # 本地浏览器预览配置含会话、Cookie 与缓存，不纳入源码仓库
 reports/**/chrome-profile/
+# 独立动作的本地预览、浏览器工具、测试日志和构建工作副本；源图与提示词位于 art/。
+reports/pet-independent-20261106/

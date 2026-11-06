@@ -1,0 +1,142 @@
+{
+  "reference": "android/app/src/main/res/drawable-nodpi/whale_maid_open_v2.png",
+  "artSource": "host_image",
+  "generated": [
+    {
+      "name": "idle",
+      "sourceFile": "sources/idle.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-efe81a09-3f2c-42c2-8013-845d902d8d1e.png",
+      "promptFile": "prompts/idle.txt"
+    },
+    {
+      "name": "drink",
+      "sourceFile": "sources/drink.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-063a51a7-53e0-4387-8bdc-87db22898c47.png",
+      "promptFile": "prompts/drink.txt"
+    },
+    {
+      "name": "reading",
+      "sourceFile": "sources/reading.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-3e92f19a-a552-4895-8162-6038d4dca365.png",
+      "promptFile": "prompts/reading.txt",
+      "revisionPromptFiles": [
+        "prompts/reading-repair-v2.txt",
+        "prompts/reading-repair-v3.txt"
+      ]
+    },
+    {
+      "name": "writing",
+      "sourceFile": "sources/writing.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-acff5386-781a-46db-a1c7-ae6faf5ae551.png",
+      "promptFile": "prompts/writing.txt"
+    },
+    {
+      "name": "control",
+      "sourceFile": "sources/control.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-2bc12ce8-291a-454d-9746-af3d25fa4490.png",
+      "promptFile": "prompts/control.txt",
+      "revisionPromptFiles": [
+        "prompts/control-repair.txt"
+      ]
+    },
+    {
+      "name": "accept",
+      "sourceFile": "sources/accept.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-1a70cf29-c4bf-4ea4-832a-fec6efa8b70a.png",
+      "promptFile": "prompts/accept.txt"
+    },
+    {
+      "name": "ask",
+      "sourceFile": "sources/ask.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-e8e693e1-9f5c-40ac-9f01-194d87694e3a.png",
+      "promptFile": "prompts/ask.txt"
+    },
+    {
+      "name": "celebrate",
+      "sourceFile": "sources/celebrate.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-2e7e851d-2d4f-4f73-a97e-460fcc9b143a.png",
+      "promptFile": "prompts/celebrate.txt"
+    },
+    {
+      "name": "setback",
+      "sourceFile": "sources/setback.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-18191233-1fc0-407a-b29c-96153c8c99d8.png",
+      "promptFile": "prompts/setback.txt"
+    },
+    {
+      "name": "touch",
+      "sourceFile": "sources/touch.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-b9f52f88-aab0-4090-8272-03264725e067.png",
+      "promptFile": "prompts/touch.txt",
+      "revisionPromptFiles": [
+        "prompts/touch-background-repair.txt"
+      ]
+    },
+    {
+      "name": "observe",
+      "sourceFile": "sources/observe.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-96084320-48b8-4943-ace9-7de9bda4fa04.png",
+      "promptFile": "prompts/observe.txt"
+    },
+    {
+      "name": "wait",
+      "sourceFile": "sources/wait.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-2c0c33af-441e-446f-b155-7d03b3fcc3b6.png",
+      "promptFile": "prompts/wait.txt"
+    },
+    {
+      "name": "paused",
+      "sourceFile": "sources/paused.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-d7087b94-f659-459f-aefc-62663f014a0f.png",
+      "promptFile": "prompts/paused.txt"
+    },
+    {
+      "name": "stopped",
+      "sourceFile": "sources/stopped.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-e6393fcd-2f59-4e73-bd20-aaf09b846427.png",
+      "promptFile": "prompts/stopped.txt"
+    },
+    {
+      "name": "error",
+      "sourceFile": "sources/error.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-e3294190-842e-48f6-b9e8-293c1823805a.png",
+      "promptFile": "prompts/error.txt"
+    },
+    {
+      "name": "reply",
+      "sourceFile": "sources/reply.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-48610628-9b7c-4e5d-9a11-e32369e1b4cc.png",
+      "promptFile": "prompts/reply.txt"
+    },
+    {
+      "name": "notice",
+      "sourceFile": "sources/notice.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-ada06df7-74a3-40de-8178-6b9b0a2290fe.png",
+      "promptFile": "prompts/notice.txt"
+    },
+    {
+      "name": "drag",
+      "sourceFile": "sources/drag.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-043a9306-9b15-44fc-9113-8916d0dd9fc4.png",
+      "promptFile": "prompts/drag.txt"
+    }
+  ]
+}

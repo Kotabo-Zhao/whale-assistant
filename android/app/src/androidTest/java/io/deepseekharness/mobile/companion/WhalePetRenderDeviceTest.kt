@@ -162,22 +162,21 @@ class WhalePetRenderDeviceTest {
     @Test fun drawAvatarCycle() {
         val inst = InstrumentationRegistry.getInstrumentation()
         val resources = inst.targetContext.resources
-        fun load(id: Int) = BitmapFactory.decodeResource(resources, id, BitmapFactory.Options().apply { inSampleSize = 4; inScaled = false })
-        val open = load(R.drawable.whale_maid_open_v2)
         val frame = Bitmap.createBitmap(192, 192, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(frame)
-        CompanionPetDrawable(open, load(R.drawable.whale_maid_blink_v2), load(R.drawable.whale_maid_body_v3)).use { pet ->
+        CompanionPetDrawable(resources, 192, java.util.concurrent.Executor { it.run() }).use { pet ->
             pet.setBounds(0, 0, 192, 192)
             val times = mutableListOf<Long>()
             repeat(io.deepseekharness.mobile.overlay.PetAction.entries.size * 40) { i ->
-                pet.setPose(io.deepseekharness.mobile.overlay.PetActing.pose(io.deepseekharness.mobile.overlay.PetAction.entries[i / 40], (i % 40) * 50L))
-                pet.blinkAmount = if (i % 70 in 0..4) 0.6f else 0f
+                pet.prepareForExport(io.deepseekharness.mobile.overlay.PetAction.entries[i / 40], (i % 40) * 50L)
                 val start = SystemClock.elapsedRealtimeNanos(); pet.draw(canvas)
                 if (i >= 40) times.add(SystemClock.elapsedRealtimeNanos() - start)
             }
             times.sort()
             inst.sendStatus(0, Bundle().apply {
-                putInt("sourceWidth", open.width); putLong("drawP50Us", times[times.size / 2] / 1000)
+                putInt("sourceWidth", io.deepseekharness.mobile.overlay.PetCels.CELL)
+                putLong("cachedBitmapBytes", pet.cachedBitmapBytes)
+                putLong("drawP50Us", times[times.size / 2] / 1000)
                 putLong("drawP95Us", times[times.size * 95 / 100] / 1000)
             })
         }

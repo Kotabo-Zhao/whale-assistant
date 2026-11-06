@@ -1,0 +1,3088 @@
+{
+  "artSource": "host_image",
+  "route": "native image_gen",
+  "sharedSkeleton": false,
+  "interpolatedFrames": false,
+  "sourceArtworkPreserved": true,
+  "actions": [
+    {
+      "name": "idle",
+      "source": "art/pet-independent/sources/idle.png",
+      "sourceSha256": "0373e4699a9a6fc138571cf3e8f13eeb489ef2edbae87b0879f8cfd217bf1150",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "b0ce8645fcd49dcc8a6d4f4efb567bea5ee5ff191ec0fd35fe860c45724305e1",
+      "assetBytes": 546656,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            427
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ],
+          "opaquePixels": 28788
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            427
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            302
+          ],
+          "opaquePixels": 28837
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            427
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            55,
+            32,
+            269,
+            301
+          ],
+          "opaquePixels": 28826
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            427
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            55,
+            32,
+            269,
+            302
+          ],
+          "opaquePixels": 28704
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            55,
+            31,
+            282,
+            302
+          ],
+          "opaquePixels": 29039
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            55,
+            31,
+            276,
+            302
+          ],
+          "opaquePixels": 29328
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            55,
+            31,
+            277,
+            301
+          ],
+          "opaquePixels": 28960
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            55,
+            31,
+            272,
+            302
+          ],
+          "opaquePixels": 28778
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "drink",
+      "source": "art/pet-independent/sources/drink.png",
+      "sourceSha256": "1cbe5c2a836e6732d6457eda3f2d8cfbc6b137c4f751cb9bef801a35aa4ac3ce",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "8aed76e2b9dd5411c27a81405c39b0477325ff4c0a91a3d1b76a1592003dfe89",
+      "assetBytes": 496942,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            68,
+            33,
+            269,
+            297
+          ],
+          "opaquePixels": 26300
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            33,
+            269,
+            297
+          ],
+          "opaquePixels": 26433
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            33,
+            270,
+            297
+          ],
+          "opaquePixels": 26518
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            33,
+            270,
+            297
+          ],
+          "opaquePixels": 26622
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            33,
+            269,
+            298
+          ],
+          "opaquePixels": 26599
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            33,
+            270,
+            298
+          ],
+          "opaquePixels": 26545
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            421
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            70,
+            33,
+            270,
+            298
+          ],
+          "opaquePixels": 26332
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            70,
+            33,
+            270,
+            298
+          ],
+          "opaquePixels": 26211
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "reading",
+      "source": "art/pet-independent/sources/reading.png",
+      "sourceSha256": "de88086d31cf704b97cf7ca1371211e79c94e5654080060eb228c5e7f7edc08e",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "6511ad15341e453e6b96283777528d3fd5c74a1e3bcb6585ddd011ba7a7a5a8f",
+      "assetBytes": 519726,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            431
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            32,
+            254,
+            304
+          ],
+          "opaquePixels": 29740
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            431
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            32,
+            254,
+            304
+          ],
+          "opaquePixels": 29834
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            32,
+            254,
+            304
+          ],
+          "opaquePixels": 29869
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            431
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            32,
+            253,
+            304
+          ],
+          "opaquePixels": 29931
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            31,
+            254,
+            304
+          ],
+          "opaquePixels": 29903
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            31,
+            254,
+            304
+          ],
+          "opaquePixels": 29717
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            31,
+            254,
+            304
+          ],
+          "opaquePixels": 29787
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            31,
+            254,
+            304
+          ],
+          "opaquePixels": 29666
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "writing",
+      "source": "art/pet-independent/sources/writing.png",
+      "sourceSha256": "e2766e2fce45687a41eb90503d0af168ba154b2bb9ee12e4dd84ba36f711ecc0",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "5bfe2de1f18bbed45cb9d992a9ebc73a61dae701ff5aab2bf3074561867128aa",
+      "assetBytes": 504296,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            419
+          ],
+          "offset": [
+            33,
+            58
+          ],
+          "scale": 0.5714543404735062,
+          "opaqueBounds": [
+            64,
+            65,
+            265,
+            298
+          ],
+          "opaquePixels": 29181
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            419
+          ],
+          "offset": [
+            33,
+            58
+          ],
+          "scale": 0.5714543404735062,
+          "opaqueBounds": [
+            63,
+            65,
+            265,
+            298
+          ],
+          "opaquePixels": 28879
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            419
+          ],
+          "offset": [
+            33,
+            58
+          ],
+          "scale": 0.5714543404735062,
+          "opaqueBounds": [
+            64,
+            65,
+            265,
+            298
+          ],
+          "opaquePixels": 28843
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            419
+          ],
+          "offset": [
+            33,
+            58
+          ],
+          "scale": 0.5714543404735062,
+          "opaqueBounds": [
+            64,
+            65,
+            266,
+            298
+          ],
+          "opaquePixels": 28788
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            418
+          ],
+          "offset": [
+            33,
+            59
+          ],
+          "scale": 0.5714543404735062,
+          "opaqueBounds": [
+            63,
+            64,
+            265,
+            298
+          ],
+          "opaquePixels": 29496
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            418
+          ],
+          "offset": [
+            33,
+            59
+          ],
+          "scale": 0.5714543404735062,
+          "opaqueBounds": [
+            63,
+            64,
+            265,
+            298
+          ],
+          "opaquePixels": 29393
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            418
+          ],
+          "offset": [
+            33,
+            59
+          ],
+          "scale": 0.5714543404735062,
+          "opaqueBounds": [
+            64,
+            66,
+            265,
+            298
+          ],
+          "opaquePixels": 28892
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            418
+          ],
+          "offset": [
+            33,
+            59
+          ],
+          "scale": 0.5714543404735062,
+          "opaqueBounds": [
+            64,
+            66,
+            266,
+            298
+          ],
+          "opaquePixels": 28941
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "control",
+      "source": "art/pet-independent/sources/control.png",
+      "sourceSha256": "e253ee7bdec793987edd9dc541a25348b5062e06db874ffa419651eab4c8839f",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "049d54c6ab7f12e42762f12e2ec8cf77e6daa490f5c3a931d9589676e0a10083",
+      "assetBytes": 511282,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            74,
+            30,
+            267,
+            302
+          ],
+          "opaquePixels": 27991
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            74,
+            30,
+            267,
+            303
+          ],
+          "opaquePixels": 27999
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            74,
+            30,
+            267,
+            303
+          ],
+          "opaquePixels": 27983
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            75,
+            30,
+            267,
+            302
+          ],
+          "opaquePixels": 27907
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            74,
+            30,
+            267,
+            303
+          ],
+          "opaquePixels": 28023
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            74,
+            30,
+            267,
+            303
+          ],
+          "opaquePixels": 28022
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            74,
+            30,
+            267,
+            303
+          ],
+          "opaquePixels": 28006
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            74,
+            30,
+            267,
+            303
+          ],
+          "opaquePixels": 27954
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "accept",
+      "source": "art/pet-independent/sources/accept.png",
+      "sourceSha256": "d1d0eb766dcdfff9a0dac6c0a45e9ffd5d93ab81a767fa0c6c16ca9c7c9cc3d4",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "e96fc4a7d84f81fcdb9fb15f7e805c3a74f7ce123b542cfdad633fdc8cd123f7",
+      "assetBytes": 534102,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            30,
+            263,
+            301
+          ],
+          "opaquePixels": 28643
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            30,
+            263,
+            301
+          ],
+          "opaquePixels": 28473
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            30,
+            264,
+            301
+          ],
+          "opaquePixels": 28572
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            59,
+            38,
+            263,
+            301
+          ],
+          "opaquePixels": 28334
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            29,
+            263,
+            301
+          ],
+          "opaquePixels": 28465
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            29,
+            263,
+            301
+          ],
+          "opaquePixels": 28859
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            30,
+            264,
+            301
+          ],
+          "opaquePixels": 28829
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            30,
+            263,
+            301
+          ],
+          "opaquePixels": 28508
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "ask",
+      "source": "art/pet-independent/sources/ask.png",
+      "sourceSha256": "b657544816034aeff0372a982536f2501da2364fcb216794c886d48369f5e0ad",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "01f5dc9225f462fea688b56ac976e0a8812671acc6ef274225a30540bd65fc9f",
+      "assetBytes": 572824,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            59,
+            32,
+            268,
+            303
+          ],
+          "opaquePixels": 28392
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            58,
+            33,
+            268,
+            303
+          ],
+          "opaquePixels": 28552
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            58,
+            33,
+            268,
+            303
+          ],
+          "opaquePixels": 28390
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            32,
+            268,
+            303
+          ],
+          "opaquePixels": 28757
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            31,
+            268,
+            303
+          ],
+          "opaquePixels": 28975
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            58,
+            31,
+            268,
+            303
+          ],
+          "opaquePixels": 28821
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            59,
+            31,
+            269,
+            303
+          ],
+          "opaquePixels": 28693
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            58,
+            31,
+            268,
+            303
+          ],
+          "opaquePixels": 28350
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "celebrate",
+      "source": "art/pet-independent/sources/celebrate.png",
+      "sourceSha256": "4197b61c0efddf8697121cbc899b9451da68350407ba84bf8451bf8bb49495ab",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "481a37d93b7003e19c8836f4459d0ba3fa161327ce6f84dfbf5d2309b2cb115e",
+      "assetBytes": 556114,
+      "registration": "fixed cell center, flight preserved",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            35,
+            271,
+            301
+          ],
+          "opaquePixels": 29100
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            43,
+            272,
+            301
+          ],
+          "opaquePixels": 29234
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            33,
+            272,
+            285
+          ],
+          "opaquePixels": 27658
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            56,
+            30,
+            271,
+            280
+          ],
+          "opaquePixels": 27623
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            34,
+            271,
+            288
+          ],
+          "opaquePixels": 27366
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            59,
+            38,
+            273,
+            298
+          ],
+          "opaquePixels": 28924
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            35,
+            271,
+            298
+          ],
+          "opaquePixels": 28439
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            64,
+            35,
+            271,
+            298
+          ],
+          "opaquePixels": 28459
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "setback",
+      "source": "art/pet-independent/sources/setback.png",
+      "sourceSha256": "e0a4bac37ff73bd61d8f8d21a719cb1fc85a61e08cc1ae4f600f1fb2ce0c6831",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "768834daeda10cda092151b7eb397d720c817d0458e341395073519fdc5aeaa1",
+      "assetBytes": 562296,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            433
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            31,
+            271,
+            304
+          ],
+          "opaquePixels": 29657
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            433
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            56,
+            31,
+            272,
+            304
+          ],
+          "opaquePixels": 29966
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            433
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            31,
+            272,
+            304
+          ],
+          "opaquePixels": 30139
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            433
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            31,
+            272,
+            304
+          ],
+          "opaquePixels": 30033
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            433
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            31,
+            271,
+            305
+          ],
+          "opaquePixels": 30336
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            432
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            56,
+            30,
+            272,
+            305
+          ],
+          "opaquePixels": 29995
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            433
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            30,
+            272,
+            305
+          ],
+          "opaquePixels": 29891
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            432
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            57,
+            30,
+            272,
+            305
+          ],
+          "opaquePixels": 29674
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "touch",
+      "source": "art/pet-independent/sources/touch.png",
+      "sourceSha256": "aa63ca873963f813b169f2105b46f0443d747bf097f6e261652a18f2ec56297e",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "ff26e06edc61892549bca0994e68ea62de992f36d0607c7aa9fe46ca1af36110",
+      "assetBytes": 521990,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            61,
+            32,
+            272,
+            299
+          ],
+          "opaquePixels": 28000
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            32,
+            272,
+            299
+          ],
+          "opaquePixels": 28594
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            61,
+            32,
+            273,
+            299
+          ],
+          "opaquePixels": 28638
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            61,
+            32,
+            272,
+            299
+          ],
+          "opaquePixels": 28556
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            32,
+            272,
+            299
+          ],
+          "opaquePixels": 28869
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            32,
+            272,
+            299
+          ],
+          "opaquePixels": 28583
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            32,
+            273,
+            299
+          ],
+          "opaquePixels": 28793
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            32,
+            272,
+            299
+          ],
+          "opaquePixels": 28341
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "observe",
+      "source": "art/pet-independent/sources/observe.png",
+      "sourceSha256": "92766eae6d0f1fa1f298450609290fe7861979a2ffca3c47d169bc556c1c5361",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "f957e7565fc406c4e1839919943693bf9ced55f786e7143f8366cfe5bd0e530c",
+      "assetBytes": 533716,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            432
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            54,
+            29,
+            270,
+            304
+          ],
+          "opaquePixels": 30127
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            432
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            54,
+            29,
+            271,
+            304
+          ],
+          "opaquePixels": 30235
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            432
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            54,
+            29,
+            271,
+            304
+          ],
+          "opaquePixels": 30155
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            432
+          ],
+          "offset": [
+            16,
+            23
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            54,
+            29,
+            270,
+            304
+          ],
+          "opaquePixels": 30158
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            431
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            54,
+            29,
+            270,
+            305
+          ],
+          "opaquePixels": 30185
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            431
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            29,
+            271,
+            305
+          ],
+          "opaquePixels": 30536
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            431
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            54,
+            29,
+            271,
+            305
+          ],
+          "opaquePixels": 30258
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            431
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            54,
+            29,
+            270,
+            305
+          ],
+          "opaquePixels": 30177
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "wait",
+      "source": "art/pet-independent/sources/wait.png",
+      "sourceSha256": "b9ce2cc9bd02574ab8a2bf23311b442a7b075fbc882361b396b6e104ea802e9d",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "64eb09ce95fba58ae0d4d75a31a695c4c86a42cd98908664662c796bca0c4c96",
+      "assetBytes": 516212,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            30,
+            257,
+            303
+          ],
+          "opaquePixels": 27823
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            30,
+            257,
+            303
+          ],
+          "opaquePixels": 27966
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            30,
+            258,
+            303
+          ],
+          "opaquePixels": 28215
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            30,
+            257,
+            303
+          ],
+          "opaquePixels": 28066
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            64,
+            30,
+            257,
+            303
+          ],
+          "opaquePixels": 28223
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            63,
+            30,
+            257,
+            303
+          ],
+          "opaquePixels": 28280
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            30,
+            258,
+            303
+          ],
+          "opaquePixels": 28154
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            428
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            66,
+            30,
+            257,
+            303
+          ],
+          "opaquePixels": 27975
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "paused",
+      "source": "art/pet-independent/sources/paused.png",
+      "sourceSha256": "fb8c17c2d39f02b7509551b4bea5eaedd30d29bb9cc6b5722c0b882aa73ff877",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "b6262ca9ddc7a4e043da3d018d95d990d8026c629f3f06ed894d53cadc43bbb8",
+      "assetBytes": 517494,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            30,
+            269,
+            303
+          ],
+          "opaquePixels": 28150
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            30,
+            269,
+            303
+          ],
+          "opaquePixels": 28198
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            30,
+            269,
+            303
+          ],
+          "opaquePixels": 28335
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            31,
+            269,
+            303
+          ],
+          "opaquePixels": 28270
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            31,
+            269,
+            304
+          ],
+          "opaquePixels": 28280
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            31,
+            269,
+            304
+          ],
+          "opaquePixels": 28287
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            430
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            31,
+            269,
+            304
+          ],
+          "opaquePixels": 28376
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            429
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            31,
+            269,
+            304
+          ],
+          "opaquePixels": 28326
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "stopped",
+      "source": "art/pet-independent/sources/stopped.png",
+      "sourceSha256": "d729e802accd4db05635bccd81110a92c6415c28829b4da520677e7d3a86e81e",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "4ce85711bcb923774f50e2a74c5b550e981d36566249f35db043fdef0f8df941",
+      "assetBytes": 505604,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            31,
+            267,
+            300
+          ],
+          "opaquePixels": 27553
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            36,
+            267,
+            300
+          ],
+          "opaquePixels": 27126
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            42,
+            267,
+            300
+          ],
+          "opaquePixels": 27062
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            44,
+            267,
+            300
+          ],
+          "opaquePixels": 27328
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            64,
+            41,
+            266,
+            301
+          ],
+          "opaquePixels": 26913
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            63,
+            36,
+            269,
+            301
+          ],
+          "opaquePixels": 26867
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            63,
+            35,
+            269,
+            301
+          ],
+          "opaquePixels": 26981
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            425
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            63,
+            35,
+            269,
+            301
+          ],
+          "opaquePixels": 26840
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "error",
+      "source": "art/pet-independent/sources/error.png",
+      "sourceSha256": "4d110b03ea57000cdd48c7b416e239633f154306c19d68cd97b443000dc7e64c",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "ffbf2221042e750062fad0493d3385b8f39421291a3eec36471da95f13855f01",
+      "assetBytes": 622616,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            427
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            34,
+            271,
+            301
+          ],
+          "opaquePixels": 27582
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            427
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            35,
+            271,
+            301
+          ],
+          "opaquePixels": 27967
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            427
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            71,
+            35,
+            272,
+            301
+          ],
+          "opaquePixels": 27909
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            427
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            68,
+            35,
+            272,
+            301
+          ],
+          "opaquePixels": 28563
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            35,
+            271,
+            302
+          ],
+          "opaquePixels": 28544
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            70,
+            35,
+            271,
+            302
+          ],
+          "opaquePixels": 28062
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            35,
+            272,
+            302
+          ],
+          "opaquePixels": 28144
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            426
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            35,
+            272,
+            302
+          ],
+          "opaquePixels": 28031
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "reply",
+      "source": "art/pet-independent/sources/reply.png",
+      "sourceSha256": "f66560f5fa2173c2493238cc59d78df94a2b8d2546b0a642cabbe308a3af2c08",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "d32c4f4301c31c9f2260ce21524730d34d8a1d1b9a9990996700943ca3c14337",
+      "assetBytes": 517850,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            421
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            64,
+            32,
+            267,
+            297
+          ],
+          "opaquePixels": 26045
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            64,
+            32,
+            268,
+            297
+          ],
+          "opaquePixels": 26759
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            32,
+            268,
+            297
+          ],
+          "opaquePixels": 26960
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            67,
+            32,
+            268,
+            297
+          ],
+          "opaquePixels": 27208
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            66,
+            31,
+            268,
+            297
+          ],
+          "opaquePixels": 27149
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            66,
+            31,
+            268,
+            298
+          ],
+          "opaquePixels": 26970
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            67,
+            32,
+            268,
+            297
+          ],
+          "opaquePixels": 26395
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            420
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            31,
+            268,
+            298
+          ],
+          "opaquePixels": 26226
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "notice",
+      "source": "art/pet-independent/sources/notice.png",
+      "sourceSha256": "b78aced5615ebd72ccf6a0a0680138638fb69dd204d8dddf845e2c55fef2358d",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "e88f254ecadb80d26816e62432285fa8108a7145464519b3c5e1a38639fa89fe",
+      "assetBytes": 518302,
+      "registration": "fixed cell center and feet, same scale for all frames",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            28,
+            268,
+            298
+          ],
+          "opaquePixels": 26751
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            28,
+            268,
+            298
+          ],
+          "opaquePixels": 27233
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            28,
+            269,
+            298
+          ],
+          "opaquePixels": 27338
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            422
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            28,
+            268,
+            298
+          ],
+          "opaquePixels": 27052
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            421
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            28,
+            268,
+            299
+          ],
+          "opaquePixels": 26881
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            421
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            28,
+            268,
+            299
+          ],
+          "opaquePixels": 26692
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            421
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            28,
+            269,
+            299
+          ],
+          "opaquePixels": 26765
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            421
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            69,
+            28,
+            269,
+            299
+          ],
+          "opaquePixels": 26746
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    },
+    {
+      "name": "drag",
+      "source": "art/pet-independent/sources/drag.png",
+      "sourceSha256": "d9d44b7a1bd96247549851c498e3bafba15ac0e8c1de7b55167a7440d1e4efb5",
+      "sourceSize": [
+        1774,
+        887
+      ],
+      "atlasSize": [
+        1280,
+        640
+      ],
+      "assetSha256": "44dde9d17f8dfe1b5c4aeef35a6d48047fa0bf85a5daee64d7f1d66fab4bee79",
+      "assetBytes": 567718,
+      "registration": "fixed cell center, flight preserved",
+      "frames": [
+        {
+          "frame": 0,
+          "anchor": [
+            222.0,
+            416
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            72,
+            33,
+            269,
+            294
+          ],
+          "opaquePixels": 26065
+        },
+        {
+          "frame": 1,
+          "anchor": [
+            221.5,
+            416
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            65,
+            32,
+            260,
+            289
+          ],
+          "opaquePixels": 26159
+        },
+        {
+          "frame": 2,
+          "anchor": [
+            221.5,
+            416
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            60,
+            35,
+            269,
+            286
+          ],
+          "opaquePixels": 26164
+        },
+        {
+          "frame": 3,
+          "anchor": [
+            222.0,
+            416
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            51,
+            37,
+            262,
+            288
+          ],
+          "opaquePixels": 26340
+        },
+        {
+          "frame": 4,
+          "anchor": [
+            222.0,
+            416
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            61,
+            32,
+            269,
+            288
+          ],
+          "opaquePixels": 26175
+        },
+        {
+          "frame": 5,
+          "anchor": [
+            221.5,
+            416
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            59,
+            35,
+            265,
+            284
+          ],
+          "opaquePixels": 25884
+        },
+        {
+          "frame": 6,
+          "anchor": [
+            221.5,
+            416
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            62,
+            32,
+            268,
+            288
+          ],
+          "opaquePixels": 26145
+        },
+        {
+          "frame": 7,
+          "anchor": [
+            222.0,
+            416
+          ],
+          "offset": [
+            16,
+            24
+          ],
+          "scale": 0.649379932356257,
+          "opaqueBounds": [
+            63,
+            32,
+            268,
+            288
+          ],
+          "opaquePixels": 25700
+        }
+      ],
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+    }
+  ],
+  "missing": []
+}

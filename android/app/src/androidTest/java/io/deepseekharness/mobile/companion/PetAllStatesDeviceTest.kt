@@ -16,15 +16,14 @@ import java.io.File
 class PetAllStatesDeviceTest {
     private val inst=InstrumentationRegistry.getInstrumentation()
     private val app=inst.targetContext
-    private val labels=mapOf(PetAction.IDLE to "待机 · 呼吸与舒展",PetAction.ACCEPT to "接单 · 点头与确认",PetAction.THINK to "思考 · 托腮与灵感",
+    private val labels=mapOf(PetAction.IDLE to "待机 · 眨眼与小憩",PetAction.ACCEPT to "接单 · 点头与确认",PetAction.THINK to "思考 · 阅读与翻页",
         PetAction.WORK to "工作 · 书写与回看",PetAction.ASK to "询问 · 摊手与侧首",PetAction.REPLY to "回复 · 展手与表达",
-        PetAction.CELEBRATE to "完成 · 轻跃与星芒",PetAction.SETBACK to "受挫 · 低首再振作",PetAction.TOUCH to "触摸 · 眨眼与亲近",
+        PetAction.CELEBRATE to "完成 · 轻跃与落地",PetAction.SETBACK to "受挫 · 低首再振作",PetAction.TOUCH to "触摸 · 眨眼与亲近",
         PetAction.NOTICE to "主动提醒 · 挥手递信",PetAction.DRAG to "拖动 · 收脚与平衡",PetAction.OBSERVE to "观察 · 举机与扫描",
         PetAction.CONTROL to "操控 · 双拍与停顿",PetAction.WAIT to "等待 · 低持与轮候",PetAction.PAUSED to "暂停 · 举手与持守",
         PetAction.STOPPED to "停止 · 收机与示意",PetAction.ERROR to "异常 · 看屏与求助")
     private fun drawable():CompanionPetDrawable {
-        fun load(id:Int)=BitmapFactory.decodeResource(app.resources,id,BitmapFactory.Options().apply{inSampleSize=2;inScaled=false})
-        return CompanionPetDrawable(load(R.drawable.whale_maid_open_v2),load(R.drawable.whale_maid_blink_v2),load(R.drawable.whale_maid_body_v3))
+        return CompanionPetDrawable(app.resources,320,java.util.concurrent.Executor { it.run() })
     }
     @Test fun renderAllStatesAcrossThemesAndExportNativeFrames() {
         val outputName=InstrumentationRegistry.getArguments().getString("outputDir") ?: "pet-animation"
@@ -43,13 +42,14 @@ class PetAllStatesDeviceTest {
             drawable().use { pet ->
                 for(look in listOf("simple","cute")) for(mode in listOf("dark","light")) {
                     style.edit().putString("style",look).commit();io.deepseekharness.mobile.AppThemePreference.save(app,mode)
-                    val ui=PetUi(app);pet.phonePalette(ui.accent,ui.soft)
+                    val ui=PetUi(app)
                     val sheet=Bitmap.createBitmap(1280,1800,Bitmap.Config.ARGB_8888);val board=Canvas(sheet);board.drawColor(ui.canvas)
                     labels.keys.forEachIndexed {i,action ->
                         val x=i%4*320;val y=i/4*360
                         label.color=ui.ink;label.textSize=17f;board.drawText(labels.getValue(action),x+15f,y+27f,label)
                         val instant=when(action){PetAction.IDLE->8500L;PetAction.TOUCH->410L;else->900L}
-                        pet.setBounds(x+8,y+30,x+312,y+334);pet.setPose(PetActing.pose(action,instant,.8f));pet.draw(board)
+                        pet.prepareForExport(action,instant)
+                        pet.setBounds(x+8,y+30,x+312,y+334);pet.draw(board)
                     }
                     File(out,"states-$look-$mode.png").outputStream().use{sheet.compress(Bitmap.CompressFormat.PNG,100,it)};sheet.recycle()
                     if(look=="simple" && mode=="dark" && movie) {
@@ -77,7 +77,9 @@ class PetAllStatesDeviceTest {
                                 canvas.drawText(labels.getValue(action),32f,54f,label)
                                 label.color=ui.muted;label.textSize=17f
                                 canvas.drawText("鲸鱼助手 · Pocket S 原生动画预览",32f,86f,label)
-                                pet.setBounds(48,114,592,658);pet.setPose(actor.sample(100+index*50L,.8f));pet.draw(canvas)
+                                val pose=actor.sample(100+index*50L)
+                                pet.prepareForExport(pose.action,pose.elapsedMs)
+                                pet.setBounds(48,114,592,658);pet.draw(canvas)
                                 label.textSize=15f;canvas.drawText("深海·专注    ${action.name}",32f,694f,label)
                                 File(frames,"frame-${(frameNumber++).toString().padStart(5,'0')}.png").outputStream().use{frame.compress(Bitmap.CompressFormat.PNG,100,it)}
                                 writtenFrames++
@@ -131,7 +133,7 @@ class PetAllStatesDeviceTest {
                 assertNull(PetControlDeviceUi.field(service,"companionFrame"))
                 val pet=PetControlDeviceUi.field(service,"petDrawable") as CompanionPetDrawable
                 val pose=PetControlDeviceUi.field(pet,"pose") as PetPose
-                assertEquals(PetAccent.PAUSE,pose.accent);assertEquals(4,pose.phoneMode)
+                assertEquals(PetAction.PAUSED,pose.action);assertTrue(pose.reduced)
             }
             inst.sendStatus(0,android.os.Bundle().apply{putBoolean("conversationStates",true);putBoolean("realDragAndCancel",true);putBoolean("controlPriority",true);putBoolean("reducedMotionStatic",true)})
         } finally {

@@ -40,10 +40,8 @@ class PetControlMotionDeviceTest {
                 inst.runOnMainSync {
                     val drawable=checkNotNull(PetControlDeviceUi.field(service,"petDrawable"))
                     val pose=PetControlDeviceUi.field(drawable,"pose") as io.deepseekharness.mobile.overlay.PetPose
-                    assertEquals(1f,pose.phone,0f);assertEquals(4,pose.phoneMode)
+                    assertEquals(PetAction.PAUSED,pose.action);assertTrue(pose.reduced)
                     assertNull("reduced motion must not keep scheduling frames",PetControlDeviceUi.field(service,"companionFrame"))
-                    val prop=checkNotNull(PetControlDeviceUi.field(drawable,"phoneProp"))
-                    assertEquals(PetUi(app).accent,PetControlDeviceUi.field(prop,"accent"))
                     assertTrue((PetControlDeviceUi.field(service,"ballView") as android.view.View).contentDescription.contains("暂停"))
                     assertFalse(store.overlayBallEnabled())
                 }
@@ -66,22 +64,22 @@ class PetControlMotionDeviceTest {
     }
     @Test fun renderPhoneStatesAndLiftFramesOnDevice() {
         val inst=InstrumentationRegistry.getInstrumentation();val app=inst.targetContext
-        fun load(id:Int)=BitmapFactory.decodeResource(app.resources,id,BitmapFactory.Options().apply{inSampleSize=2;inScaled=false})
         val frame=Bitmap.createBitmap(1200,1320,Bitmap.Config.ARGB_8888);val canvas=Canvas(frame)
         canvas.drawColor(Color.rgb(15,28,44))
         val label=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=Color.rgb(210,232,241);textSize=23f}
-        CompanionPetDrawable(load(R.drawable.whale_maid_open_v2),load(R.drawable.whale_maid_blink_v2),load(R.drawable.whale_maid_body_v3)).use { pet ->
+        CompanionPetDrawable(app.resources,320,java.util.concurrent.Executor { it.run() }).use { pet ->
             val actions=listOf(PetAction.OBSERVE,PetAction.CONTROL,PetAction.WAIT,PetAction.PAUSED,PetAction.STOPPED,PetAction.ERROR)
             actions.forEachIndexed { i,action ->
                 val x=i%3*400;val y=i/3*330
                 canvas.drawText(action.name,x+20f,y+30f,label)
-                pet.setBounds(x+45,y+38,x+355,y+328);pet.setPose(PetActing.pose(action,900));pet.draw(canvas)
+                pet.prepareForExport(action,900);pet.setBounds(x+45,y+38,x+355,y+328);pet.draw(canvas)
             }
             val actor=PetActing();actor.sample(0);actor.control("operating",100);actor.sample(100)
             listOf(0L,100L,220L,420L,700L,1050L).forEachIndexed { i,ms ->
                 val x=i%3*400;val y=660+i/3*330
                 canvas.drawText("TAKE PHONE ${ms}ms",x+20f,y+30f,label)
-                pet.setBounds(x+45,y+38,x+355,y+328);pet.setPose(actor.sample(100+ms));pet.draw(canvas)
+                val pose=actor.sample(100+ms);pet.prepareForExport(pose.action,pose.elapsedMs)
+                pet.setBounds(x+45,y+38,x+355,y+328);pet.draw(canvas)
             }
             assertEquals(PetAction.CONTROL,actor.action)
         }
