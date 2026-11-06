@@ -83,7 +83,8 @@ internal object ContextFollowupEvents {
         fun valid() = prefs(ctx).getLong("context_epoch", 0) == epoch && available() && !CompanionStore(ctx).inQuietHours() && PetContextFollowup.current(ctx, reference)
         if (!valid() || evidence.signature in PetInitiative.consideredContexts(ctx)) return null
         val past = priorMatters(ctx, evidence)
-        val response = model.complete(PetContextFollowup.prompt(evidence, past), 520)
+        val ownerContext=OwnerContext(ctx);val owner=ownerContext.read()
+        val response = model.complete(PetContextFollowup.prompt(evidence, past, owner), 520)
         val result = runCatching { JSONObject(response) }.getOrNull()
         val question = PetContextFollowup.question(response, evidence)
         val matter = result?.optString("matter").orEmpty().trim()
@@ -93,7 +94,7 @@ internal object ContextFollowupEvents {
                 .put("concern", CompanionBubbleChatPolicy.memoryDigest(normalized(result!!.getString("chatQuote"))))
                 .put("signature", evidence.signature).put("fact", CompanionBubbleChatPolicy.memoryDigest(normalized(result.getString("noteQuote"))))
         } else null
-        if (!valid()) return null
+        if (!valid() || !ownerContext.isCurrent(owner)) return null
         synchronized(this) {
             if (!PetContextFollowup.enabled(ctx) || prefs(ctx).getLong("context_epoch", 0) != epoch) return null
             val prefs = prefs(ctx)

@@ -45,7 +45,7 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
                     else -> JSONObject.NULL
                 }).put("searchTool", "mobile_memory_search").put("saveTool", "mobile_memory_save")
                     .put("updateTool", "mobile_memory_update").put("deleteTool", "mobile_memory_delete")
-                    .put("semanticAllowed", canReadMemory && semantic.memoryEnabled))
+                    .put("semanticAllowed", canReadMemory && semantic.memoryEnabled).put("profileTool","mobile_owner_profile"))
             .put("knowledge", JSONObject().put("allowed", canReadKnowledge)
                 .put("errorCode", if (canReadKnowledge) JSONObject.NULL else "KNOWLEDGE_MODEL_DISABLED")
                 .put("writeAllowed", store.knowledgeModelWrite)
@@ -58,6 +58,8 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
                 .put("errorCode", if (store.notificationModelAccess) JSONObject.NULL else "TASK_MODEL_DISABLED")
                 .put("searchTool", "mobile_task_search").put("updateTool", "mobile_task_update")
                 .put("sharedMaterialIncluded", store.notificationModelAccess && canReadKnowledge))
+            .put("secretary",JSONObject().put("allowed",canReadMemory).put("tool","mobile_secretary")
+                .put("notice","只含用户交办的秘书事项，与主人档案共用长期记忆访问开关；不因此开放通知内容。"))
             .put("notice", "按需检索，不自动读取全部内容；未知资料关键词时查询最近资料，再用 id/revision 读取原文。权限状态可能变化，以每次工具回执为准。")
             .toString()
     }

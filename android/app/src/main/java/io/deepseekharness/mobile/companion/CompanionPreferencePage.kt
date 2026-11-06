@@ -10,6 +10,7 @@ internal enum class CompanionPreferencePage(val title: Int, val summary: Int = 0
     DAILY(R.string.pref_daily, R.string.pref_daily_summary, R.drawable.ic_pet_calendar),
     PERMISSIONS(R.string.pref_permissions, R.string.pref_permissions_summary, R.drawable.ic_whale_nav_settings),
     MEMORY(R.string.pref_memory, R.string.pref_memory_summary, R.drawable.ic_whale_nav_memory),
+    OWNER(R.string.pref_owner, R.string.pref_owner_summary, R.drawable.ic_pet_letter),
     LIBRARY(R.string.pref_library, R.string.pref_library_summary, R.drawable.ic_whale_nav_memory),
     BACKUP(R.string.pref_backup, R.string.pref_backup_summary, R.drawable.ic_whale_nav_settings),
     MAINTENANCE(R.string.pref_maintenance, R.string.pref_maintenance_summary, R.drawable.ic_whale_nav_settings),

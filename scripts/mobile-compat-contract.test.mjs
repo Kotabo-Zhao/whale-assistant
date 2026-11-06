@@ -459,6 +459,8 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
       'mobile_companion_capabilities',
       'mobile_memory_search',
       'mobile_memory_hybrid_search',
+      'mobile_owner_profile',
+      'mobile_secretary',
       'mobile_memory_save',
       'mobile_memory_update',
       'mobile_memory_delete',

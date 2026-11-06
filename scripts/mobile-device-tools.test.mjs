@@ -31,6 +31,28 @@ const ok = text => ({ ok: true, exitCode: 0, text, truncated: false, errorCode: 
 const virtualSession = '00000000-1111-2222-3333-444444444444'
 const memoryExec = { agent: { session: { id: virtualSession } } }
 
+test('真实桥接转换结果可进入每轮主人上下文，不混淆 ok 与原生字段',async t=>{
+  const hooks=[],listeners=new Map()
+  const f=fixture(t,()=>ok(JSON.stringify({schemaVersion:1,profile:{value:'桥接验收称呼'}})),{on:(name,listener)=>hooks.push({name,listener})})
+  const agent={id:virtualSession,session:{id:virtualSession},ctx:{on:(name,listener)=>listeners.set(name,listener)}}
+  for(const hook of hooks.filter(it=>it.name==='agent/created'))hook.listener({agent})
+  const assembly={sections:[],contexts:[],tools:[],variables:{}}
+  const result=await listeners.get('system-prompt/assemble')(assembly,{},async()=>assembly)
+  assert.match(result.sections[0].text,/桥接验收称呼/)
+  assert.deepEqual(f.requests,[{command:'ownerContext',param:JSON.stringify({callerSession:virtualSession})}])
+})
+
+test('档案与秘书工具不接受内部汇报写入，也不接受伪造调用会话',async t=>{
+  const f=fixture(t,()=>ok('{"saved":true}'))
+  const events=[{type:'user/message',data:{source:{kind:'mobile-coordinator'}}}]
+  const exec={agent:{id:virtualSession,session:{id:virtualSession,snapshotEvents:()=>events}}}
+  await assert.rejects(f.tools.get('mobile_owner_profile').execute({action:'set'},exec),/USER_TURN/)
+  await assert.rejects(f.tools.get('mobile_secretary').execute({action:'create'},exec),/USER_TURN/)
+  events.push({type:'user/message',data:{source:{kind:'user'}}})
+  await f.tools.get('mobile_secretary').execute({action:'create',title:'临时测试',callerSession:'forged'},exec)
+  assert.equal(JSON.parse(f.requests[0].param).callerSession,virtualSession)
+})
+
 test('草稿重复转义返回可修正的固定建议，不转发任意异常内容', async t => {
   const f = fixture(t, () => ({ ok: false, exitCode: 1, text: 'private-runtime-error', errorCode: 'FEATURE_HTML_DOUBLE_ESCAPED' }))
   await assert.rejects(f.tools.get('mobile_whale_feature').execute({ action: 'draft', id: 'sample', title: '示例', html: '<p>示例</p>' },

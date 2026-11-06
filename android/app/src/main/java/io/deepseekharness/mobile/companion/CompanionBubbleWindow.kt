@@ -395,6 +395,18 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 composeTask()
             }
         })
+        sessionActions.addView(ui.text("主人档案与秘书事项",14f,accent).apply {
+            minHeight=dp(44);gravity=Gravity.CENTER_VERTICAL;setPadding(dp(12),0,dp(12),0)
+            ui.leadingIcon(this,R.drawable.ic_whale_nav_memory);isFocusable=true
+            setOnClickListener {
+                sessionActions.visibility=android.view.View.GONE
+                toolShelf.removeAllViews()
+                toolShelf.addView(OwnerAssistantView(context,{ panel.post { positionUpdater?.invoke() } },{
+                    toolShelf.removeAllViews();syncControls();panel.post { positionUpdater?.invoke() }
+                }))
+                syncControls();controlsScroll.scrollTo(0,0);panel.post { positionUpdater?.invoke() }
+            }
+        })
         shortcut(ui.string(R.string.pet_menu_capture), R.drawable.ic_pet_shell, "存入本地资料库") { openCapture() }
         shortcut(ui.string(R.string.pet_menu_tools), R.drawable.ic_whale_nav_plugins, ui.string(R.string.pet_menu_tools)) {
             sessionActions.visibility = android.view.View.GONE

@@ -20,6 +20,8 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
                 db.execSQL("CREATE TABLE IF NOT EXISTS memories (position INTEGER NOT NULL UNIQUE, id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS memory_text_index (id TEXT PRIMARY KEY NOT NULL, digest TEXT NOT NULL)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS memory_text_digest ON memory_text_index(digest)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS memory_profile_index (id TEXT PRIMARY KEY NOT NULL, field TEXT NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS memory_profile_field ON memory_profile_index(field)")
                 MemorySearchIndex.create(db)
                 val indexed = db.rawQuery("SELECT value FROM metadata WHERE key='memory_index_version'", null).use { it.moveToFirst() && it.getString(0) == "1" }
                 if (!indexed) {
@@ -35,8 +37,11 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
                     db.rawQuery("SELECT id,body FROM memories", null).use { cursor -> while (cursor.moveToNext()) MemorySearchIndex.put(db, cursor.getString(0), JSONObject(cursor.getString(1))) }
                     db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES ('memory_search_version','1')")
                 }
+                val profileIndexed = db.rawQuery("SELECT value FROM metadata WHERE key='memory_profile_version'",null).use { it.moveToFirst() && it.getString(0)=="1" }
+                val normalizedRevision = db.rawQuery("SELECT value FROM metadata WHERE key='memory_normalized_revision'",null).use { if (it.moveToFirst()) it.getLong(0) else -1L }
+                val recordRevision = if (isImported()) revision() else 0L
                 var normalizedCandidates = false
-                db.rawQuery("SELECT id,body FROM memories", null).use { cursor ->
+                if (!profileIndexed || normalizedRevision != recordRevision) db.rawQuery("SELECT id,body FROM memories", null).use { cursor ->
                     while (cursor.moveToNext()) {
                         val id = cursor.getString(0)
                         val row = JSONObject(cursor.getString(1))
@@ -45,9 +50,14 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
                             MemorySearchIndex.put(db, id, row)
                             normalizedCandidates = true
                         }
+                        putProfileIndex(id,row)
                     }
                 }
                 if (normalizedCandidates && isImported()) db.execSQL("UPDATE metadata SET value = CAST(value AS INTEGER) + 1 WHERE key = 'revision'")
+                if (!profileIndexed || normalizedRevision != recordRevision) {
+                    db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES ('memory_normalized_revision',?)",arrayOf((if (isImported()) revision() else 0L).toString()))
+                    db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES ('memory_profile_version','1')")
+                }
                 if (version == 0) db.version = 1
                 db.setTransactionSuccessful()
             } finally {
@@ -94,6 +104,7 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
             check(isImported()) { "legacy data not imported" }
             db.delete("memories", null, null)
             db.delete("memory_text_index", null, null)
+            db.delete("memory_profile_index",null,null)
             db.delete("memory_search_terms", null, null); db.delete("memory_search_meta", null, null)
             for (i in 0 until checked.length()) {
                 val row = checked.getJSONObject(i)
@@ -163,7 +174,7 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
         val appendOnly = firstNew < 0 || incoming.drop(firstNew).none { existing.containsKey(it.getString("id")) }
         check(oldRetained == newRetained && appendOnly) { "snapshot reordering requires full replacement" }
         var changed = false
-        for (id in existing.keys) if (id !in incomingIds) { db.delete("memories", "id=?", arrayOf(id)); db.delete("memory_text_index", "id=?", arrayOf(id)); MemorySearchIndex.delete(db, id); changed = true }
+        for (id in existing.keys) if (id !in incomingIds) { db.delete("memories", "id=?", arrayOf(id)); db.delete("memory_text_index", "id=?", arrayOf(id)); db.delete("memory_profile_index","id=?",arrayOf(id)); MemorySearchIndex.delete(db, id); changed = true }
         var position = (existing.values.maxOfOrNull { it.first } ?: -1L) + 1
         for (row in incoming) {
             val id = row.getString("id"); val body = row.toString(); val previous = existing[id]
@@ -214,7 +225,20 @@ internal class MemoryMigrationDatabase(path: File) : AutoCloseable {
     private fun putDigest(id: String, text: String) {
         db.insertWithOnConflict("memory_text_index", null, ContentValues().apply { put("id", id); put("digest", CompanionMemorySuppression.digest(text)) }, SQLiteDatabase.CONFLICT_REPLACE)
     }
-    private fun putIndex(id: String, row: JSONObject) { putDigest(id, row.getString("text")); MemorySearchIndex.put(db, id, row) }
+    private fun putIndex(id: String, row: JSONObject) { putDigest(id, row.getString("text")); MemorySearchIndex.put(db, id, row); putProfileIndex(id,row) }
+    private fun putProfileIndex(id: String, row: JSONObject) {
+        db.delete("memory_profile_index","id=?",arrayOf(id))
+        if (row.has("profileKey")) {
+            OwnerProfile.validate(row)
+            db.insertOrThrow("memory_profile_index",null,ContentValues().apply { put("id",id);put("field",row.getString("profileKey")) })
+        }
+    }
+    fun profileRows(): List<JSONObject> = db.rawQuery("SELECT m.body FROM memory_profile_index p JOIN memories m ON m.id=p.id ORDER BY p.field,m.position LIMIT 257",null).use { c ->
+        val rows=mutableListOf<JSONObject>()
+        while (c.moveToNext()) rows.add(JSONObject(c.getString(0)).also(OwnerProfile::validate))
+        check(rows.size <= 256) { "主人档案存在过多重复字段，请在记忆管理中核对" }
+        rows
+    }
 
     fun search(query: String, offset: Int): JSONObject {
         db.beginTransactionNonExclusive()

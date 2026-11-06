@@ -931,6 +931,29 @@ class DeviceBridgeServer(
                 respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                 return
             }
+            if (commandName in setOf("ownerContext","ownerProfile","secretaryTasks")) {
+                if(param.length>4096) throw RuntimeFailure("ASSISTANT_INPUT_INVALID","主人档案或事项参数过长")
+                val context=appContext ?: throw RuntimeFailure("ASSISTANT_UNAVAILABLE","个人助理不可用")
+                val request=JSONObject(param)
+                val access=io.deepseekharness.mobile.companion.CompanionAgentAccess(context,request)
+                val result=when(commandName) {
+                    "ownerContext" -> io.deepseekharness.mobile.companion.OwnerContext(context,request.getString("callerSession")).read()
+                    "ownerProfile" -> {
+                        access.requireMemory()
+                        val memory=io.deepseekharness.mobile.companion.CompanionMemoryStore(context)
+                        val value=if(request.optString("action")=="get") memory.profile() else memory.changeProfile(request,
+                            fromPetTurn=io.deepseekharness.mobile.companion.HarnessBubbleClient.isPetMemoryTurn(request.getString("callerSession")))
+                        access.requireMemory();value
+                    }
+                    else -> {
+                        access.requireMemory()
+                        val value=io.deepseekharness.mobile.companion.SecretaryActions.execute(context,request,request.getString("callerSession"))
+                        access.requireMemory();value
+                    }
+                }
+                respondResult(output,io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,result.toString(),false,null))
+                return
+            }
             if (commandName == "companionTasks") {
                 if (param.length > 1024) throw RuntimeFailure("TASK_INPUT_INVALID", "事项查询参数过长")
                 val context = appContext ?: throw RuntimeFailure("TASK_UNAVAILABLE", "事项服务不可用")

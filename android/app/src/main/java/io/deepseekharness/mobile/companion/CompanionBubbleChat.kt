@@ -90,7 +90,7 @@ internal object CompanionBubbleChatPolicy {
     }
 
     fun knowledgeToolGuidance(): String = "需要查看用户保存的图片理解或文档资料时，可按需使用 mobile_knowledge_search；不知道关键词时用 mobile_knowledge_recent 查询最近资料。返回结果的 id、revision 与 location 可用于核对和引用；location 仅表示已保存文本记录，未知页、段落、工作表和表格坐标不得推断。需要完整内容时用 mobile_knowledge_read 并带回 id/revision 分段读取；需要确认后台进度时用 mobile_knowledge_status。根据资料回答时，请写出实际采用资料的完整文件名，不要列出无关候选。处理完成不等于原文件已被完整解析。"
-    fun memoryToolGuidance(): String = "需要回忆时按需使用 mobile_memory_search 查询长期记忆；用户要求记住时用 mobile_memory_save 并按返回的 pending 状态说明，要求纠正时先搜索取得 id/revision 再用 mobile_memory_update，要求忘记时搜索核对后用 mobile_memory_delete。记忆写入由当前主会话处理，不交给只读 Worker；结果若带 sourceRecordId/sourceRevision，只是关联资料的受控引用，需在资料访问已授权时再用 mobile_knowledge_read 按该 ID/版本核对，不能把记忆当作原文。"
+    fun memoryToolGuidance(): String = "每轮主人档案已自动加载。称呼、语言、时区、城市、身份、沟通习惯、作息、设备、项目和近期安排用 mobile_owner_profile 管理；保存、纠正或忘记前 get 取得字段 revision，再 set 或 forget，并按 pending 状态说明，近期安排必须有有效期。其他长期记忆按需使用 mobile_memory_search；用户要求记住一般事实时用 mobile_memory_save，纠正时先搜索取得 id/revision 再用 mobile_memory_update，忘记时搜索核对后用 mobile_memory_delete。记忆写入由当前主会话处理，不交给只读 Worker；结果若带 sourceRecordId/sourceRevision，只是关联资料的受控引用，需在资料访问已授权时再用 mobile_knowledge_read 按该 ID/版本核对，不能把记忆当作原文。"
 
 }
 
@@ -350,7 +350,7 @@ internal class CompanionBubbleChat(
             if (knowledgeAllowed) append("本地资料访问已授权；用户询问已保存资料时先核对能力并调用资料工具，不得只凭 Shizuku 状态或猜测回复。\n").append(CompanionBubbleChatPolicy.knowledgeToolGuidance()).append('\n')
             else append("本地资料对话访问已关闭，不要查询本地资料。\n")
             append("按用户要求保存文字资料时，先用 mobile_companion_capabilities 核对 knowledge.writeAllowed，再用 mobile_knowledge_save；修改已有文字笔记先读取 editRevision，再用 mobile_knowledge_update。仅在工具回执成功后确认，写资料不要改用长期记忆。\n")
-            append("事项修改先 mobile_task_search 取得 id 和 expectedState，冲突时重新读取。\n")
+            append("用户主动交办的秘书事项使用 mobile_secretary；先 list 取得 id/revision，再创建、改期、完成或取消。只有工具回执确认才能说已保存或安排提醒。通知与资料来源的原有事项修改仍先 mobile_task_search 取得 id 和 expectedState，冲突时重新读取。\n")
             if (knowledgeAllowed && SemanticControl(context).enabled) append("可用 mobile_knowledge_hybrid_search，再读取原文核对。\n")
             append(CompanionBubbleChatPolicy.compressedContext(history.dropLast(1))).append('\n')
             append("用户当前请求：").append(CompanionBubbleChatPolicy.validateMessage(history.last().text)).append('\n').append(postHistory)

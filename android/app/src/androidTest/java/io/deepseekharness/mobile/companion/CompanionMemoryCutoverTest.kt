@@ -33,10 +33,15 @@ class CompanionMemoryCutoverTest {
         }
     }
     @After fun cleanup() { dir.deleteRecursively(); base.deleteSharedPreferences(prefsName) }
+    private fun seedLegacy(text: String) {
+        val rows=JSONArray()
+        CompanionUserMemory.add(rows,text,"user_edit",System.currentTimeMillis())
+        File(dir,"companion-memory-v1.json").writeBytes(CompanionMemoryExport.encode(rows))
+    }
 
     @Test fun migrateWriteRollbackAndRemigratePreserveCurrentStateAndSuppression() {
         val store = CompanionMemoryStore(testContext)
-        assertEquals(UserMemoryResult.ADDED, store.addForUser("旧记忆", "user_edit"))
+        seedLegacy("旧记忆") // Current addForUser already migrates; seed an actual pre-migration file.
         val prefs = testContext.getSharedPreferences("x", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("automatic_memory_suppressed_all", true).commit()
         val legacyFile = File(dir, "companion-memory-v1.json")
@@ -83,7 +88,7 @@ class CompanionMemoryCutoverTest {
 
     @Test fun missingDatabaseFailsClosedWithoutFallingBackToStaleFile() {
         val store = CompanionMemoryStore(testContext)
-        store.addForUser("旧快照", "user_edit")
+        seedLegacy("旧快照")
         store.migrateToDatabase()
         store.addForUser("新数据", "user_edit")
         assertTrue(UnifiedUnderstandingStore.path(testContext).delete())

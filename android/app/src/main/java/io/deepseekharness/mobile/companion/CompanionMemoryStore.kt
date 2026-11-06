@@ -53,6 +53,26 @@ class CompanionMemoryStore(context: Context) {
         CompanionMemoryEngine(::load, ::write, prefs.getBoolean("automatic_assistant_memory", false), !usesDatabase(), ::matchesDeletedMemory, ::rememberDeleted).execute(param)
     }
 
+    internal fun profile(forUser: Boolean = false): JSONObject = synchronized(lock) {
+        if (!forUser && !enabled) throw RuntimeFailure("MEMORY_DISABLED","用户已关闭长期记忆")
+        val rows=if (usesDatabase()) {
+            val path=UnifiedUnderstandingStore.path(app)
+            check(path.isFile) { "记忆数据库不可用" }
+            MemoryMigrationDatabase(path).use { it.profileRows() }
+        } else loadLegacy().let { values -> (0 until values.length()).map(values::getJSONObject).filter { it.has("profileKey") } }
+        OwnerProfile.view(rows,forUser=forUser)
+    }
+    internal fun changeProfile(request: JSONObject, forUser: Boolean = false, fromPetTurn: Boolean = false): JSONObject = synchronized(lock) {
+        if (!forUser && !enabled) throw RuntimeFailure("MEMORY_DISABLED","用户已关闭长期记忆")
+        if (!forUser && !fromPetTurn && request.optString("action") == "set" && prefs.getBoolean("automatic_memory_suppressed_all",false))
+            throw RuntimeFailure("MEMORY_SUPPRESSED","自动整理已暂停；可在桌宠对话中明确要求保存新档案")
+        if (!usesDatabase()) migrateToDatabase()
+        val rows=load()
+        val result=OwnerProfile.change(rows,request,prefs.getBoolean("automatic_assistant_memory",false),forUser,::matchesDeletedMemory,::rememberDeleted)
+        write(rows)
+        result.put("profile",profile(forUser))
+    }
+
     /** UI management remains available even when model access is disabled. */
     fun listForUser(): JSONArray = synchronized(lock) { load() }
     fun countForUser(): Long = synchronized(lock) {
@@ -502,6 +522,7 @@ internal object CompanionMemoryFormat {
             val text = row.opt("text") as? String ?: error("bad memory text")
             require(idPattern.matches(id) && ids.add(id) && text.length <= 600) { "bad memory" }
             CompanionKnowledgeData.utf8(text) // Do not silently replace malformed UTF-16 in stored values.
+            OwnerProfile.validate(row)
             if (row.has("status")) require(row.opt("status") is String && row.getString("status") in setOf("pending", "confirmed")) { "unknown memory status" }
             if (row.has("sourceRecordId") || row.has("sourceRevision")) require(row.optString("source") == "shared_understanding" &&
                 (row.opt("sourceRecordId") as? String)?.matches(idPattern) == true && (row.opt("sourceRevision") as? String)?.matches(Regex("[a-f0-9]{64}")) == true) { "invalid shared-memory reference" }
@@ -545,7 +566,7 @@ internal enum class UserMemoryResult { ADDED, EXISTING_PENDING, EXISTING_CONFIRM
 
 /** Stable optimistic-concurrency token; internal history never changes its current revision by accident. */
 internal object CompanionMemoryRevision {
-    private val fields = listOf("id", "text", "source", "status", "createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "sourceRecordId", "sourceRevision", "validFrom", "validUntil")
+    private val fields = listOf("id", "text", "source", "status", "createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "sourceRecordId", "sourceRevision", "validFrom", "validUntil", "profileKey", "sourceSession")
     fun of(row: JSONObject): String {
         val canonical = JSONObject()
         fields.forEach { field -> if (row.has(field)) canonical.put(field, row.opt(field)) }
@@ -555,7 +576,7 @@ internal object CompanionMemoryRevision {
         val history = row.optJSONArray("history") ?: JSONArray()
         val archived = JSONObject().put("text", row.getString("text")).put("source", row.optString("source", "unknown"))
             .put("status", row.optString("status", "confirmed")).put("validUntil", at)
-        for (field in listOf("createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "sourceRecordId", "sourceRevision", "validFrom")) {
+        for (field in listOf("createdAt", "updatedAt", "confirmedAt", "evidenceSource", "evidenceEventId", "sourceRecordId", "sourceRevision", "validFrom", "profileKey", "sourceSession")) {
             if (row.has(field)) archived.put(field, row.opt(field))
         }
         val bounded = JSONArray()
@@ -734,6 +755,8 @@ internal object CompanionMemorySearch {
             if (value is Number && value.toLong() > 0) result.put(key, value.toLong())
         }
         row.optJSONArray("history")?.length()?.takeIf { it > 0 }?.let { result.put("historyCount", it) }
+        if (row.has("profileKey")) result.put("profileKey",row.getString("profileKey"))
+        if (row.has("validUntil")) result.put("validUntilMs",row.getLong("validUntil"))
         row.optString("evidenceSource").takeIf { it.isNotBlank() }?.let { result.put("evidenceSource", it) }
         val recordId = row.opt("sourceRecordId") as? String
         val sourceRevision = row.opt("sourceRevision") as? String
