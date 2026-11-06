@@ -4,6 +4,40 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionPetMotionTest {
+    @Test fun conversationDraggingAndControlHaveDifferentPrioritiesAndReturnToLiveState() {
+        val actor=PetActing();actor.runningTasks=1;actor.chatThinking=true
+        actor.sample(100);assertEquals(PetAction.THINK,actor.action)
+        assertEquals(PetAccent.THOUGHT,actor.still().accent)
+        actor.react(PetAction.REPLY,200);actor.chatThinking=false
+        actor.sample(800);assertEquals(PetAction.REPLY,actor.action)
+        actor.sample(2800);assertEquals(PetAction.WORK,actor.action)
+        assertEquals(PetAccent.INK,actor.still().accent)
+        actor.dragging=true;actor.sample(3000);assertEquals(PetAction.DRAG,actor.action)
+        actor.control("paused",3100);actor.sample(3100);assertEquals(PetAction.PAUSED,actor.action)
+        assertEquals(4,actor.still().phoneMode)
+        actor.dragging=false;actor.control("idle",3200);actor.sample(3300);assertEquals(PetAction.WORK,actor.action)
+        actor.runningTasks=0;actor.react(PetAction.NOTICE,3400);actor.sample(4000)
+        assertEquals(PetAction.NOTICE,actor.action)
+        actor.sample(7000);assertEquals(PetAction.IDLE,actor.action)
+    }
+    @Test fun stateAccentsAndFacialLayersStayFiniteAndDoNotLeakAcrossTransitions() {
+        for(action in PetAction.entries) for(time in 0L..15000L step 75) {
+            val p=PetActing.pose(action,time,.8f)
+            assertTrue("$action $time",p.accentAlpha in 0f..1f && p.accentPhase in 0f..1f)
+            assertTrue(p.eyeClose in 0f..1f && p.wink in 0f..1f && p.phoneTap in 0f..1f)
+            assertTrue(p.lift in -.04f.. .10f)
+            val blend=p.mix(PetPose(),.6f)
+            assertTrue(blend.accentAlpha in 0f..1f)
+        }
+        val touch=PetActing.pose(PetAction.TOUCH,410)
+        val celebrate=PetActing.pose(PetAction.CELEBRATE,410)
+        assertTrue(touch.wink>0f);assertEquals(PetAccent.HEART,touch.accent)
+        assertEquals(PetAccent.STARS,celebrate.accent)
+        assertTrue(touch.rightElbow>celebrate.rightElbow+40)
+        val actor=PetActing();actor.control("failed",0)
+        val still=actor.still();repeat(10){assertEquals(still,actor.still())}
+        assertEquals(PetAccent.ALERT,still.accent)
+    }
     @Test fun deviceTruthOverridesChatAndReducedMotionKeepsTheProp() {
         val actor=PetActing()
         actor.runningTasks=1

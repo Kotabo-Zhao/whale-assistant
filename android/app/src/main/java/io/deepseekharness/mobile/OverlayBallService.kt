@@ -147,19 +147,23 @@ class OverlayBallService : Service() {
     private val reminderHints = io.deepseekharness.mobile.companion.CompanionHintQueue<QueuedReminderHint>()
     private val hintHandler = Handler(Looper.getMainLooper())
     private val calendarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "calendar-hints").apply { isDaemon = true } }
-    private val bubbleChat by lazy { io.deepseekharness.mobile.companion.CompanionBubbleWindow(this, windowManager, { state ->
+    internal fun updatePetConversationState(state:String) {
         val now = SystemClock.uptimeMillis()
         when (state) {
             "thinking" -> petActing.chatThinking = true
             "idle" -> petActing.chatThinking = false
-            "reply" -> { petActing.chatThinking = false; petActing.react(PetAction.CELEBRATE, now) }
+            "reply" -> { petActing.chatThinking = false; petActing.react(PetAction.REPLY, now) }
             "taskDone" -> petActing.react(PetAction.CELEBRATE, now)
             "taskWaiting" -> petActing.react(PetAction.ASK, now)
             "taskFailed" -> petActing.react(PetAction.SETBACK, now)
         }
-    }, { sessionId -> openHarness(sessionId) }, { running, waiting, questions ->
+        if(!companionMotionAllowed()) petDrawable?.setPose(petActing.still())
+    }
+    private val bubbleChat by lazy { io.deepseekharness.mobile.companion.CompanionBubbleWindow(this, windowManager, ::updatePetConversationState,
+        { sessionId -> openHarness(sessionId) }, { running, waiting, questions ->
         petActing.waitingTasks = questions
         petActing.runningTasks = running
+        if(!companionMotionAllowed()) petDrawable?.setPose(petActing.still())
         ballView?.findViewById<android.widget.TextView>(R.id.companion_worker_badge)?.apply {
             val count = if (waiting > 0) waiting else running
             visibility = if (count > 0) View.VISIBLE else View.GONE
@@ -788,6 +792,7 @@ class OverlayBallService : Service() {
         if(!notificationStyle) WhaleMotion.overlay(params)
         if (runCatching { windowManager.addView(bubble, params) }.isSuccess) {
             hintView = bubble
+            petActing.react(PetAction.NOTICE,SystemClock.uptimeMillis())
             if (notificationStyle && android.animation.ValueAnimator.areAnimatorsEnabled()) {
                 bubble.alpha = 0f; bubble.scaleX = 0.94f; bubble.scaleY = 0.94f
                 bubble.translationY = (if (position.y < layoutParams.y) 5 else -5) * density
@@ -1166,6 +1171,7 @@ class OverlayBallService : Service() {
         val slop = ViewConfiguration.get(this).scaledTouchSlop
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                petActing.dragging=false
                 // 运行期复查权限：球还在屏幕上、用户仍然点得到，说明权限可能是在本服务运行期间
                 // 被撤销的（部分 ROM 不杀进程也不摘窗口）。此时立即收尾并吞掉本次触摸，
                 // 不留「球还在、通知也在」的假象。
@@ -1187,6 +1193,7 @@ class OverlayBallService : Service() {
                 // 长按已弹出菜单后不再拖动：此时 ACTION_UP 会直接返回，跳过吸附与落盘，
                 // 这样从长按直接松手不会意外移动桌宠。
                 if (!longPressFired && !OverlayBallPolicy.isClick(deltaX, deltaY, slop)) {
+                    petActing.dragging=true
                     val metrics = resources.displayMetrics
                     val (x, y) = OverlayBallPolicy.clampPosition(
                         initialX + deltaX.toInt(),
@@ -1216,6 +1223,7 @@ class OverlayBallService : Service() {
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                petActing.dragging=false
                 val deltaX = event.rawX - touchStartX
                 val deltaY = event.rawY - touchStartY
                 if (longPressFired) return true
@@ -1245,6 +1253,7 @@ class OverlayBallService : Service() {
                 }
                 return true
             }
+            MotionEvent.ACTION_CANCEL -> {petActing.dragging=false;petDragLean=0f;return true}
         }
         return false
     }

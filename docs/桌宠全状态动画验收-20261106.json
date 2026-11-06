@@ -1,0 +1,45 @@
+{
+  "version": "0.3.8-preview.78",
+  "versionCode": 123,
+  "runtime": "0.3.83-whale-screen-coordinates",
+  "apkBytes": 610797691,
+  "sha256": "f07484240135305658c57b2416345b9db1755baf06b0fb4cabdcefce0a4e865c",
+  "installedHashMatches": true,
+  "states": 17,
+  "palettes": 4,
+  "nativeFrameCount": 1680,
+  "video": {
+    "seconds": 84,
+    "width": 640,
+    "height": 720,
+    "fps": 20,
+    "audio": false
+  },
+  "deviceChecks": {
+    "conversationCallback": true,
+    "touchDragCancel": true,
+    "pausePriority": true,
+    "reducedMotion": true,
+    "realControlPauseStop": true,
+    "hiddenFramesStopped": true
+  },
+  "drawMicroseconds": {
+    "p50": 996,
+    "p95": 1092
+  },
+  "processSamples": [
+    {
+      "state": "visible",
+      "milliseconds": 30000,
+      "cpuMilliseconds": 2954,
+      "pssKiB": 100301
+    },
+    {
+      "state": "hidden",
+      "milliseconds": 30001,
+      "cpuMilliseconds": 14,
+      "pssKiB": 100342
+    }
+  ],
+  "scope": "原生动画渲染和生产回调/真实触摸验收；非整机帧率、长时间耗电或17种完整模型业务任务。"
+}

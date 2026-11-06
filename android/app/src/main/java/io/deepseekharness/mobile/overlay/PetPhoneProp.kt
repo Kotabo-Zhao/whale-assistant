@@ -14,8 +14,8 @@ internal class PetPhoneProp {
         val hand = skeleton.bones[PetJoint.WRIST_L.ordinal]
         canvas.save()
         // The phone rises out of the apron as the elbow folds towards the chest.
-        canvas.translate(hand.x(.478f*w,.705f*h), hand.y(.478f*w,.705f*h) + (1f-p.phone)*.045f*h)
-        canvas.scale(w/100f,h/100f)
+        canvas.translate(hand.x(.478f*w,.705f*h), hand.y(.478f*w,.705f*h) + .012f*h + (1f-p.phone)*.045f*h)
+        canvas.scale(w/100f*.88f,h/100f*.88f)
         canvas.rotate(-7f + p.chest*.25f)
         fun fill(color: Int) { ink.style=Paint.Style.FILL; ink.color=color; ink.alpha=(alpha*p.phone).toInt() }
         if (p.phone > .01f) {
@@ -26,8 +26,10 @@ internal class PetPhoneProp {
             fill(accent); ink.strokeWidth=.9f
             when (p.phoneMode) {
                 1 -> { // Scan: lens and handle travel with the watching pose.
-                    ink.style=Paint.Style.STROKE; canvas.drawCircle(-.6f,-10f,3f,ink)
-                    canvas.drawLine(1.6f,-7.8f,3.6f,-5.8f,ink)
+                    val scan=kotlin.math.sin(p.accentPhase*2*Math.PI).toFloat()
+                    ink.style=Paint.Style.STROKE; canvas.drawCircle(-.6f,-10f+scan,3f,ink)
+                    canvas.drawLine(1.6f,-7.8f+scan,3.6f,-5.8f+scan,ink)
+                    ink.alpha=(alpha*p.phone*.22f).toInt();canvas.drawLine(-4.6f,-13f+scan*2f,4.6f,-13f+scan*2f,ink)
                 }
                 2 -> {
                     canvas.drawRoundRect(-4.2f,-14f,4.2f,-11.5f,.7f,.7f,ink)
@@ -35,7 +37,10 @@ internal class PetPhoneProp {
                     ink.alpha=(alpha*p.phone*(1f-p.phoneTap*.65f)).toInt(); ink.style=Paint.Style.STROKE
                     canvas.drawCircle(1.5f,-5.8f,1.1f+p.phoneTap*2.1f,ink)
                 }
-                3 -> for (i in -1..1) canvas.drawCircle(i*2.8f,-9f,.85f,ink)
+                3 -> for (i in -1..1) {
+                    val breath=(.55f+.45f*kotlin.math.sin(p.accentPhase*2*Math.PI-i*.9).toFloat())
+                    ink.alpha=(alpha*p.phone*breath).toInt();canvas.drawCircle(i*2.8f,-9f,.75f+.15f*breath,ink)
+                }
                 4 -> { canvas.drawRoundRect(-3.5f,-12f,-1.3f,-5f,.5f,.5f,ink); canvas.drawRoundRect(1.3f,-12f,3.5f,-5f,.5f,.5f,ink) }
                 6 -> {
                     fill(0xffb66939.toInt()); canvas.drawRoundRect(-.8f,-13f,.8f,-7.3f,.65f,.65f,ink)

@@ -14,8 +14,10 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
     private val layerPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val propPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
     private val phoneProp = PetPhoneProp()
+    private val accents = PetAccentDrawable()
     fun phonePalette(accent: Int, surface: Int) {
-        phoneProp.accent = accent; phoneProp.surface = surface; invalidateSelf()
+        phoneProp.accent = accent; phoneProp.surface = surface
+        accents.accent=accent;accents.surface=surface;invalidateSelf()
     }
     private val w = open.width.toFloat()
     private val h = open.height.toFloat()
@@ -32,7 +34,10 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
     fun setPose(next: PetPose) {
         if (next == pose) return
         val sheetChanged=(pose.sheet>.01f)!=(next.sheet>.01f) || pose.phoneMode!=next.phoneMode ||
-            kotlin.math.abs(pose.phone-next.phone)>.012f || kotlin.math.abs(pose.phoneTap-next.phoneTap)>.025f
+            kotlin.math.abs(pose.phone-next.phone)>.012f || kotlin.math.abs(pose.phoneTap-next.phoneTap)>.025f ||
+            pose.accent!=next.accent || kotlin.math.abs(pose.accentAlpha-next.accentAlpha)>.01f ||
+            (next.accentAlpha>.01f && kotlin.math.abs(pose.accentPhase-next.accentPhase)>.004f) ||
+            kotlin.math.abs(pose.eyeClose-next.eyeClose)>.015f || kotlin.math.abs(pose.wink-next.wink)>.015f
         pose = next
         prepareGeometry()
         // The 20/30 Hz motion clock continues unchanged. Avoid submitting another
@@ -86,11 +91,17 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
         layerPaint.alpha = paint.alpha
         drawSkin(canvas, left.image, left.skin, layerPaint)
         drawSkin(canvas, right.image, right.skin, layerPaint)
-        if (blinkAmount > 0f) {
-            layerPaint.alpha = (paint.alpha * blinkAmount).toInt()
+        val both=maxOf(blinkAmount,pose.eyeClose).coerceIn(0f,1f)
+        if (both > 0f) {
+            layerPaint.alpha = (paint.alpha * both).toInt()
             drawSkin(canvas, leftEye.image, leftEye.skin, layerPaint)
+        }
+        val rightClose=maxOf(both,pose.wink).coerceIn(0f,1f)
+        if(rightClose>0f) {
+            layerPaint.alpha=(paint.alpha*rightClose).toInt()
             drawSkin(canvas, rightEye.image, rightEye.skin, layerPaint)
         }
+        accents.draw(canvas,skeleton,pose,w,h,paint.alpha)
         canvas.restore()
     }
     private fun drawSkin(canvas: Canvas, image: Bitmap, skin: PetSkin, color: Paint) {
@@ -115,10 +126,11 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
         canvas.rotate(-11f + pose.chest * .35f)
         fun ink(color: Int) { propPaint.color = color; propPaint.alpha = (pose.sheet * paint.alpha).toInt() }
         ink(0xff385467.toInt()); canvas.drawRoundRect(-8f,-5f,10f,9f,1.9f,1.9f,propPaint)
-        ink(0xffd6f2ed.toInt()); canvas.drawRoundRect(-7.1f,-4.1f,9.1f,8.1f,1.2f,1.2f,propPaint)
-        ink(0xff658c96.toInt()); propPaint.strokeWidth = .9f
-        canvas.drawLine(-3.8f,-.8f,5.8f,-.8f,propPaint)
+        ink(accents.surface); canvas.drawRoundRect(-7.1f,-4.1f,9.1f,8.1f,1.2f,1.2f,propPaint)
+        ink(accents.accent); propPaint.strokeWidth = .8f
+        canvas.drawLine(-3.8f,-.8f,1.5f+4.3f*pose.accentPhase,-.8f,propPaint)
         canvas.drawLine(-3.8f,2.3f,3.4f,2.3f,propPaint)
+        propPaint.alpha=(pose.sheet*paint.alpha*.45f).toInt();canvas.drawLine(-3.8f,5.2f,4.8f,5.2f,propPaint)
         ink(0xffd39d5c.toInt()); propPaint.strokeWidth = 1.4f
         canvas.drawLine(-3.8f,-5.5f,-3.8f,-3.3f,propPaint)
         canvas.drawLine(4.4f,-5.5f,4.4f,-3.3f,propPaint)
