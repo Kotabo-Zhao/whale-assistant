@@ -16,11 +16,14 @@ internal class OwnerContext(context: Context, private val session: String? = nul
         if(tasksAllowed) result.put("secretary",runCatching {
             UnifiedUnderstandingStore.open(app).use { it.queue.secretary.list(activeOnly=true,limit=8).put("closedMatters",it.queue.secretary.closedMatters()) }
         }.getOrElse { JSONObject().put("status","unavailable") })
+        result.put("briefings", org.json.JSONArray(WorkerReportInbox(app).briefings().takeLast(3).map {
+            JSONObject().put("text",it.optString("text").take(2000)).put("owner",it.optString("owner"))
+        }))
         return result.put("clock",JSONObject().put("nowMs",System.currentTimeMillis()).put("timezone",java.time.ZoneId.systemDefault().id))
     }
     fun isCurrent(snapshot: JSONObject): Boolean = runCatching {
-        val current=read().apply { remove("clock") }
-        val previous=JSONObject(snapshot.toString()).apply { remove("clock") }
+        val current=read().apply { remove("clock"); remove("briefings") }
+        val previous=JSONObject(snapshot.toString()).apply { remove("clock"); remove("briefings") }
         current.toString()==previous.toString()
     }.getOrDefault(false)
     companion object {

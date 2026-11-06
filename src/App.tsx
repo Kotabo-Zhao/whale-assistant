@@ -949,7 +949,7 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
       </section>
 
       <nav className="desk-shortcuts" aria-label={t('工作台快捷入口')}>
-        <button type="button" onClick={onOpenTasks}>{t('后台任务')}<ChevronRight size={16}/></button>
+        <button type="button" onClick={onOpenTasks}>{t('小鲸近况')}<ChevronRight size={16}/></button>
         <button type="button" onClick={() => onNavigate('assistant-memory')}>{t('查看资料')}<ChevronRight size={16}/></button>
         <button type="button" onClick={() => onNavigate('tools')}>{t('我的工具')}<ChevronRight size={16}/></button>
       </nav>
@@ -975,7 +975,6 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
         </div>
       )}
       <TaskStarter />
-      {installed && <AutomationTaskCard />}
       {installed && !transitioning && !updateRequired && <SessionManager embedded disabled={busy !== null} onBack={() => undefined} onOpenHarness={onLaunch} />}
     </div>
   )
@@ -1264,6 +1263,7 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
     window.history.replaceState({ ...window.history.state, settingsGroup: next }, '')
   }
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const [advanced, setAdvanced] = useState(() => expanded === 'device' || expanded === 'workspace')
   /** 每个分组只留命中的入口；整组都没命中就连标题一起不渲染，避免空标题刷屏。 */
   const groups = SETTINGS_HOME_GROUPS
     .map(group => ({ group, entries: SETTINGS_HOME_ENTRIES.filter(entry => entry.group === group.id && matchesSettingsHomeQuery(entry, appliedQuery)) }))
@@ -1363,14 +1363,16 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
       )}
 
       {!searching && <nav className="account-sections" aria-label={t('设置分类')}>
-        {SETTINGS_HOME_GROUPS.map(group => <button key={group.id} type="button" className="account-group-toggle"
+        {SETTINGS_HOME_GROUPS.filter(group => advanced || !['device', 'workspace'].includes(group.id)).map(group => <button key={group.id} type="button" className="account-group-toggle"
           aria-label={t(group.label)} aria-expanded={expanded === group.id} aria-controls={'settings-group-' + group.id} onClick={() => toggleGroup(group.id)}>
           {group.id === 'assistant' ? <Bot size={18}/> : group.id === 'workspace' ? <HardDrive size={18}/> : group.id === 'models' ? <KeyRound size={18}/> : group.id === 'notifications' ? <Bell size={18}/> : group.id === 'appearance' ? <Image size={18}/> : <SlidersHorizontal size={18}/>}
           <strong>{t(group.label)}</strong></button>)}
+        <button type="button" className="account-group-toggle" aria-expanded={advanced} onClick={() => { setAdvanced(value => !value); if (expanded === 'device' || expanded === 'workspace') toggleGroup(expanded) }}>
+          <SlidersHorizontal size={18}/><strong>{t('高级设置')}</strong></button>
       </nav>}
       <div className="settings-directory">
       {groups.map(({ group, entries }) => (
-        <section className="management-list" id={'settings-group-' + group.id} key={group.id} aria-label={t(group.label)} hidden={!searching && expanded !== group.id}>
+        <section className="management-list" id={'settings-group-' + group.id} key={group.id} aria-label={t(group.label)} hidden={!searching && (expanded !== group.id || !advanced && ['device', 'workspace'].includes(group.id))}>
           {searching && <h2 className="management-group-title">{t(group.label)}</h2>}
           {(searching || expanded === group.id) && <div>
           {entries.map(entry => entry.target.kind === 'preference' ? <div key={entry.id} className="account-preference">

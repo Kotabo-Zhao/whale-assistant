@@ -58,7 +58,6 @@ internal class CustomUnderstandingModel(
             .put("system", prompt.system)
             .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", prompt.user)))
             .put("max_tokens", tokenLimit)
-            .put("temperature", 0)
         val response = CustomUnderstandingHttp.post(endpoint("/messages"), mapOf(
             "x-api-key" to key,
             "anthropic-version" to "2023-06-01",

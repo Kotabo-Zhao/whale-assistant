@@ -21,7 +21,7 @@ internal class PetFaceDrawable(private val source:Bitmap) {
         ink.shader=null;ink.color=color;ink.alpha=(255*alpha.coerceIn(0f,1f)).toInt()
         ink.style=if(stroke>0) Paint.Style.STROKE else Paint.Style.FILL;ink.strokeWidth=stroke
     }
-    fun draw(c:Canvas,skeleton:PetSkeleton,p:PetPose,w:Float,h:Float,alpha:Int) {
+    fun draw(c:Canvas,skeleton:PetSkeleton,p:PetPose,w:Float,h:Float,alpha:Int,leftClose:Float=0f,rightClose:Float=0f) {
         val b=skeleton.bones[PetJoint.HEAD.ordinal];val f=p.face;val opacity=alpha/255f
         transform[0]=b.cosine;transform[1]=-b.sine;transform[2]=b.dx
         transform[3]=b.sine;transform[4]=b.cosine;transform[5]=b.dy;transform[8]=1f
@@ -48,10 +48,9 @@ internal class PetFaceDrawable(private val source:Bitmap) {
             if(opening>.6f && f.smile>.4f) {pen(0xffffeee6.toInt(),opacity);c.drawRoundRect(x-half,y-.2f,x+half,y+.48f,.2f,.2f,ink)}
             c.restore();pen(lip,opacity,.25f);c.drawPath(path,ink)
         }
-        if(f.squint>.02f) {
-            lid(c,32.9f,36.9f,43.1f,36.8f,f.squint,opacity)
-            lid(c,52.4f,34.8f,62.3f,34.1f,f.squint,opacity)
-        }
+        val l=maxOf(f.squint*.28f,leftClose);val r=maxOf(f.squint*.28f,rightClose)
+        if(l>.02f && leftClose<.98f) lid(c,32.9f,36.9f,43.1f,36.8f,l,opacity)
+        if(r>.02f && rightClose<.98f) lid(c,52.4f,34.8f,62.3f,34.1f,r,opacity)
         // Inner brow ends rise for concern and lower for concentration.
         pen(0xff805e69.toInt(),opacity*.85f,.36f)
         val raise=f.browRaise*.7f;val tilt=f.brow*.95f
@@ -73,7 +72,7 @@ internal class PetFaceDrawable(private val source:Bitmap) {
         c.restore()
     }
     private fun lid(c:Canvas,left:Float,y:Float,right:Float,innerY:Float,amount:Float,opacity:Float) {
-        val mid=(left+right)*.5f;val down=2.9f*amount
+        val mid=(left+right)*.5f;val down=10.5f*amount
         path.rewind();path.moveTo(left,y)
         path.cubicTo(left+2f,y-2.9f,right-2f,innerY-2.2f,right,innerY)
         path.quadTo(mid,y-2f+down,left,y);path.close()

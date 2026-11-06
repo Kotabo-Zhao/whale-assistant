@@ -817,6 +817,9 @@ export async function arriveAtSettingsHome(): Promise<void> {
  * 所以这里点的是二级页上那一行入口按钮，等待口径与二级页一致：先等按钮、再等标题。
  */
 export function expandSettingsGroup(name: string): void {
+  if (!screen.queryByRole('button', { name }) && ['运行与数据', '设备控制', 'Runtime and data', 'Device control'].includes(name)) {
+    fireEvent.click(screen.getByRole('button', { name: /高级设置|Advanced settings/ }))
+  }
   const heading = screen.getByRole('button', { name })
   if (heading.getAttribute('aria-expanded') === 'false') fireEvent.click(heading)
 }

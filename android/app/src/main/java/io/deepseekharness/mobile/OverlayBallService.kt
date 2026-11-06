@@ -117,6 +117,7 @@ class OverlayBallService : Service() {
         actionMenu?.refreshControl()
         setHostAppForeground(AppForeground.isForeground())
         if (!companionMotionAllowed()) petDrawable?.setPose(petActing.still())
+        wakePetMotion()
         updateControlBounds()
         if(state.phase=="idle" && !RuntimeStore(applicationContext).overlayBallEnabled()) stopSelf()
     }
@@ -125,18 +126,14 @@ class OverlayBallService : Service() {
         io.deepseekharness.mobile.companion.PetControlProtection.update("menu",actionMenu)
     }
     private val taskAccepted: () -> Unit = {
-        hintHandler.post { if (!avatarDestroyed) petActing.react(PetAction.ACCEPT, SystemClock.uptimeMillis()) }
+        hintHandler.post { if (!avatarDestroyed) { petActing.react(PetAction.ACCEPT, SystemClock.uptimeMillis());wakePetMotion() } }
         Unit
     }
-    private var petBlinkAt = -1000L
-    private val blinkOpen = Runnable { petDrawable?.blinkAmount = 0f }
-    private val blinkTick = object : Runnable {
-        override fun run() {
-            if (!companionMotionAllowed()) return
-            petBlinkAt = SystemClock.uptimeMillis()
-            hintHandler.postDelayed(blinkOpen, 300)
-            hintHandler.postDelayed(this, if (petActing.action == PetAction.WORK) 3300 else 4800)
-        }
+    private val petBlink = io.deepseekharness.mobile.overlay.PetBlinkClock()
+    private var petLastFrameAt=0L
+    private var petPowerSave=false
+    private val motionSettingObserver=object:android.database.ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange:Boolean) { if(!avatarDestroyed) configureCompanionMotion() }
     }
     private val avatarExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "companion-avatar").apply { isDaemon = true } }
     @Volatile private var avatarDestroyed = false
@@ -158,12 +155,14 @@ class OverlayBallService : Service() {
             "taskFailed" -> petActing.react(PetAction.SETBACK, now)
         }
         if(!companionMotionAllowed()) petDrawable?.setPose(petActing.still())
+        wakePetMotion()
     }
     private val bubbleChat by lazy { io.deepseekharness.mobile.companion.CompanionBubbleWindow(this, windowManager, ::updatePetConversationState,
         { sessionId -> openHarness(sessionId) }, { running, waiting, questions ->
         petActing.waitingTasks = questions
         petActing.runningTasks = running
         if(!companionMotionAllowed()) petDrawable?.setPose(petActing.still())
+        wakePetMotion()
         ballView?.findViewById<android.widget.TextView>(R.id.companion_worker_badge)?.apply {
             val count = if (waiting > 0) waiting else running
             visibility = if (count > 0) View.VISIBLE else View.GONE
@@ -179,9 +178,7 @@ class OverlayBallService : Service() {
 
     private fun showTaskReceipt(state: String) {
         val text = when (state) {
-            "waiting" -> "后台有个问题，点开回答"
-            "completed" -> "后台任务已完成，点开查看"
-            "failed", "blocked" -> "后台任务需要处理"
+            "briefing" -> "有件事想跟你说"
             else -> return
         }
         showCompanionHint(text) { if (!bubbleChat.visible) bubbleChat.show() }
@@ -299,6 +296,7 @@ class OverlayBallService : Service() {
                 screenVisibilityRegistered = true
             }
         }
+        contentResolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE),false,motionSettingObserver)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -428,6 +426,7 @@ class OverlayBallService : Service() {
         calendarServiceDestroyed = true
         reminderHints.clear()
         avatarDestroyed = true
+        contentResolver.unregisterContentObserver(motionSettingObserver)
         if (screenVisibilityRegistered) {
             runCatching { unregisterReceiver(screenVisibility) }
             screenVisibilityRegistered = false
@@ -793,6 +792,7 @@ class OverlayBallService : Service() {
         if (runCatching { windowManager.addView(bubble, params) }.isSuccess) {
             hintView = bubble
             petActing.react(PetAction.NOTICE,SystemClock.uptimeMillis())
+            wakePetMotion()
             if (notificationStyle && android.animation.ValueAnimator.areAnimatorsEnabled()) {
                 bubble.alpha = 0f; bubble.scaleX = 0.94f; bubble.scaleY = 0.94f
                 bubble.translationY = (if (position.y < layoutParams.y) 5 else -5) * density
@@ -921,7 +921,7 @@ class OverlayBallService : Service() {
         view.setOnClickListener {
             if (!stopIfOverlayPermissionRevoked()) {
                 if(DeviceControlState.current.phase!="idle") togglePetMenu()
-                else { petActing.react(PetAction.TOUCH, SystemClock.uptimeMillis()); dismissPetMenu(); bubbleChat.toggle() }
+                else { petActing.react(PetAction.TOUCH, SystemClock.uptimeMillis());wakePetMotion(); dismissPetMenu(); bubbleChat.toggle() }
             }
         }
         view.setOnLongClickListener {
@@ -951,11 +951,11 @@ class OverlayBallService : Service() {
         // 只认当前这颗球的回调，避免重建期间旧视图的回调覆盖新状态。
         view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(attached: View) {
-                if (attached === ballView) ballAttached = true
+                if (attached === ballView) { ballAttached = true;configureCompanionMotion() }
             }
 
             override fun onViewDetachedFromWindow(detached: View) {
-                if (detached === ballView) { ballAttached = false; io.deepseekharness.mobile.companion.PetControlProtection.update("pet",null) }
+                if (detached === ballView) { ballAttached = false;configureCompanionMotion();io.deepseekharness.mobile.companion.PetControlProtection.update("pet",null) }
             }
         })
         // 权限缺失时 addView 会直接抛异常（SecurityException / BadTokenException）。
@@ -1006,10 +1006,9 @@ class OverlayBallService : Service() {
     /**
      * 动画是否可以真的跑：在 [companionMotionEnabled]（系统动画开关 + 用户「减少动态」）之外，
      * 再要求**球此刻可见**——已挂上窗口、没被本应用自己的全屏界面盖住（[hiddenForHostApp]）、
-     * 屏幕亮着且没有锁屏。不可见时撤销帧回调和眨眼定时器。
+     * 屏幕亮着且没有锁屏。不可见时撤销唯一的动画回调（含眨眼）。
      *
-     * 停掉之后画面落在 [configureCompanionMotion] 开头写的静态站位（pose/位移/旋转/眨眼全部归零），
-     * 因此恢复时不会出现「从头猛地跳一下」。
+     * 不可见时保留当前姿态，减少动态效果时选用语义静态姿态；恢复以当前画面为起点衔接。
      */
     private fun companionMotionAllowed(): Boolean =
         ballAttached && !avatarDestroyed && !hiddenForHostApp &&
@@ -1026,39 +1025,46 @@ class OverlayBallService : Service() {
     }
 
     private fun configureCompanionMotion() {
-        hintHandler.removeCallbacks(blinkTick)
-        hintHandler.removeCallbacks(blinkOpen)
+        val wasRunning=companionFrame!=null
         companionFrame?.let(hintHandler::removeCallbacks)
         companionFrame = null
-        petDrawable?.blinkAmount = 0f
-        petDrawable?.setPose(petActing.still())
-        if (!companionMotionAllowed()) return
-        val powerSave = getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
+        val drawable=petDrawable ?: return
+        if (!companionMotionAllowed()) {
+            drawable.blinkAmount=0f
+            if(!companionMotionEnabled()) drawable.setPose(petActing.still())
+            return
+        }
+        val resumedAt=SystemClock.uptimeMillis()
+        if(!wasRunning) {
+            petActing.resume(resumedAt,drawable.currentPose)
+            petBlink.reset(resumedAt)
+        }
+        petLastFrameAt=resumedAt
+        petPowerSave=getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
         companionFrame = object : Runnable {
             override fun run() {
                 if (companionFrame !== this) return
+                if(!ballAttached || avatarDestroyed || hiddenForHostApp || ballView?.isShown!=true) {
+                    companionFrame=null;return
+                }
                 val now = SystemClock.uptimeMillis()
-                if(!WhaleMotion.enabled()) {
-                    petDrawable?.setPose(petActing.still())
-                    petDrawable?.blinkAmount=0f
-                    hintHandler.postAtTime(this,now+1000)
-                    return
-                }
-                petDragLean *= .86f
-                petDrawable?.setPose(petActing.sample(now, petDragLean))
-                petDrawable?.blinkAmount = io.deepseekharness.mobile.overlay.CompanionPetMotion.blink(now - petBlinkAt)
-                val delay = when {
-                    powerSave -> 80L
-                    petActing.action == PetAction.WAIT || petActing.action == PetAction.PAUSED ||
-                        petActing.action == PetAction.STOPPED || petActing.action == PetAction.ERROR -> 50L
-                    petActing.action != PetAction.IDLE || now - petBlinkAt in 0..280 -> 33L
-                    else -> 50L
-                }
-                hintHandler.postAtTime(this, now + delay)
+                // Time-based damping has the same feel at every refresh budget.
+                petDragLean *= kotlin.math.exp(-(now-petLastFrameAt).coerceIn(0,250)/210.0).toFloat()
+                petLastFrameAt=now
+                val pose=petActing.sample(now, petDragLean)
+                drawable.setPose(pose)
+                drawable.blinkAmount=petBlink.sample(now,maxOf(pose.eyeClose,pose.wink,pose.face.happyEyes)>.3f)
+                val delay=io.deepseekharness.mobile.overlay.PetFramePolicy.delay(petActing.action,petActing.actionElapsed,
+                    petActing.transitioning,petBlink.blinking(now),petPowerSave)
+                hintHandler.postAtTime(this,now+minOf(delay,petBlink.untilNext(now)))
             }
         }
         companionFrame?.run()
-        if (petDrawable != null) hintHandler.postDelayed(blinkTick, 2400)
+    }
+
+    /** Events get an immediate frame even when the ambient loop is resting. */
+    private fun wakePetMotion() {
+        companionFrame?.let { hintHandler.removeCallbacks(it);hintHandler.post(it) }
     }
 
     /** Decode both aligned expression frames at overlay resolution, off the UI thread. */
@@ -1083,14 +1089,14 @@ class OverlayBallService : Service() {
             val posted = hintHandler.post {
                 if (!avatarDestroyed && avatarGeneration == generation && ballView === view && ballAttached) {
                     val old = petDrawable
-                    hintHandler.removeCallbacks(blinkTick); hintHandler.removeCallbacks(blinkOpen)
+                    companionFrame?.let(hintHandler::removeCallbacks);companionFrame=null
                     petDrawable = next
                     val ui=io.deepseekharness.mobile.companion.PetUi(this@OverlayBallService)
                     next.phonePalette(ui.accent,ui.soft)
                     next.setPose(if(companionMotionAllowed()) petActing.sample(SystemClock.uptimeMillis()) else petActing.still())
                     view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
                     old?.close()
-                    if (companionMotionAllowed()) hintHandler.postDelayed(blinkTick, 2400)
+                    configureCompanionMotion()
                 } else { next.close() }
             }
             if (!posted) { next.close() }
@@ -1122,7 +1128,6 @@ class OverlayBallService : Service() {
         reminderHints.clear()
         bubbleChat.hide()
         avatarGeneration++
-        hintHandler.removeCallbacks(blinkTick); hintHandler.removeCallbacks(blinkOpen)
         companionFrame?.let(hintHandler::removeCallbacks)
         companionFrame = null
         ballView?.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(null)
@@ -1157,7 +1162,7 @@ class OverlayBallService : Service() {
             if (runCatching { windowManager.updateViewLayout(view, next) }.isSuccess) layoutParams = next
         }
         // 可见性变了：动画门控必须跟着重算。被本应用自己的全屏界面盖住时停帧（用户看不到球，
-        // 动画纯属白烧电），回到其他应用时从静态站姿重新起——这就是「零感知」的那一半。
+        // 动画纯属白烧电），回到其他应用时从保留的姿态衔接。
         runCatching { applyCompanionMotionPreference() }
         updateControlBounds()
     }
@@ -1194,6 +1199,7 @@ class OverlayBallService : Service() {
                 // 这样从长按直接松手不会意外移动桌宠。
                 if (!longPressFired && !OverlayBallPolicy.isClick(deltaX, deltaY, slop)) {
                     petActing.dragging=true
+                    wakePetMotion()
                     val metrics = resources.displayMetrics
                     val (x, y) = OverlayBallPolicy.clampPosition(
                         initialX + deltaX.toInt(),
@@ -1224,6 +1230,7 @@ class OverlayBallService : Service() {
             }
             MotionEvent.ACTION_UP -> {
                 petActing.dragging=false
+                wakePetMotion()
                 val deltaX = event.rawX - touchStartX
                 val deltaY = event.rawY - touchStartY
                 if (longPressFired) return true
@@ -1253,7 +1260,7 @@ class OverlayBallService : Service() {
                 }
                 return true
             }
-            MotionEvent.ACTION_CANCEL -> {petActing.dragging=false;petDragLean=0f;return true}
+            MotionEvent.ACTION_CANCEL -> {petActing.dragging=false;petDragLean=0f;wakePetMotion();return true}
         }
         return false
     }

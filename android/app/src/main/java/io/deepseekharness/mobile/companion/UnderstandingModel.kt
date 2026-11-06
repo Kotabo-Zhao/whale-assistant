@@ -79,7 +79,7 @@ internal class DeepSeekUnderstandingModel(
         require(model.isNotBlank() && model.length <= 200 && model.none { it.isISOControl() })
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", prompt.system))
             .put(JSONObject().put("role", "user").put("content", prompt.user))
-        val payload = JSONObject().put("model", model).put("messages", messages).put("temperature", 0)
+        val payload = JSONObject().put("model", model).put("messages", messages)
             .put("max_tokens", tokenLimit).put("response_format", JSONObject().put("type", "json_object"))
         val target = java.net.URI(endpoint)
         // DeepSeek defaults to thinking mode, which can consume this small extraction

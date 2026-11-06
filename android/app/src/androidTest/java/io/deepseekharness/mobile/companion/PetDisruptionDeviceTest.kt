@@ -93,62 +93,15 @@ class PetDisruptionDeviceTest {
         }
     }
     private fun fresh() = File(app.cacheDir,"pet-disruption-"+UUID.randomUUID()).apply { check(mkdirs()) }
-    @Test fun ownerPanelRendersBothThemesInPetWindow() {
-        assertTrue("截图前请先唤醒设备",app.getSystemService(android.os.PowerManager::class.java).isInteractive)
-        val prefs=app.getSharedPreferences("whale-interface",0);val previous=prefs.getString("style",null)
-        val background=inst.startActivitySync(android.content.Intent(app,CompanionActivity::class.java)
-            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(CompanionActivity.OPEN_PAGE,"OWNER"))
-        try { for(style in listOf("cute","simple")) Pet(fresh()).use { pet ->
-            // Localized resource contexts use app preferences; fixture storage remains isolated.
-            prefs.edit().putString("style",style).commit()
+    @Test fun ownerDataNeedsNoSetupPanelInPetWindow() {
+        for(style in listOf("cute","simple")) Pet(fresh()).use { pet ->
             pet.context.getSharedPreferences("whale-interface",0).edit().putString("style",style).commit()
             pet.open({ null })
             pet.click(PetUi(pet.context).string(io.deepseekharness.mobile.R.string.pet_menu_session))
-            pet.click("主人档案与秘书事项")
-            until { var loaded=false;inst.runOnMainSync { loaded=pet.labels().any { it.text=="称呼" } };loaded }
-            inst.waitForIdleSync()
-            Thread.sleep(700) // Let the real overlay window transition become visible before capturing.
             inst.runOnMainSync {
-                val rect=android.graphics.Rect()
-                val name=pet.labels().single { it.text=="称呼" }
-                assertTrue("首屏应露出可编辑的称呼卡片",name.getGlobalVisibleRect(rect) && rect.height()>=name.lineHeight)
+                assertFalse(pet.labels().any { it.text.toString().contains("主人档案") || it.text.toString().contains("秘书事项") })
+                assertEquals(1,pet.labels().filterIsInstance<EditText>().size)
             }
-            inst.uiAutomation.takeScreenshot().let { shot ->
-                File(app.cacheDir,"p81-owner-pet-$style.png").outputStream().use { shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };shot.recycle()
-            }
-        } } finally {
-            prefs.edit().apply { if(previous==null)remove("style") else putString("style",previous) }.commit()
-            inst.runOnMainSync { background.finish() }
-        }
-    }
-    @Test fun ownerPanelEditsSharedProfileInsidePetWindow() {
-        Pet(fresh()).use { pet ->
-            pet.open({ null })
-            pet.click(PetUi(pet.context).string(io.deepseekharness.mobile.R.string.pet_menu_session))
-            pet.click("主人档案与秘书事项")
-            until { var loaded=false;inst.runOnMainSync { loaded=pet.labels().any { it.text=="称呼" } };loaded }
-            inst.runOnMainSync {
-                val label=pet.labels().single { it.text=="称呼" }
-                (label.parent as View).performClick()
-                pet.labels().filterIsInstance<EditText>().single { it.contentDescription=="称呼，最多 240 字" }.setText("面板验收主人")
-            }
-            pet.click("保存并确认")
-            until { CompanionMemoryStore(pet.context).profile().toString().contains("面板验收主人") }
-            assertTrue(OwnerContext(pet.context,"session-app-test").read().toString().contains("面板验收主人"))
-            until { var loaded=false;inst.runOnMainSync { loaded=pet.labels().any { it.text=="称呼" } };loaded }
-            pet.click("秘书事项")
-            until { var loaded=false;inst.runOnMainSync { loaded=pet.labels().any { it.text=="添加事项" } };loaded }
-            pet.click("添加事项")
-            inst.runOnMainSync { pet.labels().filterIsInstance<EditText>().single { it.contentDescription=="事项名称" }.setText("面板交办验收") }
-            pet.click("保存事项")
-            until { UnifiedUnderstandingStore.open(pet.context).use { it.queue.secretary.list().getJSONArray("items").length()==1 } }
-            until { var loaded=false;inst.runOnMainSync { loaded=pet.labels().any { it.text=="面板交办验收" } };loaded }
-            inst.runOnMainSync { (pet.labels().single { it.text=="面板交办验收" }.parent as View).performClick() }
-            pet.click("标记完成")
-            until { UnifiedUnderstandingStore.open(pet.context).use { it.queue.secretary.list(activeOnly=true).getJSONArray("items").length()==0 } }
-            pet.click("收起")
-            inst.runOnMainSync { assertEquals(1,pet.labels().filterIsInstance<EditText>().size) }
-            inst.sendStatus(0,android.os.Bundle().apply { putString("ownerInlinePanel","profile save, task create and completion in the original pet window") })
         }
     }
     private fun until(timeout: Long = 8000, test: () -> Boolean) {

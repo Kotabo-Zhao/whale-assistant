@@ -19,21 +19,29 @@ internal data class PetPose(
     val eyeClose: Float = 0f, val wink: Float = 0f,
     val accent: PetAccent = PetAccent.NONE, val accentPhase: Float = 0f, val accentAlpha: Float = 0f,
     val face:PetFacePose=PetFacePose(), val prop:PetProp=PetProp.NONE, val propAmount:Float=0f, val propPhase:Float=0f,
+    val holdX:Float=.49f, val holdY:Float=.70f, val holdAngle:Float=0f, val pageTurn:Float=0f,
 ) {
     fun mix(b: PetPose, t: Float): PetPose {
         fun blend(a: Float, end: Float) = a + (end - a) * t
-        return PetPose(blend(chest,b.chest), blend(head,b.head), blend(leftFin,b.leftFin), blend(rightFin,b.rightFin),
+        val sameObject = prop == b.prop && (phone > .01f) == (b.phone > .01f)
+        // Put the previous object down before picking up another. Both hands are solved again
+        // after blending, so their contact points do not drift through the book/phone.
+        fun held(a:Float, end:Float, rest:Float) = if(sameObject) blend(a,end)
+            else if(t<.5f) a+(rest-a)*t*2f else rest+(end-rest)*(t*2f-1f)
+        return PetInteraction.blendHands(this,b,PetPose(blend(chest,b.chest), blend(head,b.head), blend(leftFin,b.leftFin), blend(rightFin,b.rightFin),
             blend(hair,b.hair), blend(tailRoot,b.tailRoot), blend(tailTip,b.tailTip),
             blend(leftShoulder,b.leftShoulder), blend(rightShoulder,b.rightShoulder), blend(leftElbow,b.leftElbow), blend(rightElbow,b.rightElbow),
             blend(leftWrist,b.leftWrist), blend(rightWrist,b.rightWrist), blend(feet,b.feet), blend(lift,b.lift), blend(gaze,b.gaze), blend(mouth,b.mouth), blend(sheet,b.sheet),
-            blend(phone,b.phone), blend(phoneTap,b.phoneTap), b.phoneMode,
+            if(sameObject) blend(phone,b.phone) else if(t<.5f) phone*(1f-2f*t) else b.phone*(2f*t-1f),
+            blend(phoneTap,b.phoneTap), b.phoneMode,
             blend(eyeClose,b.eyeClose),blend(wink,b.wink),
             if(accent==b.accent || t>=.5f) b.accent else accent,
             if(accent==b.accent || t>=.5f) b.accentPhase else accentPhase,
             if(accent==b.accent) blend(accentAlpha,b.accentAlpha) else if(t<.5f) accentAlpha*(1f-2f*t) else b.accentAlpha*(2f*t-1f),
             face.mix(b.face,t),if(prop==b.prop || t>=.5f) b.prop else prop,
             if(prop==b.prop) blend(propAmount,b.propAmount) else if(t<.5f) propAmount*(1f-2f*t) else b.propAmount*(2f*t-1f),
-            if(prop==b.prop || t>=.5f) b.propPhase else propPhase)
+            if(prop==b.prop || t>=.5f) b.propPhase else propPhase,
+            held(holdX,b.holdX,.49f),held(holdY,b.holdY,.68f),held(holdAngle,b.holdAngle,0f),blend(pageTurn,b.pageTurn)),t)
     }
 }
 
@@ -42,11 +50,20 @@ internal class PetActing {
     var runningTasks = 0
     var waitingTasks = 0
     var chatThinking = false
+        set(value) {
+            if(value && !field && cue!=PetAction.ACCEPT) { cue=null;afterAccept=null }
+            field=value
+        }
     var dragging = false
+        set(value) {
+            if(value && !field) { cue=null;afterAccept=null }
+            field=value
+        }
     private var controlAction: PetAction? = null
     private var operationUntil = 0L
     fun control(phase: String, now: Long = 0) {
         if(phase=="operating") operationUntil=now+450
+        else if(phase!="observing") operationUntil=0L
         controlAction = when (phase) {
             "observing" -> PetAction.OBSERVE
             "operating" -> PetAction.CONTROL
@@ -62,8 +79,8 @@ internal class PetActing {
     private fun restingAction():PetAction = when {
         dragging -> PetAction.DRAG
         chatThinking -> PetAction.THINK
-        runningTasks > 0 -> PetAction.WORK
         waitingTasks > 0 -> PetAction.ASK
+        runningTasks > 0 -> PetAction.WORK
         else -> PetAction.IDLE
     }
     fun still(): PetPose = pose(controlAction ?: restingAction(), 900).copy(eyeClose=0f,wink=0f)
@@ -75,10 +92,21 @@ internal class PetActing {
     private var entered = 0L
     private var from = PetPose()
     private var last = PetPose()
+    private var initialized = false
+    val transitioning get() = transitionProgress < 1f
+    private var transitionProgress = 1f
+    val actionElapsed:Long get() = elapsedInAction
+    private var elapsedInAction = 0L
+    fun resume(now:Long, visible:PetPose) {
+        from=visible;last=visible;entered=now;initialized=true;transitionProgress=0f
+        // Reactions that happened out of sight must not replay on unlock.
+        cue=null;afterAccept=null
+        action=controlAction ?: restingAction()
+    }
     fun react(value: PetAction, now: Long) {
         if (controlAction != null) return
         if (value == PetAction.IDLE || value == PetAction.WORK) return
-        if (value in setOf(PetAction.TOUCH,PetAction.NOTICE) && cue != null && now - cueAt < duration(cue)) return
+        if ((value == PetAction.TOUCH || value == PetAction.NOTICE) && cue != null && now - cueAt < duration(cue)) return
         if (cue == PetAction.ACCEPT && value != PetAction.ACCEPT && now - cueAt < duration(cue)) {
             afterAccept = value
             return
@@ -86,7 +114,7 @@ internal class PetActing {
         afterAccept = null
         cue = value; cueAt = now
         // Repeated submissions still receive a fresh acknowledgement gesture.
-        from = last; entered = now; action = value
+        from = last; entered = now; action = value;initialized=true
     }
     private fun duration(state: PetAction?) = when (state) {
         PetAction.ACCEPT -> 1700
@@ -99,6 +127,7 @@ internal class PetActing {
         else -> 0
     }
     fun sample(now: Long, drag: Float = 0f): PetPose {
+        if (!initialized) { entered=now;initialized=true }
         if (cue != null && now - cueAt >= duration(cue)) {
             val pending = afterAccept
             val ended = cueAt + duration(cue)
@@ -110,9 +139,11 @@ internal class PetActing {
         val next = device ?: if(dragging) PetAction.DRAG else cue ?: restingAction()
         if (next != action) { from = last; entered = now; action = next }
         val elapsed = (now - entered).coerceAtLeast(0)
+        elapsedInAction=elapsed
         val target = pose(action, elapsed, drag)
-        val t = (elapsed / if (from.phone != target.phone) 420f else 260f).coerceIn(0f, 1f)
-        last = if (t < 1f) from.mix(target, t * t * (3f - 2f * t)) else target
+        val t = (elapsed / if (from.prop != target.prop || from.phone != target.phone) 600f else 320f).coerceIn(0f, 1f)
+        transitionProgress=t
+        last = if (t < 1f) PetInteraction.constrain(from.mix(target, t * t * (3f - 2f * t))) else target
         return last
     }
     companion object {
@@ -122,7 +153,8 @@ internal class PetActing {
             return sin((ms - start) * PI / width).toFloat()
         }
         fun pose(action: PetAction, ms: Long, drag: Float = 0f): PetPose =
-            PetDetails.enrich(action,ms,PetChoreography.finish(action,ms,basePose(action,ms,drag)))
+            PetInteraction.constrain(PetInteraction.animate(action,ms,
+                PetDetails.enrich(action,ms,PetChoreography.finish(action,ms,basePose(action,ms,drag)))))
         private fun basePose(action: PetAction, ms: Long, drag: Float = 0f): PetPose {
             val sway = wave(ms, 3350.0)
             val tail = wave(ms, 2250.0)

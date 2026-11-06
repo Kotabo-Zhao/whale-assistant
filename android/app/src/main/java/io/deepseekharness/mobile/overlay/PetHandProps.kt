@@ -37,14 +37,22 @@ internal class PetHandProps {
         fun grip(rightHand:Boolean,draw:()->Unit) {
             val b=skeleton.bones[if(rightHand) PetJoint.WRIST_R.ordinal else PetJoint.WRIST_L.ordinal]
             val x=if(rightHand) .513f*w else .478f*w;val y=if(rightHand) .702f*h else .705f*h
-            c.save();c.translate(b.x(x,y),b.y(x,y));c.scale(w/100f,h/100f)
-            c.rotate(p.chest*.4f+(if(rightHand) p.rightWrist else p.leftWrist)*.25f)
+            c.save();c.translate(b.x(x,y),b.y(x,y))
+            c.rotate(Math.toDegrees(kotlin.math.atan2(b.sine.toDouble(),b.cosine.toDouble())).toFloat())
+            c.scale(w/100f,h/100f)
             draw();c.restore()
         }
-        grip(right) {
+        fun held(draw:()->Unit) {
+            if(!PetInteraction.constrained(p)) { grip(right,draw);return }
+            val chest=skeleton.bones[PetJoint.CHEST.ordinal]
+            c.save();c.translate(chest.x(p.holdX*w,p.holdY*h),chest.y(p.holdX*w,p.holdY*h))
+            c.rotate(p.chest+p.holdAngle);c.scale(w/100f,h/100f)
+            draw();c.restore()
+        }
+        held {
             when(p.prop) {
                 PetProp.CUP -> {
-                    pen(outline,1.25f);c.drawOval(4f,-8f,10f,-1.5f,ink)
+                    pen(outline,1.25f);c.drawOval(-10f,-8f,-4f,-1.5f,ink)
                     panel(c,-6f,-10f,6f,2f,surface,2f)
                     pen(paper);c.drawOval(-5.2f,-11.2f,5.2f,-8f,ink)
                     pen(0xffa97554.toInt());c.drawOval(-4.5f,-10.6f,4.5f,-8.7f,ink)
@@ -65,6 +73,13 @@ internal class PetHandProps {
                     line(c,4.5f,-11.5f,4.5f,2f,0xffbe9c7b.toInt(),.45f)
                     for(i in 0..2) {line(c,-1.5f,-8f+i*2.7f,2.8f,-8.5f+i*2.7f,accent,.4f);line(c,6.3f,-8.5f+i*2.7f,10.5f,-8f+i*2.7f,accent,.4f)}
                     pen(gold);path.rewind();path.moveTo(8f,-13f);path.lineTo(10f,-13f);path.lineTo(10f,-8.5f);path.lineTo(9f,-9.5f);path.lineTo(8f,-8.5f);path.close();c.drawPath(path,ink)
+                    if(p.prop==PetProp.BOOK && p.pageTurn>.001f) {
+                        val turn=p.pageTurn
+                        val edge=12f-15f*turn;val curl=3f*sin(turn*PI).toFloat()
+                        path.rewind();path.moveTo(4.5f,-11.5f);path.quadTo(edge+curl,-15f-curl,edge,-12f)
+                        path.lineTo(edge,1.8f);path.quadTo(edge+curl,-curl,4.5f,2f);path.close()
+                        pen(0xfffff6e8.toInt());c.drawPath(path,ink);pen(0xffbe9c7b.toInt(),.35f);c.drawPath(path,ink)
+                    }
                 }
                 PetProp.QUESTION_CARD,PetProp.REPLY_CARD -> {
                     panel(c,-5f,-13.5f,10f,1.5f,paper)

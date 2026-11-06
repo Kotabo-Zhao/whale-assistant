@@ -33,6 +33,7 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
     private val left = cutArm(PetJoint.ELBOW_L, floatArrayOf(.395f,.584f, .441f,.584f, .474f,.649f, .489f,.661f, .499f,.714f, .490f,.732f, .452f,.732f, .432f,.697f, .414f,.657f))
     private val right = cutArm(PetJoint.ELBOW_R, floatArrayOf(.536f,.584f, .578f,.584f, .560f,.657f, .544f,.697f, .528f,.732f, .493f,.732f, .486f,.714f, .497f,.661f, .516f,.649f))
     private var pose = PetPose()
+    val currentPose get() = pose
     private var prepared: PetPose? = null
     fun setPose(next: PetPose) {
         if (next == pose) return
@@ -42,11 +43,12 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
             (next.accentAlpha>.01f && kotlin.math.abs(pose.accentPhase-next.accentPhase)>.004f) ||
             kotlin.math.abs(pose.eyeClose-next.eyeClose)>.015f || kotlin.math.abs(pose.wink-next.wink)>.015f ||
             pose.face!=next.face || pose.prop!=next.prop || kotlin.math.abs(pose.propAmount-next.propAmount)>.01f ||
+            pose.holdX!=next.holdX || pose.holdY!=next.holdY || pose.holdAngle!=next.holdAngle || pose.pageTurn!=next.pageTurn ||
             (next.propAmount>.01f && kotlin.math.abs(pose.propPhase-next.propPhase)>.004f)
         pose = next
         prepareGeometry()
-        // The 20/30 Hz motion clock continues unchanged. Avoid submitting another
-        // mesh when all movement is below one fifth of a physical display pixel.
+        // The adaptive clock can sample without submitting another mesh when all
+        // movement is below one fifth of a physical display pixel.
         val scale = if (bounds.width()>0) bounds.width()/w*.90f else 1f
         if (skin.movedSinceDraw(scale,.18f) || left.skin.movedSinceDraw(scale,.18f) ||
             right.skin.movedSinceDraw(scale,.18f) || sheetChanged || pose.sheet>.01f) invalidateSelf()
@@ -91,14 +93,14 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
         canvas.scale(.90f, .90f, w * .5f, h * .60f)
         prepareGeometry()
         drawSkin(canvas, base, skin, paint)
-        face.draw(canvas,skeleton,pose,w,h,paint.alpha)
         val both=maxOf(blinkAmount,pose.eyeClose,pose.face.happyEyes).coerceIn(0f,1f)
-        if (both > 0f) {
-            drawEye(canvas,leftEye,both)
-        }
         val rightClose=maxOf(both,pose.wink).coerceIn(0f,1f)
-        if(rightClose>0f) {
-            drawEye(canvas,rightEye,rightClose)
+        face.draw(canvas,skeleton,pose,w,h,paint.alpha,both,rightClose)
+        if (both >= .98f) {
+            drawEye(canvas,leftEye)
+        }
+        if(rightClose>=.98f) {
+            drawEye(canvas,rightEye)
         }
         if (pose.sheet > .01f) drawWorkSheet(canvas)
         handProps.draw(canvas,skeleton,pose,w,h,paint.alpha)
@@ -109,11 +111,10 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
         accents.draw(canvas,skeleton,pose,w,h,paint.alpha)
         canvas.restore()
     }
-    private fun drawEye(canvas:Canvas,eye:Layer,amount:Float) {
-        // Composite the eyelid layer explicitly so fractional blinks retain the iris underneath.
-        val checkpoint=canvas.saveLayerAlpha(0f,0f,w,h,(paint.alpha*amount).toInt())
-        layerPaint.alpha=255;drawSkin(canvas,eye.image,eye.skin,layerPaint)
-        canvas.restoreToCount(checkpoint)
+    private fun drawEye(canvas:Canvas,eye:Layer) {
+        // Intermediate frames are geometric lids. The fully shut artwork is opaque;
+        // cross-fading two eyes produced double lashes and a full-avatar offscreen layer.
+        layerPaint.alpha=paint.alpha;drawSkin(canvas,eye.image,eye.skin,layerPaint)
     }
     private fun drawSkin(canvas: Canvas, image: Bitmap, skin: PetSkin, color: Paint) {
         canvas.drawBitmapMesh(image, skin.cols, skin.rows, skin.vertices, 0, null, 0, color)
@@ -156,8 +157,13 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
 }
 
 internal object CompanionPetMotion {
+    const val BLINK_MS=240L
     fun blink(elapsedMs: Long): Float {
-        if (elapsedMs !in 0..279) return 0f
-        return kotlin.math.sin(elapsedMs / 280.0 * Math.PI).toFloat().let { it * it }
+        if (elapsedMs !in 0 until BLINK_MS) return 0f
+        return when {
+            elapsedMs<75 -> PetInteraction.ease(elapsedMs,0,75)
+            elapsedMs<110 -> 1f
+            else -> 1f-PetInteraction.ease(elapsedMs,110,130)
+        }
     }
 }

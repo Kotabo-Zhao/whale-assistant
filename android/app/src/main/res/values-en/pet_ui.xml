@@ -19,5 +19,5 @@
     <string name="pet_source_screen">Requires screen capture consent</string>
     <string name="pet_source_file">Images, audio or documents</string>
     <string name="pet_source_note">Save text or a link</string>
-    <string name="pet_manual_assign">Assign a task manually</string>
+    <string name="pet_manual_assign">Ask for help</string>
 </resources>

@@ -11,8 +11,6 @@
     <string name="pref_permissions">系统权限</string>
     <string name="pref_permissions_summary">悬浮窗、通知和后台运行</string>
     <string name="pref_memory">长期记忆</string>
-    <string name="pref_owner">主人档案与秘书事项</string>
-    <string name="pref_owner_summary">了解你，跟进交办、改期与完成</string>
     <string name="pref_memory_summary">查看记忆，调整主动搭话</string>
     <string name="pref_library">本地资料</string>
     <string name="pref_library_summary">资料检索、导入和对话授权</string>

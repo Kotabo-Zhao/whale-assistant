@@ -129,21 +129,32 @@ Git 提交/发布规范见 [`.agents/rules/git-workflow.md`](.agents/rules/git-w
 `blocked`（回执是「此 Worker 不允许该工具」），device 模式也漏了 battery/info。合并回去会重新引入。
 `mobile-device-tools.test.mjs` 与 `mobile-workers.test.mjs` 的「worker tool policy」用例钉住这张表。
 
-## 12. 桌宠必须能看到「用户没问、后台投递触发」的回合
+## 12. 后台结果由桌宠统一转述，不直接展示 Worker 回执
 
-气泡的流折叠（`BubbleSessionStream`）按设计只认 `user/message.source.rpcId == requestId` 的那一轮，
-并且 WebSocket 在 `turn/end` 就关闭。Worker 回执 / 屏幕陪看唤醒是父会话里**新的一轮**用户消息
-（`source.kind = mobile-workers|mobile-screen-watch`），不会出现在气泡里——这不是「主会话停了」。
+用户要求只面对最外层桌宠。Worker 原始报告留在执行台账；`WorkerCoordinator` 合并变化并唤醒前台，
+前台核对证据后用 `mobile_coordinator report` 发布自然总结。`WorkerReportInbox` 仅允许 `kind=coordination`
+且 `state=briefing` 进入可见收件箱，App「小鲸近况」与桌宠共用，不要恢复原始报告弹窗或 Worker 任务面板。
 
-修复是三件事，缺一不可：
-1. `HarnessBubbleClient.recentRecords` 必须**先开 `$events` 再开 `session/follow`，且 `assistantStream: true`**；
-   只开 follow 或传 false 会被 Host 拒（表现为 `本机对话连接中断`，轮询静默拿到空）。
-2. 布防看**会话名下真实未结束的 Worker**（`WorkerDashboardStore.activeFor`），不能只看某轮回复里
-   出现过 `mobile_workers`——否则重开气泡/进程重启后就不再盯了。
-3. `lastSeenTurn` 持久化在收件箱里，避免重开气泡时把旧回执重复推一遍。
+会话目录在分页前过滤 `session-worker-*` 和内部任务桌／恢复会话，执行记录仍保留；不要让 Worker 会话挤占用户历史。
 
-结果展示走 `CompanionDeliveryInbox`（独立文件），**不要写进 `CompanionBubbleHistory`**：那份历史要求
+协调总结按指纹去重并持久化。原始报告不触发通知、角色气泡或可见追问；用户的简短回答通过每轮加载的
+`briefings` 背景继续原任务。普通进度仅内部记录，真正的结果、阻碍和用户决定才主动转述。
+查询返回 `reportedToUser`，普通概览省略已送达结果正文；按 id 查详情仍可核验。只有实际投递成功才标记，重启保留，任务更新后重新变为未汇报；不要把已知结果再次混入无关回答。
+
+`CompanionDeliveryWatcher` 仍为屏幕陪看读取后台回合，不能再重复投递 Worker/协调回合。
+`HarnessBubbleClient.recentRecords` 必须先开 `$events` 再开 `session/follow`，且 `assistantStream: true`；
+水位仍须持久化，避免重复显示。
+
+后台结果展示走独立收件箱，**不要写进 `CompanionBubbleHistory`**：那份历史要求
 用户/助手严格交替（`messages.size % 2 == 0`），硬塞一条助手消息只能伪造用户消息。
+
+## 13. 不恢复自动生成的任务预算与日常参数面板
+
+用户要求连续自主执行。Token、调用次数和累计时长仅作诊断计数，不是默认停止条件；旧台账里的有限预算
+也不继续执行。模型工具目录不再暴露预算操作，不默认设置采样温度。实际授权、用户停止、错误恢复、死循环
+识别和系统紧急过热仍分别处理，不得把隐藏内部交互理解成伪造成功或跳过真实权限。
+
+已核验版本的 `dsh-answer-reviewer` 不再自动阻塞前台回合、按主观分数强迫重写。实机曾证明其缺少档案与工具上下文，会改错正确称呼、重复催交已派工任务；完成情况依据真实回执和目标核验，不能恢复这个评分门槛。
 
 ## 改动前先跑这些
 

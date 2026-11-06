@@ -16,6 +16,13 @@ source = assets / 'rootfs.bundle'
 def open_source():
     return archive.open('assets/runtime/rootfs.bundle') if archive else source.open('rb')
 expected_bases = {
+    '0.3.92-whale-pet-front': '524b8291442958fd28d3bb25c5df8a87a53cfb42669822f26ae2de610cd9e4f8',
+    '0.3.91-whale-pet-front': '44ae98aaf94ef9670404fc62bf4d8a45921756cbd43e740aa7ac22397aaf943f',
+    '0.3.90-whale-pet-front': 'daf31437f27b9175febaa76c34f5f06fbef669ee3d29df4c81ac0e327e9f609f',
+    '0.3.89-whale-pet-front': '49c42fda27a89e681cbd4639bd6e34013a4264389882906f5907bf302b4f124b',
+    '0.3.88-whale-pet-front': 'b4411f3bc79dcd97d0becb4b85edb0134020dfb3ba6b0a6ce84cd2a3b52814a8',
+    '0.3.87-whale-pet-front': '9d038b6fea805ae10a0bbadbdd6e32b32114beadeaabc34a95a18a8438f7c179',
+    '0.3.86-whale-owner-auto': 'ec03e5218d325cc3f9a8060f85f54aac350b6e2b5f71f18c0637260346dc4473',
     '0.3.85-whale-owner': '3950eb7707d916902d67c99dd68802ef76c40e500f8d91d7b9510c877f6a88b7',
     '0.3.84-whale-coordinator': '6feb30c1f34047ea58ee5cf539e5ce32868544dd1749b5d195ea0f7a4f01197b',
     '0.3.83-whale-screen-coordinates': 'f7da437777f2afac1e495641b3f205dcb03effe6967858c1005180313d76a810',

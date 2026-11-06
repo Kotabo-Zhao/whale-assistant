@@ -117,11 +117,15 @@ internal class BubbleSessionStream(private val requestId: String) {
             if (event.optString("type") == "assistant/message") visible[seq] = event
         }
         val messages = visible.values.filter { it.optJSONObject("data")?.optInt("turn") == turn }
-        val committed = messages.mapNotNull { it.optJSONObject("data")?.optJSONObject("message")?.optJSONArray("content") }
-            .map { parts -> parts.objects().filter { it.optString("type") == "text" }.joinToString("\n") { it.optString("text") } }.filter { it.isNotBlank() }
+        // Tool preambles, reviewer retries and earlier drafts are internal intermediate work.
+        val committed = messages.filter { it.optJSONObject("data")?.optBoolean("interrupted") != true }
+            .mapNotNull { it.optJSONObject("data")?.optJSONObject("message")?.optJSONArray("content") }
+            .filter { parts -> parts.objects().none { it.optString("type") == "tool-call" } }
+            .map { parts -> parts.objects().filter { it.optString("type") == "text" }.joinToString("\n") { it.optString("text") } }
+            .lastOrNull { it.isNotBlank() }.orEmpty()
         val settled = messages.any { it.getJSONObject("data").optInt("step") == attemptStep }
         val live = if (attemptTurn == turn && !settled) blocks.values.joinToString("\n") else ""
-        return (committed + listOf(live).filter { it.isNotBlank() }).joinToString("\n\n")
+        return live.ifBlank { committed }
     }
 }
 

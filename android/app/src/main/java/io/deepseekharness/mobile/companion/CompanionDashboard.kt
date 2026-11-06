@@ -48,6 +48,7 @@ internal class CompanionDashboard(private val context: Context) {
             return success(completed)
         }
         return when (op) {
+            "assistantBriefings" -> JSONObject().put("items", JSONArray(WorkerReportInbox(context).briefings().takeLast(20).reversed()))
             "personaList" -> CompanionPersonaStore(context).list()
             "personaSave" -> JSONObject().put("ok", true).put("card", CompanionPersonaStore(context).save(request.getJSONObject("card")))
             "personaActivate" -> { CompanionPersonaStore(context).activate(text("id")); JSONObject().put("ok", true) }

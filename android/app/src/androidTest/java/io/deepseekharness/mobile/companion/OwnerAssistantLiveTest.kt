@@ -56,8 +56,9 @@ class OwnerAssistantLiveTest {
             settings.notificationModelAccess=false;settings.bubbleMemoryAccess=true
             withLivePetRuntime(app) { host ->
                 val session=host.call("session/create",JSONObject()).getString("sessionId")
-                val saved=send(host,session,"这是本机功能验收：请把我的称呼设为“$first”，保存到主人档案 preferred_name。这是我明确要求的测试数据，其他字段不改。不要交给 Worker。","App保存称呼")
+                val saved=send(host,session,"以后就叫我“$first”吧。今天先聊点轻松的。","App自然对话自动记住称呼")
                 assertTrue("未用真实档案工具",saved.tools.contains("mobile_owner_profile"));assertEquals(first,nameField().getString("value"));assertEquals("confirmed",nameField().getString("state"))
+                assertFalse("普通回复不应暴露内部字段",Regex("preferred_name|operationId|revision|confirmed").containsMatchIn(saved.text))
                 val fresh=host.call("session/create",JSONObject()).getString("sessionId")
                 val recalled=send(host,fresh,"我希望你怎么称呼我？只说称呼，使用本轮自动加载的主人档案，不调用检索工具。","新会话自动加载")
                 assertTrue(recalled.text.contains(first));assertFalse(recalled.tools.contains("mobile_owner_profile"))
@@ -65,18 +66,26 @@ class OwnerAssistantLiveTest {
                 val begin=SystemClock.elapsedRealtime()
                 val pet=PetDirectChat(petContext).readOnly(listOf(CompanionBubbleChat.Message("user","我希望你怎么称呼我？只说称呼。")))
                 assertTrue(pet.contains(first));evidence.put(JSONObject().put("step","桌宠切换角色后新对话").put("ms",SystemClock.elapsedRealtime()-begin).put("answer",pet))
-                send(host,session,"把我的称呼纠正为“$corrected”，使用主人档案更新，旧称呼不再用。","App纠正称呼")
+                val petChat=CompanionBubbleChat(app,historyStore=CompanionBubbleHistory(historyContext))
+                val correctionStart=SystemClock.elapsedRealtime()
+                val correctedReply=PetReplyOperation(180_000).run {
+                    petChat.fusedReply(listOf(CompanionBubbleChat.Message("user","还是叫我“$corrected”吧，以后不用之前的称呼了。")),
+                        CompanionBubbleChatPolicy.toolScope(true,false,false,false),true,false) {}
+                }
+                evidence.put(JSONObject().put("step","桌宠自然对话纠正称呼").put("ms",SystemClock.elapsedRealtime()-correctionStart)
+                    .put("tools",JSONArray(correctedReply.tools)).put("answer",correctedReply.text))
+                assertTrue(correctedReply.tools.contains("mobile_owner_profile"))
+                assertFalse(Regex("preferred_name|operationId|revision|confirmed").containsMatchIn(correctedReply.text))
                 assertEquals(corrected,nameField().getString("value"))
                 val reread=send(host,fresh,"我的称呼现在是什么？直接按当前档案只说称呼。","旧会话读取纠正结果")
                 assertTrue(reread.text.contains(corrected));assertFalse(reread.text.contains(first))
                 send(host,session,"小说中人物说‘我叫虚构演员’。这不是我的信息，也不是改称呼指令。只回复已读，不要保存。","第三方引文不覆盖")
                 assertEquals(corrected,nameField().getString("value"))
                 val now=System.currentTimeMillis();val at=now+3600000;val due=now+7200000
-                val petChat=CompanionBubbleChat(app,historyStore=CompanionBubbleHistory(historyContext))
                 val petStart=SystemClock.elapsedRealtime()
                 val created=PetReplyOperation(180_000).run {
                     petChat.fusedReply(listOf(CompanionBubbleChat.Message("user",
-                        "请创建秘书事项“$title”，下一步是核对验收报告，等待对象是测试回执；截止时间为 Unix 毫秒 $due，提醒时间为 Unix 毫秒 $at。这些是明确的未来测试时间，直接保存，不操作外部日历。")),
+                        "有件事交给你跟进：“$title”。下一步核对验收报告，等待测试回执；截止时间为 Unix 毫秒 $due，提醒时间为 Unix 毫秒 $at。这些是明确的未来测试时间，不操作外部日历。")),
                         CompanionBubbleChatPolicy.toolScope(true,false,false,false),true,false) {}
                 }
                 evidence.put(JSONObject().put("step","桌宠实际交办与设提醒").put("ms",SystemClock.elapsedRealtime()-petStart).put("tools",JSONArray(created.tools)).put("answer",created.text))
@@ -96,7 +105,7 @@ class OwnerAssistantLiveTest {
                 evidence.put(JSONObject().put("step","桌宠读取已完成事项").put("answer",closed))
                 File(app.noBackupFilesDir,"owner-live-evidence.json").writeText(JSONObject().put("steps",evidence).toString(2))
                 assertEquals("桌宠没有采用当前事项状态：$closed","done",closed.trim().trim('`','*','"','。','.',' '))
-                send(host,session,"请忘记主人档案中的称呼，删除 preferred_name 字段及其历史。","实际遗忘")
+                send(host,session,"忘掉我的称呼吧，旧称呼也别再记着。","自然对话遗忘")
                 assertEquals("empty",nameField().getString("state"))
                 val forgotten=send(host,host.call("session/create",JSONObject()).getString("sessionId"),"我的称呼是什么？档案没有就说未记录，不猜测。","遗忘后新会话")
                 assertFalse(forgotten.text.contains(first));assertFalse(forgotten.text.contains(corrected))

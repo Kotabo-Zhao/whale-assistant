@@ -1,5 +1,7 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
+  '高级设置': 'Advanced settings',
+  '小鲸近况': 'Updates from Whale',
   "桌宠与主动跟进": "Pet and proactive follow-up",
   "外观与语言": "Appearance and language",
   "设备控制": "Device control",

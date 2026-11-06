@@ -88,7 +88,7 @@ test(`bound ${mode}/${permission} submissions retain their parent and enforce it
       { agent: agents.get('session-bound'), callId: 'more-work' })
     await installed.pump()
     const next = [...installed.queue.rows.values()].find(item => item.id !== row.id)
-    assert.deepEqual(next.budget,{tokens:350000,calls:40,milliseconds:240000})
+    assert.deepEqual(next.budget,{tokens:0,calls:0,milliseconds:0})
     assert.deepEqual(installed.superagent.domain.repo.triggers.get('phone:session-bound:more-work').meta.taskBudget,next.budget)
     assert.equal(next.state, 'queued')
     assert.match(next.waitReason, /模型服务正在重试/)
@@ -154,9 +154,10 @@ test('load pressure delays starts without limiting task creation', () => {
   assert.equal(readLaunchBudget(100, 2, 8), Infinity)
   assert.equal(readLaunchBudget(1, 20, 8), 0)
   assert.equal(readLaunchBudget(0, 20, 8), 1)
-  assert.equal(readLaunchBudget(0, 1, 8, { thermal: 3 }), 0)
+  assert.equal(readLaunchBudget(0, 1, 8, { thermal: 3 }), Infinity)
+  assert.equal(readLaunchBudget(0, 1, 8, { thermal: 5 }), 0)
   assert.equal(readLaunchBudget(1, 1, 8, { conserve: true }), 0)
-  assert.equal(readLaunchBudget(0, 1, 8, { thermal: 2 }), 1)
+  assert.equal(readLaunchBudget(0, 1, 8, { thermal: 2 }), Infinity)
 })
 
 test('higher priority queued work starts before other eligible work', t => {
@@ -245,7 +246,7 @@ test('restart resumes read tasks with a new receipt, but does not replay phone a
 })
 
 test('worker question releases its slot and reply returns to that same worker and parent', async t => {
-  const chatReceipts = process.env.DSH_WORKER_RECEIPT_MODE === 'chat'
+  const chatReceipts = false // Legacy environment overrides cannot expose raw worker receipts.
   const { dir } = fixture(t)
   const tools = new Map(), events = new Map(), agents = new Map()
   const makeAgent = id => {
@@ -271,7 +272,7 @@ test('worker question releases its slot and reply returns to that same worker an
   const goal = JSON.parse((await tools.get('mobile_goals').execute(
     { action: 'define', group: 'two-checks', outcome: '核对条件', criteria: ['两项一致'] }, { agent: parent }
   )).text)
-  assert.equal(goal.budget.tokens, 600000)
+  assert.equal(goal.budget.tokens, 0)
   const start = JSON.parse((await call({ action: 'start', task: 'ask color', mode: 'read' })).text)
   parent.steer({ role: 'user', content: [{ type: 'text', text: 'review' }], source: { kind: 'plugin', plugin: 'dsh-answer-reviewer', note: 'parent' } })
   assert.deepEqual(parent.lastSteer.source, { kind: 'dsh-answer-reviewer', note: 'parent' })
@@ -327,6 +328,17 @@ test('worker question releases its slot and reply returns to that same worker an
   assert.deepEqual(reloaded.inputs.map(item => item.kind), ['request', 'reply'])
   assert.equal(parent.inbox.nextTurn.length, chatReceipts ? 2 : 0)
   if (chatReceipts) assert.match(parent.inbox.nextTurn[1].content[0].text, /蓝色确认/)
+  const beforeNotice=JSON.parse((await call({ action:'status' })).text).find(item=>item.id===row.id)
+  assert.equal(beforeNotice.reportedToUser,false)
+  assert.equal(beforeNotice.summary,'蓝色确认')
+  installed.coordinator.report(parent.id,installed.coordinator.status(parent.id).fingerprint,'蓝色确认','',true)
+  await installed.coordinator.flushReports(async()=>{})
+  const afterNotice=JSON.parse((await call({ action:'status' })).text).find(item=>item.id===row.id)
+  assert.equal(afterNotice.reportedToUser,true)
+  assert.equal(afterNotice.summary,'')
+  const details=JSON.parse((await call({ action:'status',id:row.id })).text)
+  assert.equal(details.reportedToUser,true)
+  assert.equal(details.summary,'蓝色确认')
   // A completed task can receive an explicit update; subsequent inputs wait in order.
   await call({ action: 'add', id: row.id, task: '补充一' })
   await new Promise(resolve => setImmediate(resolve))

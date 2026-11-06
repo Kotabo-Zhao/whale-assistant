@@ -37,19 +37,22 @@ test('worker completion requires separate criterion verification; new evidence i
   queue.rows.get('a').authorizationRevoked=true
   assert.equal(restored.view('交接').state,'working')
 })
-test('task and goal usage survive restart; no new budget is granted by resuming a task',t=>{
+test('usage survives restart but legacy generated quotas never stop continued work',t=>{
   const {directory,queue,goals}=fixture(t)
   goals.define('整理','parent',{outcome:'整理两份文件',criteria:['内容均已核对'],budget:{tokens:1200,calls:3,milliseconds:60000}})
   for(const id of ['a','b']) queue.save({id,owner:'parent',sessionId:id,group:'整理',mode:'read',state:'running',revision:1,
-    budget:{...TASK_BUDGET},budgetUsage:{tokens:700,calls:1,milliseconds:800},budgetStartedAt:Date.now()-100})
-  assert.match(goals.denial(queue.rows.get('a')),/目标的总预算/)
+    budget:{tokens:100,calls:1,milliseconds:1000},budgetUsage:{tokens:700,calls:1,milliseconds:800},budgetStartedAt:Date.now()-100})
+  assert.equal(goals.denial(queue.rows.get('a')),'')
   const row=queue.rows.get('a'); chargeElapsed(row); queue.save(row)
   assert.ok(row.budgetUsage.milliseconds>=900)
   const recovered=new WorkerQueue(directory),ledger=new WorkerGoals(directory,recovered.rows)
   assert.equal(recovered.rows.get('a').state,'queued')
-  assert.match(ledger.denial(recovered.rows.get('a')),/总预算/)
-  recovered.rows.get('a').budgetUsage.calls=100
-  assert.match(ledger.denial(recovered.rows.get('a')),/本工单预算/)
+  assert.equal(ledger.denial(recovered.rows.get('a')),'')
+  Object.assign(recovered.rows.get('a').budgetUsage,{tokens:3000000,calls:3000,milliseconds:172800000})
+  assert.equal(ledger.denial(recovered.rows.get('a')),'')
+  assert.equal(ledger.view('整理').budgetExceeded,false)
+  assert.equal(ledger.view('整理').state,'working')
+  assert.deepEqual(TASK_BUDGET,{tokens:0,calls:0,milliseconds:0})
 })
 test('permissions are captured before child creation waits and installed before publication, including custom and Auto',async()=>{
   for(const initial of ['read-only','workspace-write','auto']) {

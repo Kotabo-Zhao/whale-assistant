@@ -1,9 +1,9 @@
 <resources>
     <string name="pet_menu_home">Quick actions</string>
     <string name="pet_menu_chat">Chat</string>
-    <string name="pet_menu_assign">New task</string>
+    <string name="pet_menu_assign">Ask for help</string>
     <string name="pet_menu_capture">Save to library</string>
-    <string name="pet_menu_inbox">Task inbox</string>
+    <string name="pet_menu_inbox">Catch up</string>
     <string name="pet_menu_tools">My tools</string>
     <string name="pet_menu_device">Device controls</string>
     <string name="pet_menu_studio">Tool workshop</string>

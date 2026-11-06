@@ -23,7 +23,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val runtime = io.deepseekharness.mobile.runtime.RuntimeStore(context)
         runtime.readModelCredential("deepseek")?.takeIf { it.isNotBlank() }?.let { key ->
             val model = runtime.settings().defaultModels[io.deepseekharness.mobile.runtime.ModelProvider.DEEPSEEK] ?: "deepseek-flash"
-            PetIntentRouter.classify(key, model, messages, whileWaiting = true)
+            PetIntentRouter.classify(key, model, messages, whileWaiting = true, briefings = WorkerReportInbox(context).prompt())
         }
     },
     private val parallelReply: (List<CompanionBubbleChat.Message>, org.json.JSONObject?, (String) -> Unit) -> String = { messages, evidence, partial -> PetDirectChat(context).readOnly(messages,evidence,partial) },
@@ -79,15 +79,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var positionUpdater: (() -> Unit)? = null
     private val workerPanel = CompanionWorkerPanel(context, { id -> hide(); openSession(id) }, onWorkerCounts, ::hide)
     private var renderWorkerReport: ((org.json.JSONObject) -> Unit)? = null
+    private var showRecentBriefings = false
     private val workerReportListener: (org.json.JSONObject) -> Unit = { report ->
         handler.post {
-            if (!closed) {
-                if (report.optString("owner") == chat.currentSessionId() && deliveryWatcher == null) armDeliveryWatcher(null)
-                when (report.optString("state")) {
-                    "completed" -> onState("taskDone")
-                    "waiting" -> onState("taskWaiting")
-                    "failed", "cancelled", "blocked" -> onState("taskFailed")
-                }
+            if (!closed && report.optString("kind") == "coordination" &&
+                WorkerReportInbox(context).briefings().any { it.optString("id") == report.optString("id") }) {
+                onState("reply")
                 if (visible) renderWorkerReport?.let { render ->
                     render(report); WorkerReportInbox(context).markSeen(listOf(report.optString("id")))
                 } else if (onBackgroundReport != null) {
@@ -114,8 +111,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     fun toggle() { if (visible) hide() else show() }
     private fun dispatchTask(task: String, mode: String, id: String, title: String, needs: String): org.json.JSONObject =
         receiveTask?.invoke(task, mode, id, title, needs) ?: workerPanel.submit(task, mode, id, title, needs)
-    fun composeTask() { if (!closed) workerPanel.compose() }
-    fun openTaskInbox() { if (!closed) workerPanel.open() }
+    fun composeTask() { if (!closed) { if (draft.isBlank()) draft = "我想请你帮我"; hide(); show() } }
+    fun openTaskInbox() { if (!closed) { showRecentBriefings = true; hide(); show() } }
     fun refreshWorkerStatus() { workerPanel.refreshStatus() }
 
     /** Classify independently from the foreground transcript and its pending request. */
@@ -215,12 +212,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val denial = chat.deniedBackground(mode, needs, prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled, prefs.knowledgeModelAccess)
         val dashboard = WorkerDashboardStore(context)
         val receipt = if (denial != null) dashboard.hold(id,text,mode,needs,title,denial,source)
-        else if (dashboard.isHeld(id)) "「$title」正在等待授权确认，可在后台任务中继续。"
+        else if (dashboard.isHeld(id)) "「$title」还缺少所需权限，我会说明需要你处理的部分。"
         else {
             val accepted = if (source == null) dispatchTask(text,mode,id,title,needs)
                 else WorkerRuntimeWake.submit(context,text,mode,commandId=id,title=title,needs=needs,sourceSession=source)
             check(accepted.getString("commandId") == id)
-            "「$title」已交给后台处理，进度可在后台任务中查看。"
+            "「$title」我来跟进，有结果或需要你决定时会告诉你。"
         }
         journal.advance(id,"handoff",receipt)
         return receipt
@@ -321,12 +318,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             visibility = android.view.View.GONE
             background = bar(); addView(accessBadge)
         }
-        val workerBadge = ui.text("后台任务", 12f, accent, true).apply {
+        val workerBadge = ui.text("近况", 12f, accent, true).apply {
             gravity = Gravity.CENTER; minHeight = dp(44)
             maxWidth = minOf((width * 0.43f).toInt(),dp((134 * fontScale.coerceAtLeast(1f)).toInt()))
             maxLines = if (fontScale >= 1.4f) 2 else 1; ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(dp(9), 0, dp(9), 0); contentDescription = "后台任务"
-            background = ui.action(ui.soft, 12); setOnClickListener { workerPanel.open() }
+            setPadding(dp(9), 0, dp(9), 0); contentDescription = "和小鲸聊聊近况"
+            background = ui.action(ui.soft, 12); setOnClickListener { openTaskInbox() }
         }
         val headingEnd = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL; addView(workerBadge); addView(ui.close(::hide)) }
         val subtitle = ui.string(R.string.pet_ui_chat_title).takeIf { fontScale < 1.4f }
@@ -393,18 +390,6 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 syncControls()
                 panel.post { positionUpdater?.invoke() }
                 composeTask()
-            }
-        })
-        sessionActions.addView(ui.text("主人档案与秘书事项",14f,accent).apply {
-            minHeight=dp(44);gravity=Gravity.CENTER_VERTICAL;setPadding(dp(12),0,dp(12),0)
-            ui.leadingIcon(this,R.drawable.ic_whale_nav_memory);isFocusable=true
-            setOnClickListener {
-                sessionActions.visibility=android.view.View.GONE
-                toolShelf.removeAllViews()
-                toolShelf.addView(OwnerAssistantView(context,{ panel.post { positionUpdater?.invoke() } },{
-                    toolShelf.removeAllViews();syncControls();panel.post { positionUpdater?.invoke() }
-                }))
-                syncControls();controlsScroll.scrollTo(0,0);panel.post { positionUpdater?.invoke() }
             }
         })
         shortcut(ui.string(R.string.pet_menu_capture), R.drawable.ic_pet_shell, "存入本地资料库") { openCapture() }
@@ -625,27 +610,22 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
         }
         fun workerReport(report: org.json.JSONObject) {
-            val state = when (report.optString("state")) {
-                "completed" -> "已完成"
-                "waiting" -> "需要你回答"
-                "blocked" -> "遇到阻碍"
-                "failed" -> "未完成"
-                "cancelled" -> "已取消"
-                else -> "状态更新"
-            }
-            val text = "后台任务 · ${report.optString("title")} · $state\n${report.optString("text")}".trim()
+            if (report.optString("kind") != "coordination") return
+            val text = report.optString("text").trim()
             bubble(text, false).also { view -> renderCompleted(view, text, false) }
         }
         val workerInbox = WorkerReportInbox(context)
         val unseenReports = workerInbox.unseen()
-        unseenReports.forEach(::workerReport)
+        val visibleReports = if (showRecentBriefings) workerInbox.briefings().takeLast(5) else unseenReports
+        visibleReports.forEach(::workerReport)
+        if (showRecentBriefings && visibleReports.isEmpty()) bubble("想了解哪件事的进展，直接告诉我。", false)
+        showRecentBriefings = false
         renderWorkerReport = ::workerReport
         liveMotion = true
         // 后台任务结果：用户那一轮已经结束，回执是在同一会话里新起的一轮，历史里没有它。
         // 单独从收件箱追加，既不改对话历史（历史要求用户/助手严格交替），也不会被误当成新提问。
         val deliveries = deliveryInbox.unseen()
         if (deliveries.isNotEmpty()) {
-            bubble("后台任务有结果了（不是新的提问，可以继续说）", false)
             deliveries.forEach { item ->
                 val parsed = CompanionBubbleChatPolicy.parseInlineImages(item.text)
                 bubble(parsed.text, false).also { view -> renderCompleted(view, parsed.text, false) }
@@ -1219,7 +1199,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (showLivePartials) flushPartial?.invoke()
             workerInbox.markSeen(unseenReports.map { it.optString("id") })
             deliveryInbox.markSeen(deliveries)
-            workerPanel.attach(workerBadge)
+            workerPanel.refreshStatus()
             executor.execute { chat.prewarm() }
             armDeliveryWatcherIfNeeded()
             if (!busy && !chat.pendingDirect && chat.pendingUser != null) handler.post { if (root === panel && !busy) { retryText = chat.pendingUser; send.performClick() } }

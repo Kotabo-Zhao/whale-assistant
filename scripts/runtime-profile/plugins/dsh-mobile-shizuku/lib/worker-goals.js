@@ -3,12 +3,13 @@ import { mkdirSync } from 'node:fs'
 import { loadJSON, persistJSON } from './worker-storage.js'
 import { join } from 'node:path'
 
-export const TASK_BUDGET = Object.freeze({ tokens: 200000, calls: 100, milliseconds: 1200000 })
-export const GOAL_BUDGET = Object.freeze({ tokens: 600000, calls: 300, milliseconds: 3600000 })
+// Zero means unmetered. Usage is still recorded for diagnosis, never an execution quota.
+export const TASK_BUDGET = Object.freeze({ tokens: 0, calls: 0, milliseconds: 0 })
+export const GOAL_BUDGET = TASK_BUDGET
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 export function budget(value, defaults) {
   const next = { ...defaults,...value }
-  for (const [key,min,max] of [['tokens',100,2000000],['calls',1,2000],['milliseconds',1000,86400000]])
+  for (const [key,min,max] of [['tokens',0,Number.MAX_SAFE_INTEGER],['calls',0,Number.MAX_SAFE_INTEGER],['milliseconds',0,Number.MAX_SAFE_INTEGER]])
     if (!Number.isSafeInteger(next[key]) || next[key]<min || next[key]>max) throw new Error('预算数值无效：' + key)
   return next
 }
@@ -17,7 +18,6 @@ export function spent(row, now=Date.now()) {
   if (row.state === 'running' && row.budgetStartedAt) used.milliseconds += Math.max(0,now-row.budgetStartedAt)
   return used
 }
-export function overBudget(used,limit) { return Object.keys(limit).find(key => used[key] >= limit[key]) }
 export function chargeElapsed(row,now=Date.now()) {
   row.budgetUsage ??= { tokens:0,calls:0,milliseconds:0 }
   if (row.budgetStartedAt) row.budgetUsage.milliseconds += Math.max(0,now-row.budgetStartedAt)
@@ -101,8 +101,8 @@ export class WorkerGoals {
     const ready=!missing && rows.length>0 && rows.every(row=>row.state==='completed' && !row.authorizationRevoked && !row.recoveryRequired)
     const verification=goal.verification?.fingerprint===fingerprint ? goal.verification : null
     return { ...goal,verification,fingerprint,usage,
-      budgetExceeded:!!overBudget(usage,goal.budget),
-      state:goal.recoveryRequired ? 'recovery' : verification?.passed ? 'verified' : ready ? 'verification' : overBudget(usage,goal.budget) ? 'budget' : 'working',
+      budget: { ...GOAL_BUDGET }, budgetExceeded:false,
+      state:goal.recoveryRequired ? 'recovery' : verification?.passed ? 'verified' : ready ? 'verification' : 'working',
       plan:rows.map(row=>({ id:row.id,title:row.title,state:row.state,dependsOn:row.dependsOn||[],owner:row.owner })) }
   }
   define(group,owner,args) {
@@ -131,15 +131,11 @@ export class WorkerGoals {
     stored.verifications=(stored.verifications||[]).concat(stored.verification).slice(-20)
     this.commit(); return this.view(group)
   }
-  denial(row,now=Date.now()) {
+  denial(row) {
     if(row.recoveryRequired) return '工单恢复副本尚待用户核对。'
     if(row.group && this.goals.get(row.group)?.recoveryRequired) return '目标账本已从只读副本恢复，请先在任务详情核对并解锁。'
 
-    if(overBudget(spent(row,now),row.budget||TASK_BUDGET)) return '本工单预算已用完，请确认进展并调整预算后继续原任务。'
-    if(row.group && this.goals.has(row.group)) {
-      const goal=this.view(row.group)
-      if(overBudget(goal.usage,goal.budget)) return '该目标的总预算已用完，请在协调会话检查各工单后继续。'
-    }
+    // Old ledgers may contain generated limits. Upgrading must not keep enforcing them.
     return ''
   }
 }

@@ -7,6 +7,11 @@ import org.json.JSONObject
 internal object HarnessVisualStyle {
     private val css = """
         :root { --whale-radius: WHALE_RADIUSpx; }
+        /* App conversations expose the outer assistant, never injected events or tool payloads. */
+        [data-chat-flow-kind="context"], [data-chat-flow-kind="turn-trigger"],
+        [data-chat-flow-kind]:has([data-tool="mobile_workers"], [data-tool="mobile_worker_report"],
+          [data-tool="mobile_coordinator"], [data-tool="mobile_goals"], [data-tool="mobile_owner_profile"],
+          [data-tool="mobile_secretary"]) { display: none !important; }
         :root, body { WHALE_TOKENS }
         body { font-family: "Avenir Next", "Segoe UI", "Microsoft YaHei", sans-serif; }
         [data-phase] :is(textarea, [contenteditable="true"]) {

@@ -278,6 +278,9 @@ function collectCandidates(root) {
       if (!isPlainDirectory(sessionEntry)) continue
       const id = decodeSegment(sessionEntry.name)
       if (id === null) continue
+      // Internal execution sessions are not extra conversations with the owner.
+      // Filter before paging so a large worker fan-out cannot hide real chats.
+      if (id.startsWith('session-worker-') || ['session-whale-task-desk', 'session-whale-recovery'].includes(id)) continue
       const session = sessionLog(path.join(projectPath, sessionEntry.name))
       if (session === null) continue
       candidates.push({ id, log: session.log, updatedAt: session.updatedAt })

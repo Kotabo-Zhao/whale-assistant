@@ -44,7 +44,7 @@ internal object PetIntentRouter {
         return Decision(intent, reference.trim(), requireNotNull(needs), label, row.opt("independent") == true)
     }
 
-    fun classify(key: String, model: String, history: List<CompanionBubbleChat.Message>, whileWaiting: Boolean = false): Decision {
+    fun classify(key: String, model: String, history: List<CompanionBubbleChat.Message>, whileWaiting: Boolean = false, briefings: String = ""): Decision {
         val context = JSONArray().apply { history.takeLast(6).forEach { put(JSONObject().put("role", it.role).put("text", it.text)) } }
         val system = """
             判断最后一条用户消息实际希望发生什么，前文仅用于解决指代。输出 JSON，intent 取下列值。
@@ -67,8 +67,8 @@ internal object PetIntentRouter {
             追加、更正、依赖前文的指代或要求等待，输出 independent=false，由原会话按顺序处理。
         """.trimIndent() else ""
         val body = JSONObject().put("model", model).put("thinking", JSONObject().put("type", "disabled"))
-            .put("temperature", 0).put("max_tokens", 320).put("response_format", JSONObject().put("type", "json_object"))
-            .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system))
+            .put("max_tokens", 320).put("response_format", JSONObject().put("type", "json_object"))
+            .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system + briefings))
                 .put(JSONObject().put("role", "user").put("content", context.toString())))
         return PetModelHttp.post(key,body.toString(),30_000) { reader ->
             val response=JSONObject(reader.readText())

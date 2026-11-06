@@ -3,12 +3,13 @@ import { expect, it, vi } from 'vitest'
 const bridge = vi.hoisted(() => ({ companionDashboard: vi.fn() }))
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { AssistantOverview } from './AssistantOverview'
-it('概览显示原生统计、近期事项和未来提醒，不启动模型', async () => {
+it('概览只展示近期事项和提醒，不展示内部采集统计，也不启动模型', async () => {
   bridge.companionDashboard.mockResolvedValue({ generatedAt: Date.now(), captureEnabled: false, notificationCount: 4, memoryCount: 2, knowledgeCount: 1, categories: { 消息: 4 }, tasks: [{ id: 't', text: '确认行程', state: 'candidate' }], reminders: [{ id: 'r', text: '取快递', at: Date.now() + 600000, state: 'scheduled' }], recurring: [] })
   render(<AssistantOverview />)
   expect(await screen.findByText('取快递')).toBeInTheDocument()
   expect(screen.getByText('确认行程')).toBeInTheDocument()
-  expect(screen.getByText('消息 · 4')).toBeInTheDocument()
+  expect(screen.queryByText('消息 · 4')).not.toBeInTheDocument()
+  expect(screen.queryByText('长期记忆')).not.toBeInTheDocument()
   expect(bridge.companionDashboard).toHaveBeenCalledWith({ operation: 'overview' })
 })
 it('首页事项摘要只跳转到统一事项入口', async () => {

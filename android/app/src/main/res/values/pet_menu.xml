@@ -1,9 +1,9 @@
 <resources>
     <string name="pet_menu_home">快捷菜单</string>
     <string name="pet_menu_chat">桌宠对话</string>
-    <string name="pet_menu_assign">交办任务</string>
+    <string name="pet_menu_assign">交代一件事</string>
     <string name="pet_menu_capture">存资料</string>
-    <string name="pet_menu_inbox">后台任务</string>
+    <string name="pet_menu_inbox">聊聊近况</string>
     <string name="pet_menu_tools">我的工具</string>
     <string name="pet_menu_device">设备与显示</string>
     <string name="pet_menu_studio">功能工坊</string>

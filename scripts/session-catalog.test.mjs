@@ -80,6 +80,18 @@ function toolResult(text) {
   return { type: 'tool/result', data: { content: [{ type: 'text', text }] } }
 }
 
+test('内部执行会话不进入用户历史，也不挤占分页名额；原始记录保留', async () => {
+  const root = createRoot()
+  const internal = []
+  for (let i = 0; i < 55; i++) internal.push(addSession(root, { directory: `session-worker-${i}`, updatedAt: BASE_TIME + 1000 + i, lines: [title('内部执行')] }))
+  internal.push(addSession(root, { directory: 'session-whale-task-desk', lines: [] }))
+  addSession(root, { directory: 'session-owner-chat', lines: [title('和小鲸聊天')] })
+  const report = await buildCatalog(1, root)
+  assert.deepEqual(report.sessions.map(row => row.id), ['session-owner-chat'])
+  assert.equal(report.truncated, false)
+  assert.ok(internal.every(existsSync))
+})
+
 test('只回元数据：标题取最后一条 session/title，正文与路径不外传', async () => {
   const root = createRoot()
   addSession(root, {

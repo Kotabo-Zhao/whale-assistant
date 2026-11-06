@@ -13,6 +13,9 @@
 .assistant-task-card > div:first-child { display: grid; min-width: 0; gap: 5px; }
 .assistant-task-card strong, .assistant-task-card small { overflow-wrap: anywhere; }
 .assistant-task-card small { color: var(--card-muted, var(--muted)); }
+.assistant-task-card.assistant-briefing { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.assistant-briefing p { margin: 8px 0 0; overflow-wrap: anywhere; line-height: 1.65; }
+.assistant-briefing > button { justify-self: start; min-height: 44px; white-space: nowrap; }
 .assistant-task-evidence { margin-top: 4px; color: var(--card-muted, var(--muted)); font-size: .82rem; }
 .assistant-task-evidence summary { cursor: pointer; color: var(--accent, var(--blue)); }
 .assistant-task-evidence p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }

@@ -125,29 +125,20 @@ class OwnerAssistantDeviceTest {
             assertFalse(manager.activeNotifications.any { it.id==id.hashCode() })
         } finally { manager.cancel(id.hashCode()) }
     }
-    @Test fun appOwnerPageUsesBothThemes() {
+    @Test fun ownerDataNeedsNoSeparateSettingsPage() {
         val inst=InstrumentationRegistry.getInstrumentation()
-        val prefs=app.getSharedPreferences("whale-interface",0);val previous=prefs.getString("style",null)
         fun views(view:android.view.View):List<android.view.View> = listOf(view)+if(view is android.view.ViewGroup)
             (0 until view.childCount).flatMap { views(view.getChildAt(it)) } else emptyList()
-        try {
-            for(style in listOf("cute","simple")) {
-                prefs.edit().putString("style",style).commit()
-                val activity=inst.startActivitySync(android.content.Intent(app,CompanionActivity::class.java)
-                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(CompanionActivity.OPEN_PAGE,"OWNER"))
-                try {
-                    val deadline=android.os.SystemClock.elapsedRealtime()+10000
-                    while(true) {
-                        var loaded=false;inst.runOnMainSync { loaded=views(activity.window.decorView).filterIsInstance<android.widget.TextView>().any { it.text=="称呼" } }
-                        if(loaded)break
-                        check(android.os.SystemClock.elapsedRealtime()<deadline);Thread.sleep(50)
-                    }
-                    inst.waitForIdleSync()
-                    inst.uiAutomation.takeScreenshot().let { shot ->
-                        File(app.cacheDir,"p81-owner-app-$style.png").outputStream().use { shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };shot.recycle()
-                    }
-                } finally { inst.runOnMainSync { activity.finish() } }
-            }
-        } finally { prefs.edit().apply { if(previous==null)remove("style") else putString("style",previous) }.commit() }
+        for(page in listOf("DATA","DAILY")) {
+            val activity=inst.startActivitySync(android.content.Intent(app,CompanionActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(CompanionActivity.OPEN_PAGE,page))
+            try {
+                inst.runOnMainSync {
+                    assertFalse(views(activity.window.decorView).filterIsInstance<android.widget.TextView>().any {
+                        it.text.toString().contains("主人档案") || it.text.toString().contains("秘书事项")
+                    })
+                }
+            } finally { inst.runOnMainSync { activity.finish() } }
+        }
     }
 }

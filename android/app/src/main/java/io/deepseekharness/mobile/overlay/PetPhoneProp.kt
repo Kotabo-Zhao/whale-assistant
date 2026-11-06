@@ -11,12 +11,12 @@ internal class PetPhoneProp {
 
     fun draw(canvas: Canvas, skeleton: PetSkeleton, p: PetPose, w: Float, h: Float, alpha: Int) {
         if (p.phone <= .01f && p.phoneMode != 5) return
-        val hand = skeleton.bones[PetJoint.WRIST_L.ordinal]
+        val chest = skeleton.bones[PetJoint.CHEST.ordinal]
         canvas.save()
         // The phone rises out of the apron as the elbow folds towards the chest.
-        canvas.translate(hand.x(.478f*w,.705f*h), hand.y(.478f*w,.705f*h) + .012f*h + (1f-p.phone)*.045f*h)
+        canvas.translate(chest.x(p.holdX*w,p.holdY*h),chest.y(p.holdX*w,p.holdY*h))
+        canvas.rotate(p.chest+p.holdAngle)
         canvas.scale(w/100f*.88f,h/100f*.88f)
-        canvas.rotate(-7f + p.chest*.25f)
         fun fill(color: Int) { ink.style=Paint.Style.FILL; ink.color=color; ink.alpha=(alpha*p.phone).toInt() }
         if (p.phone > .01f) {
             fill(0xff263f61.toInt()); canvas.drawRoundRect(-7.8f,-19f,7.8f,1.5f,2.3f,2.3f,ink)

@@ -47,7 +47,9 @@ class CompanionPetMotionTest {
         val celebrate=PetActing.pose(PetAction.CELEBRATE,410)
         assertTrue(touch.wink>0f);assertEquals(PetAccent.HEART,touch.accent)
         assertEquals(PetAccent.STARS,celebrate.accent)
-        assertTrue(touch.rightElbow>celebrate.rightElbow+40)
+        assertEquals(PetProp.HEART_CUSHION,touch.prop)
+        assertEquals(PetProp.STAR_WAND,celebrate.prop)
+        assertTrue(touch.holdY>celebrate.holdY+.04f)
         val actor=PetActing();actor.control("failed",0)
         val still=actor.still();repeat(10){assertEquals(still,actor.still())}
         assertEquals(PetAccent.ALERT,still.accent)
@@ -83,7 +85,7 @@ class CompanionPetMotionTest {
     }
     @Test fun blinkOpensAndCloses() {
         assertEquals(0f, CompanionPetMotion.blink(0), .001f)
-        assertEquals(1f, CompanionPetMotion.blink(140), .001f)
+        assertEquals(1f, CompanionPetMotion.blink(90), .001f)
         assertEquals(0f, CompanionPetMotion.blink(280), .001f)
     }
     @Test fun jointsCreateDistinctSilhouettes() {
@@ -91,7 +93,7 @@ class CompanionPetMotionTest {
         val accept = PetActing.pose(PetAction.ACCEPT, 850)
         val work = PetActing.pose(PetAction.WORK, 850)
         val celebrate = PetActing.pose(PetAction.CELEBRATE, 850)
-        assertTrue(accept.leftElbow - idle.leftElbow > 60)
+        assertTrue(kotlin.math.abs(accept.leftShoulder-idle.leftShoulder)>20)
         assertTrue(celebrate.rightElbow < -65 && celebrate.leftElbow > 65)
         assertTrue(work.rightElbow != PetActing.pose(PetAction.WORK, 1100).rightElbow)
         assertTrue(idle.tailRoot != idle.tailTip && idle.leftFin != idle.rightFin)

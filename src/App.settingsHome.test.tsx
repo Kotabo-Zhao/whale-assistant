@@ -123,7 +123,7 @@ describe('设置首页：分组与分类筛选', () => {
     render(<App />)
   await arriveAtSettingsHome()
 
-    await screen.findByRole('button', { name: 'Runtime and data' })
+    await screen.findByRole('button', { name: 'Advanced settings' })
     expandSettingsGroup('Runtime and data')
     const runtimeGroup = screen.getByRole('region', { name: 'Runtime and data' })
     expect(within(runtimeGroup).getByRole('button', { name: /Ubuntu runtime/ })).toBeVisible()

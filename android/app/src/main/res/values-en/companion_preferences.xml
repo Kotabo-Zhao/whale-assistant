@@ -11,8 +11,6 @@
     <string name="pref_permissions">System permissions</string>
     <string name="pref_permissions_summary">Overlay, notifications and background operation</string>
     <string name="pref_memory">Long-term memory</string>
-    <string name="pref_owner">Owner profile and commitments</string>
-    <string name="pref_owner_summary">Personal context and follow-through</string>
     <string name="pref_memory_summary">Review memories and adjust proactive chat</string>
     <string name="pref_library">Local library</string>
     <string name="pref_library_summary">Search, import and chat access</string>

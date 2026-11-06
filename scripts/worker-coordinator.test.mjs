@@ -20,6 +20,15 @@ function fixture(t) {
     damage: () => writeFileSync(coordinator.path,'{damaged'),
   }
 }
+
+test('升级时已结束的历史保持基线，新任务不重新播报旧结果；下一步可省略',t=>{
+  const f=fixture(t); f.add('old','completed'); f.restart()
+  f.add('new','completed')
+  let state=f.coordinator.status('session-user')
+  assert.deepEqual(state.changedTaskIds,['new'])
+  assert.doesNotThrow(()=>f.coordinator.report('session-user',state.fingerprint,'新结果'))
+  assert.equal(f.coordinator.status('session-user').coordination.report.next,'')
+})
 test('合并多个 Worker 的变化，前台繁忙及有人类输入时不插队', async t => {
   const f=fixture(t); f.add('a'); f.add('b'); await f.pump(); f.advance(31000)
   f.agent.status='running'; await f.pump(); assert.equal(f.delivered.length,0)
@@ -81,4 +90,38 @@ test('同一阻塞不因其他任务进度重复推送，未送达的汇报不�
   state=f.coordinator.status('session-user')
   f.coordinator.report('session-user',state.fingerprint,'b 完成，a 等待','核对 b',true)
   await f.coordinator.flushReports(async report => published.push(report)); assert.equal(published.length,2)
+})
+
+test('只把尚未送达的新结果交给前台转述，断线期间新结果不丢掉旧的待投递项', async t => {
+  const f=fixture(t); f.add('a','completed'); f.add('b')
+  let state=f.coordinator.status('session-user')
+  f.coordinator.report('session-user',state.fingerprint,'第一件完成','',true)
+  await f.coordinator.flushReports(async () => { throw Error('offline') })
+  assert.deepEqual(f.coordinator.status('session-user').changedTaskIds,['a'])
+  f.rows.get('b').state='waiting'; f.rows.get('b').question='选哪天？'
+  state=f.coordinator.status('session-user'); assert.deepEqual(state.changedTaskIds,['a','b'])
+  f.coordinator.report('session-user',state.fingerprint,'第一件完成，第二件需要日期','',true)
+  await f.coordinator.flushReports(async report => { assert.equal(report.taskNotices,undefined) })
+  f.restart(); assert.deepEqual(f.coordinator.status('session-user').changedTaskIds,[])
+  f.rows.get('b').state='completed'; f.rows.get('b').summary='按周六安排好了'
+  assert.deepEqual(f.coordinator.status('session-user').changedTaskIds,['b'])
+})
+
+test('只有实际送达才标记已汇报，原始记录与分页视图一致且不产生新的协调事件', async t => {
+  const f=fixture(t); f.add('a','completed')
+  const row=f.rows.get('a'); row.summary='完成'.repeat(2000)
+  row.question='确认'.repeat(700)
+  const state=f.coordinator.status('session-user')
+  assert.equal(state.tasks[0].reportedToUser,false)
+  f.coordinator.report('session-user',state.fingerprint,'已完成','',true)
+  await f.coordinator.flushReports(async()=>{ throw Error('offline') })
+  assert.equal(f.coordinator.wasAnnounced(row),false)
+  await f.coordinator.flushReports(async()=>{})
+  f.restart()
+  assert.equal(f.coordinator.wasAnnounced(row),true)
+  assert.equal(f.coordinator.status('session-user').tasks[0].reportedToUser,true)
+  assert.equal(f.coordinator.status('session-user').fingerprint,state.fingerprint)
+  row.revision++
+  assert.equal(f.coordinator.wasAnnounced(row),false)
+  assert.equal(f.coordinator.status('session-user').tasks[0].reportedToUser,false)
 })

@@ -60,4 +60,17 @@ class BubbleSessionStreamTest {
         val state = CompanionBubbleHistory.Snapshot("session-one", "a".repeat(64), emptyList(), """{"requestId":"new","user":"你好","prompt":"你好"}""", true)
         assertEquals(state, CompanionBubbleHistory.decode(CompanionBubbleHistory.encode(state)))
     }
+
+    @Test fun internalToolPreamblesAndEarlierDraftsAreNotConcatenatedIntoPetReply() {
+        val fold=started()
+        val preamble=answer(3,4,"内部派工过程")
+        preamble.getJSONObject("data").getJSONObject("message").getJSONArray("content")
+            .put(JSONObject().put("type","tool-call").put("name","mobile_workers"))
+        fold.event(preamble)
+        assertEquals("",fold.text())
+        fold.event(answer(4,4,"旧的冗长草稿"))
+        fold.event(answer(5,4,"蓝色，我来继续。"))
+        fold.event(end(6,4))
+        assertEquals("蓝色，我来继续。",fold.text())
+    }
 }

@@ -529,8 +529,7 @@ class CompanionActivity : AppCompatActivity() {
                 CompanionPreferencePage.ALERTS, CompanionPreferencePage.DAILY)
             CompanionPreferencePage.PET -> renderPet()
             CompanionPreferencePage.PERMISSIONS -> readinessCard()
-            CompanionPreferencePage.DATA -> links(CompanionPreferencePage.OWNER, CompanionPreferencePage.MEMORY, CompanionPreferencePage.LIBRARY, CompanionPreferencePage.BACKUP)
-            CompanionPreferencePage.OWNER -> content.addView(OwnerAssistantView(this))
+            CompanionPreferencePage.DATA -> links(CompanionPreferencePage.MEMORY, CompanionPreferencePage.LIBRARY, CompanionPreferencePage.BACKUP)
             CompanionPreferencePage.MEMORY -> renderMemory()
             CompanionPreferencePage.LIBRARY -> renderLibrary()
             CompanionPreferencePage.BACKUP -> renderBackup()
@@ -541,7 +540,7 @@ class CompanionActivity : AppCompatActivity() {
             CompanionPreferencePage.BACKGROUND -> renderBackground()
             CompanionPreferencePage.REMINDERS -> renderReminders()
             CompanionPreferencePage.RECORDS -> renderHistory()
-            CompanionPreferencePage.DAILY -> links(CompanionPreferencePage.OWNER, CompanionPreferencePage.APPS, CompanionPreferencePage.BRIEF)
+            CompanionPreferencePage.DAILY -> links(CompanionPreferencePage.APPS, CompanionPreferencePage.BRIEF)
             CompanionPreferencePage.APPS -> renderApps()
             CompanionPreferencePage.BRIEF -> renderBrief()
         }
@@ -580,7 +579,6 @@ class CompanionActivity : AppCompatActivity() {
     private fun renderMemory() {
         val memory = CompanionMemoryStore(this)
         heading("长期记忆", "memory")
-        button("主人档案与秘书事项") { go(CompanionPreferencePage.OWNER) }
         toggle("允许助手使用长期记忆", memory.enabled) { memory.enabled = it }
         paragraph("助手提出的记忆先等待你确认；已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。记忆保存在应用私有存储，运行环境更新不会清空；卸载应用会删除。")
         val pendingStatus = TextView(this).apply {

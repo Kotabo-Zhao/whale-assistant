@@ -162,13 +162,18 @@ class PetSessionDeviceTest {
                 .put("state", "completed").put("summary", "验收完成").put("finishedAt", System.currentTimeMillis())))
             store.put(row)
             row.put("writeSeq", 3); store.put(row)
-            assertEquals("同一报告不应重复推送", 1, received.size)
+            assertEquals("原始 Worker 报告不得推送给用户", 0, received.size)
             val inbox = WorkerReportInbox(context)
             assertEquals("验收完成", inbox.list().single().getString("text"))
+            assertEquals(0, inbox.unseen().size)
+            val summary = JSONObject().put("owner","session-test").put("fingerprint","a".repeat(64))
+                .put("summary","这件事我已经核对好了。").put("next","")
+            inbox.addCoordination(summary); inbox.addCoordination(summary)
+            assertEquals(1, received.size)
             assertEquals(1, inbox.unseen().size)
             inbox.markSeen(listOf(inbox.unseen().single().getString("id")))
             assertTrue("已经显示的报告不能再次当作新回复", WorkerReportInbox(context).unseen().isEmpty())
-            assertEquals("已读报告仍应保留在历史", 1, inbox.list().size)
+            assertEquals("已读总结仍可用于对话续接", 1, inbox.briefings().size)
         } finally { WorkerReportInbox.unsubscribe(listener) }
     }
     @Test fun deliveryInboxShowsNewItemsOnlyOnce() {
