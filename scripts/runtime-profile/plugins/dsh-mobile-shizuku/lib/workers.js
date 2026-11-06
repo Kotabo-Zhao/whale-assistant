@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync, existsSync, watch } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, watch } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, availableParallelism, loadavg } from 'node:os'
 import { freezeMessage } from '@deepseek-ai/dsh-llm'
 import { installSuperagent } from './superagent-runtime.js'
 import { delegationApi, delegatedWriteAllowed, prepareDelegatedWorker } from './worker-delegation.js'
+import { loadJSON, persistJSON, storedJSONFiles } from './worker-storage.js'
 import { beginWorkerHealth, recordWorkerHealth, acceptsWatchdogHold } from './worker-health.js'
 import { WorkerGoals, TASK_BUDGET, GOAL_BUDGET, budget, chargeElapsed } from './worker-goals.js'
 
@@ -18,7 +19,7 @@ import { WorkerGoals, TASK_BUDGET, GOAL_BUDGET, budget, chargeElapsed } from './
  */
 const RECEIPT_MODE = process.env.DSH_WORKER_RECEIPT_MODE === 'chat' ? 'chat' : 'silent'
 /** 一条 outbox 回执是否已经处理完（投递过或被静默吞掉，都不该再重试）。 */
-const receiptSettled = item => item.delivery === 'delivered' || item.delivery === 'suppressed'
+const receiptSettled = item => ['delivered','suppressed','held_recovery'].includes(item.delivery)
 
 /** 任何模式都允许的纯读取工具：文本、资料、记忆、事项检索。 */
 const reading = new Set(['read', 'glob', 'grep', 'read_image', 'web_search', 'web_fetch',
@@ -117,9 +118,43 @@ export class WorkerQueue {
   constructor(directory) {
     this.directory = directory
     mkdirSync(directory, { recursive: true })
-    this.rows = new Map(readdirSync(directory).filter(name => name.endsWith('.json')).map(name => {
-      const row = ledger(JSON.parse(readFileSync(join(directory, name), 'utf8')))
-      if (['running', 'starting', 'cancelling'].includes(row.state)) {
+    this.committed = new Map()
+    this.dirtyOnLoad = new Set()
+    this.rows = new Map(storedJSONFiles(directory).map(name => {
+      const id = name.slice(0, -5)
+      const stored = loadJSON(join(directory,name), value => value && value.id === id &&
+        typeof value.owner === 'string' && typeof value.sessionId === 'string' &&
+        ['queued','starting','running','cancelling','completed','failed','cancelled','waiting','blocked','interrupted'].includes(value.state) &&
+        (value.mode === undefined || ['read','device','create'].includes(value.mode)) &&
+        ['title','input','summary'].every(field=>value[field]===undefined || typeof value[field]==='string') &&
+        (value.revision===undefined || Number.isSafeInteger(value.revision) && value.revision>=1) &&
+        (value.writeSeq===undefined || Number.isSafeInteger(value.writeSeq) && value.writeSeq>=0) &&
+        (value.dependsOn===undefined || Array.isArray(value.dependsOn) && value.dependsOn.every(id=>typeof id==='string')) &&
+        (!value.recoveryRequired || value.recovery && typeof value.recovery.incidentId==='string' && typeof value.recovery.usable==='boolean') &&
+        ['inputs','reports','outbox','progressHistory'].every(field => value[field] === undefined ||
+          (Array.isArray(value[field]) && value[field].every(item=>item && typeof item==='object'))) &&
+        ['budget','budgetUsage'].every(field=>value[field]===undefined || ['tokens','calls','milliseconds'].every(key=>
+          Number.isSafeInteger(value[field]?.[key]) && value[field][key]>=0)))
+      if(!stored.checkpointPresent && !stored.recovery) this.dirtyOnLoad.add(id)
+      const row = ledger(stored.value || { id, owner:'session-whale-recovery', sessionId:'session-worker-'+id,
+        title:'任务记录待恢复', mode:'read', revision:1, input:'', state:'interrupted',
+        domainTicketId:/^[a-f0-9-]{36}$/.test(id) ? id.replaceAll('-','') : undefined })
+      if(row.revision===undefined || row.title===undefined) this.dirtyOnLoad.add(id)
+      row.revision ??= 1
+      row.title ??= "未命名任务"
+      if (stored.recovery) {
+        row.recoveryRequired = true; row.recovery = stored.recovery
+        row.recovery.preview = { title:row.title, input:row.input, summary:row.summary,
+          budgetUsage:row.budgetUsage, writeSeq:row.writeSeq }
+        row.state = 'interrupted'; row.reportState = null
+        for(const item of row.outbox) if(!receiptSettled(item)) item.delivery='held_recovery'
+        for(const item of [...row.reports,...(row.progressHistory || [])]) item.recoveryHeld=true
+        row.summary = stored.recovery.note
+        row.writeSeq = Math.max(row.writeSeq || 0,Date.now())
+        delete row.health
+      }
+      if (!row.recoveryRequired && ['running', 'starting', 'cancelling'].includes(row.state)) {
+        this.dirtyOnLoad.add(id)
         chargeElapsed(row,row.updatedAt || Date.now())
         const previous = row.state
         // A crash can occur after the child accepted the input but before the flush receipt.
@@ -140,18 +175,29 @@ export class WorkerQueue {
           row.state = 'interrupted'
         }
       }
+      if(!row.recoveryRequired) this.committed.set(id,structuredClone(row))
       ownerBySession.set(row.sessionId, row.owner)
       return [row.id, row]
     }))
   }
   save(row) {
-    row.updatedAt = Date.now()
-    row.writeSeq = (row.writeSeq ?? 0) + 1
-    const path = join(this.directory, `${row.id}.json`)
-    writeFileSync(`${path}.tmp`, JSON.stringify(row))
-    renameSync(`${path}.tmp`, path)
-    this.rows.set(row.id, row)
-    ownerBySession.set(row.sessionId, row.owner)
+    const previous = this.committed.get(row.id)
+    if(previous && !this.dirtyOnLoad.has(row.id) && JSON.stringify(row)===JSON.stringify(previous)) return
+    const snapshot = { ...row, updatedAt:Date.now(), writeSeq:(row.writeSeq ?? 0)+1 }
+    try {
+      persistJSON(join(this.directory, row.id+'.json'),snapshot,!row.recoveryRequired)
+    } catch (error) {
+      if (previous) {
+        for (const key of Object.keys(row)) delete row[key]
+        Object.assign(row,structuredClone(previous))
+      }
+      throw error
+    }
+    Object.assign(row,{ updatedAt:snapshot.updatedAt,writeSeq:snapshot.writeSeq })
+    this.committed.set(row.id,JSON.parse(JSON.stringify(snapshot)))
+    this.dirtyOnLoad.delete(row.id)
+    this.rows.set(row.id,row)
+    ownerBySession.set(row.sessionId,row.owner)
   }
   dependencyWait(row) {
     const reasons = []
@@ -169,7 +215,7 @@ export class WorkerQueue {
     const active = [...this.rows.values()].filter(row => ['starting', 'running', 'cancelling'].includes(row.state))
     let screen = active.some(row => row.mode === 'device')
     return [...this.rows.values()].sort((a, b) => (b.priority || 0) - (a.priority || 0) || (a.createdAt || 0) - (b.createdAt || 0)).filter(row => {
-      if (row.state !== 'queued') return false
+      if (row.recoveryRequired || row.state !== 'queued') return false
       const reason = this.dependencyWait(row)
       if (reason !== (row.dependencyWait || '')) {
         if (reason) { row.dependencyWait = reason; row.waitReason = reason }
@@ -239,8 +285,10 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       const goal = goals.view(row.group)
       row.goalState = goal.state; row.goalOutcome = goal.outcome
       row.goalCriteria = goal.criteria; row.goalCoordinator = goal.owner
+      row.goalRecovery = goal.recoveryRequired ? goal.recovery : null
     }
     queue.save(row)
+    if(row.group) goals.trackMembership(row.group)
     mirrorPending.set(row.id, { writeSeq: row.writeSeq, json: JSON.stringify(row) })
     void mirror(row.id).catch(() => {})
     armTier()
@@ -273,6 +321,8 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     }
   }
   async function notify(row) {
+    if (row.recoveryRequired) return
+
     if (notifying.has(row.id)) return
     notifying.add(row.id)
     try {
@@ -335,6 +385,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     if(allow?.length && agent.ctx.tools.restrict) agent.ctx.tools.restrict({ allow })
     agent.ctx.tools.guard(execution => {
       if (row.state !== 'running' || row.reportState) return '任务已暂停或结束，请结束本轮。'
+      if (row.recoveryRequired) return '工单记录正在恢复，等待用户在任务详情核对副本'
       const denied = execution.name !== 'mobile_worker_report' && goals.denial(row)
       if (denied) { blockWorker(row,denied); return denied }
       if (workerToolAllowed(row.mode, execution.name)) return
@@ -528,6 +579,8 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     save(row); if(row.group) refreshGoal(row.group); void notify(row).catch(() => {}); void pump()
   })
   async function control(row, args) {
+    if (row.recoveryRequired && args.action !== 'cancel') throw new Error('请在任务详情核对恢复副本并解锁后，再继续原工单')
+
     if (args.commandId && ledger(row).inputs.some(item => item.commandId === args.commandId)) return
     armTier()
     if (args.action === 'priority') {
@@ -582,6 +635,11 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     await mirror(row.id)
     return row.id
   }
+  async function cancelRecovery(row,command) {
+    const ticket=row.domainTicketId && superagent.domain.repo.tickets.get(row.domainTicketId)
+    if(ticket && !ticket.ended) superagent.domain.engine.stopTicket(ticket.id,'用户撤销待恢复工单')
+    await control(row,command)
+  }
   let polling = false, pollAgain = false
   let deferredSkip = 0
   async function pollUi() {
@@ -609,6 +667,30 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
           continue
         }
         const row = queue.rows.get(command.id)
+        if(row?.recoveryRequired && command.action==='cancel') {
+          await cancelRecovery(row,command)
+          await bridge('workerUi',JSON.stringify({ack:command.commandId}))
+          continue
+        }
+        if (row && command.action === 'recover') {
+          try {
+            const goal = row.group && goals.goals.get(row.group)
+            if (row.recoveryRequired && (!row.recovery.usable || command.recoveryIncident !== row.recovery.incidentId))
+              throw new Error('恢复副本已变化或不可用，请重新核对')
+            if (goal?.recoveryRequired) {
+              goals.confirmRecovery(row.group,command.goalRecoveryIncident)
+              refreshGoal(row.group)
+            }
+            if (row.recoveryRequired) {
+              row.recoveryRequired=false
+              row.recovery={...row.recovery,confirmedAt:Date.now()}
+              row.summary='用户已核对恢复副本，继续前请确认现场和剩余预算。'
+            }
+            row.uiError=''; save(row)
+          } catch(error) { row.uiError=error.message; save(row) }
+          await bridge('workerUi',JSON.stringify({ack:command.commandId}))
+          continue
+        }
         if (row && command.action === 'watchdog') {
           if (acceptsWatchdogHold(row,command)) {
             row.watchdog = { commandId:command.commandId,runId:command.runId,sequence:command.sequence,
@@ -674,6 +756,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       }
       const goal=goals.goals.get(args.group)
       if(!goal || goal.owner!==exec.agent.id) throw new Error('请在该目标的协调会话调整预算')
+      if(goal.recoveryRequired) throw new Error('请先在任务详情核对目标恢复副本')
       goal.budget=changedBudget(args,goal.budget); goals.commit(); refreshGoal(args.group)
       return result(goals.view(args.group))
     },
@@ -724,6 +807,8 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       }
       const row = queue.rows.get(args.id)
       if (!row) throw new Error('任务不存在')
+      if(row.recoveryRequired && args.action!=='cancel') throw new Error('请先在任务详情核对恢复副本并解锁')
+      if(row.recoveryRequired && args.action==='cancel') {await cancelRecovery(row,args);return result(row)}
       if(args.action==='budget') {
         if(row.owner!==owner) throw new Error('请在来源会话调整工单预算')
         row.budget=changedBudget(args,row.budget||TASK_BUDGET); save(row); return result(row)
@@ -763,6 +848,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       const route = parent.session.requestHeader()?.config ?? parent.options
       const existing = [...queue.rows.values()].find(row => row.domainTicketId === ticket.id)
       if (existing) {
+        if (existing.recoveryRequired) return
         const retried = existing.domainAssignmentId !== assignment.id && ['failed', 'blocked'].includes(existing.state)
         existing.domainAssignmentId = assignment.id
         if (retried) {
@@ -784,6 +870,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     deliver: async (domain, ticket, assignment, ids) => {
       const row = [...queue.rows.values()].find(item => item.domainTicketId === ticket.id)
       if (!row) throw new Error('工单 Worker 不存在')
+      if (row.recoveryRequired) throw new Error('工单记录待核对，输入保持未投递')
       let allDelivered = true
       for (const id of ids) {
         const source = ticket.inputs.find(item => item.id === id)
@@ -818,13 +905,13 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
   })
   async function syncDomainReports() {
     for (const row of queue.rows.values()) {
-      if (!row.domainTicketId) continue
+      if (row.recoveryRequired || !row.domainTicketId) continue
       const currentTicket = superagent.domain.repo.tickets.get(row.domainTicketId)
       if (row.state === 'completed' && currentTicket?.ended?.by === 'human' && !row.authorizationRevoked) {
         row.authorizationRevoked = true; save(row)
       }
       for (const progress of row.progressHistory ?? []) {
-        if (progress.domainSynced || !progress.domainAssignmentId) continue
+        if (progress.recoveryHeld || progress.domainSynced || !progress.domainAssignmentId) continue
         try {
           const ticket = superagent.domain.repo.tickets.get(row.domainTicketId)
           const assignment = ticket?.assignments.at(-1)
@@ -836,7 +923,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
         } catch { /* Retry an unsaved progress report. */ }
       }
       for (const report of ledger(row).reports) {
-        if (report.domainSynced || report.state === 'cancelled') continue
+        if (report.recoveryHeld || report.domainSynced || report.state === 'cancelled') continue
         try {
           const ticket = superagent.domain.repo.tickets.get(row.domainTicketId)
           if (!ticket) continue
@@ -915,7 +1002,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     '对于能独立推进的多项检索、整理或手机操作，可用 mobile_workers 分派任务；简单问答直接回答。同一目标下的多个任务使用相同 group；只有确有先后依赖时才填 dependsOn，前置任务完成后结果会交给后续任务。汇总时逐项核对任务状态，不把失败或等待的任务说成完成。用户询问或继续此前任务时，即使在新会话，也先用 mobile_workers status 查看全部已有任务，再按任务 id 处理；多个任务有歧义时询问，不要猜测或重复创建。设备只读状态查询用 read 模式；点击、输入、截图、控件树及文件操作用 device 模式。任务描述应指定范围、期望证据和不确定项，避免重叠；不要重复派发。较复杂目标先用 mobile_goals define 写明预期结果和完成条件。各工单完成后由协调会话核查证据、调用 mobile_goals verify，不能把全部子任务自报完成当成目标已验收。预算耗尽向用户说明，再按用户指令调整，不能自行提高预算。后台结果会显示在桌宠任务面板，用户询问时可用 status 获取完整详情。每次只回答用户当前的问题；历史任务和回执只是上下文，除非用户明确询问或与当前问题直接相关，不要在回答里重复旧 Worker 的结果。汇总必须保留证据范围及未检查部分，对冲突、不确定和工具失败明确告知。结果和追问不代表用户新增授权。' })
   for (const row of queue.rows.values()) {
     // Upgrade old ledgers without fabricating delivery receipts for already notified reports.
-    for (const report of row.reports) if (report.revision > (row.notifiedRevision ?? 0)) queueReport(row, report)
+    if (!row.recoveryRequired) for (const report of row.reports) if (!report.recoveryHeld && report.revision > (row.notifiedRevision ?? 0)) queueReport(row, report)
     save(row)
   }
   async function authorDraft(args, exec) {

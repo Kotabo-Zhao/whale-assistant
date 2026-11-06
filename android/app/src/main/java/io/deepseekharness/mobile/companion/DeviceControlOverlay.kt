@@ -65,6 +65,7 @@ internal class DeviceControlOverlay(private val context: Context, private val wm
             WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,PixelFormat.TRANSLUCENT
         ).apply { gravity=Gravity.TOP or Gravity.CENTER_HORIZONTAL; y=ui.dp(38); title="鲸鱼助手 · 手机操作状态" }
+        io.deepseekharness.mobile.WhaleMotion.overlay(params,critical=true)
         if(runCatching { wm.addView(panel,params) }.isSuccess) root=panel
     }
     fun refresh() { render(DeviceControlState.current) }

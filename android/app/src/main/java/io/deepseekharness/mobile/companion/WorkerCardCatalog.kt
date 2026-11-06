@@ -247,7 +247,7 @@ internal class WorkerCardCatalog(private val dir: File) {
         private val DEPENDENCY_ATTENTION = ATTENTION + "cancelled"
         private val OWNER_ACTIVE = setOf("queued","starting","running","waiting","blocked")
         private val fields = listOf("id","owner","title","sessionId","state","mode","group","source","priority","authorizationRevoked",
-            "authoredDraft","dependsOn","revision","health","reportState","watchdog","writeSeq","updatedAt","createdAt","requester","goalState","goalOutcome","goalCriteria","goalCoordinator","budget","budgetUsage")
+            "authoredDraft","dependsOn","revision","health","reportState","watchdog","recoveryRequired","recovery","goalRecovery","writeSeq","updatedAt","createdAt","requester","goalState","goalOutcome","goalCriteria","goalCoordinator","budget","budgetUsage")
         private val previews = listOf("scope","decisionReason","decisionEvidence","progress","summary","question","uiError","waitReason")
 
         private val cardFields = (fields + previews).toSet()

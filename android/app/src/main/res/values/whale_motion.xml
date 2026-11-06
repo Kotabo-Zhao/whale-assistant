@@ -1,0 +1,15 @@
+<resources>
+    <style name="WhaleWindowMotion" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/whale_surface_enter</item>
+        <item name="android:activityOpenExitAnimation">@anim/whale_surface_exit</item>
+        <item name="android:activityCloseEnterAnimation">@anim/whale_surface_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/whale_surface_exit</item>
+    </style>
+    <style name="WhaleOverlayMotion" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/whale_surface_enter</item>
+        <item name="android:windowExitAnimation">@anim/whale_surface_exit</item>
+    </style>
+    <style name="WhaleControlMotion" parent="@style/WhaleOverlayMotion">
+        <item name="android:windowEnterAnimation">@anim/whale_control_enter</item>
+    </style>
+</resources>

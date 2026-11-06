@@ -108,6 +108,7 @@ internal class PetToolWindows(private val context: Context, private val wm: Wind
             params.x = context.resources.displayMetrics.widthPixels - ui.dp(352)
             params.y = ui.dp(30) + ((windows.size - 1) % 4) * ui.dp(42)
             layoutWindow()
+            io.deepseekharness.mobile.WhaleMotion.overlay(params)
             wm.addView(panel, params)
             reader.execute {
                 val html = runCatching { store.withActive(tool.id, tool.revision) { it.getString("html") } }.getOrNull()
@@ -139,6 +140,7 @@ internal class PetToolWindows(private val context: Context, private val wm: Wind
             // the same view tree so selecting this tool raises its current form.
             if (panel.parent != null) {
                 wm.removeViewImmediate(panel)
+                io.deepseekharness.mobile.WhaleMotion.overlay(params)
                 wm.addView(panel, params)
             }
         }

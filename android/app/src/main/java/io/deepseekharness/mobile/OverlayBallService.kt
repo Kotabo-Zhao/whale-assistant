@@ -756,6 +756,7 @@ class OverlayBallService : Service() {
             y = position.y
         }
         removeCompanionHint()
+        if(!notificationStyle) WhaleMotion.overlay(params)
         if (runCatching { windowManager.addView(bubble, params) }.isSuccess) {
             hintView = bubble
             if (notificationStyle && android.animation.ValueAnimator.areAnimatorsEnabled()) {
@@ -923,6 +924,7 @@ class OverlayBallService : Service() {
         // onStartCommand 里已经检查过 canDrawOverlays，但用户完全可能在检查之后、
         // addView 之前把权限撤销掉 —— 这是真实竞态。这里兜一层：加不上球就结束服务，
         // 而不是让异常从 onStartCommand 逃出去终结整个进程（用户看到的是「闪退」）。
+        WhaleMotion.overlay(params)
         val attached = runCatching { windowManager.addView(view, params) }
         if (attached.isFailure) {
             lastStartFailure = FAILURE_ATTACH_FAILED
@@ -998,6 +1000,12 @@ class OverlayBallService : Service() {
             override fun run() {
                 if (companionFrame !== this) return
                 val now = SystemClock.uptimeMillis()
+                if(!WhaleMotion.enabled()) {
+                    petDrawable?.setPose(PetPose())
+                    petDrawable?.blinkAmount=0f
+                    hintHandler.postAtTime(this,now+1000)
+                    return
+                }
                 petDragLean *= .86f
                 petDrawable?.setPose(petActing.sample(now, petDragLean))
                 petDrawable?.blinkAmount = io.deepseekharness.mobile.overlay.CompanionPetMotion.blink(now - petBlinkAt)
@@ -1178,6 +1186,7 @@ class OverlayBallService : Service() {
                     return true
                 }
                 if (OverlayBallPolicy.isClick(deltaX, deltaY, slop)) {
+                    WhaleMotion.feedback(view)
                     view.performClick()
                 } else {
                     // 拖动结束：吸附到最近边缘并记住位置。
@@ -1458,6 +1467,7 @@ class OverlayBallService : Service() {
             this.y = y
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
+        WhaleMotion.overlay(params)
         if (runCatching { windowManager.addView(frame, params) }.isFailure) {
             conversationWebView?.destroy()
             conversationWebView = null
@@ -1546,6 +1556,7 @@ class OverlayBallService : Service() {
         val (handleX, handleY) = resizeHandlePosition(params, size)
         windowParams.x = handleX
         windowParams.y = handleY
+        WhaleMotion.overlay(windowParams,critical=true)
         if (runCatching { windowManager.addView(handle, windowParams) }.isFailure) {
             // 手柄挂不上不算失败：小窗本身照常用，只是这次不能缩放。
             return
@@ -1938,6 +1949,7 @@ class OverlayBallService : Service() {
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.LEFT }
         positionPetMenu(menu, params)
+        WhaleMotion.overlay(params)
         if (runCatching { windowManager.addView(menu, params) }.isSuccess) actionMenu = menu
     }
 

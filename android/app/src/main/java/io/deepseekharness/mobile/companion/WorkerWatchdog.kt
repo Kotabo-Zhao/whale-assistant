@@ -136,12 +136,46 @@ internal object WorkerWatchdogPolicy {
 /** Claims survive App restart. Keep metadata only and bound both model use and retry rate. */
 internal class WorkerWatchdogJournal(context: Context) {
     private val path=File(context.noBackupFilesDir,"worker-watchdog.json")
-    private fun read(): JSONObject = try { AtomicFile(path).openRead().bufferedReader().use { JSONObject(it.readText()) } }
-        catch (_: java.io.FileNotFoundException) { JSONObject().put("entries",JSONObject()) }
-    private fun write(value: JSONObject) = TaskStateWriter().replace(path,value.toString().toByteArray())
+    private val checkpoint=File(context.noBackupFilesDir,"worker-watchdog.snapshot")
+    private fun digest(text:String)=java.security.MessageDigest.getInstance("SHA-256")
+        .digest(text.toByteArray()).joinToString(""){"%02x".format(it)}
+    private fun decode(text:String):JSONObject {
+        val outer=JSONObject(text)
+        val value=if(outer.has("payload")) {
+            val payload=outer.getString("payload")
+            require(outer.getString("sha256")==digest(payload))
+            JSONObject(payload)
+        } else outer
+        require(value.optJSONObject("entries")!=null && value.optInt("reviews",0) in 0..6)
+        return value
+    }
+    private fun read(): JSONObject {
+        val primary=try {AtomicFile(path).openRead().bufferedReader().use{it.readText()}}
+            catch(_:java.io.FileNotFoundException) {null}
+        if(primary!=null) runCatching{decode(primary)}.getOrNull()?.let{return it}
+        if(primary==null && !checkpoint.exists()) return JSONObject().put("entries",JSONObject())
+        val restored=runCatching{decode(checkpoint.readText())}.getOrNull()
+            ?: JSONObject().put("entries",JSONObject())
+        val evidence=primary ?: "<missing published journal>"
+        val archive=File(path.parentFile,"watchdog-recovery/"+digest(evidence)+".damaged")
+        archive.parentFile!!.mkdirs()
+        if(!archive.exists()) TaskStateWriter().replace(archive,evidence.toByteArray())
+        restored.put("modelBlockedUntil",System.currentTimeMillis()+3_600_000)
+            .put("recoveryNote","监督日志异常已隔离，模型检查暂缓一小时；工单和已有控制命令已保留。")
+        write(restored)
+        return restored
+    }
+    private fun write(value: JSONObject) {
+        val payload=value.toString()
+        val bytes=JSONObject().put("version",1).put("sha256",digest(payload)).put("payload",payload).toString().toByteArray()
+        TaskStateWriter().replace(checkpoint,bytes)
+        TaskStateWriter().replace(path,bytes)
+    }
     private fun key(row: JSONObject)=row.getString("id")+":"+row.optLong("revision")+":"+row.getJSONObject("health").getString("runId")
     fun due(row: JSONObject, now: Long): Boolean = synchronized(lock) {
-        val entry=read().getJSONObject("entries").optJSONObject(key(row)) ?: return@synchronized true
+        val value=read()
+        if(now<value.optLong("modelBlockedUntil")) return@synchronized false
+        val entry=value.getJSONObject("entries").optJSONObject(key(row)) ?: return@synchronized true
         now-entry.optLong("at")>=300_000 && (entry.optString("state") in setOf("unavailable","checking") ||
             entry.optLong("sequence")!=row.getJSONObject("health").optLong("sequence"))
     }
@@ -153,6 +187,7 @@ internal class WorkerWatchdogJournal(context: Context) {
             now-old.optLong("at")<300_000 ||
             (model && old.optString("state") !in setOf("unavailable","checking") && old.optLong("sequence")==row.getJSONObject("health").optLong("sequence")))) return@synchronized false
         if(model) {
+            if(now<value.optLong("modelBlockedUntil")) return@synchronized false
             if(now-value.optLong("windowStart") !in 0 until 3_600_000L) value.put("windowStart",now).put("reviews",0)
             if(value.optInt("reviews")>=6) return@synchronized false
             value.put("reviews",value.optInt("reviews")+1)
@@ -170,7 +205,9 @@ internal class WorkerWatchdogJournal(context: Context) {
     }
     fun note(row: JSONObject): String = synchronized(lock) {
         if(!row.has("health")) return@synchronized ""
-        val entry=read().getJSONObject("entries").optJSONObject(key(row)) ?: return@synchronized ""
+        val value=read()
+        if(System.currentTimeMillis()<value.optLong("modelBlockedUntil")) return@synchronized value.optString("recoveryNote")
+        val entry=value.getJSONObject("entries").optJSONObject(key(row)) ?: return@synchronized ""
         if(entry.optString("state") in setOf("hold","unavailable") &&
             entry.optLong("sequence")==row.getJSONObject("health").optLong("sequence")) entry.optString("note") else ""
     }

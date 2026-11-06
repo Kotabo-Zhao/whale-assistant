@@ -329,7 +329,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             shortcuts.addView(ui.text(label, 13f, foreground).apply {
                 gravity = Gravity.CENTER; minHeight = dp(44); contentDescription = description
                 setPadding(dp(5), 0, dp(5), 0); background = ui.action(ui.surface, 10)
-                ui.leadingIcon(this, icon, 16); isFocusable = true; setOnClickListener { click() }
+                ui.leadingIcon(this, icon, 16)
+                if(fontScale>=1.4f && metrics.heightPixels>metrics.widthPixels) {
+                    val leading=compoundDrawablesRelative[0]
+                    setCompoundDrawablesRelative(null,leading,null,null)
+                    compoundDrawablePadding=dp(2)
+                }
+                isFocusable = true; setOnClickListener { click() }
             }, LinearLayout.LayoutParams(0, -2, 1f))
         }
         sessionActions.addView(ui.text(ui.string(R.string.pet_manual_assign), 14f, accent).apply {
@@ -387,6 +393,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         fun atBottom(): Boolean = scroll.getChildAt(0)?.let { child ->
             child.bottom - (scroll.scrollY + scroll.height) <= dp(48)
         } ?: true
+        var liveMotion = false
         fun bubble(message: String, isUser: Boolean): TextView {
             val shouldFollow = isUser || atBottom()
             val view = TextView(context).apply {
@@ -395,6 +402,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 styleBubble(this, isUser)
             }
             content.addView(view, LinearLayout.LayoutParams(-2, -2).apply { gravity = if (isUser) Gravity.END else Gravity.START; bottomMargin = dp(6) })
+            if(liveMotion) io.deepseekharness.mobile.WhaleMotion.enter(view)
             if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
             return view
         }
@@ -573,6 +581,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val unseenReports = workerInbox.unseen()
         unseenReports.forEach(::workerReport)
         renderWorkerReport = ::workerReport
+        liveMotion = true
         // 后台任务结果：用户那一轮已经结束，回执是在同一会话里新起的一轮，历史里没有它。
         // 单独从收件箱追加，既不改对话历史（历史要求用户/助手严格交替），也不会被误当成新提问。
         val deliveries = deliveryInbox.unseen()
@@ -1005,6 +1014,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         val toolView = PetInlineTool(context, back = {
             inlineTool?.pause(); selectedTool = null
+            io.deepseekharness.mobile.WhaleMotion.enter(scroll)
             scroll.visibility = android.view.View.VISIBLE
             shortcuts.visibility = android.view.View.VISIBLE
             footer.visibility = android.view.View.VISIBLE
@@ -1020,6 +1030,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             controlsScroll.visibility = android.view.View.GONE
             footer.visibility = android.view.View.GONE
             toolView.open(tool)
+            io.deepseekharness.mobile.WhaleMotion.enter(toolView)
             panel.post { positionUpdater?.invoke() }
         }
         val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
@@ -1055,38 +1066,40 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
             val bars = if (android.os.Build.VERSION.SDK_INT >= 30) inset?.getInsets(android.view.WindowInsets.Type.systemBars())?.bottom ?: 0 else 0
             val usable = stableBounds.height() - maxOf(keyboard, bars)
+            val originTop=frame.top.coerceAtLeast(0)
+            val available=(usable-originTop-dp(8)).coerceAtLeast(1)
+            val anchorY=currentPet[1]-originTop
             val gap = dp(8)
             val hasSideRoom = maxOf(currentPet[0], screenWidth - currentPet[0] - currentPet[2]) >= width + gap
-            val availableHeight = if (hasSideRoom) usable else minOf(usable, maxOf(currentPet[1], usable - currentPet[1] - currentPet[3]) - gap)
-            val nextLimit = (usable / 3).coerceIn(dp(48),dp(208))
-            if (controlLimit != nextLimit) { controlLimit = nextLimit; controlsScroll.requestLayout() }
+            val availableHeight = if (hasSideRoom) available else minOf(available, maxOf(anchorY, available-anchorY-currentPet[3])-gap)
             val measureWidth = android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY)
             panel.measure(measureWidth, android.view.View.MeasureSpec.UNSPECIFIED)
-            // WRAP_CONTENT can still report the expanded menu's cached height during collapse.
-            var chrome = panel.paddingTop + panel.paddingBottom
-            for (i in 0 until panel.childCount) {
-                val child = panel.getChildAt(i)
-                if (child !== bodyHost && child.visibility != android.view.View.GONE) chrome += child.measuredHeight
+            // Reserve the header, shortcuts and composer before limiting expandable controls.
+            var mandatory=panel.paddingTop+panel.paddingBottom
+            for(i in 0 until panel.childCount) {
+                val child=panel.getChildAt(i)
+                if(child!==bodyHost && child!==controlsScroll && child.visibility!=android.view.View.GONE) mandatory+=child.measuredHeight
             }
-            val natural = if (toolView.visibility == android.view.View.VISIBLE) dp(390) else content.measuredHeight.takeIf { it > 0 } ?: dp(112)
-            val available = (usable - frame.top.coerceAtLeast(0) - dp(8)).coerceAtLeast(1)
-            val targetHeight = if(toolView.visibility==android.view.View.VISIBLE)
-                minOf(availableHeight,(available*.86f).toInt(),chrome+dp(390))
-            else when (heightMode) {
-                "small" -> (available * .42f).toInt()
-                "large" -> (available * .86f).toInt()
-                else -> minOf(availableHeight, (available * .76f).toInt(), chrome + natural.coerceAtLeast(dp(72)))
+            val nextLimit=PetChatHeight.controls(available,mandatory,density)
+            if(controlLimit!=nextLimit) {
+                controlLimit=nextLimit
+                controlsScroll.requestLayout()
+                panel.measure(measureWidth,android.view.View.MeasureSpec.UNSPECIFIED)
             }
+            val chrome=mandatory+if(controlsScroll.visibility==android.view.View.GONE) 0 else controlsScroll.measuredHeight
+            val natural = if (toolView.visibility == android.view.View.VISIBLE) dp(390) else content.measuredHeight.takeIf { it > 0 } ?: dp(64)
+            val targetHeight=PetChatHeight.total(available,availableHeight,chrome,natural,heightMode,
+                stableBounds.height()>stableBounds.width(),keyboard>0,toolView.visibility==android.view.View.VISIBLE,density)
             val desiredScroll = (targetHeight - chrome).coerceIn(minOf(dp(44), (available - chrome).coerceAtLeast(1)), (available - chrome).coerceAtLeast(1))
             val scrollParams = bodyHost.layoutParams as LinearLayout.LayoutParams
             val heightChanged = scrollParams.height != desiredScroll
             if (heightChanged) { scrollParams.height = desiredScroll; bodyHost.layoutParams = scrollParams }
             panel.measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
-                android.view.View.MeasureSpec.makeMeasureSpec(usable, android.view.View.MeasureSpec.AT_MOST))
-            val actualHeight = panel.measuredHeight.coerceIn(1, metrics.heightPixels)
-            val point = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(screenWidth, usable.coerceAtLeast(actualHeight),
-                currentPet[0], currentPet[1], currentPet[2], currentPet[3], width, actualHeight, dp(2), gap)
-            val placedAbove = point.y + actualHeight <= currentPet[1]
+                android.view.View.MeasureSpec.makeMeasureSpec(available, android.view.View.MeasureSpec.AT_MOST))
+            val actualHeight = panel.measuredHeight.coerceIn(1, available)
+            val point = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(screenWidth, available,
+                currentPet[0], anchorY, currentPet[2], currentPet[3], width, actualHeight, dp(2), gap)
+            val placedAbove = point.y + actualHeight <= anchorY
             val right = currentPet[0] + currentPet[2] / 2 >= metrics.widthPixels / 2
             if (placedAbove != showAbove || right != petOnRight) {
                 val changeOrder = placedAbove != showAbove
@@ -1123,7 +1136,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             view.post { if (root === panel) positionUpdater?.invoke() }
             view.onApplyWindowInsets(insets)
         }
+        panel.addOnLayoutChangeListener { _,left,top,right,bottom,oldLeft,oldTop,oldRight,oldBottom ->
+            if(right-left!=oldRight-oldLeft || bottom-top!=oldBottom-oldTop)
+                panel.post {if(root===panel) positionUpdater?.invoke()}
+        }
         updatePosition()
+        io.deepseekharness.mobile.WhaleMotion.overlay(params)
         if (runCatching { wm.addView(panel, params) }.isSuccess) {
             root = panel; positionUpdater = updatePosition
             selectedTool?.let { presentTool?.invoke(it) }

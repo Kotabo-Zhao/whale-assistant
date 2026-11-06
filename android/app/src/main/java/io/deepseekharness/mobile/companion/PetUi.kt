@@ -101,6 +101,7 @@ internal class PetUi(private val context: Context) {
 
     fun finishDialog(dialog: AlertDialog, widthDp: Int = 364) {
         dialog.window?.apply {
+            setWindowAnimations(if(io.deepseekharness.mobile.WhaleMotion.enabled()) R.style.WhaleOverlayMotion else 0)
             setBackgroundDrawable(shape(surface, 20, line))
             setLayout(minOf(dp(widthDp), (context.resources.displayMetrics.widthPixels - dp(24)).coerceAtLeast(1)),
                 WindowManager.LayoutParams.WRAP_CONTENT)

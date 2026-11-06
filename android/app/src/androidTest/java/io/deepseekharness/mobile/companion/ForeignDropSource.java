@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 public class ForeignDropSource extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (getIntent().getBooleanExtra("portrait", false)) setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         String note = getIntent().getStringExtra("note");
         if (note == null || !note.matches("[a-z0-9-]{1,80}")) { finish(); return; }
         FrameLayout root = new FrameLayout(this);

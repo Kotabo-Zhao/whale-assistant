@@ -53,6 +53,7 @@ internal class PetActionMenu(
         render()
         scrollTo(0, 0)
         resized()
+        io.deepseekharness.mobile.WhaleMotion.enter(body)
     }
 
     private fun button(label: Int, tile: Boolean = false, click: () -> Unit) = TextView(context).apply {

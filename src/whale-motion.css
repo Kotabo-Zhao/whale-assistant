@@ -1,0 +1,48 @@
+:root {
+  --motion-fast: 130ms;
+  --motion-normal: 220ms;
+  --motion-enter: cubic-bezier(.2, .7, .2, 1);
+  --motion-press: cubic-bezier(.3, 0, .6, 1);
+}
+:root[data-style='cute'] { --motion-normal: 270ms; --motion-enter: cubic-bezier(.18, .8, .25, 1); }
+
+@keyframes whale-page-enter { from { opacity: 0; translate: 0 7px; } to { opacity: 1; translate: 0 0; } }
+@keyframes whale-panel-enter { from { opacity: 0; scale: .985; translate: 0 6px; } to { opacity: 1; scale: 1; translate: 0 0; } }
+@keyframes whale-fade-enter { from { opacity: 0; } to { opacity: 1; } }
+
+.app-main > * { animation: whale-page-enter var(--motion-normal) var(--motion-enter) backwards; }
+.dialog-backdrop, .knowledge-detail-backdrop { animation: whale-fade-enter var(--motion-fast) ease-out backwards; }
+.dialog, [role='dialog'], .context-menu, .dropdown-menu, .popover {
+  animation: whale-panel-enter var(--motion-normal) var(--motion-enter) backwards;
+  transform-origin: 50% 25%;
+}
+.worker-card, .library-editor, .library-intake, .worker-recovery, .worker-dispatch, .worker-add-form, .worker-reply-form {
+  animation: whale-page-enter var(--motion-normal) var(--motion-enter) backwards;
+}
+.toast { animation: whale-panel-enter var(--motion-normal) var(--motion-enter) backwards; }
+details[open] > :not(summary) { animation: whale-fade-enter var(--motion-normal) ease-out backwards; }
+
+button, summary, .sidebar-item, .bottom-navigation-item, .management-row, input, textarea, select {
+  transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out,
+    color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out, opacity var(--motion-fast) ease-out;
+}
+button:not(.bottom-navigation-item):not(.sidebar-item):active { scale: .975; }
+button { transition-property: background-color, border-color, color, box-shadow, opacity, scale; }
+.bottom-navigation-item, .sidebar-item { transition-duration: 160ms; }
+.bottom-navigation-item svg, .sidebar-item svg { transition: scale var(--motion-fast) var(--motion-enter); }
+.bottom-navigation-item[aria-current='page'] svg, .sidebar-item[aria-current='page'] svg { scale: 1.06; }
+.toggle-row input[role="switch"]::after { transition: transform var(--motion-normal) var(--motion-enter); }
+.worker-card[data-state='completed'] { transition: border-color var(--motion-normal) ease-out, background-color var(--motion-normal) ease-out; }
+
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled):hover { transition-duration: 160ms; }
+}
+body, .app-header, .bottom-navigation, .sidebar-nav { transition: background-color 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  button:active { scale: 1 !important; }
+}
+:root[data-motion-reduced='true'] *, :root[data-motion-reduced='true'] *::before, :root[data-motion-reduced='true'] *::after {
+  animation: none !important; transition: none !important; scroll-behavior: auto !important;
+}
+:root[data-motion-reduced='true'] button:active { scale: 1 !important; }

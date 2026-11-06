@@ -490,6 +490,7 @@ class MobileRuntimePlugin : Plugin() {
                 HarnessThemeBridge.saveFamily(context)
                 DeviceControlState.refreshIndicator(context)
                 activity?.runOnUiThread {
+                    bridge?.webView?.let { WhaleMotion.sync(it) }
                     val host=activity as? MainActivity
                     if(host!=null) host.refreshHarnessTheme() else HarnessThemeBridge.refresh()
                 }

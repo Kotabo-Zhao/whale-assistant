@@ -388,6 +388,8 @@ internal object HarnessThemeBridge {
               if(!family) { family=document.createElement('style'); family.id='whale-family-design'; (document.head||root).appendChild(family); }
               family.textContent=':root,body{--dsw-alias-label-primary:${design.hex(design.ink)}!important;--dsw-alias-label-secondary:${design.hex(design.muted)}!important;--dsw-alias-label-tertiary:${design.hex(design.muted)}!important;}button:not([role=switch]),textarea,input:not([type=checkbox]):not([type=radio]){border-radius:${design.radius}px!important;}';
 
+              family.textContent += ${org.json.JSONObject.quote(WhaleMotion.webCSS())};
+              root.dataset.motionReduced = '${!WhaleMotion.enabled()}' ;
               root.style.setProperty('--dsh-theme-accent', '$accent');
               root.style.setProperty('--dsh-theme-background', '$background');
               root.style.setProperty('--dsh-theme-surface', '$surface');

@@ -1,6 +1,7 @@
 package io.deepseekharness.mobile.companion
 
 import android.content.Context
+import io.deepseekharness.mobile.R
 import android.graphics.Typeface
 import android.view.View
 import android.widget.LinearLayout
@@ -61,6 +62,46 @@ internal class WorkerDetailView(context: Context, row: JSONObject) : ScrollView(
             val value = row.optString(key)
             if (value.isNotBlank()) { heading(label); paragraph(value,4,label) }
         }
+        val taskRecovery=row.optJSONObject("recovery").takeIf{row.optBoolean("recoveryRequired")}
+        val goalRecovery=row.optJSONObject("goalRecovery")
+        if(taskRecovery!=null || goalRecovery!=null) {
+            heading("恢复副本 · 待核对")
+            val detail=StringBuilder()
+            for(item in listOfNotNull(taskRecovery,goalRecovery)) {
+                detail.append(item.optString("note")).append("\n")
+                val preview=if(item.optBoolean("usable")) item.optJSONObject("preview") else item.optJSONObject("localPreview") ?: item.optJSONObject("preview")
+                for((key,label) in listOf("title" to "标题","input" to "原请求","summary" to "先前结果","outcome" to "预期结果","criteria" to "完成条件","budgetUsage" to "已记录用量","budget" to "预算")) {
+                    val value=preview?.opt(key)
+                    if(value!=null && value!=JSONObject.NULL) {
+                        val display=when(value) {
+                            is JSONObject -> "${value.optLong("tokens")} tokens · ${value.optLong("calls")} 次调用 · ${value.optLong("milliseconds")/60000} 分钟"
+                            is org.json.JSONArray -> (0 until value.length()).joinToString("、"){value.optString(it)}
+                            else -> value.toString()
+                        }
+                        detail.append(label).append("  ").append(display).append("\n")
+                    }
+                }
+            }
+            paragraph(detail.toString(),7,"恢复副本")
+            val usable=listOfNotNull(taskRecovery,goalRecovery).all{it.optBoolean("usable")}
+            if(usable) content.addView(toggle("核对恢复副本后解锁") { button ->
+                ui.dialogBuilder("确认恢复副本",null,R.drawable.ic_pet_assign)
+                    .setMessage("请核对副本、已执行动作和剩余预算。解锁后可补充说明，再继续原工单。")
+                    .setNegativeButton("继续核对",null).setPositiveButton("已核对，解锁") { _,_ ->
+                        button.isEnabled=false
+                        recoveryCommands.execute {
+                            val result=runCatching {WorkerDashboardStore(context).command(JSONObject().put("id",row.getString("id"))
+                                .put("action","recover").put("recoveryAcknowledged",true)
+                                .put("recoveryIncident",taskRecovery?.optString("incidentId"))
+                                .put("goalRecoveryIncident",goalRecovery?.optString("incidentId")))}
+                            button.post {button.text=if(result.isSuccess) "已提交解锁，请刷新工单" else "副本已变化，请重新打开核对"}
+                        }
+                    }.create().apply {
+                        if(context !is android.app.Activity) window?.setType(android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+                        show();ui.finishDialog(this)
+                    }
+            }) else content.addView(text("缺少可校验完整副本，请查看会话历史或导入备份后重新交办。",13f,muted=true))
+        }
         row.optString("goalOutcome").takeIf { it.isNotBlank() }?.let {
             heading("目标与完成条件"); paragraph(it,3,"目标")
             val criteria=row.optJSONArray("goalCriteria")
@@ -107,4 +148,6 @@ internal class WorkerDetailView(context: Context, row: JSONObject) : ScrollView(
             paragraph(event.optString("text",event.optString("summary")),3,"记录")
         }
     }
+    companion object {private val recoveryCommands=java.util.concurrent.Executors.newSingleThreadExecutor()}
+
 }

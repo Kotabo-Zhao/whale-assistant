@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 // 样式跟着 TerminalPanel 走才能让首屏 CSS 不包含终端相关的规则。
 import './styles.css'
 import './whale-design.css'
+import './whale-motion.css'
 import { App } from './App'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { applyTheme, applyTextColor, readThemeMode } from './theme'

@@ -24,6 +24,19 @@ internal class WorkerDashboardStore(private val context: Context, private val co
             row.remove(field)
             if (current?.has(field) == true) row.put(field, current.get(field))
         }
+        if(row.optBoolean("recoveryRequired") && current!=null &&
+            current.optJSONObject("recovery")?.optString("incidentId")!=row.getJSONObject("recovery").optString("incidentId")) {
+            val archive=File(dir,"recovery/"+id+"-"+current.optLong("writeSeq")+".json")
+            archive.parentFile!!.mkdirs()
+            if(!archive.exists()) write(archive,current.toString())
+            row.getJSONObject("recovery").put("localPreview",JSONObject()
+                .put("title",current.optString("title")).put("input",current.optString("input").take(4000))
+                .put("summary",current.optString("summary").take(4000)))
+        }
+        if(row.optBoolean("recoveryRequired") && !row.getJSONObject("recovery").has("localPreview"))
+            current?.optJSONObject("recovery")?.optJSONObject("localPreview")?.let {
+                row.getJSONObject("recovery").put("localPreview",it)
+            }
         row.put("text", row.getString("title"))
         writeWorker(target, row)
         WorkerWatchdog.wake(context)
@@ -38,6 +51,7 @@ internal class WorkerDashboardStore(private val context: Context, private val co
         val reports = row.optJSONArray("reports") ?: JSONArray()
         for (index in 0 until reports.length()) {
             val report = reports.getJSONObject(index)
+            if(row.optBoolean("recoveryRequired") || report.optBoolean("recoveryHeld")) continue
             if (report.optLong("revision") !in known && (current != null || report.optLong("finishedAt") >= processStartedAt)) {
                 notifications.add(row, report)
             }
@@ -364,9 +378,19 @@ internal class WorkerDashboardStore(private val context: Context, private val co
         synchronized(lock) {
             val id = request.getString("id"); require(UUID.fromString(id).toString() == id)
             require(File(dir, "$id.json").isFile)
-            require(request.getString("action") in setOf("cancel", "resume", "reply", "add", "priority"))
+            require(request.getString("action") in setOf("cancel", "resume", "reply", "add", "priority", "recover"))
             require(request.optString("task").length <= 16000)
-            enqueue(JSONObject(request.toString()).put("commandId", UUID.randomUUID().toString()))
+            val command=JSONObject(request.toString()).put("commandId", UUID.randomUUID().toString())
+            if(request.getString("action")=="recover") {
+                val row=worker(id)
+                val task=row.optJSONObject("recovery").takeIf{row.optBoolean("recoveryRequired")}
+                val goal=row.optJSONObject("goalRecovery")
+                require(task!=null || goal!=null)
+                require(request.optBoolean("recoveryAcknowledged"))
+                if(task!=null) require(task.optBoolean("usable") && task.getString("incidentId")==request.optString("recoveryIncident"))
+                if(goal!=null) require(goal.optBoolean("usable") && goal.getString("incidentId")==request.optString("goalRecoveryIncident"))
+            }
+            enqueue(command)
         }
         listeners.forEach { it() }
         return JSONObject().put("ok", true)

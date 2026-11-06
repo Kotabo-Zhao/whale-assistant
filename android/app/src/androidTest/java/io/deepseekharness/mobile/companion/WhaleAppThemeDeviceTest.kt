@@ -95,6 +95,7 @@ class WhaleAppThemeDeviceTest {
                     js(requireNotNull(page),"getComputedStyle(document.body).getPropertyValue('--dsw-alias-label-primary-foreground').trim()"))
                 assertEquals("conversation borders must follow family",JSONObject.quote(design.hex(design.line)),
                     js(requireNotNull(page),"getComputedStyle(document.body).getPropertyValue('--dsw-alias-border-l2').trim()"))
+                assertTrue("conversation motion stylesheet missing",js(requireNotNull(page),"document.getElementById('whale-family-design').textContent").contains("whale-surface-in"))
                 assertNull("separate native navigation must not exist",activity.findViewById<View>(io.deepseekharness.mobile.R.id.harness_tab_active))
                 capture(activity.window.decorView,"harness-$family-$mode")
                 inst.sendStatus(0,android.os.Bundle().apply{putString("harnessFamily","$family/$mode")})
@@ -148,6 +149,7 @@ class WhaleAppThemeDeviceTest {
                     val expected=design.hex(design.ink)
                     val actual=js(page,"getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()")
                     assertEquals("$tab family",JSONObject.quote(expected),actual)
+                    assertTrue("App motion missing: $tab",js(page,"getComputedStyle(document.querySelector('.app-main > *')).animationName").contains("whale-page-enter") || !io.deepseekharness.mobile.WhaleMotion.enabled())
                     assertEquals("page overflow: $tab", "true",js(page,"document.documentElement.scrollWidth<=innerWidth+2"))
                     capture(activity.window.decorView,"app-$style-$mode-$tab")
                 }
@@ -167,13 +169,16 @@ class WhaleAppThemeDeviceTest {
                 io.deepseekharness.mobile.AppThemePreference.save(app,mode)
                 for(pref in CompanionPreferencePage.entries) {
                     ActivityScenario.launch<CompanionActivity>(Intent(app,CompanionActivity::class.java).putExtra(CompanionActivity.OPEN_PAGE,pref.name)).use { native ->
-                        inst.waitForIdleSync();Thread.sleep(120)
+                        inst.waitForIdleSync();Thread.sleep(320)
                         native.onActivity { screen ->
                             val design=WhaleDesign.of(app)
                             assertEquals("native family "+pref.name,design.ink,PetUi(screen).ink)
                             val accent=android.util.TypedValue()
                             assertTrue(screen.theme.resolveAttribute(android.R.attr.colorAccent,accent,true))
                             assertEquals("native controls "+pref.name,design.accent,accent.data)
+                            val motion=android.util.TypedValue()
+                            assertTrue(screen.theme.resolveAttribute(android.R.attr.windowAnimationStyle,motion,true))
+                            assertEquals("native motion "+pref.name,io.deepseekharness.mobile.R.style.WhaleWindowMotion,motion.resourceId)
                             capture(screen.window.decorView,"native-$style-$mode-"+pref.name.lowercase())
                         }
                     }

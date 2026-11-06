@@ -515,6 +515,7 @@ class CompanionActivity : AppCompatActivity() {
         }.setNegativeButton("关闭", null).show()
     }
 
+    private var lastMotionPage:CompanionPreferencePage?=null
     private fun render() = renderAt(scroll.scrollY)
 
     private fun renderAt(position: Int) {
@@ -543,6 +544,7 @@ class CompanionActivity : AppCompatActivity() {
             CompanionPreferencePage.APPS -> renderApps()
             CompanionPreferencePage.BRIEF -> renderBrief()
         }
+        if(lastMotionPage!=page) {io.deepseekharness.mobile.WhaleMotion.enter(content);lastMotionPage=page}
         val rendered = page
         scroll.post { if (!isFinishing && !isDestroyed && rendered == page) scroll.scrollTo(0, position) }
     }

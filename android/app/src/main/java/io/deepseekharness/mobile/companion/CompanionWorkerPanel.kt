@@ -284,7 +284,9 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
             }
             if (!missing) when (state) {
                 "waiting" -> action("回答",true) { input(id,title,"reply","回答任务问题",row.optString("question")) }
-                "blocked","interrupted","failed" -> if (row.optBoolean("hasPermissionSettings") && row.optString("mode") == "read") {
+                "blocked","interrupted","failed" -> if(row.optBoolean("recoveryRequired") || row.optJSONObject("goalRecovery")!=null) {
+                    action("先核对恢复副本") {expandedId=id;schedule()}
+                } else if (row.optBoolean("hasPermissionSettings") && row.optString("mode") == "read") {
                     action("继续原任务",true) {
                         executor.execute {
                             val result = runCatching { store.resumeAuthorizedRead(id,row.getLong("writeSeq")).getString("message") }

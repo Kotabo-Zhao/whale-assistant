@@ -240,6 +240,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         val target=web ?: return
         target.setBackgroundColor(design.canvas)
         if(!pageLoaded) return
+        target.animate().cancel()
         visuallyReady=false; placeSurface()
         val generation=++visualGeneration
         HarnessThemeBridge.apply(target); HarnessVisualStyle.apply(target)
@@ -247,7 +248,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
             if(generation!=visualGeneration || target!==web || !authorized()) return@evaluateJavascript
             target.postVisualStateCallback(generation,object:WebView.VisualStateCallback(){
                 override fun onComplete(requestId:Long) {
-                    if(generation==visualGeneration && target===web && authorized()) {visuallyReady=true;placeSurface()}
+                    if(generation==visualGeneration && target===web && authorized()) {visuallyReady=true;placeSurface();WhaleMotion.enter(target)}
                 }
             })
         }

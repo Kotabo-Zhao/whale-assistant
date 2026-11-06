@@ -38,21 +38,27 @@ class WorkerDisasterSimulationDeviceTest {
               assert.equal(new WorkerQueue(dir).rows.get('good').summary,'579')
               report.incompleteTemporaryWritePreservedPublishedRecord=true
               writeFileSync(join(dir,'broken.json'),'{partial')
-              assert.throws(()=>new WorkerQueue(dir),SyntaxError)
+              const isolated=new WorkerQueue(dir)
+              assert.equal(isolated.rows.get('broken').recoveryRequired,true)
+              assert.equal(isolated.rows.get('good').summary,'579')
               assert.equal(readFileSync(join(dir,'good.json'),'utf8'),before)
-              report.singleCorruptRecordBlocksQueueStartup=true
+              report.singleCorruptRecordIsolated=true
               rmSync(join(dir,'broken.json'));rmSync(join(dir,'good.json.tmp'))
               mkdirSync(join(dir,'good.json.tmp'))
               good.summary='unpublished'
               assert.throws(()=>queue.save(good))
               assert.equal(readFileSync(join(dir,'good.json'),'utf8'),before)
               report.failedWritePreservedPublishedRecord=true
-              report.failedWriteAdvancedInMemorySequence=good.writeSeq>JSON.parse(before).writeSeq
+              assert.equal(good.writeSeq,JSON.parse(before).writeSeq)
+              assert.equal(good.summary,'579')
+              report.failedWriteRestoredMemory=true
               const goals=new WorkerGoals(join(root,'goals'),queue.rows)
               goals.define('test','parent',{outcome:'check',criteria:['579']})
               writeFileSync(goals.path,'{partial')
-              assert.throws(()=>new WorkerGoals(join(root,'goals'),queue.rows),SyntaxError)
-              report.corruptGoalLedgerBlocksGoalStartup=true
+              const restored=new WorkerGoals(join(root,'goals'),queue.rows)
+              assert.equal(restored.view('test').state,'recovery')
+              assert.equal(restored.view('test').recovery.usable,true)
+              report.corruptGoalRecoveredForReview=true
               console.log('WHALE_DISASTER_REPORT '+JSON.stringify(report))
             } finally {rmSync(root,{recursive:true,force:true})}
         """.trimIndent()
@@ -80,10 +86,90 @@ class WorkerDisasterSimulationDeviceTest {
             assertTrue("旧暂停未生效且已有新进展时，后续监督应能重新检查",
                 WorkerWatchdogJournal(scoped).claim(row,now+300001,model=true))
             File(root,"worker-watchdog.json").writeText("{partial")
-            assertTrue("损坏监督日志未被识别",runCatching {WorkerWatchdogJournal(scoped).due(row,System.currentTimeMillis())}.isFailure)
-            inst.sendStatus(0,android.os.Bundle().apply {putBoolean("corruptJournalCurrentlyBlocksReview",true);putBoolean("privateFixtureOnly",true)})
+            assertFalse("损坏监督日志恢复后应暂停模型额度",WorkerWatchdogJournal(scoped).due(row,System.currentTimeMillis()))
+            assertFalse(WorkerWatchdogJournal(scoped).claim(row,System.currentTimeMillis(),model=true))
+            val fresh=JSONObject(row.toString()).put("id",UUID.randomUUID().toString())
+            assertTrue("基础运行状态检查仍应可用",WorkerWatchdogJournal(scoped).claim(fresh,System.currentTimeMillis(),model=false))
+            assertEquals(1,File(root,"watchdog-recovery").listFiles()!!.size)
+            inst.sendStatus(0,android.os.Bundle().apply {putBoolean("corruptJournalRecoveredWithModelCooldown",true);putBoolean("privateFixtureOnly",true)})
         } finally {root.deleteRecursively()}
     }
+    @Test fun recoveryPreviewSurvivesRepeatedMirrorsWithoutOldResultNotification() {
+        val inst=InstrumentationRegistry.getInstrumentation()
+        val root=File(inst.targetContext.cacheDir,"mirror-recovery-"+UUID.randomUUID()).apply{mkdirs()}
+        val preferenceNames=java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        val scoped=object:ContextWrapper(inst.targetContext) {
+            override fun getNoBackupFilesDir()=root
+            override fun getApplicationContext()=this
+            override fun getSharedPreferences(name:String,mode:Int):android.content.SharedPreferences =
+                super.getSharedPreferences((root.name+"-"+name).also(preferenceNames::add),mode)
+        }
+        try {
+            val store=WorkerDashboardStore(scoped)
+            val id=UUID.randomUUID().toString()
+            val original=JSONObject().put("id",id).put("title","原任务").put("owner","recovery-test")
+                .put("sessionId","original").put("mode","read").put("state","completed").put("writeSeq",1).put("summary","579")
+            store.put(original)
+            val held=JSONObject(original.toString()).put("writeSeq",2).put("state","interrupted").put("summary","待核对")
+                .put("recoveryRequired",true).put("recovery",JSONObject().put("incidentId","broken").put("usable",false))
+                .put("reports",org.json.JSONArray().put(JSONObject().put("revision",1).put("state","completed")
+                    .put("summary","579").put("finishedAt",System.currentTimeMillis()).put("recoveryHeld",true)))
+            store.put(held)
+            val second=JSONObject(held.toString()).put("writeSeq",3)
+            second.getJSONObject("recovery").remove("localPreview")
+            store.put(second)
+            val saved=store.detail(id).getJSONObject("recovery")
+            assertEquals("579",saved.getJSONObject("localPreview").getString("summary"))
+            assertEquals(1,File(root,"worker-dashboard/recovery").listFiles()!!.size)
+            assertTrue(WorkerReportInbox(scoped).unseen().isEmpty())
+        } finally {preferenceNames.forEach(inst.targetContext::deleteSharedPreferences);root.deleteRecursively()}
+    }
+
+    @Test fun overlayRecoveryReviewShowsBudgetAndRequiresTheRealConfirmationButton() {
+        val inst=InstrumentationRegistry.getInstrumentation()
+        val root=File(inst.targetContext.cacheDir,"review-overlay-"+UUID.randomUUID()).apply{mkdirs()}
+        val preferenceNames=java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        val scoped=object:ContextWrapper(inst.targetContext) {
+            override fun getNoBackupFilesDir()=root
+            override fun getApplicationContext()=this
+            override fun getSharedPreferences(name:String,mode:Int):android.content.SharedPreferences =
+                super.getSharedPreferences((root.name+"-"+name).also(preferenceNames::add),mode)
+        }
+        fun views(v:android.view.View):List<android.view.View> = listOf(v)+
+            if(v is android.view.ViewGroup) (0 until v.childCount).flatMap{views(v.getChildAt(it))} else emptyList()
+        var dialog:android.app.AlertDialog?=null
+        try {
+            val id=UUID.randomUUID().toString()
+            val store=WorkerDashboardStore(scoped)
+            val row=JSONObject().put("id",id).put("title","恢复核对验收").put("owner","review-test")
+                .put("sessionId","review-test").put("state","interrupted").put("writeSeq",1).put("recoveryRequired",true)
+                .put("recovery",JSONObject().put("incidentId","review-test").put("usable",true).put("preview",
+                    JSONObject().put("title","恢复核对验收").put("budgetUsage",JSONObject().put("tokens",777).put("calls",2).put("milliseconds",60000))))
+            store.put(row)
+            inst.runOnMainSync {
+                val detail=WorkerDetailView(scoped,store.detail(id))
+                dialog=android.app.AlertDialog.Builder(scoped).setView(detail).create().apply {
+                    window?.setType(android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+                    show();PetUi(scoped).finishDialog(this)
+                }
+                assertTrue(views(detail).filterIsInstance<android.widget.TextView>().any{it.text.contains("777 tokens")})
+                views(detail).filterIsInstance<android.widget.TextView>().single{it.text=="核对恢复副本后解锁"}.performClick()
+            }
+            assertEquals("未确认时不应排入恢复命令",0,store.pending().length())
+            inst.runOnMainSync {
+                val confirm=android.view.inspector.WindowInspector.getGlobalWindowViews().flatMap(::views)
+                    .filterIsInstance<android.widget.Button>().single{it.isShown&&it.text=="已核对，解锁"}
+                confirm.performClick()
+            }
+            val end=System.currentTimeMillis()+8000
+            while(store.pending().length()==0) {check(System.currentTimeMillis()<end);Thread.sleep(40)}
+            assertEquals("recover",store.pending().getJSONObject(0).getString("action"))
+            assertTrue(store.pending().getJSONObject(0).getBoolean("recoveryAcknowledged"))
+            assertEquals(1,store.pending().length())
+            inst.sendStatus(0,android.os.Bundle().apply {putBoolean("overlayRecoveryConfirmation",true);putBoolean("budgetPreviewVisible",true)})
+        } finally {inst.runOnMainSync{dialog?.dismiss()};preferenceNames.forEach(inst.targetContext::deleteSharedPreferences);root.deleteRecursively()}
+    }
+
     @Test fun interruptedActionsAndOldEvidenceRemainHeldAfterRestart() {
         val inst=InstrumentationRegistry.getInstrumentation()
         val store=RuntimeStore(inst.targetContext)
