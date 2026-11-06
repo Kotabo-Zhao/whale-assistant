@@ -84,10 +84,12 @@ test(`bound ${mode}/${permission} submissions retain their parent and enforce it
     const session = agents.get(row.sessionId).session
     emit(session, { type: 'llm/retry', data: { delayMs: 30000 } })
     emit(session, { type: 'assistant/message', data: { usage: { totalTokens: 123 } } })
-    await registered.get('mobile_workers').execute({ action: 'start', task: 'Another read during provider backoff', mode: 'read' },
+    await registered.get('mobile_workers').execute({ action: 'start', task: 'Another read during provider backoff', mode: 'read', maxTokens:350000,maxCalls:40,maxMinutes:4 },
       { agent: agents.get('session-bound'), callId: 'more-work' })
     await installed.pump()
     const next = [...installed.queue.rows.values()].find(item => item.id !== row.id)
+    assert.deepEqual(next.budget,{tokens:350000,calls:40,milliseconds:240000})
+    assert.deepEqual(installed.superagent.domain.repo.triggers.get('phone:session-bound:more-work').meta.taskBudget,next.budget)
     assert.equal(next.state, 'queued')
     assert.match(next.waitReason, /模型服务正在重试/)
     emit(session, { type: 'turn/end', data: { reason: { kind: 'completed' } } })
@@ -112,6 +114,14 @@ test('heartbeat tier: active rows/pending deliveries 5 s, channels 15 s, idle 60
   assert.equal(heartbeatTier({ tasks: activeRowCount([{ state: 'completed' }]) }), HEARTBEAT_IDLE_MS)
   // A report whose outbox receipt is still pending keeps the 5 s tier.
   assert.equal(heartbeatTier({ pendingDeliveries: 1 }), HEARTBEAT_ACTIVE_MS)
+})
+test('屏幕 Worker 精简工具目录且守卫一致，文件任务仍可使用完整设备配置', () => {
+  for (const name of ['mobile_screen_observe','mobile_screen_act','mobile_screen_sequence','mobile_device_app_launch','mobile_worker_report'])
+    assert.equal(workerToolAllowed('device',name,'screen'),true)
+  for (const name of ['read','grep','mobile_knowledge_read','mobile_device_file_write','mobile_device_shell','mobile_device_screenshot'])
+    assert.equal(workerToolAllowed('device',name,'screen'),false)
+  assert.equal(workerToolAllowed('device','mobile_device_file_write','full'),true)
+  assert.equal(workerToolAllowed('read','mobile_device_file_write','screen'),false)
 })
 
 test('dependent work explains its blocker across restart and releases only after success', t => {

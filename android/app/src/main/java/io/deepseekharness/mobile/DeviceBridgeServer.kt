@@ -729,6 +729,22 @@ class DeviceBridgeServer(
                 respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                 return
             }
+            if (commandName == "workerCoordination") {
+                require(param.length <= 16000)
+                val context = appContext ?: throw RuntimeFailure("WORKER_UNAVAILABLE", "助手服务不可用")
+                io.deepseekharness.mobile.companion.WorkerReportInbox(context).addCoordination(JSONObject(param))
+                respondResult(output,io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,"{\"recorded\":true}",false,null))
+                return
+            }
+            if (commandName == "companionRecall") {
+                require(param.length <= 2048) { "关联召回参数过长" }
+                val context = appContext ?: throw RuntimeFailure("COMPANION_SEARCH_UNAVAILABLE", "助手服务不可用")
+                val request = JSONObject(param)
+                val result = io.deepseekharness.mobile.companion.CompanionRecall(context,request.getString("callerSession"))
+                    .recall(request.getString("query"))
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,result.toString(),false,null))
+                return
+            }
             if (commandName == "companionKnowledgeWrite") {
                 val context = appContext ?: throw RuntimeFailure("KNOWLEDGE_UNAVAILABLE", "资料服务不可用")
                 val result = io.deepseekharness.mobile.companion.CompanionKnowledgeWrite.execute(context, param)

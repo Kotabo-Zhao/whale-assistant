@@ -26,6 +26,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             PetIntentRouter.classify(key, model, messages, whileWaiting = true)
         }
     },
+    private val parallelReply: (List<CompanionBubbleChat.Message>, org.json.JSONObject?, (String) -> Unit) -> String = { messages, evidence, partial -> PetDirectChat(context).readOnly(messages,evidence,partial) },
     private val receiveTask: ((String, String, String, String, String) -> org.json.JSONObject)? = null,
     private val petBounds: () -> IntArray) {
     private val handler = Handler(Looper.getMainLooper())
@@ -49,8 +50,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var activeReply: PetReplyOperation? = null
     private class Followup(val text: String, val id: String, var deciding: Boolean = false, var receipt: String? = null) {
         val classification = PetReplyOperation(30_000)
+        val replyOperation = PetReplyOperation(60_000)
         var handingOff = false
-        var parked = false
+        @Volatile var parked = false
+        var parallel = false
+        @Volatile var live = ""
     }
     private val intakeLock = Any()
     private val journal = historyStore.followups
@@ -65,6 +69,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private val intake = java.util.concurrent.ThreadPoolExecutor(0, 1, 30, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue())
     private var sendNext: (() -> Unit)? = null
     private var renderFollowups: (() -> Unit)? = null
+    private var renderParallel: ((Followup) -> Unit)? = null
     @Volatile private var closed = false
     private var draft = chat.pendingUser.orEmpty()
     private var lastError: String? = if (chat.pendingDirect) "上次回复中断，点此重新生成。" else null
@@ -77,6 +82,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private val workerReportListener: (org.json.JSONObject) -> Unit = { report ->
         handler.post {
             if (!closed) {
+                if (report.optString("owner") == chat.currentSessionId() && deliveryWatcher == null) armDeliveryWatcher(null)
                 when (report.optString("state")) {
                     "completed" -> onState("taskDone")
                     "waiting" -> onState("taskWaiting")
@@ -115,13 +121,48 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     /** Classify independently from the foreground transcript and its pending request. */
     private fun classifyFollowup(item: Followup, messages: List<CompanionBubbleChat.Message>) {
         val sourceSession = chat.handoffSessionId()
+        val sourceRequest = request
+        val completedHistory = history.toList()
+        val speculation = PetRecallSpeculation(context,item.text.replace(Regex("\\s+")," ").take(100).dropLastWhile(Char::isHighSurrogate))
         item.deciding = true
         intake.execute {
             var receipt: String? = null
             runCatching {
                 if (closed) return@runCatching
                 val decision = item.classification.run { classifyWaiting(messages) } ?: return@runCatching
-
+                if (closed || item.parked || !decision.independent || request != sourceRequest) return@runCatching
+                if (decision.intent in setOf(PetIntentRouter.Intent.TASK_STATUS,PetIntentRouter.Intent.TASK_CANCEL)) {
+                    synchronized(intakeLock) {
+                        if (item.parked) return@runCatching
+                        item.handingOff = true
+                    }
+                    receipt = PetQuickControl.reply(context,chat.handoffSessionId(),decision)
+                    journal.advance(item.id,"answered",requireNotNull(receipt))
+                    item.parallel = true
+                    return@runCatching
+                }
+                if (decision.intent in setOf(PetIntentRouter.Intent.CHAT,PetIntentRouter.Intent.KNOWLEDGE)) {
+                    val evidence = if (decision.intent == PetIntentRouter.Intent.KNOWLEDGE) speculation.consume()
+                        ?: CompanionRecall(context).recall(item.text.replace(Regex("\\s+")," ").take(100).dropLastWhile(Char::isHighSurrogate)) else null
+                    item.parallel = true
+                    handler.post { if (!closed && !item.parked) renderParallel?.invoke(item) }
+                    var postedAt = 0L
+                    val answer = item.replyOperation.run { parallelReply(completedHistory + CompanionBubbleChat.Message("user",item.text),evidence) { partial ->
+                        item.live = partial
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (now-postedAt >= 80) { postedAt=now; handler.post { if (!closed && !item.parked) renderParallel?.invoke(item) } }
+                    } }
+                    if (closed || item.parked || request != sourceRequest) return@runCatching
+                    if (evidence != null && !CompanionRecall(context).isCurrent(evidence)) {
+                        item.live = "资料或权限已变化，刚才的候选回复已作废，消息保留待重新核对。"
+                        return@runCatching
+                    }
+                    journal.advance(item.id,"answered",answer)
+                    item.parallel = true
+                    receipt = answer
+                    return@runCatching
+                }
+                if (sourceSession != chat.handoffSessionId()) return@runCatching
                 val mode = when (decision.intent) {
                     PetIntentRouter.Intent.BACKGROUND_READ -> "read"
                     PetIntentRouter.Intent.BACKGROUND_CREATE -> "create"
@@ -149,11 +190,17 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     }
                     throw error
                 }
-            }.onFailure { android.util.Log.d("whale-intake", "intake unavailable: ${it.javaClass.simpleName}") }
+            }.onFailure {
+                item.live = "这条回复尚未完成，消息已保留。"
+                android.util.Log.d("whale-intake", "intake unavailable: ${it.javaClass.simpleName}")
+            }
+            speculation.close()
             handler.post {
                 if (!closed) {
+                    if (item.parked) return@post
                     item.receipt = receipt
                     item.deciding = false
+                    if (item.parallel) renderParallel?.invoke(item)
                     renderFollowups?.invoke()
                     sendNext?.invoke()
                 }
@@ -641,7 +688,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     android.widget.Toast.makeText(context, "正在保存交办回执，请稍后再试。", android.widget.Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-                followups.filter { it.deciding }.forEach { it.classification.cancel() }
+                followups.filter { it.deciding }.forEach { it.classification.cancel(); it.replyOperation.cancel() }
                 val unsentDraft = draft.takeUnless { it == chat.pendingUser || it == failedUser }.orEmpty()
                 busy = true; send.isEnabled = false; input.isEnabled = false; isEnabled = false; continueButton.isEnabled = false
                 val generation = ++request
@@ -712,6 +759,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 "dispatch" -> "上次交办回执尚未保存，可以使用原任务编号恢复交办。"
                 "queued" -> "这条消息尚未接取，可继续放回对话。"
                 "handoff" -> entry.receipt.ifBlank { "已开始交办，请到后台任务核对接取状态。" }
+                "answered" -> entry.receipt
                 else -> "已开始回复，可在对话记录中核对。"
             }
             fun forget() {
@@ -766,7 +814,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 "已收到回执 $received".takeIf { received > 0 }
             ).joinToString(" · ")
             if (followups.isEmpty()) expanded = false
-            val latest = followups.lastOrNull { it.receipt != null }?.receipt
+            val latest = followups.lastOrNull { it.receipt != null && !it.parallel }?.receipt
             progress.text = listOfNotNull(counts, latest).joinToString("\n")
             progress.visibility = if (counts.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
             progress.contentDescription = "$counts，查看消息状态"
@@ -806,6 +854,16 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         var failedMessage: TextView? = null
         var retryText: String? = null
         var queued: Followup? = null
+        val parallelBubbles = mutableMapOf<String,Pair<TextView,TextView>>()
+        renderParallel = { item ->
+            val answer = item.receipt ?: item.live.ifBlank { "正在另行回复…" }
+            val pair = parallelBubbles.getOrPut(item.id) {
+                bubble(item.text,true).also { renderCompleted(it,item.text,true) } to bubble(answer,false)
+            }
+            pair.second.text = if (item.receipt == null) answer else CompanionRichText.render(answer,ui)
+            panel.post { positionUpdater?.invoke(); if (atBottom()) scroll.fullScroll(android.view.View.FOCUS_DOWN) }
+        }
+        followups.filter { it.parallel }.forEach { renderParallel?.invoke(it) }
         sendNext = {
             if (!busy && !closed && chat.pendingUser == null && failedUser == null && followups.firstOrNull()?.deciding == false) {
                 queued = followups.removeFirst()
@@ -873,9 +931,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (!fromQueue && (typed == message || replyingTo != null)) input.text.clear()
             failedMessage?.let { content.removeView(it) }; failedMessage = null
             lastError = null
-            val sentBubble = bubble(message, true)
-            renderCompleted(sentBubble, message, true)
-            val streamingBubble = bubble("正在输入…", false)
+            val parallelViews = item?.id?.let(parallelBubbles::remove)
+            val sentBubble = parallelViews?.first ?: bubble(message, true).also { renderCompleted(it,message,true) }
+            val streamingBubble = parallelViews?.second ?: bubble("正在输入…", false)
             liveText = ""
             renderLive = { text -> streamingBubble.text = text; panel.post { positionUpdater?.invoke() } }
             mainQuestion = null
@@ -1297,6 +1355,6 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     }
 
     fun followPet() { positionUpdater?.invoke() }
-    fun hide() { inlineTool?.destroy(); inlineTool = null; presentTool = null; selectedTool = null; showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { inlineTool?.destroy(); activeReply?.cancel(); activeReply=null; closed = true; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
+    fun hide() { inlineTool?.destroy(); inlineTool = null; presentTool = null; selectedTool = null; showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; renderParallel = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
+    fun destroy() { inlineTool?.destroy(); activeReply?.cancel(); activeReply=null; closed = true; followups.forEach { it.classification.cancel(); it.replyOperation.cancel() }; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
 }

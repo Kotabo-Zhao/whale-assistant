@@ -42,6 +42,7 @@ internal class CompanionDeliveryWatcher(
     private fun loop() {
         val startedAt = System.currentTimeMillis()
         var quietPolls = 0
+        var lastActiveAt = startedAt
         try {
             while (!stopped.get() && System.currentTimeMillis() - startedAt < MAX_DURATION_MS) {
                 if (!sleep(INTERVAL_MS) || stopped.get()) return
@@ -58,7 +59,9 @@ internal class CompanionDeliveryWatcher(
                 }
                 quietPolls = if (found.isEmpty()) quietPolls + 1 else 0
                 // 连续两轮没有新回合、且这个会话已经没有未完成任务 → 收工，绝不常转。
-                if (quietPolls >= 2 && !hasActiveWorkers()) return
+                if (hasActiveWorkers() || found.isNotEmpty()) lastActiveAt = System.currentTimeMillis()
+                // A coalesced Router turn may start after the final Worker ended and take a model round.
+                if (quietPolls >= 2 && System.currentTimeMillis()-lastActiveAt >= 120_000) return
             }
         } finally {
             stopped.set(true)

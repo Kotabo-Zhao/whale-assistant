@@ -41,10 +41,11 @@ class PetDisruptionDeviceTest {
         val replies = AtomicInteger()
         val firstReply = CountDownLatch(1)
         lateinit var window: CompanionBubbleWindow
-        fun open(classify: (List<CompanionBubbleChat.Message>) -> PetIntentRouter.Decision?, receive: ((String,String,String,String,String) -> JSONObject)? = null, stall: (() -> Unit)? = null) {
+        fun open(classify: (List<CompanionBubbleChat.Message>) -> PetIntentRouter.Decision?, receive: ((String,String,String,String,String) -> JSONObject)? = null, stall: (() -> Unit)? = null,
+                 parallel: (List<CompanionBubbleChat.Message>,JSONObject?,(String)->Unit) -> String = { _,_,_ -> error("未配置并行回复夹具") }) {
             inst.runOnMainSync {
                 window = CompanionBubbleWindow(context,app.getSystemService(WindowManager::class.java),
-                    autoOpenOnDelivery=false, historyStore=history, classifyWaiting=classify, receiveTask=receive,
+                    autoOpenOnDelivery=false, historyStore=history, classifyWaiting=classify, receiveTask=receive, parallelReply=parallel,
                     replyRunner={ _,_,_,_,_,_ ->
                         if (replies.incrementAndGet() == 1) {
                             firstReply.countDown()
@@ -57,7 +58,7 @@ class PetDisruptionDeviceTest {
         }
         private fun views(view: View): List<View> = listOf(view) + if (view is ViewGroup)
             (0 until view.childCount).flatMap { views(view.getChildAt(it)) } else emptyList()
-        private fun labels(): List<TextView> {
+        fun labels(): List<TextView> {
             val root = window.javaClass.getDeclaredField("root").apply { isAccessible=true }.get(window) as View
             return views(root).filterIsInstance<TextView>()
         }
@@ -95,6 +96,60 @@ class PetDisruptionDeviceTest {
     private fun until(timeout: Long = 8000, test: () -> Boolean) {
         val end = SystemClock.elapsedRealtime()+timeout
         while (!test()) { check(SystemClock.elapsedRealtime()<end) { "设备状态等待超时" }; Thread.sleep(40) }
+    }
+
+    @Test fun independentConversationFinishesWhileOriginalTurnIsStillBlocked() {
+        Pet(fresh()).use { pet ->
+            val release = CountDownLatch(1)
+            val reply = "并行回答：703，原任务仍在执行。"
+            pet.open({ PetIntentRouter.Decision(PetIntentRouter.Intent.CHAT,independent=true) }, stall={ release.await(90,TimeUnit.SECONDS) },
+                parallel={ history,_,partial -> assertEquals("37 乘 19 是多少",history.last().text); partial("并行回答…"); reply })
+            pet.send("需要长时间执行的原任务")
+            assertTrue(pet.firstReply.await(5,TimeUnit.SECONDS))
+            pet.send("37 乘 19 是多少")
+            until { pet.history.followups.entries().singleOrNull()?.stage == "answered" }
+            until { var found=false; inst.runOnMainSync { found=pet.labels().any { it.text.toString()==reply } }; found }
+            inst.runOnMainSync {
+                assertTrue(pet.labels().any { it.text.toString() == reply })
+                assertTrue(pet.window.javaClass.getDeclaredField("busy").apply { isAccessible=true }.getBoolean(pet.window))
+                pet.window.hide(); pet.window.show()
+                assertEquals(1,pet.labels().count { it.text.toString() == reply })
+            }
+            assertEquals(1,pet.replies.get())
+            assertEquals(reply,pet.history.followups.entries().single().receipt)
+            release.countDown()
+        }
+    }
+
+    @Test fun realIndependentModelReplyAppearsWhileOriginalRequestIsBlocked() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("liveDuplexChecks")=="yes")
+        val stored = RuntimeStore(app)
+        val key = checkNotNull(stored.readModelCredential("deepseek")?.takeIf(String::isNotBlank))
+        val model = stored.settings().defaultModels[io.deepseekharness.mobile.runtime.ModelProvider.DEEPSEEK] ?: "deepseek-flash"
+        val release = CountDownLatch(1)
+        try {
+            Pet(fresh()).use { pet ->
+                pet.open({ messages -> PetIntentRouter.classify(key,model,messages,whileWaiting=true) },
+                    stall={ release.await(90,TimeUnit.SECONDS) },
+                    parallel={ messages,evidence,partial -> PetDirectChat(app).readOnly(messages,evidence,partial) })
+                pet.send("请写一份详细的旅行清单")
+                assertTrue(pet.firstReply.await(5,TimeUnit.SECONDS))
+                val start=SystemClock.elapsedRealtime()
+                pet.send("独立回答一个新问题：37 乘 19 是多少？只回答数字，原请求继续。")
+                until(60_000) { pet.history.followups.entries().singleOrNull()?.stage=="answered" }
+                val elapsed=SystemClock.elapsedRealtime()-start
+                val answer=pet.history.followups.entries().single().receipt
+                assertTrue(answer.contains("703"))
+                until { var visible=false; inst.runOnMainSync { visible=pet.labels().any { it.text.toString()==answer } }; visible }
+                assertTrue(busy(pet.window))
+                inst.runOnMainSync {
+                    pet.window.hide(); pet.window.show()
+                    assertEquals(1,pet.labels().count { it.text.toString()==answer })
+                }
+                assertEquals(1,pet.replies.get())
+                inst.sendStatus(0,android.os.Bundle().apply { putLong("nativeIndependentReplyMs",elapsed); putString("answer",answer); putString("originalRequest","still blocked; injected wait, actual routing and reply model") })
+            }
+        } finally { release.countDown() }
     }
 
     @Test fun floatingPublishedToolKeepsFormWhilePetAcceptsAnotherOrder() {

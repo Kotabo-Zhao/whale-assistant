@@ -8,13 +8,14 @@ import { delegationApi, delegatedWriteAllowed, prepareDelegatedWorker } from './
 import { loadJSON, persistJSON, storedJSONFiles } from './worker-storage.js'
 import { beginWorkerHealth, recordWorkerHealth, acceptsWatchdogHold } from './worker-health.js'
 import { WorkerGoals, TASK_BUDGET, GOAL_BUDGET, budget, chargeElapsed } from './worker-goals.js'
+import { WorkerCoordinator } from './worker-coordinator.js'
+import { foregroundWaitDenial } from './foreground-policy.js'
 
 /**
  * Worker 回执的投递模式。
  *
- * `silent`（默认）：任务结果只留在任务台账里，事项页和 `mobile_workers` 的 status
- * 都能取回，但**不再**作为一条用户消息插进主人会话——之前那样会让 Worker 一完成就
- * 凭空开一个 turn，用户问别的事情时收到的却是旧任务的结果。
+ * `silent`（默认）：单条回执只留在台账和任务面板；由 WorkerCoordinator 合并变化后
+ * 在主人会话空闲时唤醒协调，避免每个 Worker 都抢占前台和重复插入旧结果。
  * `chat`：恢复旧的主动回传行为（想临时对比时把 DSH_WORKER_RECEIPT_MODE 设成 chat 即可）。
  */
 const RECEIPT_MODE = process.env.DSH_WORKER_RECEIPT_MODE === 'chat' ? 'chat' : 'silent'
@@ -23,7 +24,7 @@ const receiptSettled = item => ['delivered','suppressed','held_recovery'].includ
 
 /** 任何模式都允许的纯读取工具：文本、资料、记忆、事项检索。 */
 const reading = new Set(['read', 'glob', 'grep', 'read_image', 'web_search', 'web_fetch',
-  'mobile_superagent_read',
+  'mobile_superagent_read', 'mobile_context_recall', 'mobile_knowledge_hybrid_search', 'mobile_memory_hybrid_search',
   'mobile_memory_search', 'mobile_companion_capabilities', 'mobile_knowledge_search', 'mobile_knowledge_recent',
   'mobile_knowledge_read', 'mobile_knowledge_image', 'mobile_knowledge_status', 'mobile_task_search'])
 /**
@@ -41,6 +42,9 @@ const deviceRead = new Set(['mobile_device_capabilities', 'mobile_device_info', 
  * 屏幕内容（截图/控件树/屏幕陪看）与文件读写都放在这里：它们要么改变设备状态，要么暴露更大的内容面。
  */
 const deviceAction = new Set(['mobile_screen_recover', 'mobile_screen_sequence', 'mobile_screen_act', 'mobile_screen_observe', 'mobile_device_screenshot', 'mobile_device_ui_dump', 'mobile_device_tap',
+  'mobile_virtual_screen_state', 'mobile_virtual_screen_screenshot', 'mobile_virtual_screen_action', 'mobile_virtual_screen_config',
+  'mobile_virtual_screen_target', 'mobile_virtual_screen_tree', 'mobile_virtual_screen_shell',
+  'mobile_accessibility_tree', 'mobile_accessibility_action', 'mobile_accessibility_back',
   'mobile_device_swipe', 'mobile_device_input_text', 'mobile_device_keyevent', 'mobile_device_app_launch',
   'mobile_device_task', 'mobile_device_shell', 'mobile_see_now', 'mobile_device_file_list',
   'mobile_device_file_read', 'mobile_device_file_download', 'mobile_device_file_write',
@@ -49,8 +53,12 @@ const deviceAction = new Set(['mobile_screen_recover', 'mobile_screen_sequence',
  * Worker 工具边界（纯函数，便于单测）：read 模式 = 文本/资料/记忆/事项 + 设备只读状态查询；
  * device 模式在此之上再加设备操作与屏幕/文件类工具。`mobile_worker_report` 始终允许。
  */
-export function workerToolAllowed(mode, name) {
+const screenTools = new Set(['mobile_worker_report', 'mobile_device_capabilities', 'mobile_device_current_app',
+  'mobile_device_list_packages', 'mobile_device_app_launch', 'mobile_screen_observe', 'mobile_screen_act',
+  'mobile_screen_sequence', 'mobile_screen_recover', 'mobile_device_wait'])
+export function workerToolAllowed(mode, name, profile = 'full') {
   if (mode === 'create') return name === 'mobile_whale_feature' || name === 'mobile_worker_report'
+  if (mode === 'device' && profile === 'screen') return screenTools.has(name)
   if (name === 'mobile_worker_report' || reading.has(name) || deviceRead.has(name)) return true
   return mode === 'device' && deviceAction.has(name)
 }
@@ -239,6 +247,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
   const queue = new WorkerQueue(directory)
   const goals = new WorkerGoals(directory,queue.rows)
   for (const row of queue.rows.values()) if(row.group) goals.ensure(row.group,row.owner)
+  const coordinator = new WorkerCoordinator(directory, queue.rows, goals)
   let capacity = {}, capacityCheckedAt = 0
   const bound = new WeakSet()
   const compatible = new WeakSet()
@@ -246,6 +255,15 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
   const providerResumeAt = new Map()
   let pumping = false
   let disposed = false
+  let coordinatorTimer = null
+  function scheduleCoordination() {
+    if (disposed || coordinatorTimer !== null) return
+    coordinatorTimer = setTimeout(() => {
+      coordinatorTimer = null
+      void coordinator.pump(resolve, deliver).catch(() => {})
+    }, 4000)
+    coordinatorTimer.unref?.()
+  }
   let currentParent = '', superagent
   const parentDirectory = join(directory, 'superagent'), parentFile = join(parentDirectory, 'parent-session.json')
   if (existsSync(parentFile)) {
@@ -291,6 +309,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     if(row.group) goals.trackMembership(row.group)
     mirrorPending.set(row.id, { writeSeq: row.writeSeq, json: JSON.stringify(row) })
     void mirror(row.id).catch(() => {})
+    scheduleCoordination()
     armTier()
   }
   const bySession = id => [...queue.rows.values()].find(row => row.sessionId === id)
@@ -307,7 +326,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     const known = agent.session.snapshotEvents().some(event => event.type === 'user/message' && event.data.id === messageId)
       || [...agent.inbox.nextTurn, ...agent.inbox.nextStep].some(message => message.id === messageId)
     if (!known) agent.followup(freezeMessage({ id: messageId, role: 'user',
-      content: [{ type: 'text', text }], source: { kind: 'mobile-workers' } }))
+      content: [{ type: 'text', text }], source: { kind: key.startsWith('coord:') ? 'mobile-coordinator' : 'mobile-workers' } }))
     await ctx.sessionPersistence.flush()
   }
   // Report snapshots and delivery state stay with the task before any message is sent.
@@ -381,14 +400,16 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     // Guard execution and trim the inherited model catalog to the same capability
     // set. Keeping every mobile schema in every read/create turn wasted tokens.
     const visible = agent.ctx.tools.schemas?.(agent)
-    const allow = visible?.filter(tool => workerToolAllowed(row.mode,tool.name)).map(tool => tool.name)
+    const allow = visible?.filter(tool => workerToolAllowed(row.mode,tool.name,row.toolProfile)).map(tool => tool.name) ??
+      [...reading,...deviceRead,...deviceAction,'mobile_worker_report','mobile_whale_feature']
+        .filter(name => workerToolAllowed(row.mode,name,row.toolProfile))
     if(allow?.length && agent.ctx.tools.restrict) agent.ctx.tools.restrict({ allow })
     agent.ctx.tools.guard(execution => {
       if (row.state !== 'running' || row.reportState) return '任务已暂停或结束，请结束本轮。'
       if (row.recoveryRequired) return '工单记录正在恢复，等待用户在任务详情核对副本'
       const denied = execution.name !== 'mobile_worker_report' && goals.denial(row)
       if (denied) { blockWorker(row,denied); return denied }
-      if (workerToolAllowed(row.mode, execution.name)) return
+      if (workerToolAllowed(row.mode, execution.name,row.toolProfile)) return
       return '此 Worker 不允许该工具；需要用户补充时用 mobile_worker_report 报 waiting。'
     })
     if (row.mode === 'create') {
@@ -484,19 +505,28 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     } finally { pumping = false }
   }
   ctx.tools.guard(execution => {
+    if (execution.agent?.id && !bySession(execution.agent.id)) {
+      if (deviceAction.has(execution.name)) return '手机操作由 device Worker 执行。请用 mobile_workers start 委派用户本次明确要求的完整任务，接取后立即回复；前台继续接收聊天和调度。'
+      const denial = foregroundWaitDenial(execution)
+      if (denial) return denial
+    }
     const active = [...queue.rows.values()].find(row => row.mode === 'device' && ['running', 'starting', 'cancelling'].includes(row.state))
     if (active && deviceAction.has(execution.name) && execution.agent?.id !== active.sessionId) return '手机正由另一个 Worker 操作，请等待其结束或先取消。'
   })
   ctx.on('agent/created', ({ agent }) => { bind(agent) })
+  ctx.on('agent/status', ({ agent, status }) => {
+    if (status === 'idle' && !bySession(agent.id)) scheduleCoordination()
+  })
   ctx.on('session/event', (session, event) => {
     const row = bySession(session.id)
     if (!row) {
+      if (event.type === 'user/message') coordinator.consumed(session.id, event.data?.id)
       if (['sandbox/mode','approval/policy','permission/preset'].includes(event.type)) {
         for (const task of queue.rows.values()) if (task.owner === session.id && ['running','starting'].includes(task.state)) {
           blockWorker(task,'来源会话权限已变化，请在确认权限后继续原任务。')
         }
       }
-      if (event.type === 'user/message' && !['mobile-workers', 'mobile-screen-watch', 'dsh-answer-reviewer'].includes(event.data?.source?.kind)) rememberParent(session.id)
+      if (event.type === 'user/message' && !['mobile-workers', 'mobile-coordinator', 'mobile-screen-watch', 'dsh-answer-reviewer'].includes(event.data?.source?.kind)) rememberParent(session.id)
       return
     }
     if (event.type === 'user/message' && event.data?.source?.kind === 'mobile-workers') {
@@ -713,7 +743,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       if (pollAgain && !disposed) { pollAgain = false; void pollUi().catch(() => {}) }
     }
   }
-  function createWorker({ id = randomUUID(), owner, callId, title, task, mode, route, domainTicketId, domainAssignmentId, creationCommandId, group, source, requester, scope, dependsOn, priority, decisionReason, decisionEvidence, mandateStrength, taskBudget }) {
+  function createWorker({ id = randomUUID(), owner, callId, title, task, mode, route, domainTicketId, domainAssignmentId, creationCommandId, group, source, requester, scope, dependsOn, priority, decisionReason, decisionEvidence, mandateStrength, taskBudget, toolProfile }) {
     const existing = queue.rows.get(id)
     if (existing) return existing
     const row = { id, owner, callId: callId ?? id, sessionId: `session-worker-${id}`, title: (title || task).slice(0, 120),
@@ -722,6 +752,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       requester: requester || '', decisionReason: decisionReason || '', decisionEvidence: decisionEvidence || '', mandateStrength: mandateStrength || '',
       ...(domainTicketId ? { domainTicketId, domainAssignmentId } : {}) }
     row.budget = budget(taskBudget,TASK_BUDGET); row.budgetUsage = { tokens:0,calls:0,milliseconds:0 }
+    row.toolProfile = toolProfile === 'screen' && mode === 'device' ? 'screen' : 'full'
     if (group) goals.ensure(group,owner)
     if (creationCommandId) {
       row.workspace = join(directory,'workspaces',id)
@@ -765,6 +796,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     description: '管理本机各会话的后台 Worker。status 无 id 查看全部任务摘要，指定 group 只查看同一目标下的任务，带 id 查看完整记录；groups 按目标汇总任务状态和结果；start 创建任务，同一目标下多个任务使用同一 group；dependsOn 为必须先完成的任务 id 数组；priority 为 0 至 10，数字越大越优先，未指定为 0，action=priority 可修改已有任务优先级。add 追加信息；reply 回答追问；resume 在用户确认后继续中断任务；cancel 取消任务并撤回授权，已完成任务撤回后不能再自动续接。read 模式允许资料及设备只读状态查询；device 模式独占手机操作。结果和追问在桌宠任务面板主动显示；无需重复提交。',
     parameters: { action: { type: 'string', required: true, enum: ['start', 'status', 'groups', 'add', 'reply', 'resume', 'cancel', 'priority','budget'] },
       title: { type: 'string' }, task: { type: 'string' }, id: { type: 'string' }, group: { type: 'string' }, dependsOn: { type: 'array', items: { type: 'string' } }, priority: { type: 'number' }, mode: { type: 'string', enum: ['read', 'device'] },
+      toolProfile: { type: 'string', enum: ['screen','full'], description: '手机界面操作用 screen，只保留十个观察/操控工具，减少每轮模型输入；确需文件或 Shell 等其他设备工具时用 full。' },
       maxTokens:{type:'integer'},maxCalls:{type:'integer'},maxMinutes:{type:'integer'} },
     output: workerOutput,
     execute: async (args, exec) => {
@@ -796,11 +828,13 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       }
       if (args.action === 'start') {
         if (!args.task?.trim() || args.task.length > 16000) throw new Error('请提供具体任务，最多 16000 字')
+        if (args.toolProfile !== undefined && !['screen','full'].includes(args.toolProfile)) throw new Error('Worker 工具配置无效')
         if (args.priority !== undefined && (!Number.isInteger(args.priority) || args.priority < 0 || args.priority > 10)) throw new Error('优先级需要为 0 到 10 的整数')
         if (args.dependsOn && (!Array.isArray(args.dependsOn) || args.dependsOn.some(id => !queue.rows.has(id)))) throw new Error('依赖任务不存在，请先查询已有任务')
         const existing = [...queue.rows.values()].find(row => row.owner === owner && row.callId === exec.callId)
         if (existing && exec.callId) return result(existing)
-        const ticketId = await superagent.acceptPhone(owner, exec.callId || randomUUID(), args)
+        const taskBudget = changedBudget(args,TASK_BUDGET)
+        const ticketId = await superagent.acceptPhone(owner, exec.callId || randomUUID(), { ...args, taskBudget })
         const row = [...queue.rows.values()].find(item => item.domainTicketId === ticketId)
         if (!row) throw new Error('任务已创建，正在恢复派工')
         return result({ id: row.id, state: row.state, sessionId: row.sessionId })
@@ -864,6 +898,8 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
         creationCommandId: mode === 'create' && trigger.source === 'phone' ? trigger.meta?.creationCommandId : undefined,
         domainTicketId: ticket.id, domainAssignmentId: assignment.id,
         group: trigger.meta?.group, source: trigger.source, requester: ticket.mandate.actor?.id, scope: ticket.mandate.scope, dependsOn: trigger.meta?.dependsOn, priority: trigger.meta?.priority,
+        taskBudget: trigger.meta?.taskBudget,
+        toolProfile: trigger.meta?.toolProfile,
         decisionReason: (decision?.reason ?? []).map(item => item.values?.text || item.code).join('；'), decisionEvidence: decision?.audit?.evidence, mandateStrength: ticket.mandate.strength,
         task: `工作范围：${ticket.mandate.scope}\n来源 ${trigger.source} 的请求：\n${trigger.text}` })
     },
@@ -953,7 +989,7 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
   }
   function currentTier() {
     return heartbeatTier({ tasks: activeRowCount(queue.rows.values()), mirrors: mirrorPending.size,
-      pendingDeliveries: pendingDeliveryCount(),
+      pendingDeliveries: pendingDeliveryCount() + coordinator.pendingCount,
       channels: superagent?.hasEnabledSources?.() === true, settingsReady: settingsLoaded, hasTasks: queue.rows.size > 0 })
   }
   function armTier() {
@@ -967,6 +1003,8 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
   }
   function tick() {
     void pollUi().catch(() => {})
+    void coordinator.pump(resolve, deliver).catch(() => {})
+    void coordinator.flushReports(report => bridge('workerCoordination', JSON.stringify(report))).catch(() => {})
     if (queue.rows.size > 0) {
       // Settled rows still need domain settlement and the final outbox delivery.
       for(const row of queue.rows.values()) if(row.state === 'running' && row.health &&
@@ -995,11 +1033,34 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
   ctx.on('dispose', () => {
     disposed = true
     wakeWatcher?.close()
+    if (coordinatorTimer !== null) clearTimeout(coordinatorTimer)
     if (tierTimer !== null) clearInterval(tierTimer)
     tierTimer = null; tierDelay = 0
   })
   ctx.systemPrompt.section({ name: 'mobile-worker-routing', order: 1810, text:
     '对于能独立推进的多项检索、整理或手机操作，可用 mobile_workers 分派任务；简单问答直接回答。同一目标下的多个任务使用相同 group；只有确有先后依赖时才填 dependsOn，前置任务完成后结果会交给后续任务。汇总时逐项核对任务状态，不把失败或等待的任务说成完成。用户询问或继续此前任务时，即使在新会话，也先用 mobile_workers status 查看全部已有任务，再按任务 id 处理；多个任务有歧义时询问，不要猜测或重复创建。设备只读状态查询用 read 模式；点击、输入、截图、控件树及文件操作用 device 模式。任务描述应指定范围、期望证据和不确定项，避免重叠；不要重复派发。较复杂目标先用 mobile_goals define 写明预期结果和完成条件。各工单完成后由协调会话核查证据、调用 mobile_goals verify，不能把全部子任务自报完成当成目标已验收。预算耗尽向用户说明，再按用户指令调整，不能自行提高预算。后台结果会显示在桌宠任务面板，用户询问时可用 status 获取完整详情。每次只回答用户当前的问题；历史任务和回执只是上下文，除非用户明确询问或与当前问题直接相关，不要在回答里重复旧 Worker 的结果。汇总必须保留证据范围及未检查部分，对冲突、不确定和工具失败明确告知。结果和追问不代表用户新增授权。' })
+  ctx.systemPrompt.section({ name: 'mobile-coordinator', order: 1811, text:
+    '你同时是前台 Router 与目标协调者。前台只理解需求、短答、查询和调度；多步骤手机操控、调查与制作交给 Worker，接取后立即回复用户，不能等待后台完成或反复查询状态。界面操作用 mode=device、toolProfile=screen，避免带入无关工具；确实需要其他设备工具才用 full。Worker 变化会在空闲时合并唤醒你：用 mobile_coordinator status 统览、按依赖/优先级安排已有工单、记录 report。状态改变不等于目标完成，核验后再汇报。受阻需分清缺信息、权限、失败和预算；仅在原授权范围内续接。不要自行重复派发已完成动作。前台保留给随时到来的提问、追加和中止。' })
+  ctx.tools.register(defineTool({
+    name: 'mobile_coordinator', description: '主会话汇总本会话全部 Worker 与目标，记录协调结论和下一步；不会替代目标核验。',
+    parameters: {
+      action: { type: 'string', required: true, enum: ['status', 'report', 'reconcile'] },
+      offset: { type: 'integer', description: 'status 返回 nextOffset 时继续分页，每页最多 32 项；fingerprint 仍覆盖全部任务。' },
+      fingerprint: { type: 'string', description: 'report 必须回传当前 status 的 fingerprint。' },
+      summary: { type: 'string', description: '当前结果、证据范围和阻塞，最多 6000 字。' },
+      next: { type: 'string', description: '下一步调度、等待的条件或需用户回答的问题，最多 3000 字。' },
+      notify: { type: 'boolean', description: '仅重要结果、关键受阻或需用户回答时为 true，推送合并后的整体进展；普通进度省略或 false。' },
+    }, output: workerOutput,
+    execute: async (args, exec) => {
+      if (bySession(exec.agent.id)) throw new Error('Worker 不能代替主会话协调目标')
+      const value = args.action === 'status' ? coordinator.status(exec.agent.id, args.offset ?? 0) :
+        args.action === 'reconcile' ? coordinator.reconcile(exec.agent.id, args.fingerprint) :
+        args.action === 'report' ? coordinator.report(exec.agent.id, args.fingerprint, args.summary, args.next, args.notify === true) : null
+      if (!value) throw new Error('未知协调操作')
+      if (args.action === 'report') await coordinator.flushReports(report => bridge('workerCoordination', JSON.stringify(report)))
+      return { text: JSON.stringify(value) }
+    }, presentCall: () => ({ title: '协调后台任务' }),
+  }))
   for (const row of queue.rows.values()) {
     // Upgrade old ledgers without fabricating delivery receipts for already notified reports.
     if (!row.recoveryRequired) for (const report of row.reports) if (!report.recoveryHeld && report.revision > (row.notifiedRevision ?? 0)) queueReport(row, report)
@@ -1031,5 +1092,5 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
     }
     return reply
   }
-  return { queue, goals, pump, bySession, authorDraft, superagent, syncDomainReports, flushNotifications: notify }
+  return { queue, goals, coordinator, pump, bySession, authorDraft, superagent, syncDomainReports, flushNotifications: notify }
 }

@@ -232,7 +232,8 @@ export function installSuperagent(ctx, { directory, bridge, defineTool, output, 
     }
     const trigger = { id: triggerId, source: 'phone', threads: [{ source: 'phone', id: matter ? 'matter:'+matter.id : triggerId }],
       actor: { source: 'phone', id: session }, human: true, addressed: 'direct', at: new Date().toISOString(), text: args.task,
-      channel: { source: 'phone', thread: triggerId, address: { session } }, meta: { session, ...(creationCommandId ? { creationCommandId } : {}), group: (args.group || '').trim().slice(0, 120), dependsOn: args.dependsOn || [], priority: args.priority || 0 } }
+      channel: { source: 'phone', thread: triggerId, address: { session } }, meta: { session, ...(creationCommandId ? { creationCommandId } : {}), group: (args.group || '').trim().slice(0, 120), dependsOn: args.dependsOn || [], priority: args.priority || 0,
+        ...(args.taskBudget ? { taskBudget: args.taskBudget } : {}), ...(args.toolProfile ? { toolProfile: args.toolProfile } : {}) } }
     domain.receive(trigger)
     const decision = domain.decide(triggerId, { kind: 'accept', title: (args.title || args.task).slice(0, 120),
       scope: args.task, reason: creationCommandId ? '用户交办工具创作' : '主会话派发', audit: { mode: creationCommandId ? 'create' : args.mode === 'device' ? 'device' : 'read' } })
