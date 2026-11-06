@@ -69,6 +69,7 @@ class WhalePetRenderDeviceTest {
             val displayTransitions = screenChanges.get() - startScreenChanges
             inst.sendStatus(0, Bundle().apply {
                 putString("state", name); putLong("sampleMs", duration); putLong("processCpuMs", cpu)
+                putBoolean("systemPowerSave",screen.isPowerSaveMode)
                 putBoolean("frameScheduled", frameRunning()); putLong("processPssKiB", android.os.Debug.getPss())
                 putInt("temperatureDeciC",endBattery.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE,-1))
                 putInt("startTemperatureDeciC",startBattery.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE,-1))

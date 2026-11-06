@@ -5,12 +5,15 @@ internal data class PetCelSample(val clip: String, val frame: Int, val nextMs: L
 
 internal class PetCelClip(
     val name: String, val holds: List<PetCelHold>, val still: Int = 0, val loopFrom: Int = 0,
+    val cells: Int = 8,
 ) {
+    val rows get() = cells / PetCels.COLUMNS
     val duration = holds.sumOf { it.millis }.toLong()
     private val loopDuration = holds.drop(loopFrom).sumOf { it.millis }.toLong()
     init {
-        require(holds.isNotEmpty() && holds.all { it.frame in 0..7 && it.millis > 0 })
-        require(still in 0..7 && loopFrom in holds.indices)
+        require(cells in listOf(8, 16))
+        require(holds.isNotEmpty() && holds.all { it.frame in 0 until cells && it.millis > 0 })
+        require(still in 0 until cells && loopFrom in holds.indices)
     }
     fun sample(elapsed: Long): PetCelSample {
         var t = elapsed.coerceAtLeast(0)
@@ -25,37 +28,35 @@ internal class PetCelClip(
     }
 }
 
-/** Each name is an independently drawn, complete eight-cel asset. No shared skeleton or eye overlay. */
+/** Each name owns complete illustrated cels. Held poses rest; gestures use dense, short-spaced drawings. */
 internal object PetCels {
     const val CELL = 320
     const val COLUMNS = 4
-    const val ROWS = 2
     const val IDLE_CYCLE = 24_000L
     const val DRINK_AT = 16_000L
     const val DRINK_END = 20_500L
-    private fun clip(name: String, vararg millis: Int, still: Int = 0, loopFrom: Int = 0) =
-        PetCelClip(name, millis.mapIndexed { i, ms -> PetCelHold(i, ms) }, still, loopFrom)
+    private fun clip(name: String, vararg millis: Int, still: Int = 0, loopFrom: Int = 0, cells: Int = 8) =
+        PetCelClip(name, millis.mapIndexed { i, ms -> PetCelHold(i, ms) }, still, loopFrom, cells)
 
     val clips = listOf(
         clip("idle", 1600, 70, 80, 110, 1800, 450, 90, 1000),
-        clip("drink", 1000, 250, 250, 300, 650, 350, 400, 1300),
-        clip("reading", 3000, 180, 200, 240, 240, 240, 350, 2200),
-        clip("writing", 600, 180, 200, 220, 700, 140, 200, 900),
-        clip("control", 400, 120, 120, 160, 120, 300, 100, 600),
-        clip("accept", 120, 160, 200, 220, 200, 220, 200, 380, still = 2),
-        PetCelClip("ask", listOf(PetCelHold(2,900), PetCelHold(3,450), PetCelHold(4,120),
-            PetCelHold(5,1700), PetCelHold(6,1330)), still = 3),
-        clip("celebrate", 180, 180, 220, 400, 220, 220, 300, 480, still = 7),
-        clip("setback", 300, 250, 400, 300, 300, 350, 300, 500, still = 7),
-        clip("touch", 90, 110, 140, 180, 170, 140, 100, 120, still = 6),
-        clip("observe", 1600, 350, 1400, 100, 1600, 600, 350, 1300),
-        clip("wait", 2000, 500, 110, 1800, 700, 600, 450, 1600),
-        clip("paused", 160, 180, 200, 1800, 110, 1300, 450, 1600, still = 3, loopFrom = 3),
-        clip("stopped", 200, 220, 300, 250, 300, 1000, 1200, 1800, still = 7, loopFrom = 5),
-        clip("error", 400, 250, 350, 500, 400, 110, 1200, 1800, still = 6, loopFrom = 6),
-        clip("reply", 150, 230, 330, 260, 350, 120, 360, 600, still = 7),
-        clip("notice", 300, 280, 400, 160, 350, 700, 450, 760, still = 5),
-        clip("drag", 220, 220, 300, 110, 300, 300, 300, 300, still = 0),
+        clip("drink", 600, 80, 80, 80, 80, 80, 80, 200, 400, 80, 80, 80, 80, 80, 80, 2340, cells = 16),
+        clip("reading", 1200, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 100, 1800, cells = 16),
+        clip("writing", 300, 80, 80, 80, 80, 80, 80, 80, 80, 80, 400, 90, 80, 80, 80, 900, cells = 16),
+        clip("control", 300, 80, 80, 80, 80, 80, 80, 180, 80, 80, 80, 80, 80, 100, 80, 300, cells = 16),
+        clip("accept", 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 500, still = 10, cells = 16),
+        clip("ask", 400, 80, 80, 80, 80, 80, 1600, 80, 80, 80, 600, 80, 80, 80, 80, 940, still = 6, cells = 16),
+        clip("celebrate", 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 1000, still = 15, cells = 16),
+        clip("setback", 300, 80, 80, 80, 80, 80, 80, 80, 300, 80, 80, 80, 80, 80, 80, 1060, still = 15, cells = 16),
+        clip("touch", 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 150, still = 6, cells = 16),
+        clip("observe", 1600, 120, 1600, 100, 1800, 160, 120, 1800),
+        clip("wait", 2000, 90, 100, 2000, 140, 180, 140, 1800),
+        clip("paused", 80, 90, 100, 1800, 100, 1600, 120, 1800, still = 3, loopFrom = 3),
+        clip("stopped", 100, 100, 120, 180, 120, 1200, 90, 1800, still = 7, loopFrom = 5),
+        clip("error", 300, 100, 120, 500, 120, 90, 1400, 1800, still = 6, loopFrom = 6),
+        clip("reply", 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 1200, still = 6, cells = 16),
+        clip("notice", 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 2200, still = 13, cells = 16),
+        clip("drag", 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, still = 0, cells = 16),
     ).associateBy { it.name }
     val actionClips = mapOf(
         PetAction.IDLE to "idle", PetAction.THINK to "reading", PetAction.WORK to "writing",

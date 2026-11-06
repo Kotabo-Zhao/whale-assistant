@@ -138,5 +138,103 @@
       "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-043a9306-9b15-44fc-9113-8916d0dd9fc4.png",
       "promptFile": "prompts/drag.txt"
     }
+  ],
+  "revisions": [
+    {
+      "reason": "用户反馈第一轮样片卡顿：补画独立中间姿态并缩短动作段停留",
+      "source": "native image_gen",
+      "clips": [
+        {
+          "name": "drink",
+          "sourceFile": "sources/drink-smooth16.png",
+          "promptFile": "prompts/drink-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-f5c12fc6-5dc6-4218-93cb-3ea1afc6e6a3.png",
+          "cells": 16
+        },
+        {
+          "name": "reading",
+          "sourceFile": "sources/reading-smooth16.png",
+          "promptFile": "prompts/reading-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-b6f0bc3c-93f6-4159-8a82-a4098df9daa5.png",
+          "cells": 16
+        },
+        {
+          "name": "writing",
+          "sourceFile": "sources/writing-smooth16.png",
+          "promptFile": "prompts/writing-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-57797597-ebce-4355-bd52-cdd319c75bcf.png",
+          "cells": 16
+        },
+        {
+          "name": "control",
+          "sourceFile": "sources/control-smooth16.png",
+          "promptFile": "prompts/control-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-dffd3672-6960-444c-9dd8-380170fbfd0e.png",
+          "cells": 16
+        }
+      ]
+    },
+    {
+      "reason": "扩展交互动作的独立中间姿态，并重画询问、清理庆祝背景",
+      "source": "native image_gen",
+      "clips": [
+        {
+          "name": "ask",
+          "sourceFile": "sources/ask-smooth16.png",
+          "promptFile": "prompts/ask-smooth16-v2.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-9aa22017-75d3-439d-a51a-3ab539caf563.png",
+          "cells": 16
+        },
+        {
+          "name": "celebrate",
+          "sourceFile": "sources/celebrate-smooth16.png",
+          "promptFile": "prompts/celebrate-smooth16-clean.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-548c991b-be47-478a-87b2-deaea77e4c00.png",
+          "cells": 16
+        },
+        {
+          "name": "accept",
+          "sourceFile": "sources/accept-smooth16.png",
+          "promptFile": "prompts/accept-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-6174ec17-5c89-417d-9b27-77efe6801130.png",
+          "cells": 16
+        },
+        {
+          "name": "setback",
+          "sourceFile": "sources/setback-smooth16.png",
+          "promptFile": "prompts/setback-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-24d55898-4aa2-469e-b9cc-c45fba11372f.png",
+          "cells": 16
+        },
+        {
+          "name": "touch",
+          "sourceFile": "sources/touch-smooth16.png",
+          "promptFile": "prompts/touch-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-88eb2e4f-6f42-45cf-b0ba-21691cf9a3d8.png",
+          "cells": 16
+        },
+        {
+          "name": "reply",
+          "sourceFile": "sources/reply-smooth16.png",
+          "promptFile": "prompts/reply-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-dc811107-998e-4ab6-9a22-355a073dfd33.png",
+          "cells": 16
+        },
+        {
+          "name": "notice",
+          "sourceFile": "sources/notice-smooth16.png",
+          "promptFile": "prompts/notice-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-784067cf-7f06-4c95-bcf6-3589eaa7d039.png",
+          "cells": 16
+        },
+        {
+          "name": "drag",
+          "sourceFile": "sources/drag-smooth16.png",
+          "promptFile": "prompts/drag-smooth16.txt",
+          "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-ddf5acda-654d-4080-a315-545ffcfb7380.png",
+          "cells": 16
+        }
+      ]
+    }
   ]
 }

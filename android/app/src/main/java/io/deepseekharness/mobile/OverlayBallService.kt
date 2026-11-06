@@ -1046,12 +1046,13 @@ class OverlayBallService : Service() {
                     companionFrame=null;return
                 }
                 val now = SystemClock.uptimeMillis()
-                val pose=petActing.sample(now)
+                val current=petActing.sample(now)
+                // Save power during ambient rest, not by turning hand gestures into a 5 FPS slideshow.
+                val pose=if(petPowerSave && current.action==PetAction.IDLE) current.copy(reduced=true) else current
                 drawable.setPose(pose)
                 // Held cels sleep until their next boundary. No mesh, separate blink tick or idle FPS loop.
-                val celDelay=drawable.nextFrameDelayMs.coerceAtLeast(if(petPowerSave) 200L else 1L)
-                val delay=minOf(celDelay,petActing.untilStateChange(now)).coerceIn(1L,60_000L)
-                hintHandler.postAtTime(this,now+delay)
+                val delay=minOf(drawable.nextFrameDelayMs,petActing.untilStateChange(now))
+                if(delay!=Long.MAX_VALUE) hintHandler.postAtTime(this,now+delay.coerceIn(1L,60_000L))
             }
         }
         companionFrame?.run()

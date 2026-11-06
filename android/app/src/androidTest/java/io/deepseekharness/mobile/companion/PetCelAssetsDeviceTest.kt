@@ -28,7 +28,7 @@ class PetCelAssetsDeviceTest {
                 }
                 inst.runOnMainSync {
                     assertTrue(pet.cachedAtlasCount <= CompanionPetDrawable.MAX_ATLASES)
-                    assertTrue(pet.cachedBitmapBytes <= 3L * 1280 * 640 * 4)
+                    assertTrue(pet.cachedBitmapBytes <= 3L * 1280 * 1280 * 4)
                 }
             }
         } finally {
@@ -36,7 +36,7 @@ class PetCelAssetsDeviceTest {
             worker.shutdownNow()
         }
     }
-    @Test fun allAuthoredSheetsHaveEightTransparentBoundedCells() {
+    @Test fun allAuthoredSheetsHaveTheDeclaredTransparentBoundedCells() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val digests = mutableSetOf<String>()
         for (name in PetCels.clips.keys) {
@@ -44,8 +44,9 @@ class PetCelAssetsDeviceTest {
             digests.add(java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) })
             val image = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             try {
-                assertEquals(1280, image.width); assertEquals(640, image.height)
-                for (frame in 0..7) {
+                val clip=PetCels.clips.getValue(name)
+                assertEquals(1280, image.width); assertEquals(clip.rows*320, image.height)
+                for (frame in 0 until clip.cells) {
                     val x = frame % 4 * 320; val y = frame / 4 * 320
                     val pixels = IntArray(320 * 320)
                     image.getPixels(pixels, 0, 320, x, y, 320, 320)

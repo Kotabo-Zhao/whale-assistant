@@ -14,12 +14,14 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 def pack(name):
-    path = SOURCES / f"{name}.png"
+    smooth = SOURCES / f"{name}-smooth16.png"
+    path = smooth if smooth.exists() else SOURCES / f"{name}.png"
+    count, rows = (16, 4) if smooth.exists() else (8, 2)
     raw = Image.open(path).convert("RGBA")
     frames, anchors = [], []
-    for i in range(8):
+    for i in range(count):
         left, right = round((i % 4) * raw.width / 4), round((i % 4 + 1) * raw.width / 4)
-        top, bottom = round((i // 4) * raw.height / 2), round((i // 4 + 1) * raw.height / 2)
+        top, bottom = round((i // 4) * raw.height / rows), round((i // 4 + 1) * raw.height / rows)
         frame = raw.crop((left, top, right, bottom))
         a = np.asarray(frame.getchannel("A"))
         if np.mean(a > 200) > .78:
@@ -31,7 +33,7 @@ def pack(name):
         foot_x = float(np.median(xs[ys > floor - 30]))
         anchors.append((foot_x, floor))
         frames.append(frame)
-    atlas = Image.new("RGBA", (1280, 640))
+    atlas = Image.new("RGBA", (1280, 320 * rows))
     qa = []
     for i, frame in enumerate(frames):
         # Fixed feet registration corrects camera drift, not body pose. Preserve authored flight.
@@ -59,7 +61,7 @@ def pack(name):
     target = OUTPUT / f"{name}.webp"
     atlas.save(target, "WEBP", lossless=True, method=6, exact=True)
     return {"name":name,"source":str(path.relative_to(ROOT)).replace("\\","/"),
-            "sourceSha256":sha(path),"sourceSize":list(raw.size),"atlasSize":[1280,640],
+            "sourceSha256":sha(path),"sourceSize":list(raw.size),"atlasSize":list(atlas.size),"cells":count,
             "assetSha256":sha(target),"assetBytes":target.stat().st_size,
             "registration":"fixed cell center, flight preserved" if name in AIRBORNE else "fixed cell center and feet, same scale for all frames",
             "frames":qa,"visualAcceptance":"requires per-action visual review; geometry checks are not aesthetic approval"}

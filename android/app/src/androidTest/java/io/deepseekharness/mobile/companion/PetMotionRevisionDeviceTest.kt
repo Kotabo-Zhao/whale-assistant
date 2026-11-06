@@ -14,6 +14,64 @@ import java.io.File
 class PetMotionRevisionDeviceTest {
     private val inst=InstrumentationRegistry.getInstrumentation()
     private val app=inst.targetContext
+    @Test fun powerSaverRestsIdleWithoutReducingGestureCadence() {
+        val prefs=CompanionStore(app);val reduced=prefs.reduceMotion
+        val store=io.deepseekharness.mobile.runtime.RuntimeStore(app);val enabled=store.overlayBallEnabled()
+        val wasRunning=OverlayBallService.isRunning
+        var restoreDirector:(()->Unit)?=null
+        try {
+            prefs.reduceMotion=false;store.setOverlayBallEnabled(true)
+            io.deepseekharness.mobile.DeviceControlState.resume()
+            inst.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+            OverlayBallService.start(app)
+            PetControlDeviceUi.await("visible decoded pet") {
+                OverlayBallService.updateForHostAppForeground(false)
+                PetControlDeviceUi.service()?.let{PetControlDeviceUi.field(it,"petDrawable")}!=null
+            }
+            val service=PetControlDeviceUi.service() as OverlayBallService
+            val pet=PetControlDeviceUi.field(service,"petDrawable") as CompanionPetDrawable
+            val actor=PetControlDeviceUi.field(service,"petActing") as PetActing
+            inst.runOnMainSync {
+                val running=actor.runningTasks;val waiting=actor.waitingTasks
+                val dragging=actor.dragging;val thinking=actor.chatThinking
+                restoreDirector={actor.runningTasks=running;actor.waitingTasks=waiting;actor.dragging=dragging;actor.chatThinking=thinking}
+                actor.runningTasks=0;actor.waitingTasks=0;actor.dragging=false
+                service.javaClass.getDeclaredField("petPowerSave").apply{isAccessible=true}.setBoolean(service,true)
+                service.updatePetConversationState("idle")
+            }
+            PetControlDeviceUi.await("power-saving ambient still") {
+                var resting=false
+                inst.runOnMainSync {resting=pet.currentPose.action==PetAction.IDLE && pet.currentPose.reduced}
+                resting
+            }
+            inst.runOnMainSync {
+                val callback=PetControlDeviceUi.field(service,"companionFrame") as Runnable
+                val handler=PetControlDeviceUi.field(service,"hintHandler") as android.os.Handler
+                if(android.os.Build.VERSION.SDK_INT>=29) assertFalse("Ambient still must not poll",handler.hasCallbacks(callback))
+                service.updatePetConversationState("thinking")
+            }
+            PetControlDeviceUi.await("reading gesture begins") {
+                var moving=false
+                inst.runOnMainSync {moving=pet.displayedClipName=="reading" && pet.currentCel.frame in 1..4 && !pet.currentPose.reduced}
+                moving
+            }
+            val seen=mutableSetOf<Int>();val until=SystemClock.uptimeMillis()+1100
+            while(SystemClock.uptimeMillis()<until) {
+                inst.runOnMainSync {seen.add(pet.currentCel.frame)}
+                Thread.sleep(20)
+            }
+            assertTrue("Gesture should not be clamped to 5 FPS: $seen",seen.size>=8)
+            inst.sendStatus(0,android.os.Bundle().apply{putInt("gestureCellsIn1100ms",seen.size);putBoolean("powerSaverIdleNoPolling",true)})
+        } finally {
+            prefs.reduceMotion=reduced;store.setOverlayBallEnabled(enabled)
+            inst.runOnMainSync {
+                (PetControlDeviceUi.service() as? OverlayBallService)?.updatePetConversationState("idle")
+                restoreDirector?.invoke()
+                OverlayBallService.applyCompanionMotionPreference()
+            }
+            if(!wasRunning) OverlayBallService.stop(app)
+        }
+    }
     @Test fun animatorSettingStopsAllFramesAndRestartsWithoutScreenCycle() {
         val prefs=CompanionStore(app);val reduced=prefs.reduceMotion
         val store=io.deepseekharness.mobile.runtime.RuntimeStore(app);val enabled=store.overlayBallEnabled()

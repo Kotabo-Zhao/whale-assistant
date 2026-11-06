@@ -48,7 +48,8 @@ internal class CompanionPetDrawable(
                 inSampleSize = sample; inScaled = false; inPreferredConfig = Bitmap.Config.ARGB_8888
             })
         } ?: error("Missing pet animation: $name")
-        require(bitmap.width % PetCels.COLUMNS == 0 && bitmap.height % PetCels.ROWS == 0)
+        val rows = PetCels.clips.getValue(name).rows
+        require(bitmap.width % PetCels.COLUMNS == 0 && bitmap.height == bitmap.width / PetCels.COLUMNS * rows)
         return bitmap
     }
 
@@ -118,7 +119,7 @@ internal class CompanionPetDrawable(
     override fun draw(canvas: Canvas) {
         if (closed) return
         val cellW = displayed.width / PetCels.COLUMNS
-        val cellH = displayed.height / PetCels.ROWS
+        val cellH = displayed.height / PetCels.clips.getValue(displayedClip).rows
         val col = displayedFrame % PetCels.COLUMNS
         val row = displayedFrame / PetCels.COLUMNS
         source.set(col * cellW, row * cellH, (col + 1) * cellW, (row + 1) * cellH)

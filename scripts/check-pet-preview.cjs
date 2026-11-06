@@ -15,27 +15,28 @@ const {chromium} = require(process.env.PET_PLAYWRIGHT_MODULE || path.join(out, '
     await page.goto(pathToFileURL(path.join(out,'独立动作预览.html')).href);
     await page.waitForFunction(()=>window.PET_READY===true);
     await page.locator('#play').click();
-    const names=await page.evaluate(()=>Object.keys(window.PET_PREVIEW.data));
+    const layout=await page.evaluate(()=>Object.fromEntries(Object.entries(window.PET_PREVIEW.data).map(([n,d])=>[n,d.cells])));
+    const names=Object.keys(layout);
     assert.equal(names.length,18);
     for(const name of names) {
       await page.selectOption('#action',name);
-      for(let frame=0;frame<8;frame++) {
+      for(let frame=0;frame<layout[name];frame++) {
         const state=await page.evaluate(n=>{window.PET_PREVIEW.frame(n);return window.PET_PREVIEW.state()},frame);
         assert.equal(state.frame,frame);assert.equal(state.playing,false);
         assert.equal(state.selected,name);
       }
     }
     await page.selectOption('#action','drink');
-    await page.evaluate(()=>window.PET_PREVIEW.frame(4));
+    await page.evaluate(()=>window.PET_PREVIEW.frame(8));
     await page.screenshot({path:path.join(out,'浏览器实际预览.png')});
     await page.locator('#play').click();
     const during=await page.evaluate(()=>window.PET_PREVIEW.state());
-    assert.equal(during.frame,4);assert.equal(during.playing,true);
+    assert.equal(during.frame,8);assert.equal(during.playing,true);
     await page.waitForTimeout(750);
     const after=await page.evaluate(()=>window.PET_PREVIEW.state());
-    assert.ok(after.frame>=5,'Playback must resume from selected frame, not reset to the old clock');
+    assert.ok(after.frame>=9,'Playback must resume from selected frame, not reset to the old clock');
     assert.deepEqual(errors,[]);
-    const result={actions:names.length,inspectedCells:names.length*8,controls:'pass',consoleErrors:errors,
+    const result={actions:names.length,inspectedCells:Object.values(layout).reduce((s,n)=>s+n,0),controls:'pass',consoleErrors:errors,
       note:'Controls and image loading only; visual acceptance requires playback review.'};
     fs.writeFileSync(path.join(out,'preview-check.json'),JSON.stringify(result,null,2)+'\n');
     console.log(JSON.stringify(result));

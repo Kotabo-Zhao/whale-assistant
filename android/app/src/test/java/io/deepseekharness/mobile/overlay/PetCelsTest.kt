@@ -15,7 +15,7 @@ class PetCelsTest {
             var t = 0L
             while (t < clip.duration * 4) {
                 val sample = clip.sample(t)
-                assertTrue(sample.frame in 0..7)
+                assertTrue(sample.frame in 0 until clip.cells)
                 assertTrue(sample.nextMs > 0)
                 val held = clip.sample(t + sample.nextMs - 1)
                 assertEquals(sample.frame, held.frame)

@@ -7,11 +7,13 @@ const {chromium}=require(process.env.PET_PLAYWRIGHT_MODULE || path.join(out,'qa-
  const browser=await chromium.launch({headless:true,executablePath:process.env.PET_BROWSER||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
  try {
   const page=await browser.newPage({viewport:{width:1280,height:440}});
+  const errors=[];page.on('pageerror',e=>errors.push(String(e)));
   await page.goto(pathToFileURL(path.join(out,'独立动作预览.html')).href);
   await page.waitForFunction(()=>window.PET_READY===true);
-  const video=await page.evaluate(async()=>{
+  const video=await page.evaluate(async(group)=>{
    const data=window.PET_PREVIEW.data,images={};
    for(const [name,value] of Object.entries(data)) {const im=new Image();im.src=value.url;await im.decode();images[name]=im}
+   window.PET_PREVIEW.frame(0); // stop the inspection player's timer before replacing its DOM
    document.body.replaceChildren();
    const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=440;document.body.append(canvas);
    const ctx=canvas.getContext('2d');const stream=canvas.captureStream(30);
@@ -24,8 +26,10 @@ const {chromium}=require(process.env.PET_PLAYWRIGHT_MODULE || path.join(out,'qa-
     for(let i=first;i<d.holds.length;i++){if(t<d.holds[i][1])return d.holds[i][0];t-=d.holds[i][1]}}
    function draw(t){
     ctx.fillStyle='#132333';ctx.fillRect(0,0,1280,440);
-    const names=t<16000?['drink','reading','writing','control']:t<20000?['accept','reply','stopped','paused']:['idle','ask','notice','error'];
-    const offset=t<16000?0:t<20000?16000:20000;
+    const names=group==='reactions'
+      ?(t<8000?['accept','ask','celebrate','setback']:t<16000?['touch','reply','notice','drag']:['observe','wait','paused','error'])
+      :(t<16000?['drink','reading','writing','control']:t<20000?['accept','reply','stopped','paused']:['idle','ask','notice','error']);
+    const offset=group==='reactions'?(t<8000?0:t<16000?8000:16000):(t<16000?0:t<20000?16000:20000);
     names.forEach((name,i)=>{const f=cel(name,t-offset);
      ctx.fillStyle=i%2?'#0a1017':'#eaf1f5';ctx.fillRect(i*320+6,52,308,320);
      ctx.drawImage(images[name],f%4*320,Math.floor(f/4)*320,320,320,i*320+28,82,264,264);
@@ -37,7 +41,8 @@ const {chromium}=require(process.env.PET_PLAYWRIGHT_MODULE || path.join(out,'qa-
    await new Promise(resolve=>{function tick(){const t=performance.now()-start;draw(Math.min(t,23999));if(t<24000)requestAnimationFrame(tick);else resolve()}requestAnimationFrame(tick)});
    recorder.stop();const blob=await done;stream.getTracks().forEach(t=>t.stop());
    return await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.readAsDataURL(blob)});
-  });
-  const file=path.join(out,'独立动作素材回放.webm');fs.writeFileSync(file,Buffer.from(video,'base64'));console.log(file);
+  },process.env.PET_MOVIE_GROUP||'props');
+  if(errors.length)throw new Error(errors.join('\n'));
+  const file=path.join(out,(process.env.PET_MOVIE_NAME||'顺滑修订回放')+'.webm');fs.writeFileSync(file,Buffer.from(video,'base64'));console.log(file);
  } finally {await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

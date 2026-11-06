@@ -15,21 +15,24 @@ names={"idle":"安静待机","drink":"举杯喝水","reading":"阅读翻页","wr
 clips={}
 for match in re.finditer(r'clip\("([a-z]+)",([^)]*)\)',source):
     name,body=match.groups()
-    times=[];loop=0;still=0
+    times=[];loop=0;still=0;cells=8
     for arg in body.split(","):
         arg=arg.strip()
         if re.fullmatch(r"\d+",arg):times.append(int(arg))
         elif arg.startswith("loopFrom"):loop=int(arg.split("=")[1])
         elif arg.startswith("still"):still=int(arg.split("=")[1])
-    clips[name]={"holds":[[i,t] for i,t in enumerate(times)],"loop":loop,"still":still}
-ask=re.search(r'PetCelClip\("ask",(.+?)\), still = (\d+)\)',source,re.S)
-assert ask,"Missing authored ASK timings"
-clips["ask"]={"holds":[list(map(int,p)) for p in re.findall(r"PetCelHold\((\d+),(\d+)\)",ask[1])],"loop":0,"still":int(ask[2])}
+        elif arg.startswith("cells"):cells=int(arg.split("=")[1])
+    clips[name]={"holds":[[i,t] for i,t in enumerate(times)],"loop":loop,"still":still,"cells":cells}
+if "ask" not in clips:
+    ask=re.search(r'PetCelClip\("ask",(.+?)\), still = (\d+)\)',source,re.S)
+    assert ask,"Missing authored ASK timings"
+    clips["ask"]={"holds":[list(map(int,p)) for p in re.findall(r"PetCelHold\((\d+),(\d+)\)",ask[1])],"loop":0,"still":int(ask[2]),"cells":8}
 assert set(clips)==set(names)
 data={}
 for name in names:
     path=ASSETS/f"{name}.webp"
     if not path.exists():raise ValueError(f"Missing atlas: {name}")
+    assert Image.open(path).size==(1280,clips[name]['cells']//4*320),f"Wrong cell layout: {name}"
     data[name]={**clips[name],"label":names[name],"url":"data:image/webp;base64,"+base64.b64encode(path.read_bytes()).decode()}
 
 html=r"""<!doctype html><html lang="zh-CN"><meta charset="UTF-8">
@@ -64,7 +67,8 @@ function sample(name,t){const d=DATA[name],total=d.holds.reduce((s,h)=>s+h[1],0)
  for(let i=start;i<d.holds.length;i++){if(t<d.holds[i][1])return {frame:d.holds[i][0],next:d.holds[i][1]-t};t-=d.holds[i][1]}}
 function paint(){for(const c of canvases){c.width=c.height=size;c.style.width=c.style.height=size+'px';const x=c.getContext('2d');
  x.clearRect(0,0,size,size);x.drawImage(images[selected],(frame%4)*320,Math.floor(frame/4)*320,320,320,0,0,size,size)}
- document.querySelector('#label').textContent=DATA[selected].label;document.querySelector('#frame').textContent=(frame+1)+' / 8';
+ document.querySelector('#label').textContent=DATA[selected].label;document.querySelector('#frame').textContent=(frame+1)+' / '+DATA[selected].cells;
+ document.querySelector('#scrub').max=DATA[selected].cells-1;
  document.querySelector('#scrub').value=frame;selector.value=selected;
  for(const b of gallery.children)b.classList.toggle('active',b.dataset.name===selected);
  document.querySelector('#play').textContent=playing?'暂停':'播放'}
@@ -76,7 +80,7 @@ function tick(){clearTimeout(timer);const now=performance.now();if(playing)elaps
 function choose(name){selected=name;elapsed=0;frame=DATA[name].holds[0][0];last=performance.now();tick()}
 selector.onchange=()=>{tour=false;choose(selector.value)};
 document.querySelector('#play').onclick=()=>{playing=!playing;last=performance.now();tick()};
-function manual(n){playing=false;tour=false;frame=(n+8)%8;
+function manual(n){playing=false;tour=false;frame=(n+DATA[selected].cells)%DATA[selected].cells;
  const at=DATA[selected].holds.findIndex(h=>h[0]===frame);
  elapsed=at<0?0:DATA[selected].holds.slice(0,at).reduce((s,h)=>s+h[1],0);tick()}
 document.querySelector('#prev').onclick=()=>manual(frame-1);document.querySelector('#next').onclick=()=>manual(frame+1);
@@ -114,4 +118,15 @@ for group in range(3):
             cel=cel.convert("RGBa").resize((180,180),Image.Resampling.LANCZOS).convert("RGBA")
             board.paste(cel,(ix*192+6,row*206+24),cel)
     board.save(OUT/f"逐帧检查-{group+1}.png")
+for name,clip in clips.items():
+    if clip['cells']<=8:continue
+    board=Image.new("RGB",(1120,1200),(13,25,37));draw=ImageDraw.Draw(board)
+    atlas=Image.open(ASSETS/f"{name}.webp").convert("RGBA")
+    for ix in range(clip['cells']):
+        cel=atlas.crop((ix%4*320,ix//4*320,ix%4*320+320,ix//4*320+320))
+        cel=cel.convert("RGBa").resize((264,264),Image.Resampling.LANCZOS).convert("RGBA")
+        x=ix%4*280+8;y=ix//4*300+28
+        board.paste(cel,(x,y),cel)
+        draw.text((x,y-25),f"{names[name]} {ix+1}",font=font,fill=(213,233,244))
+    board.save(OUT/f"连续姿态-{name}.png")
 print(json.dumps({"actions":len(data),"html":str(OUT/"独立动作预览.html")},ensure_ascii=False))
