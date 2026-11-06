@@ -15,9 +15,12 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
     private val propPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
     private val phoneProp = PetPhoneProp()
     private val accents = PetAccentDrawable()
+    private val face = PetFaceDrawable(open)
+    private val handProps = PetHandProps()
     fun phonePalette(accent: Int, surface: Int) {
         phoneProp.accent = accent; phoneProp.surface = surface
         accents.accent=accent;accents.surface=surface;invalidateSelf()
+        handProps.accent=accent;handProps.surface=surface
     }
     private val w = open.width.toFloat()
     private val h = open.height.toFloat()
@@ -25,8 +28,8 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
     private val skeleton = PetSkeleton(w, h)
     private val skin = PetSkin(20, 22, Rect(0, 0, open.width, open.height), w, h)
     private data class Layer(val image: Bitmap, val skin: PetSkin)
-    private val leftEye = eye(.29f, .46f)
-    private val rightEye = eye(.50f, .66f)
+    private val leftEye = eye(.29f, .445f)
+    private val rightEye = eye(.518f, .66f)
     private val left = cutArm(PetJoint.ELBOW_L, floatArrayOf(.395f,.584f, .441f,.584f, .474f,.649f, .489f,.661f, .499f,.714f, .490f,.732f, .452f,.732f, .432f,.697f, .414f,.657f))
     private val right = cutArm(PetJoint.ELBOW_R, floatArrayOf(.536f,.584f, .578f,.584f, .560f,.657f, .544f,.697f, .528f,.732f, .493f,.732f, .486f,.714f, .497f,.661f, .516f,.649f))
     private var pose = PetPose()
@@ -37,7 +40,9 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
             kotlin.math.abs(pose.phone-next.phone)>.012f || kotlin.math.abs(pose.phoneTap-next.phoneTap)>.025f ||
             pose.accent!=next.accent || kotlin.math.abs(pose.accentAlpha-next.accentAlpha)>.01f ||
             (next.accentAlpha>.01f && kotlin.math.abs(pose.accentPhase-next.accentPhase)>.004f) ||
-            kotlin.math.abs(pose.eyeClose-next.eyeClose)>.015f || kotlin.math.abs(pose.wink-next.wink)>.015f
+            kotlin.math.abs(pose.eyeClose-next.eyeClose)>.015f || kotlin.math.abs(pose.wink-next.wink)>.015f ||
+            pose.face!=next.face || pose.prop!=next.prop || kotlin.math.abs(pose.propAmount-next.propAmount)>.01f ||
+            (next.propAmount>.01f && kotlin.math.abs(pose.propPhase-next.propPhase)>.004f)
         pose = next
         prepareGeometry()
         // The 20/30 Hz motion clock continues unchanged. Avoid submitting another
@@ -86,23 +91,29 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
         canvas.scale(.90f, .90f, w * .5f, h * .60f)
         prepareGeometry()
         drawSkin(canvas, base, skin, paint)
+        face.draw(canvas,skeleton,pose,w,h,paint.alpha)
+        val both=maxOf(blinkAmount,pose.eyeClose,pose.face.happyEyes).coerceIn(0f,1f)
+        if (both > 0f) {
+            drawEye(canvas,leftEye,both)
+        }
+        val rightClose=maxOf(both,pose.wink).coerceIn(0f,1f)
+        if(rightClose>0f) {
+            drawEye(canvas,rightEye,rightClose)
+        }
         if (pose.sheet > .01f) drawWorkSheet(canvas)
+        handProps.draw(canvas,skeleton,pose,w,h,paint.alpha)
         phoneProp.draw(canvas,skeleton,pose,w,h,paint.alpha)
         layerPaint.alpha = paint.alpha
         drawSkin(canvas, left.image, left.skin, layerPaint)
         drawSkin(canvas, right.image, right.skin, layerPaint)
-        val both=maxOf(blinkAmount,pose.eyeClose).coerceIn(0f,1f)
-        if (both > 0f) {
-            layerPaint.alpha = (paint.alpha * both).toInt()
-            drawSkin(canvas, leftEye.image, leftEye.skin, layerPaint)
-        }
-        val rightClose=maxOf(both,pose.wink).coerceIn(0f,1f)
-        if(rightClose>0f) {
-            layerPaint.alpha=(paint.alpha*rightClose).toInt()
-            drawSkin(canvas, rightEye.image, rightEye.skin, layerPaint)
-        }
         accents.draw(canvas,skeleton,pose,w,h,paint.alpha)
         canvas.restore()
+    }
+    private fun drawEye(canvas:Canvas,eye:Layer,amount:Float) {
+        // Composite the eyelid layer explicitly so fractional blinks retain the iris underneath.
+        val checkpoint=canvas.saveLayerAlpha(0f,0f,w,h,(paint.alpha*amount).toInt())
+        layerPaint.alpha=255;drawSkin(canvas,eye.image,eye.skin,layerPaint)
+        canvas.restoreToCount(checkpoint)
     }
     private fun drawSkin(canvas: Canvas, image: Bitmap, skin: PetSkin, color: Paint) {
         canvas.drawBitmapMesh(image, skin.cols, skin.rows, skin.vertices, 0, null, 0, color)

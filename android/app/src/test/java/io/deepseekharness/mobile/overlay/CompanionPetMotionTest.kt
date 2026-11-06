@@ -4,6 +4,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionPetMotionTest {
+    @Test fun interruptedPropAndExpressionCannotLeakIntoPauseOrIdle() {
+        val actor=PetActing();actor.runningTasks=1;actor.sample(100)
+        val writing=actor.sample(1000)
+        assertEquals(PetProp.NOTEBOOK,writing.prop)
+        actor.control("paused",1100);actor.sample(1100)
+        val paused=actor.sample(1600)
+        assertEquals(PetProp.NONE,paused.prop);assertEquals(4,paused.phoneMode)
+        assertEquals(0f,paused.face.opening,0f)
+        actor.runningTasks=0;actor.control("idle",1800);actor.sample(1800)
+        val idle=actor.sample(2400)
+        assertEquals(PetProp.CUP,idle.prop);assertEquals(0f,idle.phone,0f)
+        assertEquals(0f,idle.face.sweat,0f);assertEquals(0f,idle.face.tear,0f)
+        assertEquals(idle.face,actor.still().face)
+    }
     @Test fun conversationDraggingAndControlHaveDifferentPrioritiesAndReturnToLiveState() {
         val actor=PetActing();actor.runningTasks=1;actor.chatThinking=true
         actor.sample(100);assertEquals(PetAction.THINK,actor.action)

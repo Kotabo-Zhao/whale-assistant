@@ -52,6 +52,7 @@ internal class PetAccentDrawable {
                 for(i in -1..1) {val wave=(.55f+.45f*sin(t*2*PI-i*.9).toFloat());pen(accent,a*wave);c.drawCircle(x+i*3.3f,y,.8f+.3f*wave,ink)}
             }
             PetAccent.INK -> {
+                if(p.prop==PetProp.NOTEBOOK) {c.restore();return}
                 // A small pencil makes the worksheet's purpose visible at phone-overlay size.
                 val wrist=skeleton.bones[PetJoint.WRIST_R.ordinal]
                 val px=wrist.x(.513f*w,.702f*h)/w*100f;val py=wrist.y(.513f*w,.702f*h)/h*100f

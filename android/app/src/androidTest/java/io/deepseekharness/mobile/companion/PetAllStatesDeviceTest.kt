@@ -27,7 +27,9 @@ class PetAllStatesDeviceTest {
         return CompanionPetDrawable(load(R.drawable.whale_maid_open_v2),load(R.drawable.whale_maid_blink_v2),load(R.drawable.whale_maid_body_v3))
     }
     @Test fun renderAllStatesAcrossThemesAndExportNativeFrames() {
-        val out=File(app.getExternalFilesDir(null),"p78-animation-final").apply{mkdirs()}
+        val outputName=InstrumentationRegistry.getArguments().getString("outputDir") ?: "pet-animation"
+        require(outputName.matches(Regex("[a-zA-Z0-9-]+")))
+        val out=File(app.getExternalFilesDir(null),outputName).apply{mkdirs()}
         val style=app.getSharedPreferences("whale-interface",0);val oldStyle=style.getString("style",null)
         val oldMode=io.deepseekharness.mobile.AppThemePreference.current(app)
         val frame=Bitmap.createBitmap(640,720,Bitmap.Config.ARGB_8888);val canvas=Canvas(frame)

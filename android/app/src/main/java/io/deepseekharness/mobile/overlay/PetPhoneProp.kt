@@ -50,7 +50,7 @@ internal class PetPhoneProp {
             fill(0xff688da7.toInt()); canvas.drawRoundRect(-2.8f,-1.5f,2.8f,-.9f,.3f,.3f,ink)
         }
         canvas.restore()
-        if (p.phoneMode == 5) {
+        if (p.phoneMode == 5 && p.prop != PetProp.STOP_PADDLE) {
             val palm=skeleton.bones[PetJoint.WRIST_R.ordinal]
             canvas.save(); canvas.translate(palm.x(.516f*w,.70f*h),palm.y(.516f*w,.70f*h)-.05f*h)
             canvas.scale(w/100f,h/100f)

@@ -18,6 +18,7 @@ internal data class PetPose(
     val phone: Float = 0f, val phoneTap: Float = 0f, val phoneMode: Int = 0,
     val eyeClose: Float = 0f, val wink: Float = 0f,
     val accent: PetAccent = PetAccent.NONE, val accentPhase: Float = 0f, val accentAlpha: Float = 0f,
+    val face:PetFacePose=PetFacePose(), val prop:PetProp=PetProp.NONE, val propAmount:Float=0f, val propPhase:Float=0f,
 ) {
     fun mix(b: PetPose, t: Float): PetPose {
         fun blend(a: Float, end: Float) = a + (end - a) * t
@@ -29,7 +30,10 @@ internal data class PetPose(
             blend(eyeClose,b.eyeClose),blend(wink,b.wink),
             if(accent==b.accent || t>=.5f) b.accent else accent,
             if(accent==b.accent || t>=.5f) b.accentPhase else accentPhase,
-            if(accent==b.accent) blend(accentAlpha,b.accentAlpha) else if(t<.5f) accentAlpha*(1f-2f*t) else b.accentAlpha*(2f*t-1f))
+            if(accent==b.accent) blend(accentAlpha,b.accentAlpha) else if(t<.5f) accentAlpha*(1f-2f*t) else b.accentAlpha*(2f*t-1f),
+            face.mix(b.face,t),if(prop==b.prop || t>=.5f) b.prop else prop,
+            if(prop==b.prop) blend(propAmount,b.propAmount) else if(t<.5f) propAmount*(1f-2f*t) else b.propAmount*(2f*t-1f),
+            if(prop==b.prop || t>=.5f) b.propPhase else propPhase)
     }
 }
 
@@ -117,7 +121,8 @@ internal class PetActing {
             if (ms < start || ms > start + width) return 0f
             return sin((ms - start) * PI / width).toFloat()
         }
-        fun pose(action: PetAction, ms: Long, drag: Float = 0f): PetPose = PetChoreography.finish(action,ms,basePose(action,ms,drag))
+        fun pose(action: PetAction, ms: Long, drag: Float = 0f): PetPose =
+            PetDetails.enrich(action,ms,PetChoreography.finish(action,ms,basePose(action,ms,drag)))
         private fun basePose(action: PetAction, ms: Long, drag: Float = 0f): PetPose {
             val sway = wave(ms, 3350.0)
             val tail = wave(ms, 2250.0)
