@@ -14,6 +14,64 @@ import java.io.File
 class PetMotionRevisionDeviceTest {
     private val inst=InstrumentationRegistry.getInstrumentation()
     private val app=inst.targetContext
+    /** Optional live-surface review, not a claim that a real worker performed these activities. */
+    @Test fun replayAuthoredClipsInActualOverlayForVisualReview() {
+        if(InstrumentationRegistry.getArguments().getString("liveReview")!="true") return
+        val prefs=CompanionStore(app);val reduced=prefs.reduceMotion
+        val store=io.deepseekharness.mobile.runtime.RuntimeStore(app);val enabled=store.overlayBallEnabled()
+        val wasRunning=OverlayBallService.isRunning
+        var restoreDirector:(()->Unit)?=null
+        val out=File(app.getExternalFilesDir(null),"pet-live-review").apply{mkdirs()}
+        try {
+            prefs.reduceMotion=false;store.setOverlayBallEnabled(true)
+            inst.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+            OverlayBallService.start(app)
+            PetControlDeviceUi.await("live review pet") {
+                OverlayBallService.updateForHostAppForeground(false)
+                PetControlDeviceUi.service()?.let{PetControlDeviceUi.field(it,"petDrawable")}!=null
+            }
+            val service=PetControlDeviceUi.service() as OverlayBallService
+            val actor=PetControlDeviceUi.field(service,"petActing") as PetActing
+            val crop=Rect()
+            inst.runOnMainSync {
+                val running=actor.runningTasks;val waiting=actor.waitingTasks;val thinking=actor.chatThinking
+                val dragging=actor.dragging
+                restoreDirector={actor.runningTasks=running;actor.waitingTasks=waiting;actor.chatThinking=thinking;actor.dragging=dragging}
+                actor.runningTasks=0;actor.waitingTasks=0;actor.chatThinking=false;actor.dragging=false
+                val view=PetControlDeviceUi.field(service,"ballView") as android.view.View
+                val xy=IntArray(2);view.getLocationOnScreen(xy)
+                crop.set(xy[0],xy[1],xy[0]+view.width,xy[1]+view.height)
+            }
+            inst.sendStatus(0,android.os.Bundle().apply{putString("liveReviewCrop","${crop.width()}:${crop.height()}:${crop.left}:${crop.top}")})
+            for(action in listOf(PetAction.IDLE,PetAction.THINK,PetAction.WORK,PetAction.CONTROL)) {
+                inst.runOnMainSync {
+                    actor.runningTasks=if(action==PetAction.WORK)1 else 0
+                    actor.chatThinking=action==PetAction.THINK
+                    actor.control(if(action==PetAction.CONTROL)"operating" else "idle",SystemClock.uptimeMillis())
+                    actor.resume(SystemClock.uptimeMillis(),PetPose(action,if(action==PetAction.IDLE)16000 else 0))
+                    service.javaClass.getDeclaredMethod("wakePetMotion").apply{isAccessible=true}.invoke(service)
+                }
+                inst.sendStatus(0,android.os.Bundle().apply{putString("liveReviewAction",action.name)})
+                Thread.sleep(1800)
+                val screen=requireNotNull(inst.uiAutomation.takeScreenshot())
+                val avatar=Bitmap.createBitmap(screen,crop.left,crop.top,crop.width(),crop.height())
+                File(out,"${action.name.lowercase()}.png").outputStream().use{avatar.compress(Bitmap.CompressFormat.PNG,100,it)}
+                avatar.recycle();screen.recycle()
+                Thread.sleep(3200)
+            }
+        } finally {
+            prefs.reduceMotion=reduced;store.setOverlayBallEnabled(enabled)
+            inst.runOnMainSync {
+                (PetControlDeviceUi.service() as? OverlayBallService)?.let{service ->
+                    service.updatePetConversationState("idle")
+                    (PetControlDeviceUi.field(service,"petActing") as PetActing).control(io.deepseekharness.mobile.DeviceControlState.current.phase,SystemClock.uptimeMillis())
+                    restoreDirector?.invoke()
+                    OverlayBallService.applyCompanionMotionPreference()
+                }
+            }
+            if(!wasRunning) OverlayBallService.stop(app)
+        }
+    }
     @Test fun powerSaverRestsIdleWithoutReducingGestureCadence() {
         val prefs=CompanionStore(app);val reduced=prefs.reduceMotion
         val store=io.deepseekharness.mobile.runtime.RuntimeStore(app);val enabled=store.overlayBallEnabled()
