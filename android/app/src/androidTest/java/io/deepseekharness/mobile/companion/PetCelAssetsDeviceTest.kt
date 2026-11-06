@@ -28,8 +28,17 @@ class PetCelAssetsDeviceTest {
                 }
                 inst.runOnMainSync {
                     assertTrue(pet.cachedAtlasCount <= CompanionPetDrawable.MAX_ATLASES)
-                    assertTrue(pet.cachedBitmapBytes <= 3L * 1280 * 1280 * 4)
+                    assertTrue(pet.cachedBitmapBytes <= pet.cacheLimitBytes)
                 }
+            }
+            for (clip in PetCels.exits.values) {
+                inst.runOnMainSync { pet.setPose(PetPose(), PetCels.clips.getValue(clip).sample(0)) }
+                PetControlDeviceUi.await("decode $clip") {
+                    var loaded=false
+                    inst.runOnMainSync {loaded=pet.displayedClipName==clip}
+                    loaded
+                }
+                inst.runOnMainSync { assertTrue(pet.cachedBitmapBytes <= pet.cacheLimitBytes) }
             }
         } finally {
             inst.runOnMainSync { pet.close() }
@@ -60,8 +69,27 @@ class PetCelAssetsDeviceTest {
                 }
             } finally { image.recycle() }
         }
-        assertEquals(18, digests.size)
+        assertEquals(PetCels.clips.size, digests.size)
     }
+    @Test fun eachReturnJoinsItsActionAndIdleWithIdenticalDecodedPixels() {
+        val app=InstrumentationRegistry.getInstrumentation().targetContext
+        fun atlas(name:String)=app.assets.open("pet-cels/$name.webp").use { BitmapFactory.decodeStream(it)!! }
+        fun cell(image:Bitmap,index:Int)=IntArray(320*320).also {
+            image.getPixels(it,0,320,index%4*320,index/4*320,320,320)
+        }
+        val idle=atlas("idle")
+        try {
+            val neutral=cell(idle,0)
+            for((name,returnName) in PetCels.exits) {
+                val source=atlas(name);val exit=atlas(returnName)
+                try {
+                    assertArrayEquals("$name -> $returnName",cell(source,PetCels.clips.getValue(name).exitFrame),cell(exit,0))
+                    assertArrayEquals("$returnName -> idle",neutral,cell(exit,PetCels.clips.getValue(returnName).exitFrame))
+                } finally {source.recycle();exit.recycle()}
+            }
+        } finally {idle.recycle()}
+    }
+
     @Test fun obsoleteDecodesCannotReplaceTheCurrentActionOrResurrectClosedDrawable() {
         val inst = InstrumentationRegistry.getInstrumentation()
         val jobs = java.util.ArrayDeque<Runnable>()

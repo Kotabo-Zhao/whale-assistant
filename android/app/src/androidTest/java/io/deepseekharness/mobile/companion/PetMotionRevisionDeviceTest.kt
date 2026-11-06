@@ -58,6 +58,21 @@ class PetMotionRevisionDeviceTest {
                 File(out,"${action.name.lowercase()}.png").outputStream().use{avatar.compress(Bitmap.CompressFormat.PNG,100,it)}
                 avatar.recycle();screen.recycle()
                 Thread.sleep(3200)
+                inst.runOnMainSync {
+                    actor.runningTasks=0;actor.waitingTasks=0;actor.chatThinking=false
+                    actor.control("idle",SystemClock.uptimeMillis())
+                    actor.resume(SystemClock.uptimeMillis(),PetPose())
+                    service.javaClass.getDeclaredMethod("wakePetMotion").apply{isAccessible=true}.invoke(service)
+                }
+                val expected=if(action==PetAction.IDLE)"drink_return" else PetCels.exits.getValue(PetCels.actionClips.getValue(action))
+                val seen=mutableSetOf<String>();val until=SystemClock.uptimeMillis()+3500
+                while(SystemClock.uptimeMillis()<until) {
+                    inst.runOnMainSync {seen.add((PetControlDeviceUi.field(service,"petDrawable") as CompanionPetDrawable).displayedClipName)}
+                    Thread.sleep(20)
+                }
+                assertTrue("$action must display its independent return: $seen",expected in seen)
+                assertTrue("$action must reach idle: $seen","idle" in seen)
+                inst.sendStatus(0,android.os.Bundle().apply{putString("liveReturnSequence",seen.joinToString(","))})
             }
         } finally {
             prefs.reduceMotion=reduced;store.setOverlayBallEnabled(enabled)
@@ -99,7 +114,7 @@ class PetMotionRevisionDeviceTest {
             }
             PetControlDeviceUi.await("power-saving ambient still") {
                 var resting=false
-                inst.runOnMainSync {resting=pet.currentPose.action==PetAction.IDLE && pet.currentPose.reduced}
+                inst.runOnMainSync {resting=pet.currentPose.action==PetAction.IDLE && pet.currentCel.clip=="idle" && pet.nextFrameDelayMs==Long.MAX_VALUE}
                 resting
             }
             inst.runOnMainSync {

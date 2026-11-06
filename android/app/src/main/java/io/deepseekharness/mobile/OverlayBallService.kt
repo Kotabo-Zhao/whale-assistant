@@ -102,6 +102,8 @@ class OverlayBallService : Service() {
     private var companionFrame: Runnable? = null
     private var petDrawable: io.deepseekharness.mobile.overlay.CompanionPetDrawable? = null
     private val petActing = PetActing()
+    private val petPlayback = io.deepseekharness.mobile.overlay.PetPlayback(
+        io.deepseekharness.mobile.overlay.PetCels.clips, io.deepseekharness.mobile.overlay.PetCels.exits)
     private val controlListener: (DeviceControlState.Snapshot) -> Unit = {
         hintHandler.post { if (!avatarDestroyed) refreshControlPose() }
     }
@@ -1034,6 +1036,7 @@ class OverlayBallService : Service() {
         companionFrame = null
         val drawable=petDrawable ?: return
         if (!companionMotionAllowed()) {
+            petPlayback.reset()
             updateVisibleStaticPet()
             return
         }
@@ -1046,13 +1049,12 @@ class OverlayBallService : Service() {
             override fun run() {
                 if (companionFrame !== this) return
                 if(!ballAttached || avatarDestroyed || hiddenForHostApp || ballView?.isShown!=true) {
-                    companionFrame=null;return
+                    companionFrame=null;petPlayback.reset();return
                 }
                 val now = SystemClock.uptimeMillis()
                 val current=petActing.sample(now)
                 // Save power during ambient rest, not by turning hand gestures into a 5 FPS slideshow.
-                val pose=if(petPowerSave && current.action==PetAction.IDLE) current.copy(reduced=true) else current
-                drawable.setPose(pose)
+                drawable.setPose(current, petPlayback.sample(current, now, quietIdle = petPowerSave))
                 // Held cels sleep until their next boundary. No mesh, separate blink tick or idle FPS loop.
                 val delay=minOf(drawable.nextFrameDelayMs,petActing.untilStateChange(now))
                 if(delay!=Long.MAX_VALUE) hintHandler.postAtTime(this,now+delay.coerceIn(1L,60_000L))

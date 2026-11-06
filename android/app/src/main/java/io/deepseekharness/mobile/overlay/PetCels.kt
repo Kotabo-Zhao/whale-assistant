@@ -5,15 +5,15 @@ internal data class PetCelSample(val clip: String, val frame: Int, val nextMs: L
 
 internal class PetCelClip(
     val name: String, val holds: List<PetCelHold>, val still: Int = 0, val loopFrom: Int = 0,
-    val cells: Int = 8,
+    val cells: Int = 8, val exitFrame: Int = cells - 1,
 ) {
     val rows get() = cells / PetCels.COLUMNS
     val duration = holds.sumOf { it.millis }.toLong()
     private val loopDuration = holds.drop(loopFrom).sumOf { it.millis }.toLong()
     init {
-        require(cells in listOf(8, 16))
+        require(cells in listOf(8, 16, 32))
         require(holds.isNotEmpty() && holds.all { it.frame in 0 until cells && it.millis > 0 })
-        require(still in 0 until cells && loopFrom in holds.indices)
+        require(still in 0 until cells && loopFrom in holds.indices && exitFrame in 0 until cells)
     }
     fun sample(elapsed: Long): PetCelSample {
         var t = elapsed.coerceAtLeast(0)
@@ -35,10 +35,22 @@ internal object PetCels {
     const val IDLE_CYCLE = 24_000L
     const val DRINK_AT = 16_000L
     const val DRINK_END = 20_500L
-    private fun clip(name: String, vararg millis: Int, still: Int = 0, loopFrom: Int = 0, cells: Int = 8) =
-        PetCelClip(name, millis.mapIndexed { i, ms -> PetCelHold(i, ms) }, still, loopFrom, cells)
+    private val looping = setOf("idle", "reading", "writing", "control", "ask", "observe", "wait", "paused", "stopped", "error", "drag")
+    private fun clip(name: String, vararg millis: Int, still: Int = 0, loopFrom: Int = 0, cells: Int = 8): PetCelClip {
+        require(millis.size == cells)
+        val holds = millis.flatMapIndexed { i, ms ->
+            // Bake one actual optical-flow midpoint per pair. Long rests remain asleep;
+            // only the final motion interval is split. The complete action duration is unchanged.
+            if (i == cells - 1 && name !in looping) listOf(PetCelHold(i * 2, ms))
+            else {
+                val middle = minOf(ms, 80) / 2
+                listOf(PetCelHold(i * 2, ms - middle), PetCelHold(i * 2 + 1, middle))
+            }
+        }
+        return PetCelClip(name, holds, still * 2, loopFrom * 2, cells * 2, (cells - 1) * 2)
+    }
 
-    val clips = listOf(
+    val primaryClips = listOf(
         clip("idle", 1600, 70, 80, 110, 1800, 450, 90, 1000),
         clip("drink", 600, 80, 80, 80, 80, 80, 80, 200, 400, 80, 80, 80, 80, 80, 80, 2340, cells = 16),
         clip("reading", 1200, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 100, 1800, cells = 16),
@@ -58,6 +70,13 @@ internal object PetCels {
         clip("notice", 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 2200, still = 13, cells = 16),
         clip("drag", 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, still = 0, cells = 16),
     ).associateBy { it.name }
+    val exits = primaryClips.keys.filter { it != "idle" }.associateWith { "${it}_return" }
+    val clips = primaryClips + exits.values.associateWith { name ->
+        // First and last key cels are pixel-identical to the source endpoint and idle frame 0.
+        // The initial hold also gives the background decoder time to load the return atlas.
+        clip(name, 140, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 160,
+            still = 15, loopFrom = 15, cells = 16)
+    }
     val actionClips = mapOf(
         PetAction.IDLE to "idle", PetAction.THINK to "reading", PetAction.WORK to "writing",
         PetAction.CONTROL to "control", PetAction.ACCEPT to "accept", PetAction.ASK to "ask",

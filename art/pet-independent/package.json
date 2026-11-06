@@ -2,7 +2,7 @@
   "artSource": "host_image",
   "route": "native image_gen",
   "sharedSkeleton": false,
-  "interpolatedFrames": false,
+  "interpolatedFrames": true,
   "sourceArtworkPreserved": true,
   "actions": [
     {
@@ -15,11 +15,11 @@
       ],
       "atlasSize": [
         1280,
-        640
+        1280
       ],
-      "cells": 8,
-      "assetSha256": "b0ce8645fcd49dcc8a6d4f4efb567bea5ee5ff191ec0fd35fe860c45724305e1",
-      "assetBytes": 546656,
+      "cells": 16,
+      "assetSha256": "86adda1f628297d3ef2f842501b0cab4f3ec1c3008f46dbcf14a2a126c3e565b",
+      "assetBytes": 1121344,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -175,7 +175,9 @@
           "opaquePixels": 28778
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 8,
+      "keyAtlasSha256": "b0ce8645fcd49dcc8a6d4f4efb567bea5ee5ff191ec0fd35fe860c45724305e1"
     },
     {
       "name": "drink",
@@ -187,11 +189,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "09f334ac436a308a82f8b8aecc10abf7cae5bb6d826c4da5889ccd422342a36e",
-      "assetBytes": 1086404,
+      "cells": 32,
+      "assetSha256": "9137e55f5457d181cd7b603293013ab0e6b2a8d0375e773d0f291f35f54c9baf",
+      "assetBytes": 2156304,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -499,7 +501,9 @@
           "opaquePixels": 28031
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "09f334ac436a308a82f8b8aecc10abf7cae5bb6d826c4da5889ccd422342a36e"
     },
     {
       "name": "reading",
@@ -511,11 +515,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "95ff5d3e1b677b7c968b3d76937123f5180f41a27e7f3017ff01e2bfde8e6bda",
-      "assetBytes": 1099602,
+      "cells": 32,
+      "assetSha256": "82196f8594fcb4f6455b08ab526ecdefc97ab24c9ae8c644e403bdec2c77deb2",
+      "assetBytes": 2230948,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -823,7 +827,9 @@
           "opaquePixels": 29686
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "95ff5d3e1b677b7c968b3d76937123f5180f41a27e7f3017ff01e2bfde8e6bda"
     },
     {
       "name": "writing",
@@ -835,11 +841,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "c1a60ebf61ad9b23e78cf5a6677c2d2e5fab8319ba8345555028bec66e66796b",
-      "assetBytes": 1067704,
+      "cells": 32,
+      "assetSha256": "d6680efcf47e90351b3e77cfb63b17a3f4df0d7604455de4c7a9ee0be1474e63",
+      "assetBytes": 2176464,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -1147,7 +1153,9 @@
           "opaquePixels": 30048
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "c1a60ebf61ad9b23e78cf5a6677c2d2e5fab8319ba8345555028bec66e66796b"
     },
     {
       "name": "control",
@@ -1159,11 +1167,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "90b5fef8ac6402ffd7c426a085de769994bfa1349986774be91c2ba0f027c02d",
-      "assetBytes": 1049052,
+      "cells": 32,
+      "assetSha256": "b1578834261da57a0af8b10723df47a67b9a643e995f3955cc393ba6f6850ce1",
+      "assetBytes": 2126600,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -1471,7 +1479,9 @@
           "opaquePixels": 26874
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "90b5fef8ac6402ffd7c426a085de769994bfa1349986774be91c2ba0f027c02d"
     },
     {
       "name": "accept",
@@ -1483,11 +1493,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "27bdbfb5ec907bdfa8d01440597b71af21df356bb4995085ab7330d7b4de93ce",
-      "assetBytes": 1133304,
+      "cells": 32,
+      "assetSha256": "d9be085c344d6e04f81aa4465078969296a4bd9176211b12051794a1d3db097b",
+      "assetBytes": 2241142,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -1795,7 +1805,9 @@
           "opaquePixels": 28367
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "27bdbfb5ec907bdfa8d01440597b71af21df356bb4995085ab7330d7b4de93ce"
     },
     {
       "name": "ask",
@@ -1807,11 +1819,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "6ad743a62c33ac8e5b3943037066594e8d3c0968697214f04cb50a4e57880a3b",
-      "assetBytes": 1233456,
+      "cells": 32,
+      "assetSha256": "b1ac0d4daad563ffac088addb541ef814c9512abb1e7c668ae5e9a9fd5ba8231",
+      "assetBytes": 2552160,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -2119,7 +2131,9 @@
           "opaquePixels": 30155
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "6ad743a62c33ac8e5b3943037066594e8d3c0968697214f04cb50a4e57880a3b"
     },
     {
       "name": "celebrate",
@@ -2131,11 +2145,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "01177901389e5f6b15348974d76b19052bcb04c554527931c84df9c451c0cb7b",
-      "assetBytes": 1167132,
+      "cells": 32,
+      "assetSha256": "2fb99d188e1e751bef856c0f477f389927862a029c686e6ac1ba7d616216091c",
+      "assetBytes": 2305354,
       "registration": "fixed cell center, flight preserved",
       "frames": [
         {
@@ -2443,7 +2457,9 @@
           "opaquePixels": 28737
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "01177901389e5f6b15348974d76b19052bcb04c554527931c84df9c451c0cb7b"
     },
     {
       "name": "setback",
@@ -2455,11 +2471,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "828da6b518f58ccb14fc10f43c6ed93ae94eb469332748807605f27494a10b80",
-      "assetBytes": 1141494,
+      "cells": 32,
+      "assetSha256": "a01e6ca0c864df8494597c2bf70ee00a7ad351b20a2451d3470b2a84871e9792",
+      "assetBytes": 2241528,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -2767,7 +2783,9 @@
           "opaquePixels": 29466
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "828da6b518f58ccb14fc10f43c6ed93ae94eb469332748807605f27494a10b80"
     },
     {
       "name": "touch",
@@ -2779,11 +2797,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "24e797e5b70c351014cf58c3d315b6119111387ca45c5790cee893e2455fbdb4",
-      "assetBytes": 1199674,
+      "cells": 32,
+      "assetSha256": "8dd688487b521c4b15392a49775e4ab24c271d11bd9ccc5112ee99cd0cd80af6",
+      "assetBytes": 2459414,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -3091,7 +3109,9 @@
           "opaquePixels": 28027
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "24e797e5b70c351014cf58c3d315b6119111387ca45c5790cee893e2455fbdb4"
     },
     {
       "name": "observe",
@@ -3103,11 +3123,11 @@
       ],
       "atlasSize": [
         1280,
-        640
+        1280
       ],
-      "cells": 8,
-      "assetSha256": "f957e7565fc406c4e1839919943693bf9ced55f786e7143f8366cfe5bd0e530c",
-      "assetBytes": 533716,
+      "cells": 16,
+      "assetSha256": "cabd845508297186db09d940bd3e8b9194fbc62c168cab9feece1a77b906b224",
+      "assetBytes": 1096262,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -3263,7 +3283,9 @@
           "opaquePixels": 30177
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 8,
+      "keyAtlasSha256": "f957e7565fc406c4e1839919943693bf9ced55f786e7143f8366cfe5bd0e530c"
     },
     {
       "name": "wait",
@@ -3275,11 +3297,11 @@
       ],
       "atlasSize": [
         1280,
-        640
+        1280
       ],
-      "cells": 8,
-      "assetSha256": "64eb09ce95fba58ae0d4d75a31a695c4c86a42cd98908664662c796bca0c4c96",
-      "assetBytes": 516212,
+      "cells": 16,
+      "assetSha256": "cd461aa69998c3b382e0bfb154653a672ae2b1bcf8b374eed8f5fd5fa1303684",
+      "assetBytes": 1058778,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -3435,7 +3457,9 @@
           "opaquePixels": 27975
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 8,
+      "keyAtlasSha256": "64eb09ce95fba58ae0d4d75a31a695c4c86a42cd98908664662c796bca0c4c96"
     },
     {
       "name": "paused",
@@ -3447,11 +3471,11 @@
       ],
       "atlasSize": [
         1280,
-        640
+        1280
       ],
-      "cells": 8,
-      "assetSha256": "b6262ca9ddc7a4e043da3d018d95d990d8026c629f3f06ed894d53cadc43bbb8",
-      "assetBytes": 517494,
+      "cells": 16,
+      "assetSha256": "d1ba6f73b3b9e36ca1c711084d8387a0ff7b3b382fa983a1c210a0baefbc6861",
+      "assetBytes": 1064278,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -3607,7 +3631,9 @@
           "opaquePixels": 28326
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 8,
+      "keyAtlasSha256": "b6262ca9ddc7a4e043da3d018d95d990d8026c629f3f06ed894d53cadc43bbb8"
     },
     {
       "name": "stopped",
@@ -3619,11 +3645,11 @@
       ],
       "atlasSize": [
         1280,
-        640
+        1280
       ],
-      "cells": 8,
-      "assetSha256": "4ce85711bcb923774f50e2a74c5b550e981d36566249f35db043fdef0f8df941",
-      "assetBytes": 505604,
+      "cells": 16,
+      "assetSha256": "92953580f15d33c7f4cf5257b42b251d47cd0fef236a10436795c5fa85c96d18",
+      "assetBytes": 1031136,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -3779,7 +3805,9 @@
           "opaquePixels": 26840
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 8,
+      "keyAtlasSha256": "4ce85711bcb923774f50e2a74c5b550e981d36566249f35db043fdef0f8df941"
     },
     {
       "name": "error",
@@ -3791,11 +3819,11 @@
       ],
       "atlasSize": [
         1280,
-        640
+        1280
       ],
-      "cells": 8,
-      "assetSha256": "ffbf2221042e750062fad0493d3385b8f39421291a3eec36471da95f13855f01",
-      "assetBytes": 622616,
+      "cells": 16,
+      "assetSha256": "9699317a15b7110300168165f4ce358b07a5823c111f32094b873a810f356ba5",
+      "assetBytes": 1406008,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -3951,7 +3979,9 @@
           "opaquePixels": 28031
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 8,
+      "keyAtlasSha256": "ffbf2221042e750062fad0493d3385b8f39421291a3eec36471da95f13855f01"
     },
     {
       "name": "reply",
@@ -3963,11 +3993,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "b883aaed8d4ee12397f189a4119018499b382e7fcaf478422bd2cb11529cfe2d",
-      "assetBytes": 1173980,
+      "cells": 32,
+      "assetSha256": "4c58f0a6e66e5bd99ab69f13b230ce67ced7eec8ffc54f25f8b4f66e80320aac",
+      "assetBytes": 2382552,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -4275,7 +4305,9 @@
           "opaquePixels": 26124
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "b883aaed8d4ee12397f189a4119018499b382e7fcaf478422bd2cb11529cfe2d"
     },
     {
       "name": "notice",
@@ -4287,11 +4319,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "13021127ff36ee9339a28611a71a5df834077811b0f9c58a3ca8786d281dedad",
-      "assetBytes": 1022996,
+      "cells": 32,
+      "assetSha256": "4fcad5386a15a643c60c6889fa25e43083fcb73a6854f96be4d77fbf91d37950",
+      "assetBytes": 2017044,
       "registration": "fixed cell center and feet, same scale for all frames",
       "frames": [
         {
@@ -4599,7 +4631,9 @@
           "opaquePixels": 25521
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "13021127ff36ee9339a28611a71a5df834077811b0f9c58a3ca8786d281dedad"
     },
     {
       "name": "drag",
@@ -4611,11 +4645,11 @@
       ],
       "atlasSize": [
         1280,
-        1280
+        2560
       ],
-      "cells": 16,
-      "assetSha256": "bacce53b4fdc1bc8d6ca912a61511e97201aa16674037d907a2edf3f152f8baa",
-      "assetBytes": 1262374,
+      "cells": 32,
+      "assetSha256": "86cdbde57e6f153ef0cb2f2d06d69df7d1f309d9785cb6a088b1b8c0ade8c13b",
+      "assetBytes": 2766904,
       "registration": "fixed cell center, flight preserved",
       "frames": [
         {
@@ -4923,7 +4957,4225 @@
           "opaquePixels": 27093
         }
       ],
-      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval"
+      "visualAcceptance": "requires per-action visual review; geometry checks are not aesthetic approval",
+      "keyCells": 16,
+      "keyAtlasSha256": "bacce53b4fdc1bc8d6ca912a61511e97201aa16674037d907a2edf3f152f8baa"
+    },
+    {
+      "name": "drink_return",
+      "source": "art/pet-independent/sources/drink-return16.png",
+      "sourceSha256": "db84b566e5ba64b861e8abf2a05aecb6c43b0483cfc848146b899d46cc9d0415",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "e3c02cfe776aae2ec5a7ac670c9cf0bc6598ac11d2df45f620db4d7060dcd002",
+      "assetBytes": 2358674,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9186440677966101,
+          "offset": [
+            20,
+            24
+          ],
+          "opaqueBounds": [
+            70,
+            32,
+            273,
+            303
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9188166550576581,
+          "offset": [
+            20,
+            24
+          ],
+          "opaqueBounds": [
+            69,
+            33,
+            274,
+            303
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.918989242318706,
+          "offset": [
+            19,
+            23
+          ],
+          "opaqueBounds": [
+            70,
+            32,
+            273,
+            302
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9191618295797539,
+          "offset": [
+            18,
+            23
+          ],
+          "opaqueBounds": [
+            70,
+            33,
+            272,
+            302
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9193344168408017,
+          "offset": [
+            18,
+            23
+          ],
+          "opaqueBounds": [
+            69,
+            34,
+            270,
+            303
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9195070041018497,
+          "offset": [
+            19,
+            23
+          ],
+          "opaqueBounds": [
+            69,
+            35,
+            271,
+            303
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9196795913628977,
+          "offset": [
+            18,
+            23
+          ],
+          "opaqueBounds": [
+            66,
+            35,
+            271,
+            303
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9198521786239455,
+          "offset": [
+            18,
+            22
+          ],
+          "opaqueBounds": [
+            67,
+            34,
+            272,
+            302
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9200247658849934,
+          "offset": [
+            18,
+            22
+          ],
+          "opaqueBounds": [
+            66,
+            33,
+            271,
+            302
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9201973531460413,
+          "offset": [
+            18,
+            22
+          ],
+          "opaqueBounds": [
+            64,
+            33,
+            271,
+            302
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9203699404070892,
+          "offset": [
+            16,
+            22
+          ],
+          "opaqueBounds": [
+            61,
+            33,
+            269,
+            302
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9205425276681372,
+          "offset": [
+            16,
+            22
+          ],
+          "opaqueBounds": [
+            62,
+            33,
+            270,
+            302
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9207151149291851,
+          "offset": [
+            16,
+            21
+          ],
+          "opaqueBounds": [
+            60,
+            32,
+            269,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.920887702190233,
+          "offset": [
+            15,
+            20
+          ],
+          "opaqueBounds": [
+            59,
+            32,
+            268,
+            300
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9210602894512808,
+          "offset": [
+            15,
+            21
+          ],
+          "opaqueBounds": [
+            59,
+            33,
+            268,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9212328767123288,
+          "offset": [
+            14,
+            20
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/drink-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "8bfdc021da1f80e7307a057d16c98e8a9691a4dde7aad012c2c361ca103286c8"
+    },
+    {
+      "name": "reading_return",
+      "source": "art/pet-independent/sources/reading-return16.png",
+      "sourceSha256": "5eaded599954c15424c1c4720dfbbf83dd8ad265cb5c24078ea6851546da39c7",
+      "sourceSize": [
+        1240,
+        1269
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "2e09b6e20ae2ba5f9f6039aa376e667f6b6a69a72de5823554195fd9bbdfd3f9",
+      "assetBytes": 2273238,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9096989966555183,
+          "offset": [
+            25,
+            21
+          ],
+          "opaqueBounds": [
+            58,
+            32,
+            256,
+            304
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9088301746562616,
+          "offset": [
+            32,
+            22
+          ],
+          "opaqueBounds": [
+            57,
+            33,
+            261,
+            304
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9079613526570048,
+          "offset": [
+            36,
+            21
+          ],
+          "opaqueBounds": [
+            56,
+            32,
+            260,
+            303
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9070925306577481,
+          "offset": [
+            41,
+            22
+          ],
+          "opaqueBounds": [
+            56,
+            34,
+            263,
+            304
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9062237086584912,
+          "offset": [
+            23,
+            21
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            263,
+            303
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9053548866592345,
+          "offset": [
+            29,
+            21
+          ],
+          "opaqueBounds": [
+            56,
+            32,
+            263,
+            303
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9044860646599777,
+          "offset": [
+            33,
+            22
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            263,
+            304
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.903617242660721,
+          "offset": [
+            37,
+            22
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            263,
+            303
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.902748420661464,
+          "offset": [
+            19,
+            22
+          ],
+          "opaqueBounds": [
+            55,
+            31,
+            260,
+            302
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9018795986622072,
+          "offset": [
+            26,
+            22
+          ],
+          "opaqueBounds": [
+            56,
+            31,
+            262,
+            303
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9010107766629505,
+          "offset": [
+            32,
+            22
+          ],
+          "opaqueBounds": [
+            56,
+            31,
+            262,
+            303
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9001419546636937,
+          "offset": [
+            36,
+            22
+          ],
+          "opaqueBounds": [
+            55,
+            31,
+            262,
+            302
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.899273132664437,
+          "offset": [
+            20,
+            23
+          ],
+          "opaqueBounds": [
+            56,
+            32,
+            263,
+            302
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.8984043106651802,
+          "offset": [
+            26,
+            23
+          ],
+          "opaqueBounds": [
+            56,
+            32,
+            262,
+            302
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.8975354886659235,
+          "offset": [
+            32,
+            23
+          ],
+          "opaqueBounds": [
+            54,
+            32,
+            263,
+            302
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.8966666666666666,
+          "offset": [
+            36,
+            23
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/reading-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "e0f292908292b09ed03923636eabe1ee5dd221afbc8a964d5e90a6eb22e74310"
+    },
+    {
+      "name": "writing_return",
+      "source": "art/pet-independent/sources/writing-return16.png",
+      "sourceSha256": "291d1bfd43c83bef594d600f5fe29d31f15baffb263930b1104a685ea68d5065",
+      "sourceSize": [
+        1247,
+        1261
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "a4a6316bdfb4eefeb202a52b3c22a75ce0164a92d2c1d245b9278fb9ce73f8a8",
+      "assetBytes": 2130050,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9957446808510638,
+          "offset": [
+            -14,
+            18
+          ],
+          "opaqueBounds": [
+            61,
+            65,
+            264,
+            299
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9945738233397807,
+          "offset": [
+            1,
+            19
+          ],
+          "opaqueBounds": [
+            66,
+            63,
+            260,
+            299
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9934029658284977,
+          "offset": [
+            14,
+            20
+          ],
+          "opaqueBounds": [
+            65,
+            64,
+            260,
+            299
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9922321083172148,
+          "offset": [
+            27,
+            23
+          ],
+          "opaqueBounds": [
+            66,
+            65,
+            260,
+            300
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9910612508059318,
+          "offset": [
+            -14,
+            34
+          ],
+          "opaqueBounds": [
+            65,
+            62,
+            262,
+            299
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9898903932946487,
+          "offset": [
+            0,
+            35
+          ],
+          "opaqueBounds": [
+            65,
+            60,
+            264,
+            300
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9887195357833656,
+          "offset": [
+            15,
+            33
+          ],
+          "opaqueBounds": [
+            64,
+            58,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9875486782720825,
+          "offset": [
+            28,
+            32
+          ],
+          "opaqueBounds": [
+            64,
+            53,
+            264,
+            299
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9863778207607994,
+          "offset": [
+            -13,
+            36
+          ],
+          "opaqueBounds": [
+            66,
+            45,
+            267,
+            301
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9852069632495164,
+          "offset": [
+            2,
+            34
+          ],
+          "opaqueBounds": [
+            66,
+            41,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9840361057382334,
+          "offset": [
+            16,
+            33
+          ],
+          "opaqueBounds": [
+            66,
+            37,
+            267,
+            300
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9828652482269503,
+          "offset": [
+            26,
+            33
+          ],
+          "opaqueBounds": [
+            66,
+            34,
+            261,
+            301
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9816943907156672,
+          "offset": [
+            -13,
+            31
+          ],
+          "opaqueBounds": [
+            65,
+            34,
+            257,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9805235332043842,
+          "offset": [
+            2,
+            30
+          ],
+          "opaqueBounds": [
+            66,
+            33,
+            257,
+            300
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9793526756931012,
+          "offset": [
+            16,
+            31
+          ],
+          "opaqueBounds": [
+            64,
+            33,
+            257,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9781818181818182,
+          "offset": [
+            27,
+            31
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/writing-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "6fd7df2baf18566c51ed8c1dd25e79e611fede9d697b57af83cc54672adef95c"
+    },
+    {
+      "name": "control_return",
+      "source": "art/pet-independent/sources/control-return16.png",
+      "sourceSha256": "5601dc11d85d307da03130e956f8ab2ac96138d1686933a3d5eff79dde01139c",
+      "sourceSize": [
+        1262,
+        1246
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "e6ab0162fc7bff2b3f4dad82d49e3eb9ba688bba1bfbed5acb1c877dac1c5431",
+      "assetBytes": 2225436,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9149659863945578,
+          "offset": [
+            23,
+            23
+          ],
+          "opaqueBounds": [
+            77,
+            32,
+            262,
+            301
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9153837790824093,
+          "offset": [
+            24,
+            23
+          ],
+          "opaqueBounds": [
+            75,
+            32,
+            264,
+            301
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9158015717702607,
+          "offset": [
+            22,
+            23
+          ],
+          "opaqueBounds": [
+            74,
+            32,
+            263,
+            301
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9162193644581121,
+          "offset": [
+            21,
+            22
+          ],
+          "opaqueBounds": [
+            74,
+            31,
+            263,
+            300
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9166371571459635,
+          "offset": [
+            21,
+            24
+          ],
+          "opaqueBounds": [
+            74,
+            31,
+            264,
+            300
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9170549498338149,
+          "offset": [
+            21,
+            24
+          ],
+          "opaqueBounds": [
+            73,
+            30,
+            264,
+            301
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9174727425216662,
+          "offset": [
+            21,
+            24
+          ],
+          "opaqueBounds": [
+            74,
+            30,
+            264,
+            301
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9178905352095176,
+          "offset": [
+            19,
+            24
+          ],
+          "opaqueBounds": [
+            72,
+            29,
+            263,
+            301
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.918308327897369,
+          "offset": [
+            19,
+            26
+          ],
+          "opaqueBounds": [
+            71,
+            29,
+            262,
+            301
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9187261205852204,
+          "offset": [
+            20,
+            26
+          ],
+          "opaqueBounds": [
+            71,
+            29,
+            263,
+            301
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9191439132730718,
+          "offset": [
+            18,
+            26
+          ],
+          "opaqueBounds": [
+            69,
+            29,
+            262,
+            301
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9195617059609231,
+          "offset": [
+            18,
+            26
+          ],
+          "opaqueBounds": [
+            70,
+            29,
+            262,
+            301
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9199794986487746,
+          "offset": [
+            17,
+            27
+          ],
+          "opaqueBounds": [
+            68,
+            30,
+            262,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9203972913366261,
+          "offset": [
+            17,
+            27
+          ],
+          "opaqueBounds": [
+            68,
+            31,
+            261,
+            301
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9208150840244773,
+          "offset": [
+            17,
+            27
+          ],
+          "opaqueBounds": [
+            67,
+            32,
+            261,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9212328767123288,
+          "offset": [
+            14,
+            26
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/control-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "34b5bc83d571a5bd37a13cb1757887d804c8f31301fbac4ee3ff021905f4d83a"
+    },
+    {
+      "name": "accept_return",
+      "source": "art/pet-independent/sources/accept-return16.png",
+      "sourceSha256": "4cfb031aa9fc91cb7e76abbdbb00a304ae055c5ccd2c01ee6561ddf198414e6e",
+      "sourceSize": [
+        1261,
+        1247
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "d63287c66b128883b66c9b52c0b53cf9fed1b100d14159d9ad5cf6d95837224e",
+      "assetBytes": 2296562,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.967741935483871,
+          "offset": [
+            9,
+            22
+          ],
+          "opaqueBounds": [
+            64,
+            34,
+            266,
+            304
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9679670820232135,
+          "offset": [
+            8,
+            22
+          ],
+          "opaqueBounds": [
+            68,
+            37,
+            267,
+            304
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9681922285625558,
+          "offset": [
+            7,
+            22
+          ],
+          "opaqueBounds": [
+            67,
+            39,
+            267,
+            304
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9684173751018983,
+          "offset": [
+            8,
+            22
+          ],
+          "opaqueBounds": [
+            67,
+            39,
+            267,
+            304
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9686425216412407,
+          "offset": [
+            6,
+            21
+          ],
+          "opaqueBounds": [
+            66,
+            38,
+            266,
+            303
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9688676681805831,
+          "offset": [
+            5,
+            21
+          ],
+          "opaqueBounds": [
+            65,
+            39,
+            265,
+            303
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9690928147199256,
+          "offset": [
+            5,
+            21
+          ],
+          "opaqueBounds": [
+            66,
+            39,
+            266,
+            303
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.969317961259268,
+          "offset": [
+            5,
+            21
+          ],
+          "opaqueBounds": [
+            65,
+            39,
+            265,
+            303
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9695431077986103,
+          "offset": [
+            5,
+            17
+          ],
+          "opaqueBounds": [
+            64,
+            34,
+            265,
+            301
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9697682543379527,
+          "offset": [
+            4,
+            17
+          ],
+          "opaqueBounds": [
+            63,
+            34,
+            264,
+            302
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9699934008772951,
+          "offset": [
+            3,
+            17
+          ],
+          "opaqueBounds": [
+            63,
+            34,
+            264,
+            302
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9702185474166376,
+          "offset": [
+            3,
+            17
+          ],
+          "opaqueBounds": [
+            62,
+            34,
+            263,
+            302
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.97044369395598,
+          "offset": [
+            2,
+            14
+          ],
+          "opaqueBounds": [
+            61,
+            31,
+            263,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9706688404953224,
+          "offset": [
+            2,
+            14
+          ],
+          "opaqueBounds": [
+            61,
+            32,
+            263,
+            301
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9708939870346648,
+          "offset": [
+            1,
+            15
+          ],
+          "opaqueBounds": [
+            60,
+            33,
+            262,
+            302
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9711191335740073,
+          "offset": [
+            1,
+            14
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/accept-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "4815420d2595f6f1cccf9cb7fe50bc26dfe91549e3027cca63c4c80c21fd801a"
+    },
+    {
+      "name": "ask_return",
+      "source": "art/pet-independent/sources/ask-return16.png",
+      "sourceSha256": "bb318b00e9248c8e23e32e831425351efa69313075b6a1bc274a565b5e8dc0f8",
+      "sourceSize": [
+        1261,
+        1247
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "cc0685743da9c04bf7261743756c932f14d3288cb12fe041e819506a8973bc69",
+      "assetBytes": 2344204,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9855595667870036,
+          "offset": [
+            10,
+            20
+          ],
+          "opaqueBounds": [
+            59,
+            31,
+            275,
+            304
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9843639889532418,
+          "offset": [
+            9,
+            20
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            273,
+            304
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9831684111194798,
+          "offset": [
+            9,
+            20
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            274,
+            304
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.981972833285718,
+          "offset": [
+            10,
+            21
+          ],
+          "opaqueBounds": [
+            65,
+            33,
+            272,
+            304
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9807772554519562,
+          "offset": [
+            9,
+            21
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            272,
+            303
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9795816776181944,
+          "offset": [
+            8,
+            21
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            272,
+            303
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9783860997844324,
+          "offset": [
+            7,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            32,
+            271,
+            302
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9771905219506705,
+          "offset": [
+            8,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            32,
+            271,
+            302
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9759949441169087,
+          "offset": [
+            7,
+            20
+          ],
+          "opaqueBounds": [
+            61,
+            31,
+            271,
+            303
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9747993662831468,
+          "offset": [
+            7,
+            20
+          ],
+          "opaqueBounds": [
+            61,
+            32,
+            270,
+            302
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9736037884493849,
+          "offset": [
+            6,
+            21
+          ],
+          "opaqueBounds": [
+            61,
+            33,
+            270,
+            303
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.972408210615623,
+          "offset": [
+            6,
+            21
+          ],
+          "opaqueBounds": [
+            60,
+            33,
+            268,
+            302
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9712126327818611,
+          "offset": [
+            6,
+            19
+          ],
+          "opaqueBounds": [
+            60,
+            32,
+            268,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9700170549480993,
+          "offset": [
+            6,
+            19
+          ],
+          "opaqueBounds": [
+            60,
+            32,
+            267,
+            301
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9688214771143373,
+          "offset": [
+            6,
+            19
+          ],
+          "opaqueBounds": [
+            60,
+            32,
+            267,
+            300
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9676258992805755,
+          "offset": [
+            7,
+            19
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/ask-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "5ac98bcd7eeefff65cde29ad3b8668a1a43d432214b57682719227a1f4997a76"
+    },
+    {
+      "name": "celebrate_return",
+      "source": "art/pet-independent/sources/celebrate-return16.png",
+      "sourceSha256": "a8dc9a7465b0cc04f13cadafbb031ac1cd5b04509890a54ce76501f8c9338d73",
+      "sourceSize": [
+        1246,
+        1262
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "e9b3b2688f8d0df96d4ec0eaa493ed14ae249d5d31cf13aa0ab572509ed8fbc9",
+      "assetBytes": 2424080,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.910958904109589,
+          "offset": [
+            18,
+            24
+          ],
+          "opaqueBounds": [
+            54,
+            34,
+            272,
+            300
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9122813670190074,
+          "offset": [
+            20,
+            24
+          ],
+          "opaqueBounds": [
+            57,
+            34,
+            273,
+            300
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9136038299284258,
+          "offset": [
+            22,
+            23
+          ],
+          "opaqueBounds": [
+            57,
+            33,
+            273,
+            300
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9149262928378443,
+          "offset": [
+            23,
+            23
+          ],
+          "opaqueBounds": [
+            57,
+            33,
+            273,
+            300
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9162487557472627,
+          "offset": [
+            17,
+            23
+          ],
+          "opaqueBounds": [
+            55,
+            33,
+            274,
+            301
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9175712186566811,
+          "offset": [
+            18,
+            22
+          ],
+          "opaqueBounds": [
+            54,
+            32,
+            273,
+            300
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9188936815660994,
+          "offset": [
+            19,
+            22
+          ],
+          "opaqueBounds": [
+            54,
+            33,
+            273,
+            300
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9202161444755179,
+          "offset": [
+            19,
+            22
+          ],
+          "opaqueBounds": [
+            53,
+            33,
+            272,
+            301
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9215386073849363,
+          "offset": [
+            14,
+            21
+          ],
+          "opaqueBounds": [
+            53,
+            33,
+            273,
+            300
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9228610702943547,
+          "offset": [
+            17,
+            21
+          ],
+          "opaqueBounds": [
+            53,
+            34,
+            274,
+            301
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9241835332037731,
+          "offset": [
+            17,
+            21
+          ],
+          "opaqueBounds": [
+            52,
+            35,
+            273,
+            301
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9255059961131915,
+          "offset": [
+            17,
+            20
+          ],
+          "opaqueBounds": [
+            51,
+            33,
+            272,
+            301
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9268284590226099,
+          "offset": [
+            12,
+            19
+          ],
+          "opaqueBounds": [
+            51,
+            32,
+            272,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9281509219320283,
+          "offset": [
+            14,
+            19
+          ],
+          "opaqueBounds": [
+            51,
+            33,
+            272,
+            301
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9294733848414467,
+          "offset": [
+            15,
+            18
+          ],
+          "opaqueBounds": [
+            51,
+            33,
+            272,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9307958477508651,
+          "offset": [
+            16,
+            18
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/celebrate-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "1a930108bbfb53b6da0f8b032f9c8255ea0d53ca63187dc43283cc118b2f15fd"
+    },
+    {
+      "name": "setback_return",
+      "source": "art/pet-independent/sources/setback-return16.png",
+      "sourceSha256": "0d00f67e63489b37c9324dd95e1437eaace3622ea2782bf7d8f821f701686dc2",
+      "sourceSize": [
+        1247,
+        1261
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "20b197fa41d8d03d46020c41f7dc5c6a4e299c07d0d8437ae788b8031666435f",
+      "assetBytes": 2309802,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9611307420494699,
+          "offset": [
+            13,
+            20
+          ],
+          "opaqueBounds": [
+            60,
+            33,
+            271,
+            305
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9604240282685512,
+          "offset": [
+            20,
+            19
+          ],
+          "opaqueBounds": [
+            68,
+            32,
+            274,
+            305
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9597173144876324,
+          "offset": [
+            25,
+            19
+          ],
+          "opaqueBounds": [
+            66,
+            32,
+            272,
+            304
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9590106007067138,
+          "offset": [
+            28,
+            19
+          ],
+          "opaqueBounds": [
+            67,
+            32,
+            271,
+            304
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9583038869257952,
+          "offset": [
+            11,
+            18
+          ],
+          "opaqueBounds": [
+            66,
+            32,
+            272,
+            303
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9575971731448762,
+          "offset": [
+            16,
+            18
+          ],
+          "opaqueBounds": [
+            63,
+            32,
+            271,
+            303
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9568904593639576,
+          "offset": [
+            22,
+            18
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            271,
+            303
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9561837455830389,
+          "offset": [
+            26,
+            18
+          ],
+          "opaqueBounds": [
+            63,
+            32,
+            269,
+            303
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9554770318021202,
+          "offset": [
+            9,
+            18
+          ],
+          "opaqueBounds": [
+            63,
+            33,
+            269,
+            303
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9547703180212014,
+          "offset": [
+            14,
+            18
+          ],
+          "opaqueBounds": [
+            60,
+            33,
+            267,
+            303
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9540636042402826,
+          "offset": [
+            20,
+            18
+          ],
+          "opaqueBounds": [
+            61,
+            33,
+            267,
+            302
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9533568904593639,
+          "offset": [
+            24,
+            18
+          ],
+          "opaqueBounds": [
+            59,
+            33,
+            266,
+            302
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9526501766784452,
+          "offset": [
+            8,
+            18
+          ],
+          "opaqueBounds": [
+            61,
+            33,
+            266,
+            302
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9519434628975265,
+          "offset": [
+            14,
+            18
+          ],
+          "opaqueBounds": [
+            60,
+            32,
+            267,
+            302
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9512367491166077,
+          "offset": [
+            20,
+            18
+          ],
+          "opaqueBounds": [
+            60,
+            32,
+            266,
+            302
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.950530035335689,
+          "offset": [
+            24,
+            18
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/setback-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "983abde68d6da63dd09632ab2ceb9a42dde9b3e21e810fe76ebd8f75bf6bd83f"
+    },
+    {
+      "name": "touch_return",
+      "source": "art/pet-independent/sources/touch-return16.png",
+      "sourceSha256": "729733473c1459fab4c494e21ac8c5192b6737f9c6bbb16d7868bdc2d00cf196",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "87a37c45e9e3554bcc0d1c5d427122b1ef48f6b40242d9baaea2773b60379716",
+      "assetBytes": 2439054,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9220338983050848,
+          "offset": [
+            15,
+            24
+          ],
+          "opaqueBounds": [
+            67,
+            33,
+            274,
+            305
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9230504537490896,
+          "offset": [
+            15,
+            23
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            270,
+            305
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9240670091930944,
+          "offset": [
+            15,
+            23
+          ],
+          "opaqueBounds": [
+            63,
+            32,
+            270,
+            305
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9250835646370992,
+          "offset": [
+            17,
+            22
+          ],
+          "opaqueBounds": [
+            65,
+            31,
+            272,
+            305
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.926100120081104,
+          "offset": [
+            16,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            29,
+            271,
+            304
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9271166755251088,
+          "offset": [
+            16,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            29,
+            271,
+            304
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9281332309691135,
+          "offset": [
+            16,
+            20
+          ],
+          "opaqueBounds": [
+            63,
+            28,
+            272,
+            303
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9291497864131184,
+          "offset": [
+            14,
+            20
+          ],
+          "opaqueBounds": [
+            62,
+            28,
+            271,
+            303
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9301663418571231,
+          "offset": [
+            14,
+            20
+          ],
+          "opaqueBounds": [
+            61,
+            29,
+            270,
+            303
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.931182897301128,
+          "offset": [
+            14,
+            20
+          ],
+          "opaqueBounds": [
+            61,
+            30,
+            269,
+            303
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9321994527451327,
+          "offset": [
+            12,
+            19
+          ],
+          "opaqueBounds": [
+            59,
+            29,
+            269,
+            303
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9332160081891376,
+          "offset": [
+            11,
+            18
+          ],
+          "opaqueBounds": [
+            59,
+            28,
+            269,
+            302
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9342325636331423,
+          "offset": [
+            11,
+            18
+          ],
+          "opaqueBounds": [
+            59,
+            32,
+            269,
+            302
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9352491190771471,
+          "offset": [
+            10,
+            17
+          ],
+          "opaqueBounds": [
+            57,
+            32,
+            268,
+            302
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.936265674521152,
+          "offset": [
+            10,
+            17
+          ],
+          "opaqueBounds": [
+            57,
+            33,
+            268,
+            302
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9372822299651568,
+          "offset": [
+            8,
+            16
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/touch-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "041e8b0c9bc33c86a3b0c4d01d54da33fb0e2566e949b2acacb5b75af53571d8"
+    },
+    {
+      "name": "observe_return",
+      "source": "art/pet-independent/sources/observe-return16.png",
+      "sourceSha256": "205166f3e5643c91763cb92e3c8aacb9813174b544b259eff37253cd3a12f97b",
+      "sourceSize": [
+        1247,
+        1261
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "7e592724ff3ea492072ef524bf93017b1ec1716da6d500b7df8d58c6b8e216e9",
+      "assetBytes": 2765168,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9261744966442953,
+          "offset": [
+            16,
+            19
+          ],
+          "opaqueBounds": [
+            54,
+            29,
+            270,
+            305
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9242073079791201,
+          "offset": [
+            21,
+            19
+          ],
+          "opaqueBounds": [
+            52,
+            30,
+            272,
+            304
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9222401193139448,
+          "offset": [
+            27,
+            19
+          ],
+          "opaqueBounds": [
+            52,
+            32,
+            273,
+            305
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9202729306487696,
+          "offset": [
+            33,
+            20
+          ],
+          "opaqueBounds": [
+            53,
+            34,
+            273,
+            305
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9183057419835943,
+          "offset": [
+            18,
+            20
+          ],
+          "opaqueBounds": [
+            53,
+            34,
+            276,
+            304
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9163385533184192,
+          "offset": [
+            25,
+            21
+          ],
+          "opaqueBounds": [
+            55,
+            34,
+            276,
+            305
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9143713646532439,
+          "offset": [
+            32,
+            21
+          ],
+          "opaqueBounds": [
+            55,
+            34,
+            276,
+            304
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9124041759880686,
+          "offset": [
+            36,
+            21
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            278,
+            303
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9104369873228932,
+          "offset": [
+            20,
+            22
+          ],
+          "opaqueBounds": [
+            55,
+            33,
+            276,
+            304
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.908469798657718,
+          "offset": [
+            25,
+            22
+          ],
+          "opaqueBounds": [
+            57,
+            32,
+            274,
+            303
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9065026099925428,
+          "offset": [
+            32,
+            22
+          ],
+          "opaqueBounds": [
+            57,
+            32,
+            274,
+            302
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9045354213273675,
+          "offset": [
+            35,
+            23
+          ],
+          "opaqueBounds": [
+            56,
+            32,
+            274,
+            303
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9025682326621924,
+          "offset": [
+            20,
+            22
+          ],
+          "opaqueBounds": [
+            56,
+            30,
+            274,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9006010439970171,
+          "offset": [
+            25,
+            22
+          ],
+          "opaqueBounds": [
+            56,
+            30,
+            271,
+            301
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.8986338553318419,
+          "offset": [
+            31,
+            23
+          ],
+          "opaqueBounds": [
+            56,
+            32,
+            271,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.8966666666666666,
+          "offset": [
+            35,
+            23
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/observe-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "61b48ae768b2b30f7f747be4d54746f305bc29608b6ce15cffbf69d04f049faa"
+    },
+    {
+      "name": "wait_return",
+      "source": "art/pet-independent/sources/wait-return16.png",
+      "sourceSha256": "e536b711e56d36b612e18e9c367165d738d56b628247af11c79e082759ad4b04",
+      "sourceSize": [
+        1247,
+        1261
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "413dded3c58aa248ae5d260c42d1cb064fcca5470dc3fde263ef8ab4d6ae56d9",
+      "assetBytes": 2209728,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.931740614334471,
+          "offset": [
+            11,
+            23
+          ],
+          "opaqueBounds": [
+            66,
+            30,
+            257,
+            303
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9316776298955639,
+          "offset": [
+            22,
+            23
+          ],
+          "opaqueBounds": [
+            71,
+            30,
+            254,
+            302
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9316146454566568,
+          "offset": [
+            29,
+            23
+          ],
+          "opaqueBounds": [
+            69,
+            31,
+            255,
+            302
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9315516610177499,
+          "offset": [
+            37,
+            23
+          ],
+          "opaqueBounds": [
+            68,
+            33,
+            256,
+            302
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9314886765788428,
+          "offset": [
+            7,
+            23
+          ],
+          "opaqueBounds": [
+            68,
+            33,
+            255,
+            302
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9314256921399358,
+          "offset": [
+            15,
+            23
+          ],
+          "opaqueBounds": [
+            66,
+            33,
+            256,
+            302
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9313627077010286,
+          "offset": [
+            24,
+            23
+          ],
+          "opaqueBounds": [
+            65,
+            33,
+            257,
+            302
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9312997232621216,
+          "offset": [
+            30,
+            23
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            258,
+            302
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9312367388232146,
+          "offset": [
+            3,
+            22
+          ],
+          "opaqueBounds": [
+            65,
+            32,
+            259,
+            302
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9311737543843075,
+          "offset": [
+            12,
+            22
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            258,
+            302
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9311107699454004,
+          "offset": [
+            23,
+            21
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            259,
+            301
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9310477855064934,
+          "offset": [
+            30,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            31,
+            258,
+            301
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9309848010675863,
+          "offset": [
+            0,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            31,
+            257,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9309218166286792,
+          "offset": [
+            13,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            31,
+            258,
+            301
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9308588321897722,
+          "offset": [
+            23,
+            21
+          ],
+          "opaqueBounds": [
+            61,
+            31,
+            258,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9307958477508651,
+          "offset": [
+            30,
+            21
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/wait-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "dd0f950435c141700251a558c7ddb92970ff83c2901625b096ada5a3628fcb25"
+    },
+    {
+      "name": "paused_return",
+      "source": "art/pet-independent/sources/paused-return16.png",
+      "sourceSha256": "51a93577854ead8286469f29a9660c39c0ab8d96e31a6f4830b07d85194e540a",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "6153eab091d8c762c3c2a471d0030e20142cb8ca10a8d3b09c7e2acf62c12f9d",
+      "assetBytes": 2353450,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9612676056338029,
+          "offset": [
+            6,
+            25
+          ],
+          "opaqueBounds": [
+            62,
+            31,
+            269,
+            304
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9633577603381668,
+          "offset": [
+            7,
+            24
+          ],
+          "opaqueBounds": [
+            64,
+            31,
+            271,
+            304
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9654479150425308,
+          "offset": [
+            5,
+            24
+          ],
+          "opaqueBounds": [
+            64,
+            32,
+            269,
+            304
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9675380697468947,
+          "offset": [
+            4,
+            23
+          ],
+          "opaqueBounds": [
+            65,
+            32,
+            269,
+            304
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9696282244512586,
+          "offset": [
+            4,
+            22
+          ],
+          "opaqueBounds": [
+            65,
+            32,
+            268,
+            302
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9717183791556226,
+          "offset": [
+            4,
+            21
+          ],
+          "opaqueBounds": [
+            66,
+            33,
+            270,
+            302
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9738085338599864,
+          "offset": [
+            3,
+            20
+          ],
+          "opaqueBounds": [
+            66,
+            34,
+            269,
+            302
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9758986885643504,
+          "offset": [
+            2,
+            20
+          ],
+          "opaqueBounds": [
+            65,
+            35,
+            269,
+            302
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9779888432687143,
+          "offset": [
+            2,
+            20
+          ],
+          "opaqueBounds": [
+            65,
+            36,
+            269,
+            303
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9800789979730783,
+          "offset": [
+            2,
+            19
+          ],
+          "opaqueBounds": [
+            65,
+            36,
+            270,
+            303
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9821691526774423,
+          "offset": [
+            1,
+            18
+          ],
+          "opaqueBounds": [
+            62,
+            37,
+            269,
+            302
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9842593073818062,
+          "offset": [
+            1,
+            17
+          ],
+          "opaqueBounds": [
+            61,
+            37,
+            271,
+            302
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9863494620861701,
+          "offset": [
+            1,
+            16
+          ],
+          "opaqueBounds": [
+            59,
+            36,
+            271,
+            303
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.988439616790534,
+          "offset": [
+            2,
+            12
+          ],
+          "opaqueBounds": [
+            58,
+            33,
+            271,
+            301
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9905297714948981,
+          "offset": [
+            2,
+            11
+          ],
+          "opaqueBounds": [
+            59,
+            32,
+            273,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.992619926199262,
+          "offset": [
+            0,
+            10
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/paused-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "06701c54f084785a28cbfc4dd3f1b43826bf1f346088ee34b5c4951c95b55a65"
+    },
+    {
+      "name": "stopped_return",
+      "source": "art/pet-independent/sources/stopped-return16.png",
+      "sourceSha256": "49ceae9ce8229065e5b1330d263d2b0bc68aeecdaa7669aedcae0eba64ed65af",
+      "sourceSize": [
+        1246,
+        1263
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "59c897a9236ea6cffbbf9c9610dc81dca01a62d4ccfac481fe2179e62b220b02",
+      "assetBytes": 2330272,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9333333333333333,
+          "offset": [
+            12,
+            22
+          ],
+          "opaqueBounds": [
+            63,
+            35,
+            269,
+            301
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9329501915708813,
+          "offset": [
+            19,
+            22
+          ],
+          "opaqueBounds": [
+            62,
+            34,
+            268,
+            301
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9325670498084291,
+          "offset": [
+            22,
+            22
+          ],
+          "opaqueBounds": [
+            62,
+            33,
+            268,
+            301
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9321839080459771,
+          "offset": [
+            26,
+            22
+          ],
+          "opaqueBounds": [
+            63,
+            32,
+            269,
+            301
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9318007662835249,
+          "offset": [
+            13,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            31,
+            269,
+            301
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9314176245210729,
+          "offset": [
+            18,
+            22
+          ],
+          "opaqueBounds": [
+            62,
+            31,
+            269,
+            301
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9310344827586207,
+          "offset": [
+            21,
+            22
+          ],
+          "opaqueBounds": [
+            63,
+            31,
+            269,
+            301
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9306513409961685,
+          "offset": [
+            25,
+            22
+          ],
+          "opaqueBounds": [
+            63,
+            31,
+            268,
+            301
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9302681992337165,
+          "offset": [
+            12,
+            21
+          ],
+          "opaqueBounds": [
+            64,
+            33,
+            267,
+            301
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9298850574712643,
+          "offset": [
+            18,
+            21
+          ],
+          "opaqueBounds": [
+            64,
+            31,
+            268,
+            301
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9295019157088122,
+          "offset": [
+            20,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            31,
+            267,
+            301
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9291187739463601,
+          "offset": [
+            24,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            31,
+            266,
+            301
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9287356321839081,
+          "offset": [
+            11,
+            21
+          ],
+          "opaqueBounds": [
+            63,
+            32,
+            266,
+            300
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.928352490421456,
+          "offset": [
+            17,
+            22
+          ],
+          "opaqueBounds": [
+            63,
+            32,
+            266,
+            301
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9279693486590038,
+          "offset": [
+            21,
+            22
+          ],
+          "opaqueBounds": [
+            63,
+            32,
+            267,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9275862068965517,
+          "offset": [
+            24,
+            22
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/stopped-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "7f1296f0e28695a25ae3e24dfac62d9dbd28ecdaaca6d738bbeca0312eaaf85a"
+    },
+    {
+      "name": "error_return",
+      "source": "art/pet-independent/sources/error-return16.png",
+      "sourceSha256": "e105756f87f143eae2af3af8844425c76d5e66e1609fea199e205e7f9a5c3df4",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "84fdd2c3571018323afbb8fe2b05accbe3d3a0e822ca3556ca38b330ee701021",
+      "assetBytes": 2414670,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9238754325259516,
+          "offset": [
+            14,
+            25
+          ],
+          "opaqueBounds": [
+            69,
+            35,
+            272,
+            302
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9254292769303248,
+          "offset": [
+            14,
+            24
+          ],
+          "opaqueBounds": [
+            69,
+            37,
+            270,
+            302
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.926983121334698,
+          "offset": [
+            13,
+            24
+          ],
+          "opaqueBounds": [
+            69,
+            39,
+            270,
+            302
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9285369657390712,
+          "offset": [
+            13,
+            23
+          ],
+          "opaqueBounds": [
+            68,
+            40,
+            271,
+            302
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9300908101434443,
+          "offset": [
+            13,
+            22
+          ],
+          "opaqueBounds": [
+            65,
+            40,
+            272,
+            302
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9316446545478175,
+          "offset": [
+            13,
+            21
+          ],
+          "opaqueBounds": [
+            65,
+            39,
+            273,
+            302
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9331984989521906,
+          "offset": [
+            12,
+            21
+          ],
+          "opaqueBounds": [
+            64,
+            40,
+            271,
+            302
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9347523433565639,
+          "offset": [
+            11,
+            20
+          ],
+          "opaqueBounds": [
+            62,
+            39,
+            271,
+            302
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.936306187760937,
+          "offset": [
+            11,
+            20
+          ],
+          "opaqueBounds": [
+            60,
+            38,
+            270,
+            301
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9378600321653101,
+          "offset": [
+            10,
+            19
+          ],
+          "opaqueBounds": [
+            60,
+            36,
+            269,
+            301
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9394138765696833,
+          "offset": [
+            10,
+            19
+          ],
+          "opaqueBounds": [
+            60,
+            35,
+            269,
+            301
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9409677209740566,
+          "offset": [
+            9,
+            18
+          ],
+          "opaqueBounds": [
+            59,
+            34,
+            270,
+            301
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9425215653784297,
+          "offset": [
+            8,
+            17
+          ],
+          "opaqueBounds": [
+            56,
+            34,
+            268,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9440754097828029,
+          "offset": [
+            8,
+            16
+          ],
+          "opaqueBounds": [
+            56,
+            33,
+            268,
+            300
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.945629254187176,
+          "offset": [
+            8,
+            15
+          ],
+          "opaqueBounds": [
+            56,
+            32,
+            269,
+            300
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9471830985915493,
+          "offset": [
+            6,
+            15
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/error-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "c8e1667eb92ffb6abce2fd8df832f2e7e5c2a72f42966f3ac757ec2404ca2945"
+    },
+    {
+      "name": "reply_return",
+      "source": "art/pet-independent/sources/reply-return16.png",
+      "sourceSha256": "a535e352d7cb755023e50b9a2faa793c4c5d49a51ec7a87235b94a31937c5bd0",
+      "sourceSize": [
+        1247,
+        1261
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "cd0836ff15a5b05771e8596499f0c3f3227a88019835294d67343adedb0e352b",
+      "assetBytes": 2284174,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9060402684563759,
+          "offset": [
+            10,
+            25
+          ],
+          "opaqueBounds": [
+            60,
+            34,
+            260,
+            304
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9096852029402365,
+          "offset": [
+            14,
+            24
+          ],
+          "opaqueBounds": [
+            58,
+            32,
+            261,
+            305
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9133301374240972,
+          "offset": [
+            18,
+            22
+          ],
+          "opaqueBounds": [
+            57,
+            31,
+            262,
+            304
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9169750719079579,
+          "offset": [
+            21,
+            21
+          ],
+          "opaqueBounds": [
+            57,
+            31,
+            263,
+            304
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9206200063918185,
+          "offset": [
+            8,
+            19
+          ],
+          "opaqueBounds": [
+            58,
+            32,
+            263,
+            303
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9242649408756792,
+          "offset": [
+            13,
+            17
+          ],
+          "opaqueBounds": [
+            57,
+            30,
+            264,
+            302
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9279098753595398,
+          "offset": [
+            17,
+            17
+          ],
+          "opaqueBounds": [
+            57,
+            32,
+            266,
+            303
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9315548098434006,
+          "offset": [
+            20,
+            17
+          ],
+          "opaqueBounds": [
+            58,
+            35,
+            267,
+            303
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.935199744327261,
+          "offset": [
+            7,
+            14
+          ],
+          "opaqueBounds": [
+            57,
+            32,
+            270,
+            302
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9388446788111218,
+          "offset": [
+            12,
+            13
+          ],
+          "opaqueBounds": [
+            57,
+            31,
+            271,
+            302
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9424896132949825,
+          "offset": [
+            16,
+            13
+          ],
+          "opaqueBounds": [
+            55,
+            34,
+            271,
+            303
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.946134547778843,
+          "offset": [
+            20,
+            11
+          ],
+          "opaqueBounds": [
+            56,
+            34,
+            274,
+            301
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9497794822627038,
+          "offset": [
+            6,
+            11
+          ],
+          "opaqueBounds": [
+            55,
+            34,
+            273,
+            302
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9534244167465644,
+          "offset": [
+            11,
+            10
+          ],
+          "opaqueBounds": [
+            55,
+            34,
+            273,
+            302
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9570693512304251,
+          "offset": [
+            15,
+            8
+          ],
+          "opaqueBounds": [
+            54,
+            32,
+            274,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9607142857142857,
+          "offset": [
+            17,
+            7
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/reply-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "9c26e97cc9216619485f589bcf7c8fb78e4a52d5362d68a3a89c08c3df644796"
+    },
+    {
+      "name": "notice_return",
+      "source": "art/pet-independent/sources/notice-return16.png",
+      "sourceSha256": "7f937f0bbcb92fa507f53f6b50e1bcb64054d760774d08f75c0af34a5ed2e497",
+      "sourceSize": [
+        1263,
+        1245
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "97fe6f659b236ca8e6f66994bccdb8ae6d5ec8eff13e61498c30ec5b6a8b5ba1",
+      "assetBytes": 2221500,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.8959731543624161,
+          "offset": [
+            16,
+            25
+          ],
+          "opaqueBounds": [
+            71,
+            32,
+            264,
+            299
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.8972393431645589,
+          "offset": [
+            16,
+            25
+          ],
+          "opaqueBounds": [
+            71,
+            33,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.8985055319667017,
+          "offset": [
+            17,
+            24
+          ],
+          "opaqueBounds": [
+            72,
+            32,
+            265,
+            299
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.8997717207688445,
+          "offset": [
+            16,
+            24
+          ],
+          "opaqueBounds": [
+            72,
+            33,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9010379095709873,
+          "offset": [
+            15,
+            25
+          ],
+          "opaqueBounds": [
+            72,
+            34,
+            264,
+            300
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9023040983731301,
+          "offset": [
+            15,
+            24
+          ],
+          "opaqueBounds": [
+            72,
+            34,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9035702871752729,
+          "offset": [
+            15,
+            24
+          ],
+          "opaqueBounds": [
+            72,
+            34,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9048364759774157,
+          "offset": [
+            14,
+            24
+          ],
+          "opaqueBounds": [
+            71,
+            34,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9061026647795583,
+          "offset": [
+            14,
+            24
+          ],
+          "opaqueBounds": [
+            71,
+            33,
+            265,
+            301
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9073688535817012,
+          "offset": [
+            14,
+            23
+          ],
+          "opaqueBounds": [
+            71,
+            32,
+            266,
+            300
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.9086350423838438,
+          "offset": [
+            14,
+            23
+          ],
+          "opaqueBounds": [
+            71,
+            32,
+            266,
+            300
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9099012311859866,
+          "offset": [
+            12,
+            23
+          ],
+          "opaqueBounds": [
+            70,
+            32,
+            265,
+            301
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.9111674199881296,
+          "offset": [
+            13,
+            23
+          ],
+          "opaqueBounds": [
+            70,
+            32,
+            265,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9124336087902722,
+          "offset": [
+            13,
+            22
+          ],
+          "opaqueBounds": [
+            70,
+            32,
+            265,
+            301
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.9136997975924152,
+          "offset": [
+            13,
+            22
+          ],
+          "opaqueBounds": [
+            69,
+            32,
+            265,
+            301
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9149659863945578,
+          "offset": [
+            13,
+            22
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/notice-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "e663323860eef27265a79732bad42e6b2c7a2144e52cdef08673176a43e87552"
+    },
+    {
+      "name": "drag_return",
+      "source": "art/pet-independent/sources/drag-return16.png",
+      "sourceSha256": "ba1a35165debdcf442e61fc9eb5b593196b98fab8602eec8338a70bf1aab7995",
+      "sourceSize": [
+        1263,
+        1246
+      ],
+      "atlasSize": [
+        1280,
+        2560
+      ],
+      "cells": 32,
+      "assetSha256": "006e6c565564331e76c7970d7c3c03ba654b99fb4b74032a9e40a982803c58e2",
+      "assetBytes": 2400044,
+      "frames": [
+        {
+          "frame": 0,
+          "scale": 0.9238754325259516,
+          "offset": [
+            17,
+            26
+          ],
+          "opaqueBounds": [
+            65,
+            32,
+            265,
+            299
+          ]
+        },
+        {
+          "frame": 1,
+          "scale": 0.9252077136324087,
+          "offset": [
+            16,
+            22
+          ],
+          "opaqueBounds": [
+            61,
+            33,
+            270,
+            299
+          ]
+        },
+        {
+          "frame": 2,
+          "scale": 0.9265399947388657,
+          "offset": [
+            14,
+            16
+          ],
+          "opaqueBounds": [
+            61,
+            35,
+            268,
+            299
+          ]
+        },
+        {
+          "frame": 3,
+          "scale": 0.9278722758453228,
+          "offset": [
+            13,
+            15
+          ],
+          "opaqueBounds": [
+            61,
+            39,
+            266,
+            300
+          ]
+        },
+        {
+          "frame": 4,
+          "scale": 0.9292045569517797,
+          "offset": [
+            13,
+            17
+          ],
+          "opaqueBounds": [
+            62,
+            39,
+            266,
+            299
+          ]
+        },
+        {
+          "frame": 5,
+          "scale": 0.9305368380582368,
+          "offset": [
+            14,
+            16
+          ],
+          "opaqueBounds": [
+            64,
+            36,
+            266,
+            299
+          ]
+        },
+        {
+          "frame": 6,
+          "scale": 0.9318691191646938,
+          "offset": [
+            13,
+            16
+          ],
+          "opaqueBounds": [
+            63,
+            35,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 7,
+          "scale": 0.9332014002711508,
+          "offset": [
+            12,
+            16
+          ],
+          "opaqueBounds": [
+            63,
+            35,
+            265,
+            299
+          ]
+        },
+        {
+          "frame": 8,
+          "scale": 0.9345336813776078,
+          "offset": [
+            12,
+            16
+          ],
+          "opaqueBounds": [
+            63,
+            31,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 9,
+          "scale": 0.9358659624840648,
+          "offset": [
+            12,
+            16
+          ],
+          "opaqueBounds": [
+            63,
+            29,
+            265,
+            300
+          ]
+        },
+        {
+          "frame": 10,
+          "scale": 0.937198243590522,
+          "offset": [
+            12,
+            15
+          ],
+          "opaqueBounds": [
+            62,
+            27,
+            265,
+            299
+          ]
+        },
+        {
+          "frame": 11,
+          "scale": 0.9385305246969788,
+          "offset": [
+            11,
+            15
+          ],
+          "opaqueBounds": [
+            62,
+            27,
+            263,
+            300
+          ]
+        },
+        {
+          "frame": 12,
+          "scale": 0.939862805803436,
+          "offset": [
+            11,
+            17
+          ],
+          "opaqueBounds": [
+            62,
+            29,
+            263,
+            301
+          ]
+        },
+        {
+          "frame": 13,
+          "scale": 0.9411950869098931,
+          "offset": [
+            10,
+            16
+          ],
+          "opaqueBounds": [
+            60,
+            28,
+            260,
+            300
+          ]
+        },
+        {
+          "frame": 14,
+          "scale": 0.94252736801635,
+          "offset": [
+            11,
+            16
+          ],
+          "opaqueBounds": [
+            60,
+            29,
+            261,
+            300
+          ]
+        },
+        {
+          "frame": 15,
+          "scale": 0.9438596491228071,
+          "offset": [
+            11,
+            16
+          ],
+          "opaqueBounds": [
+            55,
+            32,
+            271,
+            301
+          ]
+        }
+      ],
+      "exactEndpoints": [
+        "references/drag-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "keyCells": 16,
+      "keyAtlasSha256": "763d0adf8f202e7a43c866b1272fcdce6362b6903c15185564d66ff003b7884c"
     }
   ],
   "missing": []

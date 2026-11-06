@@ -28,6 +28,20 @@ if "ask" not in clips:
     assert ask,"Missing authored ASK timings"
     clips["ask"]={"holds":[list(map(int,p)) for p in re.findall(r"PetCelHold\((\d+),(\d+)\)",ask[1])],"loop":0,"still":int(ask[2]),"cells":8}
 assert set(clips)==set(names)
+primary_names=list(names)
+looping=set(re.findall(r'"([a-z]+)"',re.search(r'private val looping = setOf\(([^\n]+)\)',source)[1]))
+release=re.search(r'clip\(name, (.+?),\s*still = 15, loopFrom = 15, cells = 16\)',source,re.S)[1]
+return_times=[int(x.strip()) for x in release.split(',')]
+for name in primary_names:
+    if name!='idle':
+        names[name+'_return']=names[name]+' · 收尾'
+        clips[name+'_return']={'holds':list(enumerate(return_times)),'loop':15,'still':15,'cells':16}
+for name,clip in clips.items():
+    old=clip['holds'];holds=[]
+    for i,ms in old:
+        if i==clip['cells']-1 and name not in looping:holds.append([i*2,ms])
+        else:holds.extend([[i*2,ms-min(ms,80)//2],[i*2+1,min(ms,80)//2]])
+    clip.update(holds=holds,loop=clip['loop']*2,still=clip['still']*2,cells=clip['cells']*2)
 data={}
 for name in names:
     path=ASSETS/f"{name}.webp"
@@ -51,7 +65,7 @@ canvas{max-width:100%;object-fit:contain}.status{display:flex;justify-content:sp
 @media(max-width:850px){.gallery{grid-template-columns:repeat(6,1fr)}.stages{grid-template-columns:1fr}.stage{min-height:330px}}
 @media(max-width:550px){.gallery{grid-template-columns:repeat(3,1fr)}main{padding:16px}}
 </style><main><h1>鲸鱼助手 · 独立动作预览</h1>
-<p>每个动作单独绘制，手、道具、服装和表情都在同一张画面里。可暂停逐帧检查，也可比较浅色和深色背景。</p>
+<p>独立原画加离线光流插值。偶数索引保留原画，奇数索引为中间帧；动作播完会收尾并回到待机。可暂停逐帧检查。</p>
 <div class="controls"><select id="action" aria-label="动作"></select><button id="play">暂停</button><button id="prev">上一帧</button><button id="next">下一帧</button>
 <select id="size" aria-label="显示尺寸"><option value="264">实机 264 像素</option><option value="88">88 像素</option><option value="480">放大检查</option></select>
 <select id="speed" aria-label="播放速度"><option value="1">正常速度</option><option value=".5">半速</option></select><button id="tour">依次播放全部</button></div>
@@ -59,9 +73,9 @@ canvas{max-width:100%;object-fit:contain}.status{display:flex;justify-content:sp
 <div class="status"><strong id="label"></strong><label>逐帧 <input id="scrub" type="range" min="0" max="7" step="1" value="0"></label><span id="frame"></span></div>
 <div class="gallery" id="gallery"></div></main>
 <script>const DATA=__DATA__;
-const images={},order=Object.keys(DATA),selector=document.querySelector('#action'),gallery=document.querySelector('#gallery');
+const images={},order=Object.keys(DATA),primary=order.filter(n=>!n.endsWith('_return')),selector=document.querySelector('#action'),gallery=document.querySelector('#gallery');
 const canvases=[document.querySelector('#light'),document.querySelector('#dark')];
-let selected='drink',playing=true,frame=0,elapsed=0,last=performance.now(),speed=1,size=264,tour=false,timer=null;
+let selected='drink',playing=true,frame=0,elapsed=0,last=performance.now(),speed=1,size=264,tour=false,tourIndex=0,timer=null;
 function sample(name,t){const d=DATA[name],total=d.holds.reduce((s,h)=>s+h[1],0);let start=0;
  if(t>=total){start=d.loop;t=(t-total)%d.holds.slice(start).reduce((s,h)=>s+h[1],0)}
  for(let i=start;i<d.holds.length;i++){if(t<d.holds[i][1])return {frame:d.holds[i][0],next:d.holds[i][1]-t};t-=d.holds[i][1]}}
@@ -74,7 +88,8 @@ function paint(){for(const c of canvases){c.width=c.height=size;c.style.width=c.
  document.querySelector('#play').textContent=playing?'暂停':'播放'}
 function tick(){clearTimeout(timer);const now=performance.now();if(playing)elapsed+=(now-last)*speed;last=now;
  const duration=DATA[selected].holds.reduce((s,h)=>s+h[1],0);
- if(tour&&elapsed>=Math.max(duration,2600)){selected=order[(order.indexOf(selected)+1)%order.length];elapsed=0}
+ if(playing&&selected!=='idle'&&elapsed>=duration){selected=selected.endsWith('_return')?'idle':selected+'_return';elapsed-=duration}
+ if(tour&&selected==='idle'&&elapsed>=2600){tourIndex=(tourIndex+1)%primary.length;selected=primary[tourIndex];elapsed=0}
  const s=sample(selected,elapsed);if(playing)frame=s.frame;paint();
  if(playing)timer=setTimeout(tick,Math.max(10,s.next/speed))}
 function choose(name){selected=name;elapsed=0;frame=DATA[name].holds[0][0];last=performance.now();tick()}
@@ -87,7 +102,7 @@ document.querySelector('#prev').onclick=()=>manual(frame-1);document.querySelect
 document.querySelector('#scrub').oninput=e=>manual(+e.target.value);
 document.querySelector('#size').onchange=e=>{size=+e.target.value;paint()};
 document.querySelector('#speed').onchange=e=>{speed=+e.target.value;last=performance.now();tick()};
-document.querySelector('#tour').onclick=()=>{tour=true;playing=true;choose('idle')};
+document.querySelector('#tour').onclick=()=>{tour=true;tourIndex=0;playing=true;choose('idle')};
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeout(timer)}else{last=performance.now();tick()}});
 window.PET_PREVIEW={select:choose,frame:manual,state:()=>({selected,frame,elapsed,playing}),data:DATA};
 Promise.all(order.map(name=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{
@@ -100,7 +115,7 @@ Promise.all(order.map(name=>new Promise((resolve,reject)=>{const im=new Image();
 (OUT/"独立动作预览.html").write_text(html.replace("__DATA__",json.dumps(data,ensure_ascii=False)),encoding="utf-8")
 (OUT/"timings.json").write_text(json.dumps({n:{**clips[n],"label":names[n]} for n in names},ensure_ascii=False,indent=2),encoding="utf-8")
 font=ImageFont.truetype("C:/Windows/Fonts/msyh.ttc",18)
-board=Image.new("RGB",(1400,1240),(236,243,247));draw=ImageDraw.Draw(board)
+board=Image.new("RGB",(1400,310*((len(names)+4)//5)),(236,243,247));draw=ImageDraw.Draw(board)
 for i,name in enumerate(names):
     atlas=Image.open(ASSETS/f"{name}.webp").convert("RGBA")
     ix=clips[name]["still"];cel=atlas.crop((ix%4*320,ix//4*320,ix%4*320+320,ix//4*320+320))
@@ -120,7 +135,7 @@ for group in range(3):
     board.save(OUT/f"逐帧检查-{group+1}.png")
 for name,clip in clips.items():
     if clip['cells']<=8:continue
-    board=Image.new("RGB",(1120,1200),(13,25,37));draw=ImageDraw.Draw(board)
+    board=Image.new("RGB",(1120,300*(clip['cells']//4)),(13,25,37));draw=ImageDraw.Draw(board)
     atlas=Image.open(ASSETS/f"{name}.webp").convert("RGBA")
     for ix in range(clip['cells']):
         cel=atlas.crop((ix%4*320,ix//4*320,ix%4*320+320,ix//4*320+320))

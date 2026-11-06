@@ -33,6 +33,10 @@ internal class CompanionPetDrawable(
     val displayedClipName get() = displayedClip
     val cachedAtlasCount get() = cache.size
     val cachedBitmapBytes get() = cache.values.sumOf { it.allocationByteCount.toLong() }
+    // Reserve one idle plus two large clips (action + return), scaled to the actual avatar.
+    val cacheLimitBytes = minOf(MAX_BITMAP_BYTES, targetSize.coerceIn(96, PetCels.CELL).toLong().let { side ->
+        side * side * 4 * (PetCels.clips.getValue("idle").cells + 2 * PetCels.clips.values.maxOf { it.cells })
+    })
 
     init {
         // Constructor is called on the avatar executor. One idle atlas is enough to attach.
@@ -41,22 +45,24 @@ internal class CompanionPetDrawable(
     }
 
     private fun decode(name: String): Bitmap {
-        var sample = 1
-        while (PetCels.CELL / (sample * 2) >= targetSize.coerceAtLeast(96)) sample *= 2
+        val cellSize = targetSize.coerceIn(96, PetCels.CELL)
         val bitmap = resources.assets.open("pet-cels/$name.webp").use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply {
-                inSampleSize = sample; inScaled = false; inPreferredConfig = Bitmap.Config.ARGB_8888
+                // Bake density scaling during the off-main decode. A 264px avatar should
+                // not keep every 320px source cel resident after doubling its frame count.
+                inScaled = true; inDensity = PetCels.CELL; inTargetDensity = cellSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
             })
         } ?: error("Missing pet animation: $name")
         val rows = PetCels.clips.getValue(name).rows
-        require(bitmap.width % PetCels.COLUMNS == 0 && bitmap.height == bitmap.width / PetCels.COLUMNS * rows)
+        require(bitmap.width == cellSize * PetCels.COLUMNS && bitmap.height == cellSize * rows)
         return bitmap
     }
 
-    fun setPose(next: PetPose) {
+    fun setPose(next: PetPose, cel: PetCelSample = PetCels.sample(next)) {
         if (closed) return
         pose = next
-        currentCel = PetCels.sample(next)
+        currentCel = cel
         wanted = currentCel.clip
         val loaded = cache[wanted]
         if (loaded != null) show(loaded, currentCel)
@@ -100,7 +106,7 @@ internal class CompanionPetDrawable(
 
     private fun trim() {
         val entries = cache.entries.iterator()
-        while (cache.size > MAX_ATLASES && entries.hasNext()) {
+        while ((cache.size > MAX_ATLASES || cachedBitmapBytes > cacheLimitBytes) && entries.hasNext()) {
             val entry = entries.next()
             if (entry.value === displayed) continue
             entry.value.recycle()
@@ -140,5 +146,8 @@ internal class CompanionPetDrawable(
         cache.values.forEach { if (!it.isRecycled) it.recycle() }
         cache.clear()
     }
-    companion object { const val MAX_ATLASES = 3 }
+    companion object {
+        const val MAX_ATLASES = 3
+        const val MAX_BITMAP_BYTES = 32L * 1024 * 1024
+    }
 }

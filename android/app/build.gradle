@@ -178,8 +178,8 @@ android {
         minSdk 26
         targetSdk 35
         buildConfigField 'boolean', 'SEPARATE_RUNTIME', separateRuntime.toString()
-        versionCode 129
-        versionName '0.3.8-preview.84'
+        versionCode 130
+        versionName '0.3.8-preview.85'
 
         buildConfigField 'String', 'DEFAULT_MANIFEST_URL', envBuildValue('DSH_RUNTIME_MANIFEST_URL')
         buildConfigField 'String', 'DEFAULT_MANIFEST_SHA256', envBuildValue('DSH_RUNTIME_MANIFEST_SHA256')

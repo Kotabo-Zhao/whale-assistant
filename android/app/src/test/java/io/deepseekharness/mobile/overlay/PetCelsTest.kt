@@ -7,7 +7,9 @@ class PetCelsTest {
     @Test fun everyStateHasItsOwnDrawingAndThereIsASeparateOccasionalDrink() {
         assertEquals(PetAction.entries.toSet(), PetCels.actionClips.keys)
         assertEquals(17, PetCels.actionClips.values.toSet().size)
-        assertEquals(18, PetCels.clips.size)
+        assertEquals(18, PetCels.primaryClips.size)
+        assertEquals(35, PetCels.clips.size)
+        assertEquals(PetCels.primaryClips.keys - "idle", PetCels.exits.keys)
         assertTrue("drink" in PetCels.clips)
     }
     @Test fun everyFrameBoundaryHasAnExactPositiveWakeupAndValidAtlasCell() {
@@ -34,7 +36,7 @@ class PetCelsTest {
         assertTrue(PetCels.sample(PetPose()).nextMs >= 1000)
         var t = 0L; var updates = 0
         while (t < 24000) { t += PetCels.sample(PetPose(elapsedMs = t)).nextMs; updates++ }
-        assertTrue("Idle should not retain a fixed 5/30/60 FPS tick: $updates", updates < 55)
+        assertTrue("Idle should not retain a fixed 5/30/60 FPS tick: $updates", updates < 110)
     }
     @Test fun pauseAndStopDoNotRepeatedlyPerformTheirEntryGesture() {
         for (name in listOf("paused", "stopped", "error")) {

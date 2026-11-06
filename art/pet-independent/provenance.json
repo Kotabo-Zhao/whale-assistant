@@ -137,6 +137,202 @@
       "provider": "native image_gen",
       "generatedPath": "C:\\Users\\57417\\.codex\\generated_images\\01a1b0c4-4b53-7882-be84-51d293f92ba2\\exec-043a9306-9b15-44fc-9113-8916d0dd9fc4.png",
       "promptFile": "prompts/drag.txt"
+    },
+    {
+      "name": "drink_return",
+      "sourceFile": "sources/drink-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-47fcc64a-056e-4715-bc54-99f678ae9c27.png",
+      "promptFile": "prompts/drink-return16.txt",
+      "endpointReferences": [
+        "references/drink-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "reading_return",
+      "sourceFile": "sources/reading-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-edd3745e-fde5-4ec8-a9b7-abc45dc1a35b.png",
+      "promptFile": "prompts/reading-return16.txt",
+      "endpointReferences": [
+        "references/reading-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "revisionPromptFiles": [
+        "prompts/reading-return16-tail-repair.txt"
+      ]
+    },
+    {
+      "name": "writing_return",
+      "sourceFile": "sources/writing-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-d3c328d8-eb2a-4f20-8201-3c458b027fbf.png",
+      "promptFile": "prompts/writing-return16.txt",
+      "endpointReferences": [
+        "references/writing-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "revisionPromptFiles": [
+        "prompts/writing-return16-grid-repair.txt"
+      ]
+    },
+    {
+      "name": "control_return",
+      "sourceFile": "sources/control-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-286c4b51-c3c5-485c-a314-6cb4d853dcd2.png",
+      "promptFile": "prompts/control-return16.txt",
+      "endpointReferences": [
+        "references/control-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "accept_return",
+      "sourceFile": "sources/accept-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-7d5ab8c4-ad11-4c77-a15b-69e09eb32369.png",
+      "promptFile": "prompts/accept-return16.txt",
+      "endpointReferences": [
+        "references/accept-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "celebrate_return",
+      "sourceFile": "sources/celebrate-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-26763ca9-9bf2-44b2-bfbe-801ed8cc5da1.png",
+      "promptFile": "prompts/celebrate-return16.txt",
+      "endpointReferences": [
+        "references/celebrate-endpoint.png",
+        "references/idle-endpoint.png"
+      ],
+      "revisionPromptFiles": [
+        "prompts/celebrate-return16-alpha-repair.txt"
+      ]
+    },
+    {
+      "name": "notice_return",
+      "sourceFile": "sources/notice-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-ea4be0d7-dc05-4605-892b-fcb4860637b5.png",
+      "promptFile": "prompts/notice-return16.txt",
+      "endpointReferences": [
+        "references/notice-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "ask_return",
+      "sourceFile": "sources/ask-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-acd67dc4-5763-4980-9e05-0fa5a4491e0d.png",
+      "promptFile": "prompts/ask-return16.txt",
+      "endpointReferences": [
+        "references/ask-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "setback_return",
+      "sourceFile": "sources/setback-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-e3824f50-30c6-4591-b9ad-e529894c1740.png",
+      "promptFile": "prompts/setback-return16.txt",
+      "endpointReferences": [
+        "references/setback-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "touch_return",
+      "sourceFile": "sources/touch-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-64d51954-bf09-47c2-a08e-5921ae6719a0.png",
+      "promptFile": "prompts/touch-return16.txt",
+      "endpointReferences": [
+        "references/touch-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "reply_return",
+      "sourceFile": "sources/reply-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-1390c633-ae7f-47d1-910e-de51ca596361.png",
+      "promptFile": "prompts/reply-return16.txt",
+      "endpointReferences": [
+        "references/reply-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "observe_return",
+      "sourceFile": "sources/observe-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-d45e460b-f286-4c89-bcbb-e4c2f24921d2.png",
+      "promptFile": "prompts/observe-return16.txt",
+      "endpointReferences": [
+        "references/observe-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "wait_return",
+      "sourceFile": "sources/wait-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-7bceb999-6206-4bb4-b0c7-3ef23cabb491.png",
+      "promptFile": "prompts/wait-return16.txt",
+      "endpointReferences": [
+        "references/wait-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "paused_return",
+      "sourceFile": "sources/paused-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-a43e7247-8184-413f-966d-ff4668ddd5c2.png",
+      "promptFile": "prompts/paused-return16.txt",
+      "endpointReferences": [
+        "references/paused-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "stopped_return",
+      "sourceFile": "sources/stopped-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-678716ab-8686-43e8-9e77-a85202d4e6d7.png",
+      "promptFile": "prompts/stopped-return16.txt",
+      "endpointReferences": [
+        "references/stopped-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "error_return",
+      "sourceFile": "sources/error-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-27a39fc2-d6b8-40c9-9d3c-e56f99181391.png",
+      "promptFile": "prompts/error-return16.txt",
+      "endpointReferences": [
+        "references/error-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
+    },
+    {
+      "name": "drag_return",
+      "sourceFile": "sources/drag-return16.png",
+      "provider": "native image_gen",
+      "generatedPath": "C:/Users/57417/.codex/generated_images/01a1b0c4-4b53-7882-be84-51d293f92ba2/exec-f86323f9-5517-4d6a-b276-65b3d66566e3.png",
+      "promptFile": "prompts/drag-return16.txt",
+      "endpointReferences": [
+        "references/drag-endpoint.png",
+        "references/idle-endpoint.png"
+      ]
     }
   ],
   "revisions": [
@@ -236,5 +432,12 @@
         }
       ]
     }
-  ]
+  ],
+  "interpolation": {
+    "userRequested": true,
+    "method": "OpenCV DIS bidirectional optical flow baked offline",
+    "runtimeOpticalFlow": false,
+    "sourceDrawingsPreserved": true,
+    "metadata": "../../android/app/src/main/assets/pet-cels/interpolation.json"
+  }
 }

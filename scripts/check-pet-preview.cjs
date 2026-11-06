@@ -17,7 +17,7 @@ const {chromium} = require(process.env.PET_PLAYWRIGHT_MODULE || path.join(out, '
     await page.locator('#play').click();
     const layout=await page.evaluate(()=>Object.fromEntries(Object.entries(window.PET_PREVIEW.data).map(([n,d])=>[n,d.cells])));
     const names=Object.keys(layout);
-    assert.equal(names.length,18);
+    assert.equal(names.length,35);
     for(const name of names) {
       await page.selectOption('#action',name);
       for(let frame=0;frame<layout[name];frame++) {
@@ -38,7 +38,7 @@ const {chromium} = require(process.env.PET_PLAYWRIGHT_MODULE || path.join(out, '
     assert.deepEqual(errors,[]);
     const result={actions:names.length,inspectedCells:Object.values(layout).reduce((s,n)=>s+n,0),controls:'pass',consoleErrors:errors,
       note:'Controls and image loading only; visual acceptance requires playback review.'};
-    fs.writeFileSync(path.join(out,'preview-check.json'),JSON.stringify(result,null,2)+'\n');
+    fs.writeFileSync(path.join(out,'preview-check-85.json'),JSON.stringify(result,null,2)+'\n');
     console.log(JSON.stringify(result));
   } finally {await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});
