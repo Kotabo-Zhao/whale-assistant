@@ -16,6 +16,10 @@ source = assets / 'rootfs.bundle'
 def open_source():
     return archive.open('assets/runtime/rootfs.bundle') if archive else source.open('rb')
 expected_bases = {
+    '0.3.83-whale-screen-coordinates': 'f7da437777f2afac1e495641b3f205dcb03effe6967858c1005180313d76a810',
+    '0.3.82-whale-screen-text': '75512bf56025bedeed85bb6aba99439d50ace2eda6802f9d16254d436baa8a62',
+    '0.3.81-whale-screen-text': '7e4ad14cb3b313f8ffa9e0163cbf4f83be32f54fcf26732da00606968ee5df98',
+    '0.3.80-whale-pet-journal': '9c0517341e62b1c7e67b0298dd319871e3bcf72f7c1ed22ad3a9221370c0c2b6',
     '0.3.79-whale-screen-evidence': '6fe31e26038eaaa19262ab3191bfdc665521791a3c5116f929708f5b03436481',
     '0.3.77-whale-screen-evidence': '1c510c748f5a72949dc586a4981c7eaee89376da5eefbcba2bd992197736fdd3',
     '0.3.76-whale-screen-sequence': 'c5239e4bc2d67590530c70b6569065f706fa90aef4b9af2961e8e2644ff7f5f0',

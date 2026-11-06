@@ -42,7 +42,17 @@ class ScreenSequenceDeviceTest {
                 clock && SystemClock.elapsedRealtime()-stableSince>=800
             }
             fun plan(vararg labels:String)=JSONObject().put("operationId",java.util.UUID.randomUUID().toString()).put("packageName","com.android.deskclock")
+                .put("sessionId","device-test-screen-sequence")
                 .put("steps",JSONArray(labels.map{JSONObject().put("text",it)}))
+            if(InstrumentationRegistry.getArguments().getString("recoverPreviousTest")=="true") {
+                val rows=JSONObject(command("screenRecover","{}").getString("text")).getJSONArray("items")
+                for(i in 0 until rows.length()) {
+                    val row=rows.getJSONObject(i)
+                    if(row.optString("state")=="unknown" && row.optLong("reconciledAt")==0L &&
+                        row.optString("packageName")=="com.android.deskclock" && row.optString("sessionId") in setOf("","device-test-screen-sequence"))
+                        assertTrue(command("screenRecover",JSONObject().put("operationId",row.getString("operationId")).toString()).getBoolean("ok"))
+                }
+            }
             fun selected(text:String)=nodes(inst.uiAutomation.rootInActiveWindow).any{it.contentDescription?.toString()==text && it.isSelected}
             val full=command("screenSequence",plan("时钟","定时器","秒表").put("includeImage",true).toString())
             assertTrue(full.toString(),full.getBoolean("ok"))
@@ -55,7 +65,7 @@ class ScreenSequenceDeviceTest {
             assertTrue(result.getJSONObject("snapshot").getString("imageBase64").length>100)
             assertFalse(result.getJSONObject("observation").has("observationId"))
             val image=result.getJSONObject("observation").getJSONObject("image")
-            val overlay=image.getJSONObject("excludedControlOverlay").getJSONArray("bounds")
+            val overlay=image.getJSONObject("excludedControlOverlay").getJSONArray("regions").getJSONArray(0)
             val excluded=android.graphics.Rect(overlay.getInt(0),overlay.getInt(1),overlay.getInt(2),overlay.getInt(3))
             val lines=image.getJSONArray("lines")
             assertTrue("应看到秒表标签下的真实指示线",(0 until lines.length()).any {
@@ -63,7 +73,7 @@ class ScreenSequenceDeviceTest {
             })
             for(i in 0 until lines.length()) {
                 val b=lines.getJSONObject(i).getJSONArray("bounds")
-                assertFalse("控制条不属于目标 App 观察",excluded.contains((b.getInt(0)+b.getInt(2))/2,(b.getInt(1)+b.getInt(3))/2))
+                assertFalse("桌宠不属于目标 App 观察",excluded.contains((b.getInt(0)+b.getInt(2))/2,(b.getInt(1)+b.getInt(3))/2))
             }
             val missing=JSONObject(command("screenSequence",plan("时钟","WhaleMissingTarget7319","秒表").toString()).getString("text"))
             assertEquals("SCREEN_TARGET_MISSING",missing.getString("errorCode"));assertEquals(1,missing.getInt("completed"));assertTrue(selected("时钟"))
@@ -81,6 +91,9 @@ class ScreenSequenceDeviceTest {
                 runner.join(10000);assertFalse(runner.isAlive)
                 assertEquals(if(pause) "DEVICE_CONTROL_PAUSED" else "SCREEN_SEQUENCE_CANCELLED",reply.get().getString("errorCode"))
                 Thread.sleep(200);assertTrue(selected("定时器"));DeviceControlState.resume()
+                val recovery=command("screenRecover",JSONObject().put("operationId",sequence.getString("operationId")).toString())
+                assertTrue(recovery.toString(),recovery.getBoolean("ok"))
+                assertTrue(JSONObject(recovery.getString("text")).getBoolean("doNotReplay"))
                 assertTrue(command("screenSequence",plan("时钟").toString()).getBoolean("ok"))
                 await{selected("时钟")}
             }

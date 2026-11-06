@@ -193,8 +193,9 @@ class ScreenControlLatencyDeviceTest {
                     .put("settleMs",value.getLong("settleMs")).put("actionAndObserveMs",SystemClock.elapsedRealtime()-started))
                 if(round==4) {
                     val replay=command("screenAct",actionRequest.toString())
-                    assertFalse("旧观察被重复执行",replay.getBoolean("ok"))
-                    assertEquals("SCREEN_OBSERVATION_STALE",replay.getString("errorCode"))
+                    assertTrue(replay.toString(),replay.getBoolean("ok"))
+                    val prior=JSONObject(replay.getString("text"))
+                    assertEquals("recorded",prior.getString("status"));assertTrue(prior.getBoolean("doNotReplay"))
                     assertEquals(beforeFast+5,count.get())
                 }
             }
@@ -229,11 +230,13 @@ class ScreenControlLatencyDeviceTest {
                 assertEquals("中断后发生抬起",beforeUp,ups.get())
                 assertEquals("中断后发生延迟点击",beforeFast+5,count.get())
                 DeviceControlState.resume()
+                val recovery=command("screenRecover",JSONObject().put("operationId",fresh.getString("observationId")).toString())
+                assertTrue(recovery.toString(),recovery.getBoolean("ok"))
             }
-            // The visible stop strip cannot be tapped by this coordinate channel.
+            // The pet and its control menu cannot be tapped by this coordinate channel.
             val protectedObservation=JSONObject(command("screenObserve","{\"ocr\":true}").getString("text"))
-            val indicator=DeviceControlState::class.java.getDeclaredField("indicator").apply{isAccessible=true}.get(DeviceControlState)!!
-            val panel=indicator.javaClass.getDeclaredField("root").apply{isAccessible=true}.get(indicator) as View
+            val service=checkNotNull(PetControlDeviceUi.service())
+            val panel=PetControlDeviceUi.field(service,"ballView") as View
             var controlX=0;var controlY=0
             main {val pos=IntArray(2);panel.getLocationOnScreen(pos);controlX=pos[0]+panel.width/2;controlY=pos[1]+panel.height/2}
             val protectedResult=command("screenAct",JSONObject().put("observationId",protectedObservation.getString("observationId"))

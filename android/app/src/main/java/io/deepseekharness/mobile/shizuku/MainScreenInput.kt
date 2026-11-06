@@ -51,7 +51,7 @@ internal class MainScreenInput {
         require(id.length in 1..64 && parameters.length<=2048)
         val p=JSONObject(parameters)
         val action=p.getString("action")
-        require(action in setOf("tap","swipe","back"))
+        require(action in setOf("tap","swipe","back","text"))
         fun integer(key:String):Int {
             val v=p.get(key);require(v is Int || v is Long)
             val n=(v as Number).toLong();require(n in 0..65535);return n.toInt()
@@ -60,7 +60,7 @@ internal class MainScreenInput {
         fun point(x:String,y:String):Pair<Int,Int> = (integer(x) to integer(y)).also {
             require(it.first<width && it.second<height){"坐标超出屏幕"}
         }
-        val start=if(action=="back") 0 to 0 else point("x","y")
+        val start=if(action=="back" || action=="text") 0 to 0 else point("x","y")
         val end=if(action=="swipe") point("endX","endY") else start
         val duration=if(action=="swipe") integer("durationMs").also{require(it in 80..1000)} else 0
         val job=Job()
@@ -85,11 +85,20 @@ internal class MainScreenInput {
             check(actual.x==width && actual.y==height){"SCREEN_GEOMETRY_CHANGED"}
             synchronized(job) {
                 check(!job.cancelled && owner.isBinderAlive){"SCREEN_ACTION_CANCELLED"}
-                if(action=="back") {
-                    val now=SystemClock.uptimeMillis()
-                    emit(KeyEvent(now,now,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_BACK,0,0,android.view.KeyCharacterMap.VIRTUAL_KEYBOARD,0,0,InputDevice.SOURCE_KEYBOARD));events++
-                    // Finish this atomic key pair even if cancellation arrives concurrently.
-                    emit(KeyEvent(now,SystemClock.uptimeMillis(),KeyEvent.ACTION_UP,KeyEvent.KEYCODE_BACK,0,0,android.view.KeyCharacterMap.VIRTUAL_KEYBOARD,0,0,InputDevice.SOURCE_KEYBOARD));events++
+                if(action=="back" || action=="text") {
+                    fun key(code:Int,meta:Int=0) {
+                        val now=SystemClock.uptimeMillis()
+                        try {
+                            emit(KeyEvent(now,now,KeyEvent.ACTION_DOWN,code,0,meta,android.view.KeyCharacterMap.VIRTUAL_KEYBOARD,0,0,InputDevice.SOURCE_KEYBOARD));events++
+                        } finally {
+                            // Always release the key, including an uncertain down injection.
+                            emit(KeyEvent(now,SystemClock.uptimeMillis(),KeyEvent.ACTION_UP,code,0,meta,android.view.KeyCharacterMap.VIRTUAL_KEYBOARD,0,0,InputDevice.SOURCE_KEYBOARD));events++
+                        }
+                    }
+                    if(action=="back") key(KeyEvent.KEYCODE_BACK) else {
+                        if(p.optBoolean("replace")) key(KeyEvent.KEYCODE_A,KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON)
+                        key(KeyEvent.KEYCODE_PASTE)
+                    }
                 } else {
                     job.downTime=SystemClock.uptimeMillis();job.x=start.first.toFloat();job.y=start.second.toFloat()
                     job.down=true;motion(job,MotionEvent.ACTION_DOWN);events++
@@ -109,7 +118,7 @@ internal class MainScreenInput {
                     }
                 }
             }
-            if(action!="back") synchronized(job) {
+            if(action=="tap" || action=="swipe") synchronized(job) {
                 check(!job.cancelled && owner.isBinderAlive){"SCREEN_ACTION_CANCELLED"}
                 motion(job,MotionEvent.ACTION_UP);job.down=false;events++
             }

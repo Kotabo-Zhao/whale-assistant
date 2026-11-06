@@ -151,7 +151,10 @@ class DeviceCommandRunnerTest {
     @Test
     fun appAutomationUsesFixedCommandsAndBoundedWait() {
         val launch = runner.buildInput(requestId, DeviceCommand.LAUNCH_APP, "com.example.demo")
-        assertTrue(launch.contains("monkey -p \"com.example.demo\" 1"))
+        assertTrue(launch.contains("cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER \"com.example.demo\""))
+        assertTrue(launch.contains("\"com.example.demo/\"*"))
+        assertTrue(launch.contains("am start -W -a android.intent.action.MAIN"))
+        assertFalse(launch.contains("monkey"))
         val current = runner.buildInput(requestId, DeviceCommand.FOREGROUND_PACKAGE, "")
         assertTrue(current.contains("dumpsys activity activities"))
         assertTrue(current.contains("mResumedActivity"))

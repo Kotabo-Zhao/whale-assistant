@@ -26,13 +26,8 @@ internal object DeviceControlState {
     private var cancel: (() -> Unit)? = null
     private val execution = java.util.concurrent.locks.ReentrantLock()
     private var halted = false
-    private var indicator: io.deepseekharness.mobile.companion.DeviceControlOverlay? = null
     fun refreshIndicator(context: Context) {
-        val app=context.applicationContext
-        main.post {
-            if(indicator==null) indicator=io.deepseekharness.mobile.companion.DeviceControlOverlay(app,app.getSystemService(android.view.WindowManager::class.java))
-            indicator?.refresh()
-        }
+        OverlayBallService.refreshDeviceControl(context.applicationContext)
     }
     private var holder: Pair<String,Context>? = null
     private var holderRun = ""
@@ -72,6 +67,13 @@ internal object DeviceControlState {
         current = Snapshot(phase, action, SystemClock.elapsedRealtime())
         listeners.forEach { it(current) }
     }
+    @Synchronized fun stage(observing: Boolean) {
+        checkCurrent()
+        if (activeTicket.get() == null) return
+        val phase=if(observing) "observing" else "operating"
+        if(current.phase!=phase) publish(phase)
+    }
+    @Synchronized fun failed() { checkCurrent(); if(activeTicket.get()!=null) publish("failed") }
     fun subscribe(listener: (Snapshot) -> Unit) { listeners.add(listener) }
     fun unsubscribe(listener: (Snapshot) -> Unit) { listeners.remove(listener) }
     fun disconnected() {
@@ -104,18 +106,18 @@ internal object DeviceControlState {
     fun execute(context: Context, observing: Boolean, name: String, cancelAction: (() -> Unit)? = null,
                 block: () -> DeviceCommandResult): DeviceCommandResult {
         if(activeTicket.get()!=null) {checkCurrent();return block().also{checkCurrent()}}
-        refreshIndicator(context)
         val admission=synchronized(this){revocation}
         execution.lock()
         try {
         val ticket = synchronized(this) {
             if (halted || admission!=revocation)
-                throw RuntimeFailure("DEVICE_CONTROL_PAUSED", "手机操作已由用户暂停，请在桌宠状态条中继续")
+                throw RuntimeFailure("DEVICE_CONTROL_PAUSED", "手机操作已由用户暂停，请点桌宠恢复接收新操作；旧步骤不会重放")
             generation++; cancel = cancelAction
             publish(if (observing) "observing" else "operating", name)
             generation
         }
         activeTicket.set(ticket)
+        refreshIndicator(context)
         val started = SystemClock.elapsedRealtime()
         try {
             return block().also { result ->
@@ -123,7 +125,7 @@ internal object DeviceControlState {
                 synchronized(this) {
                     if (ticket == generation) {
                         cancel = null
-                        publish(if (result.ok) "waiting" else "failed")
+                        publish(if (result.ok && current.phase!="failed") "waiting" else "failed")
                     }
                 }
             }

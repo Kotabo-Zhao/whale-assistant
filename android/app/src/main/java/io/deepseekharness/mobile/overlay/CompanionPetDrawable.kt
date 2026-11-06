@@ -13,6 +13,10 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val layerPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val propPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
+    private val phoneProp = PetPhoneProp()
+    fun phonePalette(accent: Int, surface: Int) {
+        phoneProp.accent = accent; phoneProp.surface = surface; invalidateSelf()
+    }
     private val w = open.width.toFloat()
     private val h = open.height.toFloat()
     private val base = open.copy(Bitmap.Config.ARGB_8888, true)
@@ -27,7 +31,8 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
     private var prepared: PetPose? = null
     fun setPose(next: PetPose) {
         if (next == pose) return
-        val sheetChanged=(pose.sheet>.01f)!=(next.sheet>.01f)
+        val sheetChanged=(pose.sheet>.01f)!=(next.sheet>.01f) || pose.phoneMode!=next.phoneMode ||
+            kotlin.math.abs(pose.phone-next.phone)>.012f || kotlin.math.abs(pose.phoneTap-next.phoneTap)>.025f
         pose = next
         prepareGeometry()
         // The 20/30 Hz motion clock continues unchanged. Avoid submitting another
@@ -77,6 +82,7 @@ internal class CompanionPetDrawable(private val open: Bitmap, private val closed
         prepareGeometry()
         drawSkin(canvas, base, skin, paint)
         if (pose.sheet > .01f) drawWorkSheet(canvas)
+        phoneProp.draw(canvas,skeleton,pose,w,h,paint.alpha)
         layerPaint.alpha = paint.alpha
         drawSkin(canvas, left.image, left.skin, layerPaint)
         drawSkin(canvas, right.image, right.skin, layerPaint)

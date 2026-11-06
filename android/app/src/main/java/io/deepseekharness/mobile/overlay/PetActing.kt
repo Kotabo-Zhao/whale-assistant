@@ -3,7 +3,8 @@ package io.deepseekharness.mobile.overlay
 import kotlin.math.PI
 import kotlin.math.sin
 
-internal enum class PetAction { IDLE, ACCEPT, WORK, ASK, CELEBRATE, SETBACK, TOUCH }
+internal enum class PetAction { IDLE, ACCEPT, WORK, ASK, CELEBRATE, SETBACK, TOUCH,
+    OBSERVE, CONTROL, WAIT, PAUSED, STOPPED, ERROR }
 
 /** Rotations are local to the named joint. Lift is measured in fractions of character height. */
 internal data class PetPose(
@@ -12,13 +13,15 @@ internal data class PetPose(
     val leftShoulder: Float = 0f, val rightShoulder: Float = 0f,
     val leftElbow: Float = 0f, val rightElbow: Float = 0f, val leftWrist: Float = 0f, val rightWrist: Float = 0f,
     val feet: Float = 0f, val lift: Float = 0f, val gaze: Float = 0f, val mouth: Float = 0f, val sheet: Float = 0f,
+    val phone: Float = 0f, val phoneTap: Float = 0f, val phoneMode: Int = 0,
 ) {
     fun mix(b: PetPose, t: Float): PetPose {
         fun blend(a: Float, end: Float) = a + (end - a) * t
         return PetPose(blend(chest,b.chest), blend(head,b.head), blend(leftFin,b.leftFin), blend(rightFin,b.rightFin),
             blend(hair,b.hair), blend(tailRoot,b.tailRoot), blend(tailTip,b.tailTip),
             blend(leftShoulder,b.leftShoulder), blend(rightShoulder,b.rightShoulder), blend(leftElbow,b.leftElbow), blend(rightElbow,b.rightElbow),
-            blend(leftWrist,b.leftWrist), blend(rightWrist,b.rightWrist), blend(feet,b.feet), blend(lift,b.lift), blend(gaze,b.gaze), blend(mouth,b.mouth), blend(sheet,b.sheet))
+            blend(leftWrist,b.leftWrist), blend(rightWrist,b.rightWrist), blend(feet,b.feet), blend(lift,b.lift), blend(gaze,b.gaze), blend(mouth,b.mouth), blend(sheet,b.sheet),
+            blend(phone,b.phone), blend(phoneTap,b.phoneTap), b.phoneMode)
     }
 }
 
@@ -27,6 +30,27 @@ internal class PetActing {
     var runningTasks = 0
     var waitingTasks = 0
     var chatThinking = false
+    private var controlAction: PetAction? = null
+    private var operationUntil = 0L
+    fun control(phase: String, now: Long = 0) {
+        if(phase=="operating") operationUntil=now+450
+        controlAction = when (phase) {
+            "observing" -> PetAction.OBSERVE
+            "operating" -> PetAction.CONTROL
+            "waiting" -> PetAction.WAIT
+            "paused" -> PetAction.PAUSED
+            "stopped" -> PetAction.STOPPED
+            "failed" -> PetAction.ERROR
+            else -> null
+        }
+        // Never celebrate an unrelated chat reply while the phone is controlled or paused.
+        if (controlAction != null) { cue = null; afterAccept = null }
+    }
+    fun still(): PetPose = pose(controlAction ?: when {
+        runningTasks > 0 || chatThinking -> PetAction.WORK
+        waitingTasks > 0 -> PetAction.ASK
+        else -> PetAction.IDLE
+    }, 900)
     var action = PetAction.IDLE
         private set
     private var cue: PetAction? = null
@@ -36,6 +60,7 @@ internal class PetActing {
     private var from = PetPose()
     private var last = PetPose()
     fun react(value: PetAction, now: Long) {
+        if (controlAction != null) return
         if (value == PetAction.IDLE || value == PetAction.WORK) return
         if (value == PetAction.TOUCH && cue != null && now - cueAt < duration(cue)) return
         if (cue == PetAction.ACCEPT && value != PetAction.ACCEPT && now - cueAt < duration(cue)) {
@@ -63,7 +88,8 @@ internal class PetActing {
             afterAccept = null
             if (pending != null && now - ended < duration(pending)) react(pending, ended)
         }
-        val next = cue ?: when {
+        val device = if(controlAction==PetAction.OBSERVE && now<operationUntil) PetAction.CONTROL else controlAction
+        val next = device ?: cue ?: when {
             runningTasks > 0 || chatThinking -> PetAction.WORK
             waitingTasks > 0 -> PetAction.ASK
             else -> PetAction.IDLE
@@ -71,7 +97,7 @@ internal class PetActing {
         if (next != action) { from = last; entered = now; action = next }
         val elapsed = (now - entered).coerceAtLeast(0)
         val target = pose(action, elapsed, drag)
-        val t = (elapsed / 190f).coerceIn(0f, 1f)
+        val t = (elapsed / if (from.phone != target.phone) 420f else 190f).coerceIn(0f, 1f)
         last = if (t < 1f) from.mix(target, t * t * (3f - 2f * t)) else target
         return last
     }
@@ -125,6 +151,28 @@ internal class PetActing {
                 }
                 PetAction.SETBACK -> PetPose(chest = 10f, head = 13f + 3f*sway, leftFin = -20f, rightFin = 20f, hair = -7f,
                     tailRoot = 18f, tailTip = 12f*lag, leftElbow = 25f, rightElbow = -38f + 4f*sway, lift = -.01f, gaze = -.6f)
+                PetAction.OBSERVE, PetAction.CONTROL, PetAction.WAIT, PetAction.PAUSED, PetAction.ERROR -> {
+                    val tapping = if (action == PetAction.CONTROL) (1f + wave(ms, 680.0)) * .5f else 0f
+                    val paused = action == PetAction.PAUSED
+                    val looking = action == PetAction.OBSERVE
+                    val problem = action == PetAction.ERROR
+                    PetPose(chest = if (paused) -4f else 3f + sway, head = when {
+                        paused -> -12f; problem -> -18f + 3f*sway; looking -> 9f + 4f*wave(ms, 2400.0); else -> 6f + 2f*sway
+                    }, leftFin = 5f*sway, rightFin = -6f*sway, hair = -3f*sway,
+                        tailRoot = 8f*tail, tailTip = 12f*lag,
+                        leftShoulder = -5f, leftElbow = if (paused) -22f else -53f, leftWrist = 6f,
+                        rightShoulder = if (paused) -26f else 7f,
+                        rightElbow = if (paused) -108f else 43f + 10f*tapping,
+                        rightWrist = if (paused) -20f else -10f*tapping,
+                        lift = .003f*sway, gaze = if (looking) .45f*wave(ms, 2400.0) else if (paused || problem) -.7f else .35f,
+                        phone = 1f, phoneTap = tapping, phoneMode = when (action) {
+                            PetAction.OBSERVE -> 1; PetAction.CONTROL -> 2; PetAction.WAIT -> 3
+                            PetAction.PAUSED -> 4; else -> 6
+                        })
+                }
+                PetAction.STOPPED -> PetPose(chest = -3f, head = -8f, leftFin = -8f, rightFin = 8f,
+                    tailRoot = 5f*tail, tailTip = 6f*lag, leftElbow = 12f,
+                    rightShoulder = -26f, rightElbow = -108f, rightWrist = -20f, phoneMode = 5)
             }
         }
     }

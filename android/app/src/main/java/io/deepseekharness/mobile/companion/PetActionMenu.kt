@@ -21,6 +21,7 @@ internal class PetActionMenu(
 ) : ScrollView(context) {
     enum class Page(val title: Int) { HOME(R.string.pet_menu_home), SAVE(R.string.pet_menu_capture), TOOLS(R.string.pet_menu_tools), DEVICE(R.string.pet_menu_device) }
     enum class Action(val label: Int) {
+        PAUSE(R.string.pet_control_pause), RESUME(R.string.pet_control_resume), STOP(R.string.pet_control_stop),
         CHAT(R.string.pet_menu_chat), ASSIGN(R.string.pet_menu_assign), WRITE(R.string.pet_menu_write),
         CLIPBOARD(R.string.pet_menu_clipboard), SCREEN(R.string.pet_menu_screen), FILES(R.string.pet_menu_files),
         INBOX(R.string.pet_menu_inbox), HARNESS(R.string.pet_menu_harness),
@@ -28,6 +29,19 @@ internal class PetActionMenu(
     }
 
     private val ui = PetUi(context)
+    private var controlPanel: LinearLayout? = null
+    private var controlLabel: TextView? = null
+    private var controlPause: TextView? = null
+    private var controlExplanation: TextView? = null
+    fun refreshControl() {
+        val phase=io.deepseekharness.mobile.DeviceControlState.current.phase
+        controlLabel?.text=PetControlLabels.label(ui.palette,phase)
+        val halted=phase=="paused" || phase=="stopped"
+        controlPause?.setText(if(halted) R.string.pet_control_resume else R.string.pet_control_pause)
+        controlExplanation?.visibility=if(halted) VISIBLE else GONE
+        val visible=if(phase=="idle") GONE else VISIBLE
+        if(controlPanel?.visibility!=visible) { controlPanel?.visibility=visible; resized() }
+    }
     var page = initialPage
         private set
     private val body = LinearLayout(context).apply {
@@ -135,6 +149,19 @@ internal class PetActionMenu(
             heading.addView(ui.close(dismiss))
             body.addView(heading)
         }
+        controlPanel=LinearLayout(context).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(8),dp(4),dp(8),dp(8)); background=ui.shape(ui.soft,14)
+            controlLabel=ui.text("",13f,ui.ink,true).also { addView(it) }
+            val actions=LinearLayout(context)
+            controlPause=button(R.string.pet_control_pause,true) {
+                dispatch(if(io.deepseekharness.mobile.DeviceControlState.current.phase in setOf("paused","stopped")) Action.RESUME else Action.PAUSE)
+            }.also { actions.addView(it,LinearLayout.LayoutParams(0,-2,1f)) }
+            actions.addView(button(R.string.pet_control_stop,true) { dispatch(Action.STOP) },LinearLayout.LayoutParams(0,-2,1f))
+            addView(actions)
+            controlExplanation=ui.text(ui.string(R.string.pet_control_new_actions),12f,ui.muted).also { addView(it) }
+        }.also { body.addView(it) }
+        refreshControl()
         when (page) {
             Page.HOME -> {
                 tiles(tile(Action.CHAT.label, R.drawable.ic_whale_nav_chat) { dispatch(Action.CHAT) },

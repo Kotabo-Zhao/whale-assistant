@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pet_control_observing">Observing the phone</string>
+    <string name="pet_control_operating">Operating the phone</string>
+    <string name="pet_control_waiting">Waiting for the next action</string>
+    <string name="pet_control_paused">Phone control paused</string>
+    <string name="pet_control_stopped">Phone control stopped</string>
+    <string name="pet_control_failed">Phone action needs checking</string>
+    <string name="pet_control_pause">Pause</string>
+    <string name="pet_control_resume">Enable control</string>
+    <string name="pet_control_stop">Stop</string>
+    <string name="pet_control_tap">%1$s. Tap for control actions.</string>
+    <string name="pet_control_new_actions">Enabling control accepts new actions. Cancelled steps will not replay.</string>
+</resources>

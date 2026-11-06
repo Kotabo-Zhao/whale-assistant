@@ -32,7 +32,7 @@ class WhaleScreenControlDeviceTest {
     }
     private fun views(view:View):List<View> = listOf(view)+if(view is ViewGroup)(0 until view.childCount).flatMap{views(view.getChildAt(it))}else emptyList()
 
-    @Test fun actualObservationTapPauseAndStopUseTheVisibleIndicator() {
+    @Test fun actualObservationTapPauseAndStopUseThePetMenu() {
         val wake=WorkerRuntimeWake(app)
         val wm=app.getSystemService(WindowManager::class.java)
         var fixture:LinearLayout?=null
@@ -97,26 +97,21 @@ class WhaleScreenControlDeviceTest {
             main {val pos=IntArray(2);button.getLocationOnScreen(pos);assertTrue(x in pos[0]..pos[0]+button.width && y in pos[1]..pos[1]+button.height)}
             assertTrue(command("shell","input tap $x $y").getBoolean("ok"))
             await("real shell tap"){count.get()==1}
-            fun indicator():View?=field(DeviceControlState,"indicator")?.let{field(it,"root") as? View}
-            fun click(label:String) {
-                await("visible indicator $label") {var ready=false;main {ready=indicator()?.let{root->root.isShown&&views(root).filterIsInstance<TextView>().any{it.text.toString()==label}}==true};ready}
-                main {views(requireNotNull(indicator())).filterIsInstance<TextView>().single{it.text.toString()==label}.performClick()}
-            }
-            click("暂停")
+            PetControlDeviceUi.click("暂停操作")
             val paused=command("shell","input tap $x $y")
             assertEquals("DEVICE_CONTROL_PAUSED",paused.optString("errorCode"));assertEquals(1,count.get())
-            click("继续")
+            PetControlDeviceUi.click("恢复控制")
             assertTrue(command("shell","input tap $x $y").getBoolean("ok"))
             await("tap after resume"){count.get()==2}
             val result=AtomicReference<JSONObject>()
             val longStep=Thread {result.set(command("shell","sleep 8; input tap $x $y"))}.apply{start()}
             await("actual operating state"){DeviceControlState.current.phase=="operating"}
-            click("停止")
+            PetControlDeviceUi.click("停止操作")
             longStep.join(5000);assertFalse("stop must release in-flight command",longStep.isAlive)
             assertFalse(result.get().getBoolean("ok"))
             Thread.sleep(8500);assertEquals("stopped command must not tap later",2,count.get())
             assertEquals("stopped",DeviceControlState.current.phase)
-            click("继续")
+            PetControlDeviceUi.click("恢复控制")
             inst.sendStatus(0,android.os.Bundle().apply {putBoolean("nativeTree",native);putLong("treeMs",treeMs);putLong("ocrColdMs",timings[0]);putLong("ocrWarmMs",timings[1]);putInt("verifiedTaps",count.get())})
         } finally {main {fixture?.let{runCatching{wm.removeView(it)}}};DeviceControlState.resume();wake.close()}
     }

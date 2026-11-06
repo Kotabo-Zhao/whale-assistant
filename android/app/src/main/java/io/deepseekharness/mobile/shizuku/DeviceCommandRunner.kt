@@ -486,12 +486,18 @@ class DeviceCommandRunner(
             // 输出上界由读取侧的固定缓冲窗口负责。
             Body("dumpsys battery", "\$?")
         }
-        // 只允许标准 Android 包名，并通过 monkey 启动其默认入口；不接受 Activity、Intent 或 Shell 参数。
+        // Resolve the actual launcher alias. A single random monkey event may return zero without launching.
         DeviceCommand.LAUNCH_APP -> {
             if (param.length > MAX_PACKAGE_NAME_CHARS || !PACKAGE_NAME_PATTERN.matches(param)) {
                 throw RuntimeFailure("DEVICE_COMMAND_INVALID", "应用包名格式无效")
             }
-            Body("monkey -p \"$param\" 1", "\$?")
+            Body("""
+                dsh_launch_component=${'$'}(cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$param" | tail -n 1)
+                case "${'$'}dsh_launch_component" in
+                  "$param/"*) am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "${'$'}dsh_launch_component" ;;
+                  *) echo 'DEVICE_APP_ENTRY_UNAVAILABLE'; false ;;
+                esac
+            """.trimIndent(), "\$?")
         }
         // 读取当前前台包名相关的系统诊断行，不返回完整 dumpsys，减少设备信息暴露。
         DeviceCommand.FOREGROUND_PACKAGE -> {

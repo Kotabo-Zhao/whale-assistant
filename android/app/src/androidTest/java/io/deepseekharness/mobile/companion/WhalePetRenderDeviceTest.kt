@@ -169,8 +169,8 @@ class WhalePetRenderDeviceTest {
         CompanionPetDrawable(open, load(R.drawable.whale_maid_blink_v2), load(R.drawable.whale_maid_body_v3)).use { pet ->
             pet.setBounds(0, 0, 192, 192)
             val times = mutableListOf<Long>()
-            repeat(260) { i ->
-                pet.setPose(io.deepseekharness.mobile.overlay.PetActing.pose(io.deepseekharness.mobile.overlay.PetAction.entries[i / 40 % 7], (i % 40) * 50L))
+            repeat(io.deepseekharness.mobile.overlay.PetAction.entries.size * 40) { i ->
+                pet.setPose(io.deepseekharness.mobile.overlay.PetActing.pose(io.deepseekharness.mobile.overlay.PetAction.entries[i / 40], (i % 40) * 50L))
                 pet.blinkAmount = if (i % 70 in 0..4) 0.6f else 0f
                 val start = SystemClock.elapsedRealtimeNanos(); pet.draw(canvas)
                 if (i >= 40) times.add(SystemClock.elapsedRealtimeNanos() - start)

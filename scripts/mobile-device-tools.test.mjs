@@ -853,7 +853,10 @@ test('主屏动作合并返回新观察，参数校验失败不发送桥请求',
   const tool = f.tools.get('mobile_screen_act')
   const observationId = '00000000-1111-2222-3333-444444444444'
   await tool.execute({ observationId, action:'tap', x:320, y:480, ocr:true }, {})
-  assert.deepEqual(f.requests, [{ command:'screenAct', param:JSON.stringify({observationId,action:'tap',x:320,y:480,ocr:true}) }])
+  assert.equal(f.requests[0].command,'screenAct')
+  const request=JSON.parse(f.requests[0].param)
+  assert.match(request.operationId,/^[a-f0-9-]{36}$/);delete request.operationId
+  assert.deepEqual(request,{observationId,action:'tap',x:320,y:480,ocr:true})
   for (const args of [
     {observationId,action:'tap',x:1.5,y:3},
     {observationId,action:'swipe',x:1,y:2,endX:3,endY:4,durationMs:1},
@@ -887,6 +890,7 @@ test('主屏 JPEG 截图保留真实格式、物理尺寸和单次观察编号',
   assert.deepEqual(result.image.originalDimensions,{width:1440,height:2560})
   assert.equal(result.image.observationId,observationId)
   assert.match(f.tools.get('mobile_device_screenshot').output.render({},result)[0].text,/x coordinates by 3.2/)
+  assert.match(f.tools.get('mobile_device_screenshot').output.render({},result)[0].text,/before calling mobile_screen_act/)
 })
 
 
@@ -940,4 +944,41 @@ test('压缩观察去掉重复 OCR 正文但保留坐标、观察编号和错误
   const result=JSON.parse((await f.tools.get('mobile_screen_observe').execute({},{})).output)
   assert.equal(result.observationId,'fresh');assert.equal(result.image.ocrText,undefined)
   assert.deepEqual(result.image.lines,observed.image.lines)
+  assert.equal(result.image.coordinateSpace,'physical_display_pixels')
+  assert.match(result.coordinateGuide,/禁止再乘截图缩放倍数/)
+})
+
+test('主屏执行编号绑定宿主会话及工具调用，重试不生成新操作', async t=>{
+  const f=fixture(t,r=>ok(JSON.stringify({operationId:JSON.parse(r.param).operationId,journalState:'completed'})))
+  const tool=f.tools.get('mobile_screen_act')
+  const args={observationId:'00000000-1111-2222-3333-444444444444',action:'tap',x:1,y:2}
+  // The ack response is intentionally malformed JSON; it must not cause action replay.
+  const exec={agent:{session:{id:virtualSession}},callId:'call-recovery-1'}
+  await tool.execute(args,exec);await tool.execute(args,exec)
+  const calls=f.requests.filter(r=>r.command==='screenAct').map(r=>JSON.parse(r.param))
+  assert.equal(calls.length,2);assert.equal(calls[0].operationId,calls[1].operationId)
+  assert.equal(calls[0].sessionId,virtualSession);assert.equal(calls[0].callId,exec.callId)
+  assert.equal(f.requests.filter(r=>r.command==='screenReceiptAck').length,2)
+})
+
+test('中断保留操作编号与核实指引，恢复只调用只读桥入口', async t=>{
+  const f=fixture(t,r=>r.command==='screenAct' ? {ok:false,exitCode:1,text:'',truncated:false,errorCode:'SCREEN_RECOVERY_REQUIRED'} : ok('{"items":[],"pendingRecovery":0}'))
+  await assert.rejects(f.tools.get('mobile_screen_act').execute({observationId:virtualSession,action:'back'},{}),/operationId=.*mobile_screen_recover/)
+  const tool=f.tools.get('mobile_screen_recover')
+  await tool.execute({},{});await tool.execute({operationId:virtualSession},{})
+  assert.deepEqual(f.requests.slice(1),[{command:'screenRecover',param:'{}'},{command:'screenRecover',param:JSON.stringify({operationId:virtualSession})}])
+  await assert.rejects(async()=>tool.execute({operationId:'../bad'},{}),/SCREEN_INPUT_INVALID/)
+  assert.deepEqual(await f.hook({name:tool.name},()=>({kind:'deny',reason:'no access'})),{kind:'deny',reason:'no access'})
+})
+
+test('主屏粘贴原样传递 Unicode 换行和替换意图，缺少目标应用时拒绝', async t=>{
+  const f=fixture(t,()=>ok('{"action":{"injected":true,"clipboardReplaced":true}}'))
+  const tool=f.tools.get('mobile_screen_act')
+  const args={observationId:virtualSession,action:'text',text:'https://developer.android.com/\n中文 & %s $',replace:true,packageName:'com.android.chrome'}
+  await tool.execute(args,{})
+  const sent=JSON.parse(f.requests[0].param)
+  assert.equal(sent.text,args.text);assert.equal(sent.replace,true);assert.equal(sent.packageName,args.packageName)
+  for(const bad of [{...args,text:''},{...args,text:'a\0b'},{...args,packageName:''},{...args,replace:undefined},{...args,text:'a'.repeat(8001)}])
+    await assert.rejects(async()=>tool.execute(bad,{}),/SCREEN_INPUT_INVALID|invalid arguments/)
+  assert.equal(f.requests.length,1)
 })

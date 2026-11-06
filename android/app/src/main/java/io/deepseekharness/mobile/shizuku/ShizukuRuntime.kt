@@ -921,7 +921,7 @@ class ShizukuRuntime(
         private const val SERVICE_EXIT_TIMEOUT_SECONDS = 5L
         private val mainCaptureOwner by lazy {android.os.Binder()}
         private val mainCaptureTimer=java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
-        private const val USER_SERVICE_VERSION = 10
+        private const val USER_SERVICE_VERSION = 11
         private const val MAX_SESSIONS = 4
 
         /**

@@ -2,7 +2,6 @@ package io.deepseekharness.mobile
 
 import io.deepseekharness.mobile.overlay.PetAction
 import io.deepseekharness.mobile.overlay.PetActing
-import io.deepseekharness.mobile.overlay.PetPose
 import io.deepseekharness.mobile.companion.ContextFollowupEvents
 import io.deepseekharness.mobile.companion.PetContextFollowup
 import io.deepseekharness.mobile.companion.PetInitiative
@@ -104,6 +103,27 @@ class OverlayBallService : Service() {
     private var petDragLean = 0f
     private var petDrawable: io.deepseekharness.mobile.overlay.CompanionPetDrawable? = null
     private val petActing = PetActing()
+    private val controlListener: (DeviceControlState.Snapshot) -> Unit = {
+        hintHandler.post { if (!avatarDestroyed) refreshControlPose() }
+    }
+    private var companionTimersStarted = false
+    private fun refreshControlPose() {
+        val state=DeviceControlState.current
+        petActing.control(state.phase,SystemClock.uptimeMillis())
+        val ui=io.deepseekharness.mobile.companion.PetUi(this)
+        petDrawable?.phonePalette(ui.accent,ui.soft)
+        ballView?.contentDescription = if(state.phase=="idle") overlayString(R.string.overlay_ball_content_description)
+            else io.deepseekharness.mobile.companion.PetControlLabels.description(overlayPalette(),state.phase)
+        actionMenu?.refreshControl()
+        setHostAppForeground(AppForeground.isForeground())
+        if (!companionMotionAllowed()) petDrawable?.setPose(petActing.still())
+        updateControlBounds()
+        if(state.phase=="idle" && !RuntimeStore(applicationContext).overlayBallEnabled()) stopSelf()
+    }
+    private fun updateControlBounds() {
+        io.deepseekharness.mobile.companion.PetControlProtection.update("pet",ballView?.takeIf { !hiddenForHostApp })
+        io.deepseekharness.mobile.companion.PetControlProtection.update("menu",actionMenu)
+    }
     private val taskAccepted: () -> Unit = {
         hintHandler.post { if (!avatarDestroyed) petActing.react(PetAction.ACCEPT, SystemClock.uptimeMillis()) }
         Unit
@@ -148,7 +168,8 @@ class OverlayBallService : Service() {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
                 setColor(if (waiting > 0) android.graphics.Color.rgb(218, 92, 96) else android.graphics.Color.rgb(54, 137, 190))
             }
-            ballView?.contentDescription = AppLanguage.localizedContext(context).getString(R.string.pet_menu_counts, running, waiting)
+            if(DeviceControlState.current.phase=="idle")
+                ballView?.contentDescription = AppLanguage.localizedContext(context).getString(R.string.pet_menu_counts, running, waiting)
         }
     }, onBackgroundReport = ::showTaskReceipt) { intArrayOf(layoutParams.x, layoutParams.y, layoutParams.width, layoutParams.height) } }
 
@@ -258,8 +279,7 @@ class OverlayBallService : Service() {
         super.onCreate()
         activeService = this
         WorkerDashboardStore.subscribeAccepted(taskAccepted)
-        hintHandler.postDelayed(calendarTick, 5L * 1000)
-        hintHandler.postDelayed(reminderTick, 15L * 60 * 1000)
+        DeviceControlState.subscribe(controlListener)
         runCatching { ensureNotificationChannel() }
         windowManager = getSystemService(WindowManager::class.java)
         // 亮屏 / 息屏 / 解锁都会改变「球是否可见」：收到后只重算动画门控，不重载头像、不动窗口。
@@ -295,7 +315,8 @@ class OverlayBallService : Service() {
         // 避免用户已关闭悬浮球后服务仍被系统拉起并重新显示。
         val enabled = runCatching { RuntimeStore(applicationContext).overlayBallEnabled() }
             .getOrDefault(false)
-        if (!enabled) {
+        val controlVisible=DeviceControlState.current.phase!="idle"
+        if (!enabled && !controlVisible) {
             // 用户正常关闭：历史失败令牌不应残留，否则关闭后状态查询仍会带出上一次的错误。
             lastStartFailure = null
             stopForegroundCompat()
@@ -318,7 +339,7 @@ class OverlayBallService : Service() {
                 ),
             )
         }
-        if (!OverlayBallPolicy.shouldAttemptBall(enabled = enabled, state = permission)) {
+        if (!OverlayBallPolicy.shouldAttemptBall(enabled = enabled || controlVisible, state = permission)) {
             lastStartFailure = FAILURE_OVERLAY_DENIED
             stopForegroundCompat()
             stopSelf()
@@ -330,6 +351,12 @@ class OverlayBallService : Service() {
             return START_NOT_STICKY
         }
         setHostAppForeground(AppForeground.isForeground())
+        refreshControlPose()
+        if(enabled && !companionTimersStarted) {
+            companionTimersStarted=true
+            hintHandler.postDelayed(calendarTick,5L*1000)
+            hintHandler.postDelayed(reminderTick,15L*60*1000)
+        }
         // 球已挂上窗口：清掉历史失败令牌，界面状态只反映「这一次」启动结果。
         lastStartFailure = null
         diagnostics.record(
@@ -372,6 +399,7 @@ class OverlayBallService : Service() {
         layoutParams.x = x
         layoutParams.y = y
         runCatching { windowManager.updateViewLayout(view, layoutParams) }
+        view.postOnAnimation { updateControlBounds() }
         preferences.writePosition(x, y)
         // Rotation changes the available space on each side of the pet.
         layoutPetMenu()
@@ -392,6 +420,7 @@ class OverlayBallService : Service() {
 
     override fun onDestroy() {
         WorkerDashboardStore.unsubscribeAccepted(taskAccepted)
+        DeviceControlState.unsubscribe(controlListener)
         calendarServiceDestroyed = true
         reminderHints.clear()
         avatarDestroyed = true
@@ -885,7 +914,10 @@ class OverlayBallService : Service() {
 
         // 单击打开原生气泡对话；长按保留 Harness 和副屏等快捷操作。
         view.setOnClickListener {
-            if (!stopIfOverlayPermissionRevoked()) { petActing.react(PetAction.TOUCH, SystemClock.uptimeMillis()); dismissPetMenu(); bubbleChat.toggle() }
+            if (!stopIfOverlayPermissionRevoked()) {
+                if(DeviceControlState.current.phase!="idle") togglePetMenu()
+                else { petActing.react(PetAction.TOUCH, SystemClock.uptimeMillis()); dismissPetMenu(); bubbleChat.toggle() }
+            }
         }
         view.setOnLongClickListener {
             if (!stopIfOverlayPermissionRevoked()) togglePetMenu()
@@ -907,6 +939,7 @@ class OverlayBallService : Service() {
             }
         }
         view.setOnTouchListener { touched, event -> handleTouch(touched, event, layoutParams.width) }
+        view.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> updateControlBounds() }
         // 球是否还在窗口上由视图的附着回调维护：客户端侧的移除一定会回调，系统侧的移除
         // 视 ROM 实现而定，因此它只用于避免「已被摘掉的窗口挡住重挂」这一类误判，
         // 真正的清理由插件每次回前台的权限对齐（撤销 → 停服务 → 摘视图）兜底。
@@ -917,7 +950,7 @@ class OverlayBallService : Service() {
             }
 
             override fun onViewDetachedFromWindow(detached: View) {
-                if (detached === ballView) ballAttached = false
+                if (detached === ballView) { ballAttached = false; io.deepseekharness.mobile.companion.PetControlProtection.update("pet",null) }
             }
         })
         // 权限缺失时 addView 会直接抛异常（SecurityException / BadTokenException）。
@@ -993,7 +1026,7 @@ class OverlayBallService : Service() {
         companionFrame?.let(hintHandler::removeCallbacks)
         companionFrame = null
         petDrawable?.blinkAmount = 0f
-        petDrawable?.setPose(PetPose())
+        petDrawable?.setPose(petActing.still())
         if (!companionMotionAllowed()) return
         val powerSave = getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
         companionFrame = object : Runnable {
@@ -1001,7 +1034,7 @@ class OverlayBallService : Service() {
                 if (companionFrame !== this) return
                 val now = SystemClock.uptimeMillis()
                 if(!WhaleMotion.enabled()) {
-                    petDrawable?.setPose(PetPose())
+                    petDrawable?.setPose(petActing.still())
                     petDrawable?.blinkAmount=0f
                     hintHandler.postAtTime(this,now+1000)
                     return
@@ -1011,6 +1044,8 @@ class OverlayBallService : Service() {
                 petDrawable?.blinkAmount = io.deepseekharness.mobile.overlay.CompanionPetMotion.blink(now - petBlinkAt)
                 val delay = when {
                     powerSave -> 80L
+                    petActing.action == PetAction.WAIT || petActing.action == PetAction.PAUSED ||
+                        petActing.action == PetAction.STOPPED || petActing.action == PetAction.ERROR -> 50L
                     petActing.action != PetAction.IDLE || now - petBlinkAt in 0..280 -> 33L
                     else -> 50L
                 }
@@ -1045,6 +1080,9 @@ class OverlayBallService : Service() {
                     val old = petDrawable
                     hintHandler.removeCallbacks(blinkTick); hintHandler.removeCallbacks(blinkOpen)
                     petDrawable = next
+                    val ui=io.deepseekharness.mobile.companion.PetUi(this@OverlayBallService)
+                    next.phonePalette(ui.accent,ui.soft)
+                    next.setPose(if(companionMotionAllowed()) petActing.sample(SystemClock.uptimeMillis()) else petActing.still())
                     view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
                     old?.close()
                     if (companionMotionAllowed()) hintHandler.postDelayed(blinkTick, 2400)
@@ -1064,6 +1102,7 @@ class OverlayBallService : Service() {
         val (x, y) = OverlayBallPolicy.resizedPosition(layoutParams.x, layoutParams.y, metrics.widthPixels, metrics.heightPixels, layoutParams.width, size)
         next.width = size; next.height = size; next.x = x; next.y = y
         if (runCatching { windowManager.updateViewLayout(view, next) }.isFailure) return false
+        view.postOnAnimation { updateControlBounds() }
         layoutParams = next
         preferences.writePosition(x, y)
         dismissPetMenu()
@@ -1088,13 +1127,15 @@ class OverlayBallService : Service() {
             runCatching { windowManager.removeView(view) }
         }
         ballView = null
+        io.deepseekharness.mobile.companion.PetControlProtection.update("pet",null)
     }
 
     /**
      * 悬浮球属于“离开应用后仍可呼出”的入口，不该压在自己的全屏界面上。保留窗口与
      * 前台服务，只把窗口变透明并改为不接收触摸；回到其他应用时立即恢复，无需重载头像。
      */
-    private fun setHostAppForeground(foreground: Boolean) {
+    private fun setHostAppForeground(hostForeground: Boolean) {
+        val foreground=hostForeground && DeviceControlState.current.phase=="idle"
         if (hiddenForHostApp == foreground) return
         hiddenForHostApp = foreground
         if (foreground) {
@@ -1113,6 +1154,7 @@ class OverlayBallService : Service() {
         // 可见性变了：动画门控必须跟着重算。被本应用自己的全屏界面盖住时停帧（用户看不到球，
         // 动画纯属白烧电），回到其他应用时从静态站姿重新起——这就是「零感知」的那一半。
         runCatching { applyCompanionMotionPreference() }
+        updateControlBounds()
     }
 
     /**
@@ -1155,6 +1197,7 @@ class OverlayBallService : Service() {
                     layoutParams.x = x
                     layoutParams.y = y
                     runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
+                    ballView?.postOnAnimation { updateControlBounds() }
                     if (bubbleChat.visible) bubbleChat.followPet()
                     // Keep the open menu next to the moving pet.
                     layoutPetMenu()
@@ -1195,6 +1238,7 @@ class OverlayBallService : Service() {
                         layoutParams.x, metrics.widthPixels, size,
                     )
                     runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
+                    ballView?.postOnAnimation { updateControlBounds() }
                     if (bubbleChat.visible) bubbleChat.followPet()
                     preferences.writePosition(layoutParams.x, layoutParams.y)
                     layoutPetMenu()
@@ -1742,6 +1786,7 @@ class OverlayBallService : Service() {
             }
         }
         actionMenu?.let { showPetMenu(it.page) }
+        refreshControlPose()
         runCatching {
             ensureNotificationChannel()
             if (isRunning) getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
@@ -1949,6 +1994,7 @@ class OverlayBallService : Service() {
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.LEFT }
         positionPetMenu(menu, params)
+        menu.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> updateControlBounds() }
         WhaleMotion.overlay(params)
         if (runCatching { windowManager.addView(menu, params) }.isSuccess) actionMenu = menu
     }
@@ -1956,6 +2002,9 @@ class OverlayBallService : Service() {
     private fun runPetAction(action: PetActionMenu.Action) {
         dismissPetMenu()
         when (action) {
+            PetActionMenu.Action.PAUSE -> DeviceControlState.pause()
+            PetActionMenu.Action.RESUME -> DeviceControlState.resume()
+            PetActionMenu.Action.STOP -> DeviceControlState.stop()
             PetActionMenu.Action.CHAT -> bubbleChat.show()
             PetActionMenu.Action.ASSIGN -> bubbleChat.composeTask()
             PetActionMenu.Action.INBOX -> bubbleChat.openTaskInbox()
@@ -2053,12 +2102,14 @@ class OverlayBallService : Service() {
         positionPetMenu(menu, params)
         if (x != params.x || y != params.y || w != params.width || h != params.height)
             runCatching { windowManager.updateViewLayout(menu, params) }
+            menu.postOnAnimation { updateControlBounds() }
     }
 
     private fun dismissPetMenu() {
         val menu = actionMenu ?: return
         actionMenu = null
         runCatching { windowManager.removeView(menu) }
+        io.deepseekharness.mobile.companion.PetControlProtection.update("menu",null)
     }
 
     private fun overlayReserveTop(): Int = dp(SYSTEM_BAR_RESERVE_DP)
@@ -2096,6 +2147,7 @@ class OverlayBallService : Service() {
 
     /** 「隐藏悬浮球」：直接关闭设置开关并停止服务，不引入额外的「临时隐藏」状态。 */
     private fun hideBall() {
+        if(DeviceControlState.current.phase!="idle") DeviceControlState.stop()
         // 直接构造 store，不依赖 RuntimeHost 是否还持有 controller：
         // controller 与悬浮球服务相互独立，「只开球不开后台保持」的用户划掉最近任务后
         // controller 会被释放，而此时长按菜单隐藏球是最常见的操作之一。
@@ -2296,6 +2348,14 @@ class OverlayBallService : Service() {
 
         internal fun refreshAppearance() {
             Handler(Looper.getMainLooper()).post { activeService?.refreshVisibleAppearance() }
+        }
+        /** Reuse the real pet during an authorized operation without changing its persistent switch. */
+        internal fun refreshDeviceControl(context: Context) {
+            Handler(Looper.getMainLooper()).post {
+                val service=activeService
+                if(service!=null) service.refreshControlPose()
+                else if(DeviceControlState.current.phase!="idle" && Settings.canDrawOverlays(context)) start(context)
+            }
         }
 
         /** Hide the system overlay while one of this app's own full-screen Activities is visible. */

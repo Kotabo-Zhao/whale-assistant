@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pet_control_observing">正在观察手机屏幕</string>
+    <string name="pet_control_operating">正在操作手机</string>
+    <string name="pet_control_waiting">等待下一步操作</string>
+    <string name="pet_control_paused">手机操作已暂停</string>
+    <string name="pet_control_stopped">手机操作已停止</string>
+    <string name="pet_control_failed">手机操作需要核实</string>
+    <string name="pet_control_pause">暂停操作</string>
+    <string name="pet_control_resume">恢复控制</string>
+    <string name="pet_control_stop">停止操作</string>
+    <string name="pet_control_tap">%1$s，点按打开控制菜单</string>
+    <string name="pet_control_new_actions">恢复后只接收新操作，已撤销的步骤不会重放。</string>
+</resources>

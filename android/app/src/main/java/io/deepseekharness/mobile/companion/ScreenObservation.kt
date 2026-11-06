@@ -12,6 +12,14 @@ import kotlin.math.ceil
 
 /** The image may be cropped or sampled; every returned bound stays in physical screen pixels. */
 internal object ScreenObservation {
+    fun motionSample(frame:MainScreenPixels):IntArray {
+        val excluded=PetControlProtection.bounds()
+        return ScreenFrameStability.sample(frame.bitmap.width,frame.bitmap.height) { x,y ->
+            val px=frame.region.left+x*frame.region.width()/frame.bitmap.width
+            val py=frame.region.top+y*frame.region.height()/frame.bitmap.height
+            if(py<80 || py>frame.height-90 || excluded.any{it.contains(px,py)}) 0 else frame.bitmap.getPixel(x,y)
+        }
+    }
     fun text(base64:String,request:JSONObject):JSONObject {
         val bytes=try{android.util.Base64.decode(base64.trim(),android.util.Base64.DEFAULT)}
             catch(_:IllegalArgumentException){throw RuntimeFailure("SCREEN_IMAGE_INVALID","截图不可用")}
@@ -33,7 +41,7 @@ internal object ScreenObservation {
 
     private fun recognize(image:Bitmap,width:Int,height:Int,region:Rect,frameId:String):JSONObject {
         val started=android.os.SystemClock.elapsedRealtime()
-        val controlBounds=DeviceControlOverlay.observationBounds()
+        val controlBounds=PetControlProtection.bounds()
         val recognized=WhaleImageText.recognize(image)
         val lines=JSONArray()
         val sx=region.width().toDouble()/image.width;val sy=region.height().toDouble()/image.height
@@ -70,8 +78,8 @@ internal object ScreenObservation {
             val text=line.text.take(minOf(512,remaining));remaining-=text.length
             val row=JSONObject().put("text",text).put("bounds",physical(bounds))
             val physicalBounds=row.getJSONArray("bounds")
-            if(controlBounds?.contains((physicalBounds.getInt(0)+physicalBounds.getInt(2))/2,
-                (physicalBounds.getInt(1)+physicalBounds.getInt(3))/2)==true) continue
+            if(controlBounds.any { it.contains((physicalBounds.getInt(0)+physicalBounds.getInt(2))/2,
+                (physicalBounds.getInt(1)+physicalBounds.getInt(3))/2) }) continue
             if(text.length<=20) ScreenVisualHints.underline(image.width,image.height,
                 ScreenVisualHints.Box(bounds.left,bounds.top,bounds.right,bounds.bottom),image::getPixel)?.let {
                 row.put("visualSelectionHint","underline").put("indicatorBounds",physical(Rect(it.left,it.top,it.right,it.bottom)))
@@ -104,9 +112,9 @@ internal object ScreenObservation {
         return JSONObject().put("width",width).put("height",height).put("frameId",frameId)
             .put("region",JSONArray(listOf(region.left,region.top,region.width(),region.height())))
             .put("ocrText",(0 until lines.length()).joinToString("\n"){lines.getJSONObject(it).getString("text")}.take(8000)).put("lines",lines)
-            .apply { if(controlBounds!=null) put("excludedControlOverlay",JSONObject()
-                .put("owner","io.deepseekharness.mobile").put("role","screen_control_pause_stop")
-                .put("bounds",JSONArray(listOf(controlBounds.left,controlBounds.top,controlBounds.right,controlBounds.bottom)))) }
+            .apply { if(controlBounds.isNotEmpty()) put("excludedControlOverlay",JSONObject()
+                .put("owner","io.deepseekharness.mobile").put("role","pet_control_pause_stop")
+                .put("regions",JSONArray(controlBounds.map { JSONArray(listOf(it.left,it.top,it.right,it.bottom)) }))) }
             .put("ocrMs",android.os.SystemClock.elapsedRealtime()-started)
             .put("observedAtMs",System.currentTimeMillis()).put("coordinateSpace","current_screenshot_pixels")
     }
