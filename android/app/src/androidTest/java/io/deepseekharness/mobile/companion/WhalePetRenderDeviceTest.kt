@@ -14,6 +14,29 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class WhalePetRenderDeviceTest {
+    @Test fun profileColdAtlasDecoding() {
+        val inst = InstrumentationRegistry.getInstrumentation()
+        val times = mutableListOf<Long>()
+        // This runs on the instrumentation thread. The live view decodes on its avatar executor.
+        CompanionPetDrawable(inst.targetContext.resources,264,java.util.concurrent.Executor { it.run() }).use { pet ->
+            for (action in io.deepseekharness.mobile.overlay.PetAction.entries) {
+                if (action == io.deepseekharness.mobile.overlay.PetAction.IDLE) continue
+                val start = SystemClock.elapsedRealtimeNanos()
+                pet.prepareForExport(action)
+                val elapsed = (SystemClock.elapsedRealtimeNanos()-start)/1000
+                times.add(elapsed)
+                inst.sendStatus(0,Bundle().apply { putString("decodedClip",action.name);putLong("coldAtlasDecodeUs",elapsed) })
+            }
+            val start = SystemClock.elapsedRealtimeNanos()
+            pet.prepareForExport(io.deepseekharness.mobile.overlay.PetAction.IDLE,16000)
+            times.add((SystemClock.elapsedRealtimeNanos()-start)/1000)
+            times.sort()
+            inst.sendStatus(0,Bundle().apply {
+                putLong("decodeP50Us",times[times.size/2]);putLong("decodeP95Us",times[times.size*95/100])
+                putLong("decodeMaxUs",times.last());putLong("cachedBitmapBytes",pet.cachedBitmapBytes)
+            })
+        }
+    }
     @Test fun profileVisibleAndHiddenOverlay() {
         val inst = InstrumentationRegistry.getInstrumentation()
         val context = inst.targetContext

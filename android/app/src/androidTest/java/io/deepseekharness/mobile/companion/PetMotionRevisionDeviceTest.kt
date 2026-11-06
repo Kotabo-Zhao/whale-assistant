@@ -170,7 +170,7 @@ class PetMotionRevisionDeviceTest {
                 if(n==0 || n==240 || n==270 || n==330 || n==490 || n==510) File(out,"pose-$n.png").outputStream().use{frame.compress(Bitmap.CompressFormat.PNG,100,it)}
             }
             val board=Bitmap.createBitmap(1440,900,Bitmap.Config.ARGB_8888);val c=Canvas(board);c.drawColor(0xffedf3f5.toInt())
-            val times=arrayOf(longArrayOf(16000,17000,17500,18000,18800,19700),longArrayOf(0,3000,3200,3420,3660,4050),longArrayOf(0,400,520,640,800,1200))
+            val times=arrayOf(longArrayOf(16000,16760,17080,17480,17800,18080),longArrayOf(0,1280,1520,1760,2000,2240),longArrayOf(0,400,520,640,800,1200))
             paint.color=0xff213d50.toInt();paint.textSize=17f
             for(row in 0..2) for(col in 0..5) {
                 val p=pets[row];val t=times[row][col]
