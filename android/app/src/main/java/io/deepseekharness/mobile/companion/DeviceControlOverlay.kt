@@ -11,6 +11,7 @@ import io.deepseekharness.mobile.DeviceControlState
 internal class DeviceControlOverlay(private val context: Context, private val wm: WindowManager) {
     companion object {
         @Volatile private var protectedBounds:android.graphics.Rect?=null
+        fun observationBounds():android.graphics.Rect?=protectedBounds?.let{android.graphics.Rect(it)}
         fun intersects(x:Int,y:Int,endX:Int=x,endY:Int=y):Boolean {
             val r=protectedBounds ?: return false
             return r.intersects(minOf(x,endX),minOf(y,endY),maxOf(x,endX)+1,maxOf(y,endY)+1)
@@ -39,7 +40,8 @@ internal class DeviceControlOverlay(private val context: Context, private val wm
             else -> "操作已返回，等待下一步"
         }
         val text = label + " · " + state.action
-        val key = ui.surface.toString() + "|" + ui.accent
+        val metrics=context.resources.displayMetrics
+        val key = ui.surface.toString() + "|" + ui.accent + "|" + metrics.widthPixels + "x" + metrics.heightPixels
         if (root != null && key == paletteKey) {
             labelView?.text = text
             pauseView?.text = if(state.phase in setOf("paused","stopped")) "继续" else "暂停"
@@ -76,7 +78,12 @@ internal class DeviceControlOverlay(private val context: Context, private val wm
             minOf(ui.dp(460),context.resources.displayMetrics.widthPixels-ui.dp(24)),
             WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,PixelFormat.TRANSLUCENT
-        ).apply { gravity=Gravity.TOP or Gravity.CENTER_HORIZONTAL; y=ui.dp(38); title="鲸鱼助手 · 手机操作状态" }
+        ).apply {
+            gravity=Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            // Portrait tabs commonly use an icon row plus a label row; leave both visible.
+            y=ui.dp(if(metrics.heightPixels>metrics.widthPixels) 118 else 38)
+            title="鲸鱼助手 · 手机操作状态"
+        }
         io.deepseekharness.mobile.WhaleMotion.overlay(params,critical=true)
         if(runCatching { wm.addView(panel,params) }.isSuccess) root=panel
     }

@@ -1,0 +1,6740 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-06",
+  "device": "AYANEO Pocket S",
+  "appVersion": "0.3.8-preview.76",
+  "appVersionCode": 121,
+  "apkSha256": "dbed600faf962a3bf57e793b5437ff69e348f812d103cae5aacac5760ccda72f",
+  "runtimeVersion": "0.3.79-whale-screen-evidence",
+  "runtimeSha256": "6fe31e26038eaaa19262ab3191bfdc665521791a3c5116f929708f5b03436481",
+  "landscapePixels": [
+    2560,
+    1440
+  ],
+  "portraitPixels": [
+    1080,
+    2400
+  ],
+  "notes": [
+    "主模型回合计数不包含独立评分请求。",
+    "设备和会话准备时间在任务计时之外。",
+    "中间失败和慢样本保留，不合并进最终版速度统计。",
+    "最终竖屏布局修正后仅重测竖屏，横屏执行代码未变。"
+  ],
+  "nativeRegression": {
+    "landscape": "p76-native-final.log: OK (1 test), internal sequence 2974 ms",
+    "portrait": "p76-portrait-fixed.log: OK (3 tests), internal sequence 2625 ms"
+  },
+  "samples": [
+    {
+      "group": "baseline",
+      "case": "clock",
+      "source": "p75-clock-baseline.json",
+      "result": {
+        "mode": "baseline",
+        "elapsedMs": 16525,
+        "events": [
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 274,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1357,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2405
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2406,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2406,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_ET_U4jbsHyIKzaNKR3ouu2x2226"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 3648,
+            "callId": "call_00_ET_U4jbsHyIKzaNKR3ouu2x2226"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 3681,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 4242,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 7042
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 7042,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 7042,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_0AtCXu7seIUKp9bAUZtk6794"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 7507,
+            "callId": "call_00_0AtCXu7seIUKp9bAUZtk6794"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 7534,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 8106,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 9075
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 9075,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 9076,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_7rOE6HdG2fnIvstBVDMm6814"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 9569,
+            "callId": "call_00_7rOE6HdG2fnIvstBVDMm6814"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 9600,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 10426,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 11601
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 11601,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 11601,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_6FWr7IHVUGJUODizK2W26987"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 12082,
+            "callId": "call_00_6FWr7IHVUGJUODizK2W26987"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 12112,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 12564,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 14337
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 14338,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 16518
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 7185
+          },
+          {
+            "tab": "定时器",
+            "ms": 9198
+          },
+          {
+            "tab": "秒表",
+            "ms": 11711
+          }
+        ],
+        "tools": [
+          "mobile_screen_observe",
+          "mobile_screen_act"
+        ]
+      }
+    },
+    {
+      "group": "baseline",
+      "case": "clock",
+      "source": "p75-clock-baseline-2.json",
+      "result": {
+        "mode": "baseline",
+        "elapsedMs": 81322,
+        "events": [
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 284,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1639,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2130
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2130,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2131,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_czcLVy1rcxSWYOhr4WG07770"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 3191,
+            "callId": "call_00_czcLVy1rcxSWYOhr4WG07770"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 3219,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 3752,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 7668
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 7668,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 7668,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_wr8ueg5NswlLvHfwbvv81274"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 8201,
+            "callId": "call_00_wr8ueg5NswlLvHfwbvv81274"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 8229,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 8909,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 10045
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 10045,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 10046,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_WEKmxszkK4pzj1il7C9T2579"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 10553,
+            "callId": "call_00_WEKmxszkK4pzj1il7C9T2579"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 10588,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 11272,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 12345
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 12345,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 12346,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_mY1OFiCfOVYt3NBlARkk8212"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 12775,
+            "callId": "call_00_mY1OFiCfOVYt3NBlARkk8212"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 12869,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 13481,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 14890
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 14890,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 14891,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_J5kB1z2gADErAQGegfqd7054"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 15268,
+            "callId": "call_00_J5kB1z2gADErAQGegfqd7054"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 15294,
+            "step": 6
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 15912,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 22042
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 22042,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 22042,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_1Ry6VjoO4gC4oIHbzE900589"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 22326,
+            "callId": "call_00_1Ry6VjoO4gC4oIHbzE900589"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 22354,
+            "step": 7
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 23067,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 27468
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 27468,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 27469,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_WtHyp9hKD6xTk1uFem0N6195"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 27778,
+            "callId": "call_00_WtHyp9hKD6xTk1uFem0N6195"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 27827,
+            "step": 8
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 28560,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 35571
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 35571,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 35571,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_HYlu9hw8qDmGM0sYL7mG0240"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 35922,
+            "callId": "call_00_HYlu9hw8qDmGM0sYL7mG0240"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 35946,
+            "step": 9
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 36648,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 42196
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 42196,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 42196,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_sJXnUZ8Pa5HvK3n3dqLI4458"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 42562,
+            "callId": "call_00_sJXnUZ8Pa5HvK3n3dqLI4458"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 42588,
+            "step": 10
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 43307,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 48799
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 48799,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 48800,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_cdn2jXZBug4Li8q7DTAR3268"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 49058,
+            "callId": "call_00_cdn2jXZBug4Li8q7DTAR3268"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 49111,
+            "step": 11
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 49861,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 53425
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 53426,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 53426,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_Z7mWx251AZ41fB4EL6r44740"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 53698,
+            "callId": "call_00_Z7mWx251AZ41fB4EL6r44740"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 53721,
+            "step": 12
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 54364,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 59734
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 59734,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 59734,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_QvNEbt2LDAuvOG9upSJg0632"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 59988,
+            "callId": "call_00_QvNEbt2LDAuvOG9upSJg0632"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 60013,
+            "step": 13
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 60711,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 67764
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 67764,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 67765,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_D6rorDi4XgzSD5s3vu457250"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 68037,
+            "callId": "call_00_D6rorDi4XgzSD5s3vu457250"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 68060,
+            "step": 14
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 68802,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 78518
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 78519,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 81313
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 7861
+          },
+          {
+            "tab": "定时器",
+            "ms": 10108
+          },
+          {
+            "tab": "秒表",
+            "ms": 12418
+          }
+        ],
+        "tools": [
+          "mobile_screen_observe",
+          "mobile_screen_act"
+        ]
+      }
+    },
+    {
+      "group": "baseline",
+      "case": "clock",
+      "source": "p75-clock-baseline-3.json",
+      "result": {
+        "mode": "baseline",
+        "elapsedMs": 84778,
+        "events": [
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 271,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1340,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2889
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2890,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2890,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_wXXEYs43Jx95ssTjRGzX3803"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 3967,
+            "callId": "call_00_wXXEYs43Jx95ssTjRGzX3803"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 4010,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 4745,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 9374
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 9374,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 9374,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_3GCveh1igBikibl5kfwg7678"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 9836,
+            "callId": "call_00_3GCveh1igBikibl5kfwg7678"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 9867,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 10581,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 17310
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 17310,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 17310,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_Yl9HR5gJSHH0S9YaF0qu7163"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 17803,
+            "callId": "call_00_Yl9HR5gJSHH0S9YaF0qu7163"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 17831,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 18573,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 21492
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 21493,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 21493,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_ts5e4XorjXJSD7dWigsl8166"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 21998,
+            "callId": "call_00_ts5e4XorjXJSD7dWigsl8166"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 22023,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 23186,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 24064
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 24064,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 24064,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_mWVlaHO7omm3LVk5G4xH9851"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 24538,
+            "callId": "call_00_mWVlaHO7omm3LVk5G4xH9851"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 24569,
+            "step": 6
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 25331,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 28098
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 28098,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 28098,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_uUHkEzW7eo8G5HEEcdt83634"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 28396,
+            "callId": "call_00_uUHkEzW7eo8G5HEEcdt83634"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 28424,
+            "step": 7
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 29118,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 34044
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 34044,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 34044,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_whzp74pzh9u4Q3MQcllD3250"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 34333,
+            "callId": "call_00_whzp74pzh9u4Q3MQcllD3250"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 34364,
+            "step": 8
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 35054,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 37448
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 37449,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 37449,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_xHDtn2AJHjttKbM7uFlr3110"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 37741,
+            "callId": "call_00_xHDtn2AJHjttKbM7uFlr3110"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 37773,
+            "step": 9
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 38429,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 44602
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 44602,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 44603,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_s4YLpGEouK5Q35Hksy2a6043"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 44878,
+            "callId": "call_00_s4YLpGEouK5Q35Hksy2a6043"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 44909,
+            "step": 10
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 45937,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 49725
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 49726,
+            "step": -1
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 53272,
+            "step": 11
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 53909,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 59038
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 59038,
+            "step": -1
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 61871,
+            "step": 12
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 62602,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 64875
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 64875,
+            "step": -1
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 66870,
+            "step": 13
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 67625,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 70893
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 70893,
+            "step": -1
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 72779,
+            "step": 14
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 73382,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 76052
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 76053,
+            "step": -1
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 79045,
+            "step": 15
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 79565,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 82235
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 82235,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 84768
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 17428
+          },
+          {
+            "tab": "定时器",
+            "ms": 21566
+          },
+          {
+            "tab": "秒表",
+            "ms": 24179
+          }
+        ],
+        "tools": [
+          "mobile_screen_observe",
+          "mobile_screen_act"
+        ]
+      }
+    },
+    {
+      "group": "preview75",
+      "case": "clock",
+      "source": "p75-settled-clock-1.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 13202,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 160,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 160,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 160,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 162,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1340,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2905,
+            "usage": {
+              "inputTokens": 619,
+              "outputTokens": 216,
+              "cacheReadTokens": 28928,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29763
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2906,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2906,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_pW52o2oIYm78t8M5PLys7928"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5204,
+            "callId": "call_00_pW52o2oIYm78t8M5PLys7928",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5233,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 6205,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 8404,
+            "usage": {
+              "inputTokens": 763,
+              "outputTokens": 255,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 30714
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 8404,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 8404,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_zvxRqTcAk75m7UOrKOMD6727"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 8826,
+            "callId": "call_00_zvxRqTcAk75m7UOrKOMD6727",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 8866,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 10370,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 11963,
+            "usage": {
+              "inputTokens": 1271,
+              "outputTokens": 126,
+              "cacheReadTokens": 30592,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31989
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 11964,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 13200
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 3299
+          },
+          {
+            "tab": "定时器",
+            "ms": 3645
+          },
+          {
+            "tab": "秒表",
+            "ms": 3890
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence",
+          "mobile_device_screenshot"
+        ]
+      }
+    },
+    {
+      "group": "preview75",
+      "case": "clock",
+      "source": "p75-settled-clock-2.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 17216,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 252,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 252,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 252,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 256,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1651,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2318,
+            "usage": {
+              "inputTokens": 619,
+              "outputTokens": 117,
+              "cacheReadTokens": 28928,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29664
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2319,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2319,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_B4DPTxqRGAVEmwhqR0UH3665"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5145,
+            "callId": "call_00_B4DPTxqRGAVEmwhqR0UH3665",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5194,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 5753,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 8985,
+            "usage": {
+              "inputTokens": 753,
+              "outputTokens": 457,
+              "cacheReadTokens": 29568,
+              "cacheWriteTokens": 0,
+              "totalTokens": 30778
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 8985,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 8985,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_tjJnnTxWTuDA9uEe1iQ70997"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 9385,
+            "callId": "call_00_tjJnnTxWTuDA9uEe1iQ70997",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 9411,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 9964,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 12516,
+            "usage": {
+              "inputTokens": 581,
+              "outputTokens": 298,
+              "cacheReadTokens": 30720,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31599
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 12517,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 12518,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_yYbFV107MrgQhY96N8VW1042"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 13193,
+            "callId": "call_00_yYbFV107MrgQhY96N8VW1042",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 13222,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 14754,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 15695,
+            "usage": {
+              "inputTokens": 1274,
+              "outputTokens": 76,
+              "cacheReadTokens": 31488,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32838
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 15695,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 17209
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 3508
+          },
+          {
+            "tab": "定时器",
+            "ms": 3821
+          },
+          {
+            "tab": "秒表",
+            "ms": 4236
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence",
+          "mobile_screen_observe",
+          "mobile_device_screenshot"
+        ]
+      }
+    },
+    {
+      "group": "preview75",
+      "case": "clock",
+      "source": "p75-settled-clock-3.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 15497,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 191,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 192,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 192,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 194,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1072,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2864,
+            "usage": {
+              "inputTokens": 619,
+              "outputTokens": 186,
+              "cacheReadTokens": 28928,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29733
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2864,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2865,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_NlBkrNArlSQg5tiX7aEt4930"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5254,
+            "callId": "call_00_NlBkrNArlSQg5tiX7aEt4930",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5311,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 6242,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 10408,
+            "usage": {
+              "inputTokens": 736,
+              "outputTokens": 558,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 30990
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 10408,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 10408,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_q7QHbPaiu5ADDESolg4I0515"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 11001,
+            "callId": "call_00_q7QHbPaiu5ADDESolg4I0515",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 11026,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 12205,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 13842,
+            "usage": {
+              "inputTokens": 1162,
+              "outputTokens": 165,
+              "cacheReadTokens": 30976,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32303
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 13842,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 15494
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 3249
+          },
+          {
+            "tab": "定时器",
+            "ms": 3598
+          },
+          {
+            "tab": "秒表",
+            "ms": 3955
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence",
+          "mobile_device_screenshot"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p75-clock-first.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 47829,
+        "events": [
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 302,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1853,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 3360,
+            "usage": {
+              "inputTokens": 27038,
+              "outputTokens": 92,
+              "cacheReadTokens": 2304,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29434
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 3360,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 3360,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_yBkn1vjWZ40r25esKgrH9434"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 4847,
+            "callId": "call_00_yBkn1vjWZ40r25esKgrH9434"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 4877,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 5436,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 14529,
+            "usage": {
+              "inputTokens": 567,
+              "outputTokens": 1417,
+              "cacheReadTokens": 29312,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31296
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 14529,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 14529,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_PruTd3k5QbamhLW0ssmq2200"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 15022,
+            "callId": "call_00_PruTd3k5QbamhLW0ssmq2200"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 15047,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 15608,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 18799,
+            "usage": {
+              "inputTokens": 559,
+              "outputTokens": 537,
+              "cacheReadTokens": 31232,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32328
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 18799,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 18799,
+            "tool": "mobile_device_ui_dump",
+            "callId": "call_00_8wm52lFdi6iwJ2iYu4560619"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 19087,
+            "callId": "call_00_8wm52lFdi6iwJ2iYu4560619"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 19127,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 19657,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 20550,
+            "usage": {
+              "inputTokens": 249,
+              "outputTokens": 39,
+              "cacheReadTokens": 32128,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32416
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 20550,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 20551,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_63Yv3vWhz63ncl3kebPr8886"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 21196,
+            "callId": "call_00_63Yv3vWhz63ncl3kebPr8886"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 21221,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 22515,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 27650,
+            "usage": {
+              "inputTokens": 1178,
+              "outputTokens": 802,
+              "cacheReadTokens": 32384,
+              "cacheWriteTokens": 0,
+              "totalTokens": 34364
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 27650,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 27650,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_ht1PLEC6nZe8qQZzpMIN3469"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 28114,
+            "callId": "call_00_ht1PLEC6nZe8qQZzpMIN3469"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 28143,
+            "step": 6
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 28819,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 30108,
+            "usage": {
+              "inputTokens": 503,
+              "outputTokens": 226,
+              "cacheReadTokens": 34304,
+              "cacheWriteTokens": 0,
+              "totalTokens": 35033
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 30108,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 30108,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_1vm79vrLzLil4Oqz4ZTD5785"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 30610,
+            "callId": "call_00_1vm79vrLzLil4Oqz4ZTD5785"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 30641,
+            "step": 7
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 31298,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 32641,
+            "usage": {
+              "inputTokens": 660,
+              "outputTokens": 190,
+              "cacheReadTokens": 34944,
+              "cacheWriteTokens": 0,
+              "totalTokens": 35794
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 32641,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 32642,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_s4iVcdovc89Zy2SNexsw3523"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 33102,
+            "callId": "call_00_s4iVcdovc89Zy2SNexsw3523"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 33130,
+            "step": 8
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 33601,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 34526,
+            "usage": {
+              "inputTokens": 469,
+              "outputTokens": 107,
+              "cacheReadTokens": 35712,
+              "cacheWriteTokens": 0,
+              "totalTokens": 36288
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 34526,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 34526,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_M4V0Ff34myzuZ09zZoGg5131"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 34929,
+            "callId": "call_00_M4V0Ff34myzuZ09zZoGg5131"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 34973,
+            "step": 9
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 36223,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 43508,
+            "usage": {
+              "inputTokens": 1228,
+              "outputTokens": 1109,
+              "cacheReadTokens": 36224,
+              "cacheWriteTokens": 0,
+              "totalTokens": 38561
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 43508,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 47821
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 27788
+          },
+          {
+            "tab": "定时器",
+            "ms": 30214
+          },
+          {
+            "tab": "秒表",
+            "ms": 32717
+          }
+        ],
+        "tools": [
+          "mobile_screen_observe",
+          "mobile_screen_act",
+          "mobile_device_screenshot"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p75-clock-final-1.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 62376,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 291,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 292,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 292,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 297,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1329,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2547,
+            "usage": {
+              "inputTokens": 545,
+              "outputTokens": 147,
+              "cacheReadTokens": 28928,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29620
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2547,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2548,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_yDtvJsepXWpY20FUXWbm8065"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 4643,
+            "callId": "call_00_yDtvJsepXWpY20FUXWbm8065",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 4684,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 6636,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 10961,
+            "usage": {
+              "inputTokens": 917,
+              "outputTokens": 636,
+              "cacheReadTokens": 29568,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31121
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 10962,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 10962,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_P03S74gLgUYQXURg4tDO0475"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 11366,
+            "callId": "call_00_P03S74gLgUYQXURg4tDO0475",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 11396,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 12083,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 14171,
+            "usage": {
+              "inputTokens": 650,
+              "outputTokens": 234,
+              "cacheReadTokens": 31104,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31988
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 14171,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 14177,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_HKSeb62gcHLEcHL1b3Cf6842"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 14800,
+            "callId": "call_00_HKSeb62gcHLEcHL1b3Cf6842",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 14828,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 16286,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 32379,
+            "usage": {
+              "inputTokens": 1273,
+              "outputTokens": 2549,
+              "cacheReadTokens": 31872,
+              "cacheWriteTokens": 0,
+              "totalTokens": 35694
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 32379,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 34751,
+            "source": "dsh-answer-reviewer"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 34751,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 35336,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 39154,
+            "usage": {
+              "inputTokens": 310,
+              "outputTokens": 584,
+              "cacheReadTokens": 35584,
+              "cacheWriteTokens": 0,
+              "totalTokens": 36478
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 39155,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 39155,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_9g3LzBNTqADm3IO6B0fG0595"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 39477,
+            "callId": "call_00_9g3LzBNTqADm3IO6B0fG0595",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 39505,
+            "step": 6
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 40211,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 44522,
+            "usage": {
+              "inputTokens": 492,
+              "outputTokens": 555,
+              "cacheReadTokens": 36352,
+              "cacheWriteTokens": 0,
+              "totalTokens": 37399
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 44522,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 44522,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_Z5bKe9JUiffwQixlzYRw8090"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 44935,
+            "callId": "call_00_Z5bKe9JUiffwQixlzYRw8090",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 44975,
+            "step": 7
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 46273,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 53363,
+            "usage": {
+              "inputTokens": 1183,
+              "outputTokens": 1096,
+              "cacheReadTokens": 37376,
+              "cacheWriteTokens": 0,
+              "totalTokens": 39655
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 53363,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 53363,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_netSVhzVy5mIPVgcl1SD7372"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 53487,
+            "callId": "call_00_netSVhzVy5mIPVgcl1SD7372",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 53514,
+            "step": 8
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 54150,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 54828,
+            "usage": {
+              "inputTokens": 214,
+              "outputTokens": 31,
+              "cacheReadTokens": 39552,
+              "cacheWriteTokens": 0,
+              "totalTokens": 39797
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 54829,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 54829,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_8TZn3k3ZXNfHdQB9ci0Y9262"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 55264,
+            "callId": "call_00_8TZn3k3ZXNfHdQB9ci0Y9262",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 55299,
+            "step": 9
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 55855,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 59617,
+            "usage": {
+              "inputTokens": 1275,
+              "outputTokens": 462,
+              "cacheReadTokens": 39680,
+              "cacheWriteTokens": 0,
+              "totalTokens": 41417
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 59617,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 62368
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 3635
+          },
+          {
+            "tab": "定时器",
+            "ms": 4000
+          },
+          {
+            "tab": "秒表",
+            "ms": 4321
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence",
+          "mobile_screen_observe",
+          "mobile_device_screenshot",
+          "mobile_screen_act"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p75-settled-settings-1.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 45379,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 348,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 349,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 349,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 353,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1486,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2902,
+            "usage": {
+              "inputTokens": 24681,
+              "outputTokens": 194,
+              "cacheReadTokens": 4864,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29739
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2902,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2903,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_wW49JyGo5zRLXe4xdrYm7465"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 3556,
+            "callId": "call_00_wW49JyGo5zRLXe4xdrYm7465",
+            "error": false,
+            "codes": [
+              "SCREEN_APP_CHANGED"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 3594,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 4145,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 4917,
+            "usage": {
+              "inputTokens": 248,
+              "outputTokens": 45,
+              "cacheReadTokens": 29568,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29861
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 4917,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 4917,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_mGAN8Egx9o7HLAIIhbG96419"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5426,
+            "callId": "call_00_mGAN8Egx9o7HLAIIhbG96419",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5448,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 5939,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 7507,
+            "usage": {
+              "inputTokens": 727,
+              "outputTokens": 256,
+              "cacheReadTokens": 29824,
+              "cacheWriteTokens": 0,
+              "totalTokens": 30807
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 7507,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 7508,
+            "tool": "mobile_device_current_app",
+            "callId": "call_00_HUx6YfXH4goFZSKYqEHx3460"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 7723,
+            "callId": "call_00_HUx6YfXH4goFZSKYqEHx3460",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 7882,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 8353,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 9269,
+            "usage": {
+              "inputTokens": 180,
+              "outputTokens": 104,
+              "cacheReadTokens": 30720,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31004
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 9270,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 9270,
+            "tool": "mobile_device_app_launch",
+            "callId": "call_00_hYWdr0c90LD4QcQRVwxM5562"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 9463,
+            "callId": "call_00_hYWdr0c90LD4QcQRVwxM5562",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 9497,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 10007,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 10894,
+            "usage": {
+              "inputTokens": 196,
+              "outputTokens": 37,
+              "cacheReadTokens": 30848,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31081
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 10894,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 10894,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_dp2IJL85Ol1fICKDAbFF6152"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 11238,
+            "callId": "call_00_dp2IJL85Ol1fICKDAbFF6152",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 11266,
+            "step": 6
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 12205,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 12752,
+            "usage": {
+              "inputTokens": 794,
+              "outputTokens": 112,
+              "cacheReadTokens": 30976,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31882
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 12753,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 12753,
+            "tool": "mobile_device_wait",
+            "callId": "call_00_pQJpjx0xN9AnPSvuyVjk5421"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 14359,
+            "callId": "call_00_pQJpjx0xN9AnPSvuyVjk5421",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 14393,
+            "step": 7
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 15037,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 15826,
+            "usage": {
+              "inputTokens": 152,
+              "outputTokens": 24,
+              "cacheReadTokens": 31744,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31920
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 15826,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 15826,
+            "tool": "mobile_device_current_app",
+            "callId": "call_00_ET_SM0c6hi0TXU5TGJzzfE21181"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 15959,
+            "callId": "call_00_ET_SM0c6hi0TXU5TGJzzfE21181",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 16009,
+            "step": 8
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 16515,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 18031,
+            "usage": {
+              "inputTokens": 141,
+              "outputTokens": 161,
+              "cacheReadTokens": 31872,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32174
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 18032,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 18032,
+            "tool": "mobile_device_capabilities",
+            "callId": "call_00_tgvj3KXvIRdM9GKw8X4t7533"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 18085,
+            "callId": "call_00_tgvj3KXvIRdM9GKw8X4t7533",
+            "error": false,
+            "codes": [
+              "ROOT_ENGINE_DISABLED",
+              "SHIZUKU_SHELL",
+              "ACCESSIBILITY_OFF",
+              "SHELL_ASCII_ONLY",
+              "TEXT_INPUT_NEEDS_ACCESSIBILITY"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 18113,
+            "step": 9
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 18622,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 19612,
+            "usage": {
+              "inputTokens": 285,
+              "outputTokens": 129,
+              "cacheReadTokens": 32128,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32542
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 19613,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 19613,
+            "tool": "mobile_device_shell",
+            "callId": "call_00_ZygCVDPOh6TVNGtsYpmH9814"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 19746,
+            "callId": "call_00_ZygCVDPOh6TVNGtsYpmH9814",
+            "error": false,
+            "codes": [
+              "SETTINGS",
+              "DEFAULT"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 19766,
+            "step": 10
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 20251,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 21182,
+            "usage": {
+              "inputTokens": 214,
+              "outputTokens": 26,
+              "cacheReadTokens": 32384,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32624
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 21183,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 21183,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_ET_hq9YaFbWgvB80ScXoUR61422"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 21573,
+            "callId": "call_00_ET_hq9YaFbWgvB80ScXoUR61422",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 21600,
+            "step": 11
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 22145,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 23544,
+            "usage": {
+              "inputTokens": 716,
+              "outputTokens": 147,
+              "cacheReadTokens": 32512,
+              "cacheWriteTokens": 0,
+              "totalTokens": 33375
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 23544,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 23545,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_Xp0LeC2wjISiheFE0dyn3005"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 25589,
+            "callId": "call_00_Xp0LeC2wjISiheFE0dyn3005",
+            "error": false,
+            "codes": [
+              "SCREEN_TARGET_MISSING",
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 25615,
+            "step": 12
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 26329,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 29530,
+            "usage": {
+              "inputTokens": 667,
+              "outputTokens": 422,
+              "cacheReadTokens": 33280,
+              "cacheWriteTokens": 0,
+              "totalTokens": 34369
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 29531,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 29531,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_ZFlrbmQOLUjK5xdgit2u9102"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 29908,
+            "callId": "call_00_ZFlrbmQOLUjK5xdgit2u9102",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 29936,
+            "step": 13
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 30811,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 31689,
+            "usage": {
+              "inputTokens": 568,
+              "outputTokens": 110,
+              "cacheReadTokens": 34304,
+              "cacheWriteTokens": 0,
+              "totalTokens": 34982
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 31689,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 31690,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_ET_4qxgdtI6AijO5SSV7Oym1747"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 32197,
+            "callId": "call_00_ET_4qxgdtI6AijO5SSV7Oym1747",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 32222,
+            "step": 14
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 33237,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 35041,
+            "usage": {
+              "inputTokens": 578,
+              "outputTokens": 232,
+              "cacheReadTokens": 34944,
+              "cacheWriteTokens": 0,
+              "totalTokens": 35754
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 35042,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 35042,
+            "tool": "mobile_device_current_app",
+            "callId": "call_00_AHzVPsWNA0D8HEKNVKQl2977"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 35173,
+            "callId": "call_00_AHzVPsWNA0D8HEKNVKQl2977",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 35198,
+            "step": 15
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 35760,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 38638,
+            "usage": {
+              "inputTokens": 255,
+              "outputTokens": 409,
+              "cacheReadTokens": 35584,
+              "cacheWriteTokens": 0,
+              "totalTokens": 36248
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 38638,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 38638,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_ym8crVb87rvw0Re4Lwmp7873"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 39300,
+            "callId": "call_00_ym8crVb87rvw0Re4Lwmp7873",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 39327,
+            "step": 16
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 40593,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 42791,
+            "usage": {
+              "inputTokens": 1174,
+              "outputTokens": 266,
+              "cacheReadTokens": 36224,
+              "cacheWriteTokens": 0,
+              "totalTokens": 37664
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 42791,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 45364
+          }
+        ],
+        "pages": [
+          {
+            "tab": "网络和互联网",
+            "ms": 24145
+          },
+          {
+            "tab": "互联网",
+            "ms": 31867
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence",
+          "mobile_screen_observe",
+          "mobile_device_current_app",
+          "mobile_device_app_launch",
+          "mobile_device_wait",
+          "mobile_device_capabilities",
+          "mobile_device_shell",
+          "mobile_screen_act",
+          "mobile_device_screenshot"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p75-settled-settings-2.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 24474,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 247,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 247,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 247,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 250,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1503,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2917,
+            "usage": {
+              "inputTokens": 617,
+              "outputTokens": 162,
+              "cacheReadTokens": 28928,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29707
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2917,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2918,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_YRasuFEZaI0fNkU4Taqg0173"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5672,
+            "callId": "call_00_YRasuFEZaI0fNkU4Taqg0173",
+            "error": false,
+            "codes": [
+              "SCREEN_TARGET_MISSING",
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5710,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 6530,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 9369,
+            "usage": {
+              "inputTokens": 583,
+              "outputTokens": 454,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 30733
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 9369,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 9370,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_ozJJzsSTaQVQ8swr2JiD7174"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 9764,
+            "callId": "call_00_ozJJzsSTaQVQ8swr2JiD7174",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 9788,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 10421,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 11987,
+            "usage": {
+              "inputTokens": 522,
+              "outputTokens": 248,
+              "cacheReadTokens": 30720,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31490
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 11987,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 11988,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_7UUt8UoXOq5TMV1WaLFf2405"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 12404,
+            "callId": "call_00_7UUt8UoXOq5TMV1WaLFf2405",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 12440,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 13061,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 16532,
+            "usage": {
+              "inputTokens": 544,
+              "outputTokens": 519,
+              "cacheReadTokens": 31488,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32551
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 16532,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 16532,
+            "tool": "mobile_device_wait",
+            "callId": "call_00_x5nDci1zWdDBeO7m0pOj7244"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 17334,
+            "callId": "call_00_x5nDci1zWdDBeO7m0pOj7244",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 17357,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 18201,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 18861,
+            "usage": {
+              "inputTokens": 181,
+              "outputTokens": 26,
+              "cacheReadTokens": 32384,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32591
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 18861,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 18862,
+            "tool": "mobile_device_ui_dump",
+            "callId": "call_00_ET_spgvKjk4YEKxAHGN7KHg6243"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 19140,
+            "callId": "call_00_ET_spgvKjk4YEKxAHGN7KHg6243",
+            "error": true,
+            "codes": [
+              "UI_DUMP_EMPTY",
+              "ACCESSIBILITY_SERVICE_DISABLED"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 19167,
+            "step": 6
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 19637,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 20580,
+            "usage": {
+              "inputTokens": 256,
+              "outputTokens": 66,
+              "cacheReadTokens": 32384,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32706
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 20580,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 20581,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_I5NQdh10wOeh5HLwGkXo8968"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 20901,
+            "callId": "call_00_I5NQdh10wOeh5HLwGkXo8968",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 20956,
+            "step": 7
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 21452,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 22900,
+            "usage": {
+              "inputTokens": 681,
+              "outputTokens": 155,
+              "cacheReadTokens": 32512,
+              "cacheWriteTokens": 0,
+              "totalTokens": 33348
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 22900,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 24467
+          }
+        ],
+        "pages": [
+          {
+            "tab": "网络和互联网",
+            "ms": 4173
+          },
+          {
+            "tab": "互联网",
+            "ms": 12154
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence",
+          "mobile_screen_observe",
+          "mobile_screen_act",
+          "mobile_device_wait"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p76-settings-1.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 31200,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 259,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 259,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 259,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 262,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1581,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 3571,
+            "usage": {
+              "inputTokens": 24703,
+              "outputTokens": 218,
+              "cacheReadTokens": 4864,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29785
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 3571,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 3572,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_cKGe6a9qcYgsdV2N8l8L3823"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 6403,
+            "callId": "call_00_cKGe6a9qcYgsdV2N8l8L3823",
+            "error": false,
+            "codes": [
+              "SCREEN_TARGET_MISSING",
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 6476,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 7475,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 11131,
+            "usage": {
+              "inputTokens": 661,
+              "outputTokens": 592,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 30949
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 11131,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 11131,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_8lu8OxCDaYb4ljVXV6iI1263"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 11491,
+            "callId": "call_00_8lu8OxCDaYb4ljVXV6iI1263",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 11516,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 12159,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 16226,
+            "usage": {
+              "inputTokens": 608,
+              "outputTokens": 634,
+              "cacheReadTokens": 30848,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32090
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 16226,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 16226,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_UJu1br7bOocd5XCYTTJy4924"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 16867,
+            "callId": "call_00_UJu1br7bOocd5XCYTTJy4924",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 16899,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 18189,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 21788,
+            "usage": {
+              "inputTokens": 1242,
+              "outputTokens": 663,
+              "cacheReadTokens": 32000,
+              "cacheWriteTokens": 0,
+              "totalTokens": 33905
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 21789,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 21789,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_nQw34EPwxPDEu9jIzu1B7597"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 22242,
+            "callId": "call_00_nQw34EPwxPDEu9jIzu1B7597",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 22276,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 23098,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 24242,
+            "usage": {
+              "inputTokens": 651,
+              "outputTokens": 138,
+              "cacheReadTokens": 33792,
+              "cacheWriteTokens": 0,
+              "totalTokens": 34581
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 24242,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 24242,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_HjxE99Pc6fJlVIP4OEYo4605"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 24644,
+            "callId": "call_00_HjxE99Pc6fJlVIP4OEYo4605",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 24674,
+            "step": 6
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 25795,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 27149,
+            "usage": {
+              "inputTokens": 1171,
+              "outputTokens": 100,
+              "cacheReadTokens": 34560,
+              "cacheWriteTokens": 0,
+              "totalTokens": 35831
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 27150,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 31191
+          }
+        ],
+        "pages": [
+          {
+            "tab": "网络和互联网",
+            "ms": 4751
+          },
+          {
+            "tab": "互联网",
+            "ms": 21934
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence",
+          "mobile_screen_observe",
+          "mobile_device_screenshot",
+          "mobile_screen_act"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p76-clock-1.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 9797,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 171,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 171,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 172,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 175,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1113,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2855,
+            "usage": {
+              "inputTokens": 641,
+              "outputTokens": 245,
+              "cacheReadTokens": 28928,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29814
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2855,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2855,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_r37b1nzd7WBYHcIaq3G38927"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5552,
+            "callId": "call_00_r37b1nzd7WBYHcIaq3G38927",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5588,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 7037,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 8059,
+            "usage": {
+              "inputTokens": 1943,
+              "outputTokens": 97,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31736
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 8060,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 9794
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 3231
+          },
+          {
+            "tab": "定时器",
+            "ms": 3595
+          },
+          {
+            "tab": "秒表",
+            "ms": 3920
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p76-clock-2.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 112511,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 145,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 145,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 145,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 148,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 904,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2002,
+            "usage": {
+              "inputTokens": 513,
+              "outputTokens": 156,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29725
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2002,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2002,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_x6YFGjz2qlpkJqxGsKFg3449"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 4752,
+            "callId": "call_00_x6YFGjz2qlpkJqxGsKFg3449",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 4778,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 6508,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 13871,
+            "usage": {
+              "inputTokens": 1871,
+              "outputTokens": 1091,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32658
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 13871,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 13871,
+            "tool": "acp_read_original_image",
+            "callId": "call_00_0zxVyymlQczUkoIiN9Kz8552"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 13894,
+            "callId": "call_00_0zxVyymlQczUkoIiN9Kz8552",
+            "error": true,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 13920,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 14532,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 31637,
+            "usage": {
+              "inputTokens": 195,
+              "outputTokens": 2596,
+              "cacheReadTokens": 32512,
+              "cacheWriteTokens": 0,
+              "totalTokens": 35303
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 31637,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 31637,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_YGSNJpOO9mjWJBDoieG67222"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 32078,
+            "callId": "call_00_YGSNJpOO9mjWJBDoieG67222",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 32102,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 33300,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 38782,
+            "usage": {
+              "inputTokens": 1261,
+              "outputTokens": 763,
+              "cacheReadTokens": 35200,
+              "cacheWriteTokens": 0,
+              "totalTokens": 37224
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 38782,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 38783,
+            "tool": "mobile_device_ui_dump",
+            "callId": "call_00_grC3JXe7mkyEniV9kvpj6888"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 39025,
+            "callId": "call_00_grC3JXe7mkyEniV9kvpj6888",
+            "error": true,
+            "codes": [
+              "UI_DUMP_EMPTY",
+              "ACCESSIBILITY_SERVICE_DISABLED"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 39054,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 39626,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 50164,
+            "usage": {
+              "inputTokens": 153,
+              "outputTokens": 1685,
+              "cacheReadTokens": 37120,
+              "cacheWriteTokens": 0,
+              "totalTokens": 38958
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 50164,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 50164,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_tEzuVmTzukLpkjTXI5rB8689"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 50191,
+            "callId": "call_00_tEzuVmTzukLpkjTXI5rB8689",
+            "error": true,
+            "codes": [
+              "SCREEN_OBSERVATION_STALE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 50217,
+            "step": 6
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 50906,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 52478,
+            "usage": {
+              "inputTokens": 196,
+              "outputTokens": 156,
+              "cacheReadTokens": 38784,
+              "cacheWriteTokens": 0,
+              "totalTokens": 39136
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 52478,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 52478,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_y8GAi71CQx7aY42DXkVB8817"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 52818,
+            "callId": "call_00_y8GAi71CQx7aY42DXkVB8817",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 52846,
+            "step": 7
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 53530,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 54718,
+            "usage": {
+              "inputTokens": 622,
+              "outputTokens": 172,
+              "cacheReadTokens": 39040,
+              "cacheWriteTokens": 0,
+              "totalTokens": 39834
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 54718,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 54718,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_xUDSj7QDoSSCeJRjlv5y4915"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 55147,
+            "callId": "call_00_xUDSj7QDoSSCeJRjlv5y4915",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 55176,
+            "step": 8
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 55687,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 57489,
+            "usage": {
+              "inputTokens": 559,
+              "outputTokens": 134,
+              "cacheReadTokens": 39808,
+              "cacheWriteTokens": 0,
+              "totalTokens": 40501
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 57489,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 57490,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_jm5lO107SzzWj7RA8upo8998"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 57958,
+            "callId": "call_00_jm5lO107SzzWj7RA8upo8998",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 57999,
+            "step": 9
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 58613,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 62929,
+            "usage": {
+              "inputTokens": 1208,
+              "outputTokens": 649,
+              "cacheReadTokens": 40448,
+              "cacheWriteTokens": 0,
+              "totalTokens": 42305
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 62929,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 62930,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_kpaUSf6IrvNIPqHEhTkP0669"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 62949,
+            "callId": "call_00_kpaUSf6IrvNIPqHEhTkP0669",
+            "error": true,
+            "codes": [
+              "SCREEN_OBSERVATION_STALE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 62979,
+            "step": 10
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 63716,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 65532,
+            "usage": {
+              "inputTokens": 215,
+              "outputTokens": 167,
+              "cacheReadTokens": 42112,
+              "cacheWriteTokens": 0,
+              "totalTokens": 42494
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 65532,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 65532,
+            "tool": "mobile_device_tap",
+            "callId": "call_00_1sPwCza4cEuMMQ5IMJuH8506"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 65570,
+            "callId": "call_00_1sPwCza4cEuMMQ5IMJuH8506",
+            "error": true,
+            "codes": [
+              "ACCESSIBILITY_SERVICE_DISABLED"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 65590,
+            "step": 11
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 66192,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 67628,
+            "usage": {
+              "inputTokens": 149,
+              "outputTokens": 159,
+              "cacheReadTokens": 42368,
+              "cacheWriteTokens": 0,
+              "totalTokens": 42676
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 67629,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 67629,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_XHs9KYL4liMYaaRkY9On8754"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 67648,
+            "callId": "call_00_XHs9KYL4liMYaaRkY9On8754",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 67673,
+            "step": 12
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 68399,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 69378,
+            "usage": {
+              "inputTokens": 253,
+              "outputTokens": 116,
+              "cacheReadTokens": 42496,
+              "cacheWriteTokens": 0,
+              "totalTokens": 42865
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 69378,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 69378,
+            "tool": "mobile_screen_observe",
+            "callId": "call_00_SlzZxa09MuzkDJfXSXw73249"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 69664,
+            "callId": "call_00_SlzZxa09MuzkDJfXSXw73249",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 69691,
+            "step": 13
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 72379,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 72569,
+            "usage": {
+              "inputTokens": 639,
+              "outputTokens": 157,
+              "cacheReadTokens": 42752,
+              "cacheWriteTokens": 0,
+              "totalTokens": 43548
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 72571,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 72572,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_ET_4BvCZmE8yJZSFYO3qXOp2765"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 73023,
+            "callId": "call_00_ET_4BvCZmE8yJZSFYO3qXOp2765",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 73053,
+            "step": 14
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 73689,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 77670,
+            "usage": {
+              "inputTokens": 734,
+              "outputTokens": 580,
+              "cacheReadTokens": 43520,
+              "cacheWriteTokens": 0,
+              "totalTokens": 44834
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 77670,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 77670,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_cZngcLdyT6ovjf6TyS602643"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 78127,
+            "callId": "call_00_cZngcLdyT6ovjf6TyS602643",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 78165,
+            "step": 15
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 78733,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 80809,
+            "usage": {
+              "inputTokens": 566,
+              "outputTokens": 206,
+              "cacheReadTokens": 44800,
+              "cacheWriteTokens": 0,
+              "totalTokens": 45572
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 80810,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 80810,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_HO3S1SEOxKqePUtx3dVF2603"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 81241,
+            "callId": "call_00_HO3S1SEOxKqePUtx3dVF2603",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 81277,
+            "step": 16
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 82398,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 93728,
+            "usage": {
+              "inputTokens": 1163,
+              "outputTokens": 1828,
+              "cacheReadTokens": 45568,
+              "cacheWriteTokens": 0,
+              "totalTokens": 48559
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 93728,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 93729,
+            "tool": "bash",
+            "callId": "call_00_wgVBjznmR2IxgnpAOJG01055"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 93799,
+            "callId": "call_00_wgVBjznmR2IxgnpAOJG01055",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 93823,
+            "step": 17
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 94537,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 109574,
+            "usage": {
+              "inputTokens": 217,
+              "outputTokens": 2312,
+              "cacheReadTokens": 48384,
+              "cacheWriteTokens": 0,
+              "totalTokens": 50913
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 109574,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 112504
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 2408
+          },
+          {
+            "tab": "定时器",
+            "ms": 2742
+          },
+          {
+            "tab": "秒表",
+            "ms": 3110
+          },
+          {
+            "tab": "定时器",
+            "ms": 72636
+          },
+          {
+            "tab": "秒表",
+            "ms": 77768
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence",
+          "mobile_device_screenshot",
+          "mobile_screen_observe",
+          "mobile_screen_act",
+          "bash"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p76-settings-2.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 11841,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 275,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 275,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 275,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 281,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1613,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2609,
+            "usage": {
+              "inputTokens": 511,
+              "outputTokens": 154,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29721
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2609,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2609,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_gtRApHOC9mR734sHenwO8058"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 6482,
+            "callId": "call_00_gtRApHOC9mR734sHenwO8058",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 6511,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 9363,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 10321,
+            "usage": {
+              "inputTokens": 1780,
+              "outputTokens": 78,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31554
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 10322,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 11833
+          }
+        ],
+        "pages": [
+          {
+            "tab": "网络和互联网",
+            "ms": 3773
+          },
+          {
+            "tab": "互联网",
+            "ms": 4630
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p76-portrait-clock.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 27052,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 134,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 135,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 135,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 137,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1010,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2281,
+            "usage": {
+              "inputTokens": 596,
+              "outputTokens": 179,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29831
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2281,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2281,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_eJPtVvzanQRD5u74W8PD5299"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 3993,
+            "callId": "call_00_eJPtVvzanQRD5u74W8PD5299",
+            "error": false,
+            "codes": [
+              "SCREEN_TARGET_MISSING",
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 4020,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 4751,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 7226,
+            "usage": {
+              "inputTokens": 570,
+              "outputTokens": 393,
+              "cacheReadTokens": 29824,
+              "cacheWriteTokens": 0,
+              "totalTokens": 30787
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 7226,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 7227,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_g11IqRrN6YOBrWWmRCT36441"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 7642,
+            "callId": "call_00_g11IqRrN6YOBrWWmRCT36441",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 7675,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 8949,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 12590,
+            "usage": {
+              "inputTokens": 1080,
+              "outputTokens": 605,
+              "cacheReadTokens": 30720,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32405
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 12590,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 12591,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_07EMmtWGL1tvEMGOIglw8474"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 13048,
+            "callId": "call_00_07EMmtWGL1tvEMGOIglw8474",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 13081,
+            "step": 4
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 13872,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 14999,
+            "usage": {
+              "inputTokens": 465,
+              "outputTokens": 146,
+              "cacheReadTokens": 32384,
+              "cacheWriteTokens": 0,
+              "totalTokens": 32995
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 15000,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 15000,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_oXRfi7QPEhNuCPcl1wzS0360"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 15452,
+            "callId": "call_00_oXRfi7QPEhNuCPcl1wzS0360",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 15482,
+            "step": 5
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 16010,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 17224,
+            "usage": {
+              "inputTokens": 641,
+              "outputTokens": 153,
+              "cacheReadTokens": 32896,
+              "cacheWriteTokens": 0,
+              "totalTokens": 33690
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 17224,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 17225,
+            "tool": "mobile_screen_act",
+            "callId": "call_00_yY4zcIz4ZAspEYe3v4CA5766"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 17625,
+            "callId": "call_00_yY4zcIz4ZAspEYe3v4CA5766",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 17688,
+            "step": 6
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 18307,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 19456,
+            "usage": {
+              "inputTokens": 345,
+              "outputTokens": 80,
+              "cacheReadTokens": 33664,
+              "cacheWriteTokens": 0,
+              "totalTokens": 34089
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 19456,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 19456,
+            "tool": "mobile_device_screenshot",
+            "callId": "call_00_PmdJGI1LYGq8wXo3hYsy4071"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 19868,
+            "callId": "call_00_PmdJGI1LYGq8wXo3hYsy4071",
+            "error": false,
+            "codes": []
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 19895,
+            "step": 7
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 21097,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 22933,
+            "usage": {
+              "inputTokens": 1056,
+              "outputTokens": 175,
+              "cacheReadTokens": 34048,
+              "cacheWriteTokens": 0,
+              "totalTokens": 35279
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 22933,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 27048
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 12702
+          },
+          {
+            "tab": "定时器",
+            "ms": 15112
+          },
+          {
+            "tab": "秒表",
+            "ms": 17299
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence",
+          "mobile_device_screenshot",
+          "mobile_screen_act"
+        ]
+      }
+    },
+    {
+      "group": "intermediate",
+      "source": "p76-portrait-settings.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 11715,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 281,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 281,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 281,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 286,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1308,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2463,
+            "usage": {
+              "inputTokens": 594,
+              "outputTokens": 153,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29803
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2464,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2464,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_pwAtqxwj4BEO7vLux2B84847"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 6787,
+            "callId": "call_00_pwAtqxwj4BEO7vLux2B84847",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 6818,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 8196,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 9618,
+            "usage": {
+              "inputTokens": 2009,
+              "outputTokens": 53,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31758
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 9618,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 11708
+          }
+        ],
+        "pages": [
+          {
+            "tab": "网络和互联网",
+            "ms": 3964
+          },
+          {
+            "tab": "互联网",
+            "ms": 4694
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "finalLandscape",
+      "case": "clock",
+      "source": "p76-final-clock-1.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 12837,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 155,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 156,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 156,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 158,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 995,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2020,
+            "usage": {
+              "inputTokens": 596,
+              "outputTokens": 127,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29779
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2020,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2021,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_2Gf667j2ITJrZ4X25hZj4149"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 4922,
+            "callId": "call_00_2Gf667j2ITJrZ4X25hZj4149",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 4949,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 6279,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 7140,
+            "usage": {
+              "inputTokens": 1976,
+              "outputTokens": 51,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31723
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 7140,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 9576,
+            "source": "dsh-answer-reviewer"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 9576,
+            "step": 3
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 10325,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 11057,
+            "usage": {
+              "inputTokens": 307,
+              "outputTokens": 49,
+              "cacheReadTokens": 31616,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31972
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 11058,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 12834
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 2513
+          },
+          {
+            "tab": "定时器",
+            "ms": 2910
+          },
+          {
+            "tab": "秒表",
+            "ms": 3218
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "finalLandscape",
+      "case": "clock",
+      "source": "p76-final-clock-2.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 8136,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 142,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 142,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 142,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 145,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 967,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 1846,
+            "usage": {
+              "inputTokens": 596,
+              "outputTokens": 160,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29812
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 1847,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 1847,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_v3nTOL86B52U4NZgu8nL5722"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 4609,
+            "callId": "call_00_v3nTOL86B52U4NZgu8nL5722",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 4634,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 5829,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 6678,
+            "usage": {
+              "inputTokens": 1996,
+              "outputTokens": 52,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31744
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 6678,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 8131
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 2222
+          },
+          {
+            "tab": "定时器",
+            "ms": 2660
+          },
+          {
+            "tab": "秒表",
+            "ms": 2937
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "finalLandscape",
+      "case": "clock",
+      "source": "p76-final-clock-3.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 14829,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 138,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 138,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 139,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 143,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 911,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2477,
+            "usage": {
+              "inputTokens": 596,
+              "outputTokens": 92,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29744
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2477,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2477,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_B8BjWG7eKVpgxjomYaLr0291"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5369,
+            "callId": "call_00_B8BjWG7eKVpgxjomYaLr0291",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5408,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 9911,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 10454,
+            "usage": {
+              "inputTokens": 1905,
+              "outputTokens": 52,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31653
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 10455,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 14823
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 2960
+          },
+          {
+            "tab": "定时器",
+            "ms": 3435
+          },
+          {
+            "tab": "秒表",
+            "ms": 3669
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "finalPortrait",
+      "case": "clock",
+      "source": "p76-portrait-fixed-clock.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 10885,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 192,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 192,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 192,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 197,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1118,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 3038,
+            "usage": {
+              "inputTokens": 596,
+              "outputTokens": 217,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29869
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 3038,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 3039,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_Q6enKtTx5HBjp94wWcSK5475"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5442,
+            "callId": "call_00_Q6enKtTx5HBjp94wWcSK5475",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5470,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 6781,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 7978,
+            "usage": {
+              "inputTokens": 1643,
+              "outputTokens": 88,
+              "cacheReadTokens": 29824,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31555
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 7978,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 10882
+          }
+        ],
+        "pages": [
+          {
+            "tab": "时钟",
+            "ms": 3473
+          },
+          {
+            "tab": "定时器",
+            "ms": 3818
+          },
+          {
+            "tab": "秒表",
+            "ms": 4158
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "finalLandscape",
+      "case": "settings",
+      "source": "p76-final-settings-1.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 11472,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 197,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 197,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 197,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 200,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1294,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 3235,
+            "usage": {
+              "inputTokens": 24658,
+              "outputTokens": 145,
+              "cacheReadTokens": 4992,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29795
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 3235,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 3235,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_TC7Y9622s6U21ukJxUrf8267"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 7050,
+            "callId": "call_00_TC7Y9622s6U21ukJxUrf8267",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 7093,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 8478,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 9999,
+            "usage": {
+              "inputTokens": 1837,
+              "outputTokens": 122,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31655
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 10000,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 11466
+          }
+        ],
+        "pages": [
+          {
+            "tab": "网络和互联网",
+            "ms": 4494
+          },
+          {
+            "tab": "互联网",
+            "ms": 5080
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "finalLandscape",
+      "case": "settings",
+      "source": "p76-final-settings-2.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 11191,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 267,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 268,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 268,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 271,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1312,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2677,
+            "usage": {
+              "inputTokens": 594,
+              "outputTokens": 147,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29797
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2677,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2677,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_wjmuI7lADPBUTh3pSBSz6706"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 6620,
+            "callId": "call_00_wjmuI7lADPBUTh3pSBSz6706",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 6648,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 8192,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 9249,
+            "usage": {
+              "inputTokens": 1884,
+              "outputTokens": 96,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31676
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 9250,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 11182
+          }
+        ],
+        "pages": [
+          {
+            "tab": "网络和互联网",
+            "ms": 3883
+          },
+          {
+            "tab": "互联网",
+            "ms": 4774
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "finalLandscape",
+      "case": "settings",
+      "source": "p76-final-settings-3.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 9986,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 260,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 260,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 260,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 263,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1198,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2036,
+            "usage": {
+              "inputTokens": 594,
+              "outputTokens": 116,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29766
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2036,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2037,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_4L6uQIUcn3tN3Z8fym3l4647"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5888,
+            "callId": "call_00_4L6uQIUcn3tN3Z8fym3l4647",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5945,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 7242,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 8096,
+            "usage": {
+              "inputTokens": 1842,
+              "outputTokens": 52,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31590
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 8096,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 9977
+          }
+        ],
+        "pages": [
+          {
+            "tab": "网络和互联网",
+            "ms": 3393
+          },
+          {
+            "tab": "互联网",
+            "ms": 4007
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    },
+    {
+      "group": "finalPortrait",
+      "case": "settings",
+      "source": "p76-portrait-fixed-settings.json",
+      "result": {
+        "mode": "optimized",
+        "elapsedMs": 12786,
+        "events": [
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 316,
+            "source": "user"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 317,
+            "source": "runtime-context"
+          },
+          {
+            "kind": "event",
+            "type": "user/message",
+            "ms": 317,
+            "source": "time-context"
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 321,
+            "step": 1
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 1364,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 2670,
+            "usage": {
+              "inputTokens": 594,
+              "outputTokens": 133,
+              "cacheReadTokens": 29056,
+              "cacheWriteTokens": 0,
+              "totalTokens": 29783
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 2670,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "tool/call",
+            "ms": 2670,
+            "tool": "mobile_screen_sequence",
+            "callId": "call_00_G6KDsLHYkfO7UU66ZgUk3132"
+          },
+          {
+            "kind": "event",
+            "type": "tool/result",
+            "ms": 5952,
+            "callId": "call_00_G6KDsLHYkfO7UU66ZgUk3132",
+            "error": false,
+            "codes": [
+              "ACCESSIBILITY_UNAVAILABLE"
+            ]
+          },
+          {
+            "kind": "stream",
+            "type": "start",
+            "ms": 5980,
+            "step": 2
+          },
+          {
+            "kind": "stream",
+            "type": "chunk",
+            "ms": 7617,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "assistant/message",
+            "ms": 9711,
+            "usage": {
+              "inputTokens": 1978,
+              "outputTokens": 265,
+              "cacheReadTokens": 29696,
+              "cacheWriteTokens": 0,
+              "totalTokens": 31939
+            }
+          },
+          {
+            "kind": "stream",
+            "type": "end",
+            "ms": 9711,
+            "step": -1
+          },
+          {
+            "kind": "event",
+            "type": "turn/end",
+            "ms": 12780
+          }
+        ],
+        "pages": [
+          {
+            "tab": "网络和互联网",
+            "ms": 3384
+          },
+          {
+            "tab": "互联网",
+            "ms": 4109
+          }
+        ],
+        "tools": [
+          "mobile_screen_sequence"
+        ]
+      }
+    }
+  ]
+}

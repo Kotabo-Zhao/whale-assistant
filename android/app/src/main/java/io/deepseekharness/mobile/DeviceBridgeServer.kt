@@ -167,13 +167,13 @@ class DeviceBridgeServer(
         return value
     }
 
-    private fun actAndObserve(context:Context,request:JSONObject):JSONObject {
+    private fun actAndObserve(context:Context,request:JSONObject,sequence:Boolean=false):JSONObject {
         val action=request.optString("action")
         if(action !in setOf("tap","swipe","back")) throw RuntimeFailure("SCREEN_INPUT_INVALID","动作只支持 tap、swipe、back")
         val lease=screenLease
         screenLease=null // Consume before injection: uncertain outcomes can never replay this observation.
         if(lease==null || request.optString("observationId")!=lease.id ||
-            lease.version+1!=DeviceControlState.executionVersion() ||
+            lease.version+(if(sequence) 0 else 1)!=DeviceControlState.executionVersion() ||
             android.os.SystemClock.elapsedRealtime()-lease.at>15_000)
             throw RuntimeFailure("SCREEN_OBSERVATION_STALE","请重新观察后再操作")
         val actual=realScreenSize(context)
@@ -218,7 +218,7 @@ class DeviceBridgeServer(
         val value=JSONObject().put("action",receipt)
         try {
             val waitStarted=android.os.SystemClock.elapsedRealtime()
-            repeat(5) {DeviceControlState.checkCurrent();Thread.sleep(16)}
+            repeat(if(sequence) 1 else 5) {DeviceControlState.checkCurrent();Thread.sleep(16)}
             value.put("settleMs",android.os.SystemClock.elapsedRealtime()-waitStarted)
             DeviceControlState.checkCurrent()
             val observationRequest=JSONObject()
@@ -231,6 +231,60 @@ class DeviceBridgeServer(
                 .put("nextStep","动作已注入；先重新观察，不要直接重放")
         }
         return value
+    }
+
+    private val sequenceTickets=io.deepseekharness.mobile.companion.ScreenSequenceTickets {android.os.SystemClock.elapsedRealtime()}
+    private fun screenSequence(context:Context,request:JSONObject):JSONObject {
+        val operationId=request.optString("operationId")
+        sequenceTickets.start(operationId)
+        try {
+        val port=object:io.deepseekharness.mobile.companion.ScreenSequence.Port {
+            override fun check(){DeviceControlState.checkCurrent();sequenceTickets.check(operationId)}
+            override fun now()=android.os.SystemClock.elapsedRealtime()
+            override fun waitForFrame(){check();Thread.sleep(16);check()}
+            override fun observe()=observeScreen(context,JSONObject())
+            override fun refine(observation:JSONObject,text:String):JSONObject? {
+                val region=io.deepseekharness.mobile.companion.ScreenSequence.refinementRegion(observation,text) ?: return null
+                check()
+                return observeScreen(context,JSONObject().put("ocr",true).put("region",region))
+            }
+            override fun foreground():String {
+                val service=DeepSeekAccessibilityService.current()
+                if(service==null) {
+                    if(!shellEnabled()) throw RuntimeFailure("DEVICE_SHELL_DISABLED","请先开启 AI Shell")
+                    return shizuku.mainScreenForeground().also{check()}
+                }
+                val result=service.execute("accessibilityTree","")
+                if(!result.ok) throw RuntimeFailure(result.errorCode ?: "SCREEN_APP_UNAVAILABLE","无法核实前台应用")
+                check()
+                return JSONObject(result.text).getString("packageName")
+            }
+            override fun tap(observation:JSONObject,x:Int,y:Int):JSONObject {
+                check()
+                return actAndObserve(context,JSONObject().put("observationId",observation.getString("observationId"))
+                    .put("action","tap").put("x",x).put("y",y),true)
+            }
+        }
+        val result=io.deepseekharness.mobile.companion.ScreenSequence.run(request,port)
+        if(request.optBoolean("includeImage") && result.optString("status")=="completed" &&
+            result.optJSONObject("observation")?.optBoolean("treeAvailable")!=true) {
+            try {
+                port.check()
+                if(port.foreground()!=request.getString("packageName")) throw RuntimeFailure("SCREEN_APP_CHANGED","前台应用变化")
+                val snapshot=captureScreenImage()
+                port.check()
+                if(port.foreground()!=request.getString("packageName")) throw RuntimeFailure("SCREEN_APP_CHANGED","前台应用变化")
+                result.put("snapshot",snapshot)
+                // The screenshot owns the newest lease; the previous text frame cannot be acted on.
+                result.optJSONObject("observation")?.remove("observationId")
+            } catch(error:Exception) {
+                port.check();screenLease=null
+                result.optJSONObject("observation")?.remove("observationId")
+                result.put("snapshotError",if(error is RuntimeFailure) error.code else "SCREEN_CAPTURE_FAILED")
+            }
+        }
+        return result
+        } finally {sequenceTickets.finish(operationId)}
     }
 
     private fun observeImage(request:JSONObject):JSONObject {
@@ -491,7 +545,7 @@ class DeviceBridgeServer(
 
     private fun executeCommand(commandName:String,param:String,output:BufferedOutputStream,admission:Long) {
         try {
-            if(commandName in setOf("screenAct","tap","inputText","accessibilityAction","accessibilityBack","shell","launchApp","appLaunch"))
+            if(commandName in setOf("screenSequence","screenAct","tap","inputText","accessibilityAction","accessibilityBack","shell","launchApp","appLaunch"))
                 DeviceControlState.checkAdmission(admission)
             if (commandName == "pluginMarketUpdateProposal") {
                 val context = appContext ?: throw RuntimeFailure("MARKET_PROPOSAL_UNAVAILABLE", "更新请求服务不可用")
@@ -846,13 +900,22 @@ class DeviceBridgeServer(
                 respondResult(output,result)
                 return
             }
-            if (commandName in setOf("screenObserve","screenAct")) {
+            if(commandName=="screenSequenceCancel") {
+                sequenceTickets.cancel(param)
+                respondResult(output,io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,"cancelled",false,null))
+                return
+            }
+            if (commandName in setOf("screenObserve","screenAct","screenSequence")) {
                 if(param.length>2048) throw RuntimeFailure("SCREEN_INPUT_INVALID","屏幕参数过长")
                 val context=appContext ?: throw RuntimeFailure("SCREEN_UNAVAILABLE","屏幕服务不可用")
                 val request=JSONObject(param)
                 val result=DeviceControlState.execute(context,commandName=="screenObserve",
                     if(commandName=="screenObserve") "快速观察" else "操作并观察") {
-                    val value=if(commandName=="screenObserve") observeScreen(context,request) else actAndObserve(context,request)
+                    val value=when(commandName) {
+                        "screenObserve"->observeScreen(context,request)
+                        "screenSequence"->screenSequence(context,request).also {if(it.optString("status")!="completed") screenLease=null}
+                        else->actAndObserve(context,request)
+                    }
                     io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,value.toString(),false,null)
                 }
                 respondResult(output,result)

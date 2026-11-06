@@ -7,6 +7,7 @@ const fsp = require('node:fs/promises')
 const path = require('node:path').posix
 const { syncBuiltinESMExports } = require('node:module')
 const { promisify } = require('node:util')
+require('./mobile-reviewer-context.cjs').install()
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/
 const USERNAME = 'dsh-mobile'

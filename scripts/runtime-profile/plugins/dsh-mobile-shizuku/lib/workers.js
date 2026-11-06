@@ -40,7 +40,7 @@ const deviceRead = new Set(['mobile_device_capabilities', 'mobile_device_info', 
  * 设备**操作与敏感读取**：只在 device 模式允许，且同一时刻只允许一个 device Worker 独占手机。
  * 屏幕内容（截图/控件树/屏幕陪看）与文件读写都放在这里：它们要么改变设备状态，要么暴露更大的内容面。
  */
-const deviceAction = new Set(['mobile_screen_act', 'mobile_screen_observe', 'mobile_device_screenshot', 'mobile_device_ui_dump', 'mobile_device_tap',
+const deviceAction = new Set(['mobile_screen_sequence', 'mobile_screen_act', 'mobile_screen_observe', 'mobile_device_screenshot', 'mobile_device_ui_dump', 'mobile_device_tap',
   'mobile_device_swipe', 'mobile_device_input_text', 'mobile_device_keyevent', 'mobile_device_app_launch',
   'mobile_device_task', 'mobile_device_shell', 'mobile_see_now', 'mobile_device_file_list',
   'mobile_device_file_read', 'mobile_device_file_download', 'mobile_device_file_write',

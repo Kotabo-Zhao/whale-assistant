@@ -469,7 +469,8 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
     }
 
     fun followReplyWithImages(sessionId: String, requestId: String, onPartial: (String) -> Unit = {},
-        onQuestion: (String) -> Unit = {}, onStructuredQuestion: (JSONObject) -> Unit = {}, onExecutionState: (String) -> Unit = {}, sendPrompt: () -> Unit): CompanionBubbleChat.Reply {
+        onQuestion: (String) -> Unit = {}, onStructuredQuestion: (JSONObject) -> Unit = {}, onExecutionState: (String) -> Unit = {},
+        onTrace: ((String, JSONObject) -> Unit)? = null, sendPrompt: () -> Unit): CompanionBubbleChat.Reply {
         val address = JSONObject().put("kind", "session").put("sessionId", sessionId)
         var latestError = "本机对话连接失败，请检查服务状态"
         // Reconnect by reloading the Host's authoritative window, never by appending an unknown suffix.
@@ -546,10 +547,16 @@ internal class HarnessBubbleClient(private val access: HarnessAccess) {
                                     }
                                     publish(); ready.countDown()
                                 }
-                                "assistant-stream" -> { check(fold.frame(value.getJSONObject("frame"))) { "本机流式连接需要同步" }; publish() }
+                                "assistant-stream" -> {
+                                    val part=value.getJSONObject("frame")
+                                    check(fold.frame(part)) { "本机流式连接需要同步" }
+                                    if(fold.currentTurnOwned) runCatching { onTrace?.invoke("stream",part) }
+                                    publish()
+                                }
                                 "event" -> {
                                     val event = value.getJSONObject("event")
                                     fold.event(event)
+                                    if(fold.currentTurnOwned) runCatching { onTrace?.invoke("event",event) }
                                     if (event.optString("type") == "approval/asked") { onExecutionState("permission"); onQuestion("助手正在请求操作权限，请到主对话查看并决定是否允许。") }
                                     publish()
                                 }

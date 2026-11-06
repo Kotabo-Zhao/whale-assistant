@@ -393,3 +393,9 @@ test('合并主屏动作只开放给持有设备执行权的 Worker', () => {
   assert.equal(workerToolAllowed('device','mobile_screen_act'),true)
   for(const mode of ['read','create','unknown']) assert.equal(workerToolAllowed(mode,'mobile_screen_act'),false)
 })
+
+
+test('连续导航仍属于设备独占工具，读和创作 Worker 不可使用',()=>{
+  assert.equal(workerToolAllowed('device','mobile_screen_sequence'),true)
+  for(const mode of ['read','create','unknown']) assert.equal(workerToolAllowed(mode,'mobile_screen_sequence'),false)
+})

@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class DeviceShellUserService() : IDeviceShellService.Stub() {
     private val mainInput=MainScreenInput()
+    override fun mainScreenForeground():String = asService {MainScreenForeground.read()}
     override fun mainScreenAction(requestId:String,parameters:String,owner:IBinder):String = asService {
         try {mainInput.execute(requestId,parameters,owner)} catch(error:Exception) {
             org.json.JSONObject().put("injected",false).put("errorCode",when(error.message) {

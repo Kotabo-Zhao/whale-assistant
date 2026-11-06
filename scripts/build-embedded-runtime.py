@@ -1100,6 +1100,7 @@ def main() -> None:
         )
     find_linux_arm64_node_pty(args.dsh_root)
     mobile_auth_preload = read_support_file(MOBILE_AUTH_PRELOAD, "mobile authentication preload")
+    mobile_reviewer_context = read_support_file(Path(__file__).with_name("mobile-reviewer-context.cjs"), "mobile reviewer context")
     mobile_session_publisher = read_support_file(MOBILE_SESSION_PUBLISHER, "mobile session publisher")
     mobile_spec = validate_mobile_profile(args.mobile_profile) if args.mobile_profile is not None else None
     if (
@@ -1198,6 +1199,7 @@ def main() -> None:
                 mobile_auth_preload,
                 0o644,
             )
+            writer.add_bytes("usr/local/lib/mobile-reviewer-context.cjs", mobile_reviewer_context, 0o644)
             writer.add_bytes(
                 "usr/local/lib/dsh-mobile-session-publish.py",
                 mobile_session_publisher,

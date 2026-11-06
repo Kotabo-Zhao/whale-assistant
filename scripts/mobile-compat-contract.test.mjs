@@ -427,7 +427,7 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
     tools: { register: value => registeredTools.push(value) },
     on: (name, listener) => hooks.push({ name, listener }),
   })
-  assert.equal(prompts.length, 1)
+  assert.equal(prompts.length, 2)
   assert.match(prompts[0].text, /untrusted device data/)
   assert.deepEqual(
     registeredTools.map(tool => tool.name),
@@ -472,6 +472,7 @@ test('the mobile profile ships model-facing Shizuku tools without exposing bridg
       'mobile_device_screenshot',
       'mobile_device_shell',
       'mobile_virtual_screen_shell',
+      'mobile_screen_sequence',
       'mobile_screen_observe',
       'mobile_screen_act',
       'mobile_device_ui_dump',
@@ -604,7 +605,7 @@ test('Shizuku UserService uses the reserved removal transaction and stops with t
   }
   assert.match(aidl, /void destroy\(\)\s*=\s*16777114;/)
   // UserService 版本号必须在改动 AIDL 时有意提升：这里钉死当前值，改接口就得同步改这条断言。
-  assert.match(shizukuRuntime, /private const val USER_SERVICE_VERSION = 9/)
+  assert.match(shizukuRuntime, /private const val USER_SERVICE_VERSION = 10/)
   assert.match(shizukuRuntime, /fun disconnect\(\)/)
   assert.match(shizukuRuntime, /activeServiceGeneration = serviceGeneration\.incrementAndGet\(\)/)
   assert.match(shizukuRuntime, /if \(tryPingBinder\(\)\)[\s\S]*?activeServiceGeneration = serviceGeneration\.incrementAndGet\(\)[\s\S]*?activeConnection = null/)

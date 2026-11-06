@@ -435,6 +435,15 @@ class ShizukuRuntime(
         }
     }
 
+    internal fun mainScreenForeground():String {
+        requirePermission()
+        val result=try {org.json.JSONObject(requireService().mainScreenForeground())} catch(error:Exception) {
+            throw RuntimeFailure("SCREEN_APP_UNAVAILABLE","无法核实主屏前台应用",error)
+        }
+        return result.optString("packageName").takeIf{it.isNotBlank() && result.optInt("displayId",-1)==0}
+            ?: throw RuntimeFailure("SCREEN_APP_UNAVAILABLE","无法核实主屏前台应用")
+    }
+
     internal fun mainScreenAction(request:org.json.JSONObject):org.json.JSONObject {
         requirePermission()
         val current=requireService()
@@ -912,7 +921,7 @@ class ShizukuRuntime(
         private const val SERVICE_EXIT_TIMEOUT_SECONDS = 5L
         private val mainCaptureOwner by lazy {android.os.Binder()}
         private val mainCaptureTimer=java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
-        private const val USER_SERVICE_VERSION = 9
+        private const val USER_SERVICE_VERSION = 10
         private const val MAX_SESSIONS = 4
 
         /**

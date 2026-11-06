@@ -16,6 +16,9 @@ source = assets / 'rootfs.bundle'
 def open_source():
     return archive.open('assets/runtime/rootfs.bundle') if archive else source.open('rb')
 expected_bases = {
+    '0.3.79-whale-screen-evidence': '6fe31e26038eaaa19262ab3191bfdc665521791a3c5116f929708f5b03436481',
+    '0.3.77-whale-screen-evidence': '1c510c748f5a72949dc586a4981c7eaee89376da5eefbcba2bd992197736fdd3',
+    '0.3.76-whale-screen-sequence': 'c5239e4bc2d67590530c70b6569065f706fa90aef4b9af2961e8e2644ff7f5f0',
     '0.3.73-whale-screen-fast': '8c1f1edfb9b3b5300b650f406478c5b9f6efd825cd6d490fe624e7e62b057cc9',
     '0.3.72-whale-resilience': 'f4dd5b568e9393c2e284f1a6859025adf8aedafc618d6bb340eb565aa9aced15',
     '0.3.71-whale-resilience': 'a12d45a6e7b3a9e8736787cc7e6eda73a65adae5adfdef636354c2307eaa850c',
@@ -60,6 +63,8 @@ prefix = 'opt/dsh/plugins/dsh-mobile-shizuku/'
 files = {prefix + p.relative_to(plugin).as_posix(): p.read_bytes()
          for p in sorted(plugin.rglob('*')) if p.is_file() and 'node_modules' not in p.parts and
          (p.relative_to(plugin).parts[0] == 'lib' or p.name in ('package.json', 'cordis.patch.yml'))}
+files['usr/local/lib/dsh-mobile-auth.cjs'] = (root / 'scripts/mobile-auth-preload.cjs').read_bytes()
+files['usr/local/lib/mobile-reviewer-context.cjs'] = (root / 'scripts/mobile-reviewer-context.cjs').read_bytes()
 seen = set()
 delta = 0
 version = sys.argv[3] if len(sys.argv) > 3 else '0.3.46-whale-superagent-manager'

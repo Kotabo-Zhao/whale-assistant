@@ -21,6 +21,7 @@ interface IDeviceShellService {
     void cancelMainScreenPixels(String requestId) = 12;
     String mainScreenAction(String requestId, String parameters, IBinder owner) = 13;
     void cancelMainScreenAction(String requestId) = 14;
+    String mainScreenForeground() = 15;
     // Shizuku reserves this transaction for removing a UserService.
     void destroy() = 16777114;
 }

@@ -460,7 +460,7 @@ test('副屏目标切换超时保留语义准确的新错误码，不伪装成�
   // 工具描述与系统提示都要把这个码讲清楚，否则模型只会把它当成又一次「副屏不可用」。
   assert.match(tool.description, /VIRTUAL_SCREEN_TARGET_TIMEOUT/u)
   assert.match(tool.description, /仍然正常/u)
-  assert.equal(f.prompts.length, 1)
+  assert.equal(f.prompts.length, 2)
   assert.match(f.prompts[0].text, /VIRTUAL_SCREEN_TARGET_TIMEOUT/u)
   assert.match(f.prompts[0].text, /不要当成副屏不可用/u)
 })
@@ -501,7 +501,7 @@ test('副屏文本写不进去时保留 VIRTUAL_SCREEN_TEXT_UNSUPPORTED，不伪
   assert.match(text.description, /VIRTUAL_SCREEN_TEXT_UNSUPPORTED/u)
   assert.match(text.description, /不是副屏不可用/u)
   assert.match(submit.description, /写入失败时不会按回车/u)
-  assert.equal(f.prompts.length, 1)
+  assert.equal(f.prompts.length, 2)
   assert.match(f.prompts[0].text, /VIRTUAL_SCREEN_TEXT_UNSUPPORTED/u)
   assert.match(f.prompts[0].text, /不等于 VIRTUAL_SCREEN_UNAVAILABLE/u)
 })
@@ -609,7 +609,7 @@ test('副屏 follow 只发会话；没有可跟随目标时保留 FOLLOW_NONE，
   // 说明面必须点明「在这块副屏上」与「拉回副屏」，否则模型会改用主屏工具。
   assert.match(tool.description, /launch 是「在这块副屏上」/u)
   assert.match(tool.description, /拉回副屏/u)
-  assert.equal(f.prompts.length, 1)
+  assert.equal(f.prompts.length, 2)
   assert.match(f.prompts[0].text, /gesture/u)
   assert.match(f.prompts[0].text, /VIRTUAL_SCREEN_FOLLOW_NONE/u)
 })
@@ -887,4 +887,57 @@ test('主屏 JPEG 截图保留真实格式、物理尺寸和单次观察编号',
   assert.deepEqual(result.image.originalDimensions,{width:1440,height:2560})
   assert.equal(result.image.observationId,observationId)
   assert.match(f.tools.get('mobile_device_screenshot').output.render({},result)[0].text,/x coordinates by 3.2/)
+})
+
+
+test('连续导航只允许短文字计划，宿主拒绝优先，原生拒绝不回退', async t => {
+  const f=fixture(t,r=>r.command==='automationPolicy'?ok('{"schemaVersion":3,"directDeviceOperations":true}'):
+    ok('{"status":"stopped","completed":1,"errorCode":"SCREEN_TARGET_MISSING","doNotReplay":true}'))
+  const tool=f.tools.get('mobile_screen_sequence')
+  const args={packageName:'com.android.deskclock',steps:[{text:'时钟'},{text:'秒表'}]}
+  assert.deepEqual(await f.hook({name:tool.name},()=>({kind:'deny',reason:'paused'})),{kind:'deny',reason:'paused'})
+  assert.equal(f.requests.length,0)
+  assert.deepEqual(await f.hook({name:tool.name},()=>({kind:'allow'})),{kind:'allow'})
+  const result=JSON.parse((await tool.execute(args,{})).output)
+  assert.equal(result.completed,1);assert.equal(result.doNotReplay,true)
+  const sent=JSON.parse(f.requests[1].param);assert.match(sent.operationId,/^[a-f0-9-]{36}$/);delete sent.operationId;assert.deepEqual(sent,args)
+  for(const bad of [{...args,steps:[]},{...args,steps:Array(7).fill({text:'a'})},
+    {...args,packageName:'bad;input'},{...args,steps:[{text:'  '}]},{...args,steps:[{text:'时钟',x:1}]}])
+    await assert.rejects(async()=>tool.execute(bad,{}),/SCREEN_INPUT_INVALID|invalid arguments/)
+  assert.equal(f.requests.length,2)
+})
+test('连续导航将最终截图作为同一次回执附件，失败不重放动作', async t => {
+  const encoded=Buffer.from([0xff,0xd8,0xff,0]).toString('base64')
+  const f=fixture(t,()=>ok(JSON.stringify({status:'completed',completed:2,snapshot:{imageBase64:encoded,
+    mediaType:'image/jpeg',width:100,height:200,observationId:'new-lease'},observation:{image:{lines:[]}}})),{
+    llm:{resolveModelInfo:async()=>({inputModalities:['image']})},
+    attachments:{saveImage:async()=>({attachmentId:'final-frame',mediaType:'image/jpeg',width:100,height:200,bytes:4})},
+  })
+  const tool=f.tools.get('mobile_screen_sequence')
+  const value=await tool.execute({packageName:'com.example.clock',steps:[{text:'时钟'}]},
+    {agent:{options:{provider:'test',model:'vision'}}})
+  assert.equal(f.requests.length,1)
+  assert.equal(JSON.parse(f.requests[0].param).includeImage,true)
+  assert.equal(value.image.observationId,'new-lease')
+  assert.equal(JSON.parse(value.output).snapshot,undefined)
+  assert.deepEqual(tool.output.render({},value).map(x=>x.type),['text','text','image'])
+})
+test('连续导航附件保存失败仍保留动作回执且不重放', async t => {
+  const f=fixture(t,()=>ok(JSON.stringify({status:'completed',completed:2,snapshot:{
+    imageBase64:Buffer.from([0xff,0xd8,0xff,0]).toString('base64'),mediaType:'image/jpeg',width:100,height:200}})),{
+    llm:{resolveModelInfo:async()=>({inputModalities:['image']})},
+    attachments:{saveImage:async()=>{throw new Error('private-path')}},
+  })
+  const value=await f.tools.get('mobile_screen_sequence').execute({packageName:'com.example.clock',steps:[{text:'时钟'}]},
+    {agent:{options:{provider:'test',model:'vision'}}})
+  assert.equal(f.requests.length,1);assert.equal(value.image,undefined)
+  assert.deepEqual(JSON.parse(value.output),{status:'completed',completed:2,snapshotError:'SCREEN_ATTACHMENT_FAILED'})
+})
+
+test('压缩观察去掉重复 OCR 正文但保留坐标、观察编号和错误', async t=>{
+  const observed={observationId:'fresh',width:100,height:200,image:{ocrText:'重复',frameId:'hash',lines:[{text:'保留',bounds:[1,2,3,4]}]}}
+  const f=fixture(t,()=>ok(JSON.stringify(observed)))
+  const result=JSON.parse((await f.tools.get('mobile_screen_observe').execute({},{})).output)
+  assert.equal(result.observationId,'fresh');assert.equal(result.image.ocrText,undefined)
+  assert.deepEqual(result.image.lines,observed.image.lines)
 })
