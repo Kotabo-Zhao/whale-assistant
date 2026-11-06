@@ -113,7 +113,7 @@ class OverlayBallService : Service() {
             else io.deepseekharness.mobile.companion.PetControlLabels.description(overlayPalette(),state.phase)
         actionMenu?.refreshControl()
         setHostAppForeground(AppForeground.isForeground())
-        if (!companionMotionAllowed()) petDrawable?.setPose(petActing.still())
+        updateVisibleStaticPet()
         wakePetMotion()
         updateControlBounds()
         if(state.phase=="idle" && !RuntimeStore(applicationContext).overlayBallEnabled()) stopSelf()
@@ -149,14 +149,14 @@ class OverlayBallService : Service() {
             "taskWaiting" -> petActing.react(PetAction.ASK, now)
             "taskFailed" -> petActing.react(PetAction.SETBACK, now)
         }
-        if(!companionMotionAllowed()) petDrawable?.setPose(petActing.still())
+        updateVisibleStaticPet()
         wakePetMotion()
     }
     private val bubbleChat by lazy { io.deepseekharness.mobile.companion.CompanionBubbleWindow(this, windowManager, ::updatePetConversationState,
         { sessionId -> openHarness(sessionId) }, { running, waiting, questions ->
         petActing.waitingTasks = questions
         petActing.runningTasks = running
-        if(!companionMotionAllowed()) petDrawable?.setPose(petActing.still())
+        updateVisibleStaticPet()
         wakePetMotion()
         ballView?.findViewById<android.widget.TextView>(R.id.companion_worker_badge)?.apply {
             val count = if (waiting > 0) waiting else running
@@ -1005,11 +1005,17 @@ class OverlayBallService : Service() {
      *
      * 不可见时保留当前姿态，减少动态效果时选用语义静态姿态；恢复以当前画面为起点衔接。
      */
-    private fun companionMotionAllowed(): Boolean =
+    private fun companionVisible(): Boolean =
         ballAttached && !avatarDestroyed && !hiddenForHostApp &&
-            companionMotionEnabled() &&
             (getSystemService(PowerManager::class.java)?.isInteractive == true) &&
             (getSystemService(KeyguardManager::class.java)?.isKeyguardLocked != true)
+
+    private fun companionMotionAllowed(): Boolean = companionVisible() && companionMotionEnabled()
+
+    private fun updateVisibleStaticPet() {
+        // Hidden business updates change the director only; do not decode unseen atlases.
+        if (companionVisible() && !companionMotionEnabled()) petDrawable?.setPose(petActing.still())
+    }
 
     /** Reconfigure the current avatar after the user changes the accessibility preference. */
     private fun applyCompanionMotionPreference(): Boolean {
@@ -1025,7 +1031,7 @@ class OverlayBallService : Service() {
         companionFrame = null
         val drawable=petDrawable ?: return
         if (!companionMotionAllowed()) {
-            if(!companionMotionEnabled()) drawable.setPose(petActing.still())
+            updateVisibleStaticPet()
             return
         }
         val resumedAt=SystemClock.uptimeMillis()
@@ -1069,7 +1075,7 @@ class OverlayBallService : Service() {
                     val old = petDrawable
                     companionFrame?.let(hintHandler::removeCallbacks);companionFrame=null
                     petDrawable = next
-                    next.setPose(if(companionMotionAllowed()) petActing.sample(SystemClock.uptimeMillis()) else petActing.still())
+                    if (companionVisible()) next.setPose(if(companionMotionEnabled()) petActing.sample(SystemClock.uptimeMillis()) else petActing.still())
                     view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
                     old?.close()
                     // Replacing a decoded image (initial load/resize) is not a lifecycle resume:

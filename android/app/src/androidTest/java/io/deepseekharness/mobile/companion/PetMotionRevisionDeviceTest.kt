@@ -46,8 +46,23 @@ class PetMotionRevisionDeviceTest {
             PetControlDeviceUi.await("app reduced motion should be reversible") { scheduled() }
             OverlayBallService.updateForHostAppForeground(true)
             PetControlDeviceUi.await("hidden pet must have no callback") { !scheduled() }
+            val service=PetControlDeviceUi.service() as OverlayBallService
+            val pet=PetControlDeviceUi.field(service,"petDrawable") as CompanionPetDrawable
+            var held=PetPose()
+            inst.runOnMainSync {
+                held=pet.currentPose
+                service.updatePetConversationState("thinking")
+            }
+            Thread.sleep(300)
+            inst.runOnMainSync { assertEquals("Hidden updates must not load another atlas",held,pet.currentPose) }
             OverlayBallService.updateForHostAppForeground(false)
             PetControlDeviceUi.await("visible pet resumes") { scheduled() }
+            PetControlDeviceUi.await("latest hidden state appears on resume") {
+                var reading=false
+                inst.runOnMainSync { reading=pet.displayedClipName=="reading" }
+                reading
+            }
+            inst.runOnMainSync { service.updatePetConversationState("idle") }
         } finally {
             scale(original);prefs.reduceMotion=reduced;store.setOverlayBallEnabled(enabled)
             if(!wasRunning) OverlayBallService.stop(app)
