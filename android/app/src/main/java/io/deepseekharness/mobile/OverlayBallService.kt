@@ -100,6 +100,8 @@ class OverlayBallService : Service() {
     private lateinit var windowManager: WindowManager
     private var ballView: View? = null
     private var companionFrame: Runnable? = null
+    private var companionFrameCount = 0L
+    private var lastCompanionFrameAt = 0L
     private var petDrawable: io.deepseekharness.mobile.overlay.CompanionPetDrawable? = null
     private val petActing = PetActing()
     private val petPlayback = io.deepseekharness.mobile.overlay.PetPlayback(
@@ -941,7 +943,13 @@ class OverlayBallService : Service() {
             }
         }
         view.setOnTouchListener { touched, event -> handleTouch(touched, event, layoutParams.width) }
-        view.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> updateControlBounds() }
+        (view as io.deepseekharness.mobile.overlay.PetOverlayView).onPresentationChanged = {
+            if (ballView === view) reconcileCompanionPresentation()
+        }
+        view.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ ->
+            updateControlBounds()
+            if (ballView === view) reconcileCompanionPresentation()
+        }
         // 球是否还在窗口上由视图的附着回调维护：客户端侧的移除一定会回调，系统侧的移除
         // 视 ROM 实现而定，因此它只用于避免「已被摘掉的窗口挡住重挂」这一类误判，
         // 真正的清理由插件每次回前台的权限对齐（撤销 → 停服务 → 摘视图）兜底。
@@ -1010,12 +1018,22 @@ class OverlayBallService : Service() {
      *
      * 不可见时保留当前姿态，减少动态效果时选用语义静态姿态；恢复以当前画面为起点衔接。
      */
-    private fun companionVisible(): Boolean =
+    private fun companionSurfaceVisible(): Boolean =
         ballAttached && !avatarDestroyed && !hiddenForHostApp &&
+            ballView?.let { it.isAttachedToWindow && it.isShown && it.windowVisibility == View.VISIBLE } == true
+
+    private fun companionVisible(): Boolean =
+        companionSurfaceVisible() &&
             (getSystemService(PowerManager::class.java)?.isInteractive == true) &&
             (getSystemService(KeyguardManager::class.java)?.isKeyguardLocked != true)
 
     private fun companionMotionAllowed(): Boolean = companionVisible() && companionMotionEnabled()
+
+    private fun reconcileCompanionPresentation() {
+        // Becoming visible does not always dispatch attach, a screen broadcast or a new message.
+        // Conversely, layout passes during an action must not rewind its clock or clear its cue.
+        if (!companionMotionAllowed() || companionFrame == null) configureCompanionMotion()
+    }
 
     private fun updateVisibleStaticPet() {
         // Hidden business updates change the director only; do not decode unseen atlases.
@@ -1048,11 +1066,13 @@ class OverlayBallService : Service() {
         companionFrame = object : Runnable {
             override fun run() {
                 if (companionFrame !== this) return
-                if(!ballAttached || avatarDestroyed || hiddenForHostApp || ballView?.isShown!=true) {
+                if(!companionSurfaceVisible()) {
                     companionFrame=null;petPlayback.reset();return
                 }
                 val now = SystemClock.uptimeMillis()
                 val current=petActing.sample(now)
+                companionFrameCount++
+                lastCompanionFrameAt=now
                 // Save power during ambient rest, not by turning hand gestures into a 5 FPS slideshow.
                 drawable.setPose(current, petPlayback.sample(current, now, quietIdle = petPowerSave))
                 // Held cels sleep until their next boundary. No mesh, separate blink tick or idle FPS loop.
@@ -1065,7 +1085,19 @@ class OverlayBallService : Service() {
 
     /** Events get an immediate frame even when the ambient loop is resting. */
     private fun wakePetMotion() {
-        companionFrame?.let { hintHandler.removeCallbacks(it);hintHandler.post(it) }
+        val frame = companionFrame
+        if (frame != null) { hintHandler.removeCallbacks(frame);hintHandler.post(frame) }
+        // A transient invisible frame may have disposed the loop. The incoming event already
+        // selected a new cue, so recovery must not call PetActing.resume() and erase that cue.
+        else configureCompanionMotion(resumeTimeline = false)
+    }
+
+    override fun dump(fd: java.io.FileDescriptor, writer: java.io.PrintWriter, args: Array<out String>?) {
+        val frame = companionFrame
+        val drawable = petDrawable
+        writer.println("petMotion visible=${companionVisible()} surfaceVisible=${companionSurfaceVisible()} enabled=${companionMotionEnabled()} powerSave=$petPowerSave")
+        writer.println("petMotion loop=${frame != null} queued=${if (Build.VERSION.SDK_INT >= 29 && frame != null) hintHandler.hasCallbacks(frame) else false} frames=$companionFrameCount ageMs=${if (lastCompanionFrameAt == 0L) -1 else SystemClock.uptimeMillis() - lastCompanionFrameAt}")
+        writer.println("petMotion action=${drawable?.currentPose?.action} clip=${drawable?.displayedClipName} cel=${drawable?.currentCel?.frame} nextMs=${drawable?.nextFrameDelayMs}")
     }
 
     /** Decode only the idle cel atlas off the UI thread; other actions enter the bounded async cache. */

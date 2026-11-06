@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 透明鲸鱼娘保留原有触摸及无障碍操作。 -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<io.deepseekharness.mobile.overlay.PetOverlayView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:contentDescription="@string/overlay_ball_content_description"
@@ -40,4 +40,4 @@
         android:textSize="11sp"
         android:visibility="gone"
         android:importantForAccessibility="no" />
-</FrameLayout>
+</io.deepseekharness.mobile.overlay.PetOverlayView>
