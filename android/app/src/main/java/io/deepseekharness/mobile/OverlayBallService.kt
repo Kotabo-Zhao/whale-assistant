@@ -996,7 +996,10 @@ class OverlayBallService : Service() {
      * the conversation state machine.
      */
     private fun companionMotionEnabled(): Boolean =
-        android.animation.ValueAnimator.areAnimatorsEnabled() && !io.deepseekharness.mobile.companion.CompanionStore(this).reduceMotion
+        // Read the setting observed above. ValueAnimator's cached scale can still hold the old
+        // value inside this ContentObserver callback, leaving a stopped/running loop out of sync.
+        Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f &&
+            !io.deepseekharness.mobile.companion.CompanionStore(this).reduceMotion
 
     /**
      * 动画是否可以真的跑：在 [companionMotionEnabled]（系统动画开关 + 用户「减少动态」）之外，
