@@ -16,6 +16,20 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class DeviceShellUserService() : IDeviceShellService.Stub() {
+    private val mainInput=MainScreenInput()
+    override fun mainScreenAction(requestId:String,parameters:String,owner:IBinder):String = asService {
+        try {mainInput.execute(requestId,parameters,owner)} catch(error:Exception) {
+            org.json.JSONObject().put("injected",false).put("errorCode",when(error.message) {
+                "SCREEN_GEOMETRY_CHANGED" -> "SCREEN_GEOMETRY_CHANGED"
+                "SCREEN_ACTION_CANCELLED" -> "DEVICE_CONTROL_PAUSED"
+                else -> "SCREEN_INPUT_UNCERTAIN"
+            }).toString()
+        }
+    }
+    override fun cancelMainScreenAction(requestId:String) {mainInput.cancel(requestId)}
+    private val mainCapture=MainScreenCapture()
+    override fun mainScreenPixels(requestId:String,owner:IBinder):android.os.ParcelFileDescriptor = asService {mainCapture.open(requestId,owner)}
+    override fun cancelMainScreenPixels(requestId:String)=asService {mainCapture.cancel(requestId)}
     private val virtualScreen = io.deepseekharness.mobile.virtualscreen.ShellVirtualScreen()
 
     // 特权操作以用户服务进程身份执行，权限由 Shizuku 与宿主授权共同控制。
@@ -135,6 +149,8 @@ class DeviceShellUserService() : IDeviceShellService.Stub() {
     }
 
     override fun closeAll() {
+        mainCapture.closeAll()
+        mainInput.closeAll()
         virtualScreen.close()
         sessions.values.toList().forEach(::close)
     }

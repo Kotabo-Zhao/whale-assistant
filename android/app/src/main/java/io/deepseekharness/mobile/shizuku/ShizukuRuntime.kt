@@ -435,6 +435,61 @@ class ShizukuRuntime(
         }
     }
 
+    internal fun mainScreenAction(request:org.json.JSONObject):org.json.JSONObject {
+        requirePermission()
+        val current=requireService()
+        val id=java.util.UUID.randomUUID().toString()
+        val cancelled=java.util.concurrent.atomic.AtomicBoolean(false)
+        val timeout=mainCaptureTimer.schedule({runCatching{current.cancelMainScreenAction(id)}},2,TimeUnit.SECONDS)
+        try {
+            io.deepseekharness.mobile.DeviceControlState.cancellation {
+                cancelled.set(true);runCatching{current.cancelMainScreenAction(id)}
+            }
+            io.deepseekharness.mobile.DeviceControlState.checkCurrent()
+            val result=org.json.JSONObject(current.mainScreenAction(id,request.toString(),mainCaptureOwner))
+            if(!result.optBoolean("injected")) throw RuntimeFailure(result.optString("errorCode","SCREEN_INPUT_UNCERTAIN"),
+                "输入结果未确认，请先重新观察，不要重放")
+            return result
+        } catch(error:Exception) {
+            if(cancelled.get()) throw RuntimeFailure("DEVICE_CONTROL_PAUSED","手机操作已暂停",error)
+            throw if(error is RuntimeFailure) error else RuntimeFailure("SCREEN_INPUT_UNCERTAIN","输入结果未确认，请先重新观察",error)
+        } finally {
+            timeout.cancel(false)
+            io.deepseekharness.mobile.DeviceControlState.cancellation(null)
+        }
+    }
+
+    internal fun mainScreenPixels(request:org.json.JSONObject):MainScreenPixels {
+        requirePermission()
+        if(android.os.Build.VERSION.SDK_INT<29) throw RuntimeFailure("SCREEN_RAW_UNSUPPORTED","系统不支持原始帧")
+        val current=requireService()
+        val id=java.util.UUID.randomUUID().toString()
+        val capturedAt=System.currentTimeMillis()
+        val pipe=current.mainScreenPixels(id,mainCaptureOwner)
+        val timedOut=java.util.concurrent.atomic.AtomicBoolean(false)
+        val cancelled=java.util.concurrent.atomic.AtomicBoolean(false)
+        val timeout=mainCaptureTimer.schedule({
+            timedOut.set(true);runCatching{pipe.close()};runCatching{current.cancelMainScreenPixels(id)}
+        },3,TimeUnit.SECONDS)
+        try {
+            io.deepseekharness.mobile.DeviceControlState.cancellation {
+                cancelled.set(true)
+                runCatching{pipe.close()};runCatching{current.cancelMainScreenPixels(id)}
+            }
+            return android.os.ParcelFileDescriptor.AutoCloseInputStream(pipe).use {input->
+                val frame=MainScreenPixels.read(java.io.BufferedInputStream(input,64*1024),request,capturedAt)
+                try {pipe.checkError();frame} catch(error:Exception) {frame.close();throw error}
+            }
+        } catch(error:Exception) {
+            if(cancelled.get()) throw RuntimeFailure("DEVICE_CONTROL_PAUSED","屏幕采集已由用户暂停",error)
+            if(timedOut.get()) throw RuntimeFailure("SCREEN_CAPTURE_TIMEOUT","屏幕采集超时",error)
+            throw error
+        } finally {
+            timeout.cancel(false);runCatching{current.cancelMainScreenPixels(id)}
+            io.deepseekharness.mobile.DeviceControlState.cancellation(null)
+        }
+    }
+
     fun virtualScreenSnapshot(sessionId: String): ByteArray {
         requirePermission()
         require(SESSION_PATTERN.matches(sessionId))
@@ -855,7 +910,9 @@ class ShizukuRuntime(
         private const val BINDER_TIMEOUT_SECONDS = 8L
         private const val SERVICE_TIMEOUT_SECONDS = 10L
         private const val SERVICE_EXIT_TIMEOUT_SECONDS = 5L
-        private const val USER_SERVICE_VERSION = 7
+        private val mainCaptureOwner by lazy {android.os.Binder()}
+        private val mainCaptureTimer=java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+        private const val USER_SERVICE_VERSION = 9
         private const val MAX_SESSIONS = 4
 
         /**

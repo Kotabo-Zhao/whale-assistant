@@ -66,7 +66,7 @@ class WhaleScreenControlDeviceTest {
                 button=TextView(app).apply {text="Safe tap";textSize=22f;setTextColor(Color.BLUE);minHeight=140;gravity=Gravity.CENTER
                     setOnClickListener{count.incrementAndGet();text="Tapped "+count.get()}}
                 fixture!!.addView(button)
-                wm.addView(fixture,WindowManager.LayoutParams(1000,320,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                wm.addView(fixture,WindowManager.LayoutParams(minOf(1000,app.resources.displayMetrics.widthPixels-200),320,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,android.graphics.PixelFormat.TRANSLUCENT).apply{gravity=Gravity.TOP or Gravity.LEFT;x=100;y=300})
             }
             Thread.sleep(400)
@@ -80,7 +80,7 @@ class WhaleScreenControlDeviceTest {
             var observedButton:org.json.JSONArray?=null
             repeat(2) {
                 val start=SystemClock.elapsedRealtime()
-                val response=command("screenObserve",JSONObject().put("ocr",true).put("region",org.json.JSONArray(listOf(100,300,1000,320))).toString())
+                val response=command("screenObserve",JSONObject().put("ocr",true).put("region",org.json.JSONArray(listOf(100,300,minOf(1000,app.resources.displayMetrics.widthPixels-200),320))).toString())
                 assertTrue("OCR through production bridge: "+response.optString("errorCode"),response.getBoolean("ok"))
                 val image=JSONObject(response.getString("text")).getJSONObject("image")
                 assertTrue("actual fixture text must be recognized",image.getString("ocrText").contains("4729"))

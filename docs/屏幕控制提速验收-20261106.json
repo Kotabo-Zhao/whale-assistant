@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-06",
+  "device": "Pocket S",
+  "appVersion": "0.3.8-preview.74",
+  "runtimeVersion": "0.3.73-whale-screen-fast",
+  "baselineVersion": "0.3.8-preview.73",
+  "conditions": {
+    "shellEnabled": true,
+    "shizukuAuthorized": true,
+    "whaleAccessibilityEnabled": false,
+    "fixture": "可见 Whale 7319 / Safe tap 计数按钮",
+    "samplesPerSeries": 5
+  },
+  "baseline": {
+    "screenLatencySamples": [
+      {
+        "pngCaptureMs": 1495,
+        "ocrOnlyMs": 230,
+        "observeMs": 495,
+        "shellTapMs": 100
+      },
+      {
+        "pngCaptureMs": 638,
+        "ocrOnlyMs": 87,
+        "observeMs": 829,
+        "shellTapMs": 98
+      },
+      {
+        "pngCaptureMs": 451,
+        "ocrOnlyMs": 79,
+        "observeMs": 587,
+        "shellTapMs": 96
+      },
+      {
+        "pngCaptureMs": 694,
+        "ocrOnlyMs": 91,
+        "observeMs": 633,
+        "shellTapMs": 92
+      },
+      {
+        "pngCaptureMs": 579,
+        "ocrOnlyMs": 87,
+        "observeMs": 609,
+        "shellTapMs": 92
+      }
+    ]
+  },
+  "coldStart": {
+    "realAgentElapsedMs": 10661,
+    "realAgentFastTools": true,
+    "realAgentTaps": 2,
+    "realAgentTools": "mobile_screen_observe,mobile_screen_act",
+    "actualTaps": 12,
+    "controlStripProtected": true,
+    "fastControlSamples": [
+      {
+        "injectionMs": 4,
+        "settleMs": 81,
+        "actionAndObserveMs": 265
+      },
+      {
+        "injectionMs": 2,
+        "settleMs": 81,
+        "actionAndObserveMs": 277
+      },
+      {
+        "injectionMs": 1,
+        "settleMs": 80,
+        "actionAndObserveMs": 290
+      },
+      {
+        "injectionMs": 2,
+        "settleMs": 80,
+        "actionAndObserveMs": 296
+      },
+      {
+        "injectionMs": 2,
+        "settleMs": 81,
+        "actionAndObserveMs": 293
+      }
+    ],
+    "geometryMismatchRefused": true,
+    "idlePreconnectControlMs": 320,
+    "inFlightPauseAndStopCancel": true,
+    "replayAndPauseRejected": true,
+    "saturatedMirrorControlMs": 193,
+    "screenHeight": 1440,
+    "screenLatencySamples": [
+      {
+        "pngCaptureMs": 570,
+        "fastVisualMs": 214,
+        "fastVisualBytes": 87285,
+        "legacyVisualBytes": 349767,
+        "ocrOnlyMs": 77,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 159,
+        "ocrMs": 31,
+        "observeMs": 194,
+        "shellTapMs": 98
+      },
+      {
+        "pngCaptureMs": 429,
+        "fastVisualMs": 216,
+        "fastVisualBytes": 87446,
+        "legacyVisualBytes": 351580,
+        "ocrOnlyMs": 75,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 160,
+        "ocrMs": 20,
+        "observeMs": 185,
+        "shellTapMs": 93
+      },
+      {
+        "pngCaptureMs": 767,
+        "fastVisualMs": 215,
+        "fastVisualBytes": 87925,
+        "legacyVisualBytes": 352642,
+        "ocrOnlyMs": 72,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 145,
+        "ocrMs": 44,
+        "observeMs": 194,
+        "shellTapMs": 85
+      },
+      {
+        "pngCaptureMs": 649,
+        "fastVisualMs": 195,
+        "fastVisualBytes": 87811,
+        "legacyVisualBytes": 352687,
+        "ocrOnlyMs": 74,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 156,
+        "ocrMs": 20,
+        "observeMs": 182,
+        "shellTapMs": 93
+      },
+      {
+        "pngCaptureMs": 419,
+        "fastVisualMs": 212,
+        "fastVisualBytes": 87623,
+        "legacyVisualBytes": 351827,
+        "ocrOnlyMs": 73,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 177,
+        "ocrMs": 20,
+        "observeMs": 202,
+        "shellTapMs": 85
+      }
+    ],
+    "screenWidth": 2560,
+    "structuredMirrorBusy": true
+  },
+  "notes": [
+    "Shell 点击包含桥往返与控件响应检查；injectionMs 只计常驻服务内部注入，不能直接计算两者速度倍数。",
+    "观察耗时与云端模型推理、网络、第三方应用业务加载分别计量。"
+  ],
+  "portrait": {
+    "actualTaps": 10,
+    "controlStripProtected": true,
+    "fastControlSamples": [
+      {
+        "injectionMs": 4,
+        "settleMs": 80,
+        "actionAndObserveMs": 285
+      },
+      {
+        "injectionMs": 2,
+        "settleMs": 80,
+        "actionAndObserveMs": 292
+      },
+      {
+        "injectionMs": 2,
+        "settleMs": 81,
+        "actionAndObserveMs": 266
+      },
+      {
+        "injectionMs": 2,
+        "settleMs": 80,
+        "actionAndObserveMs": 255
+      },
+      {
+        "injectionMs": 3,
+        "settleMs": 81,
+        "actionAndObserveMs": 303
+      }
+    ],
+    "geometryMismatchRefused": true,
+    "idlePreconnectControlMs": 341,
+    "inFlightPauseAndStopCancel": true,
+    "replayAndPauseRejected": true,
+    "saturatedMirrorControlMs": 150,
+    "screenHeight": 2400,
+    "screenLatencySamples": [
+      {
+        "pngCaptureMs": 743,
+        "fastVisualMs": 187,
+        "fastVisualBytes": 93273,
+        "legacyVisualBytes": 298360,
+        "ocrOnlyMs": 58,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 157,
+        "ocrMs": 39,
+        "observeMs": 201,
+        "shellTapMs": 97
+      },
+      {
+        "pngCaptureMs": 504,
+        "fastVisualMs": 194,
+        "fastVisualBytes": 92902,
+        "legacyVisualBytes": 297823,
+        "ocrOnlyMs": 70,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 158,
+        "ocrMs": 32,
+        "observeMs": 194,
+        "shellTapMs": 89
+      },
+      {
+        "pngCaptureMs": 555,
+        "fastVisualMs": 217,
+        "fastVisualBytes": 93322,
+        "legacyVisualBytes": 298336,
+        "ocrOnlyMs": 54,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 143,
+        "ocrMs": 51,
+        "observeMs": 199,
+        "shellTapMs": 100
+      },
+      {
+        "pngCaptureMs": 410,
+        "fastVisualMs": 201,
+        "fastVisualBytes": 93356,
+        "legacyVisualBytes": 298540,
+        "ocrOnlyMs": 57,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 179,
+        "ocrMs": 18,
+        "observeMs": 201,
+        "shellTapMs": 80
+      },
+      {
+        "pngCaptureMs": 865,
+        "fastVisualMs": 204,
+        "fastVisualBytes": 93207,
+        "legacyVisualBytes": 298117,
+        "ocrOnlyMs": 54,
+        "captureSource": "shizuku_raw_pipe",
+        "captureMs": 144,
+        "ocrMs": 19,
+        "observeMs": 168,
+        "shellTapMs": 85
+      }
+    ],
+    "screenWidth": 1080,
+    "structuredMirrorBusy": true
+  },
+  "apkSha256": "c2554399dc523fb26e48a067f204b50cc3ec18bf86900d18a72f4336bcbacf08",
+  "runtimeSha256": "8c1f1edfb9b3b5300b650f406478c5b9f6efd825cd6d490fe624e7e62b057cc9"
+}

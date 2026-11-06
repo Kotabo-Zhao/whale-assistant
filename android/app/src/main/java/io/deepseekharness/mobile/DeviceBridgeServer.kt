@@ -22,7 +22,6 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.net.InetAddress
-import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.nio.charset.StandardCharsets
@@ -61,13 +60,22 @@ class DeviceBridgeServer(
     private val shellEnabled: () -> Boolean = { false },
     private val appContext: Context? = null,
 ) : RuntimeScopedResource {
-    private val server = ServerSocket(port, 4, InetAddress.getByName("127.0.0.1"))
-    private val executor = ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(4))
+    private val serverChannel=java.nio.channels.ServerSocketChannel.open().apply {
+        configureBlocking(false)
+        bind(java.net.InetSocketAddress(InetAddress.getByName("127.0.0.1"),port),64)
+    }
+    private val server=serverChannel.socket()
+    private val readiness=java.nio.channels.Selector.open()
+    // Parse bounded HTTP requests separately; worker ledger writes never occupy screen-control threads.
+    private val executor = ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(16))
+    private val controlExecutor = ThreadPoolExecutor(2,2,0,TimeUnit.MILLISECONDS,ArrayBlockingQueue<Runnable>(8))
+    private val mirrorExecutor = ThreadPoolExecutor(1,1,0,TimeUnit.MILLISECONDS,ArrayBlockingQueue<Runnable>(32))
     private val running = AtomicBoolean(true)
     private val activeSockets = ConcurrentHashMap.newKeySet<Socket>()
     val localPort: Int get() = server.localPort
 
     fun start() {
+        serverChannel.register(readiness,java.nio.channels.SelectionKey.OP_ACCEPT)
         val thread = Thread({ acceptLoop() }, "dsh-device-bridge")
         thread.isDaemon = true
         thread.start()
@@ -113,6 +121,179 @@ class DeviceBridgeServer(
         screenshotSession.getAndSet(null)?.let { runCatching { shizuku.close(it) } }
     }
 
+    /** Called inside the operation generation; raw formats may fall back before any action is sent. */
+    private data class ScreenLease(val id:String,val width:Int,val height:Int,val version:Long,val at:Long,
+        val region:android.graphics.Rect?)
+    private var screenLease:ScreenLease?=null
+    private fun realScreenSize(context:Context):android.graphics.Point =
+        android.graphics.Point().also { context.getSystemService(android.view.WindowManager::class.java).defaultDisplay.getRealSize(it) }
+
+    private fun observeScreen(context:Context,request:JSONObject):JSONObject {
+        screenLease=null
+        if(request.has("ocr") && request.opt("ocr") !is Boolean) throw RuntimeFailure("SCREEN_INPUT_INVALID","OCR 参数无效")
+        if(request.has("region") && request.has("ocr") && !request.getBoolean("ocr"))
+            throw RuntimeFailure("SCREEN_INPUT_INVALID","指定区域时不能关闭 OCR")
+        val started=android.os.SystemClock.elapsedRealtime()
+        val tree=DeepSeekAccessibilityService.current()?.execute("accessibilityTree","")
+        if(tree?.ok==false && tree.errorCode!="ACCESSIBILITY_WINDOW_UNAVAILABLE")
+            throw RuntimeFailure(tree.errorCode ?: "SCREEN_UNAVAILABLE","当前原生观察未获放行")
+        DeviceControlState.checkCurrent()
+        val value=JSONObject().put("treeAvailable",tree?.ok==true).put("observedAtMs",System.currentTimeMillis())
+        val treeJson=if(tree?.ok==true) JSONObject(tree.text) else null
+        if(treeJson!=null) value.put("tree",treeJson) else value.put("treeReason",tree?.errorCode ?: "ACCESSIBILITY_UNAVAILABLE")
+        val nodes=treeJson?.optJSONArray("nodes")
+        val useful=nodes!=null && (0 until nodes.length()).any {i->
+            val n=nodes.getJSONObject(i);n.optString("text").isNotBlank() || n.optString("contentDescription").isNotBlank()
+        }
+        val ocr=request.optBoolean("ocr",!useful || request.has("region"))
+        value.put("method",if(ocr) "native_tree_and_local_ocr" else "native_tree")
+        val image=if(ocr) {
+            DeviceCommand.requireShellRoute(DeviceCommand.SCREENSHOT,false,shellEnabled())
+            observeImage(request).also {value.put("image",it)}
+        } else null
+        DeviceControlState.checkCurrent()
+        val size=if(image!=null) android.graphics.Point(image.getInt("width"),image.getInt("height")) else realScreenSize(context)
+        val roi=if(!useful && image!=null && request.has("region")) image.getJSONArray("region").let {
+            android.graphics.Rect(it.getInt(0),it.getInt(1),it.getInt(0)+it.getInt(2),it.getInt(1)+it.getInt(3))
+        } else null
+        if(useful || image!=null) {
+            val lease=ScreenLease(java.util.UUID.randomUUID().toString(),size.x,size.y,
+                DeviceControlState.executionVersion(),started,roi)
+            screenLease=lease
+            value.put("observationId",lease.id).put("validForMs",15_000)
+        }
+        value.put("width",size.x).put("height",size.y)
+            .put("observationMs",android.os.SystemClock.elapsedRealtime()-started)
+        return value
+    }
+
+    private fun actAndObserve(context:Context,request:JSONObject):JSONObject {
+        val action=request.optString("action")
+        if(action !in setOf("tap","swipe","back")) throw RuntimeFailure("SCREEN_INPUT_INVALID","动作只支持 tap、swipe、back")
+        val lease=screenLease
+        screenLease=null // Consume before injection: uncertain outcomes can never replay this observation.
+        if(lease==null || request.optString("observationId")!=lease.id ||
+            lease.version+1!=DeviceControlState.executionVersion() ||
+            android.os.SystemClock.elapsedRealtime()-lease.at>15_000)
+            throw RuntimeFailure("SCREEN_OBSERVATION_STALE","请重新观察后再操作")
+        val actual=realScreenSize(context)
+        if(actual.x!=lease.width || actual.y!=lease.height)
+            throw RuntimeFailure("SCREEN_GEOMETRY_CHANGED","屏幕尺寸已变化，请重新观察")
+        if(context.getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
+            throw RuntimeFailure("SCREEN_LOCKED","请先解锁手机")
+        fun integer(key:String):Int {
+            val v=request.opt(key)
+            if(v !is Int && v !is Long) throw RuntimeFailure("SCREEN_INPUT_INVALID","坐标必须是整数")
+            val n=(v as Number).toLong()
+            if(n !in 0..65535) throw RuntimeFailure("SCREEN_INPUT_INVALID","坐标超出范围")
+            return n.toInt()
+        }
+        var x=0;var y=0;var ex=0;var ey=0
+        if(action!="back") {
+            x=integer("x");y=integer("y")
+            ex=if(action=="swipe") integer("endX") else x;ey=if(action=="swipe") integer("endY") else y
+            for(point in listOf(x to y,ex to ey))
+                if(point.first>=lease.width || point.second>=lease.height || lease.region?.contains(point.first,point.second)==false)
+                    throw RuntimeFailure("SCREEN_INPUT_INVALID","坐标不在本次观察范围内")
+            if(io.deepseekharness.mobile.companion.DeviceControlOverlay.intersects(x,y,ex,ey))
+                throw RuntimeFailure("SCREEN_CONTROL_PROTECTED","不能操作暂停或停止状态条")
+        }
+        val duration=if(action=="swipe") integer("durationMs").also {
+            if(it !in 80..1000) throw RuntimeFailure("SCREEN_INPUT_INVALID","滑动时长须为 80–1000 毫秒")
+        } else 0
+        val service=DeepSeekAccessibilityService.current()
+        val receipt=if(service!=null) {
+            // Preserve the existing foreground/allowlist/confirmation policy. A denial never falls through to shell.
+            if(action=="swipe") throw RuntimeFailure("SCREEN_ACTION_UNSUPPORTED","当前无障碍通道请使用已授权的原生滑动工具")
+            val result=service.execute(if(action=="back") "accessibilityBack" else "tap",if(action=="back") "" else "$x,$y")
+            if(!result.ok) throw RuntimeFailure(result.errorCode ?: "SCREEN_INPUT_UNCERTAIN","无障碍动作未确认，请重新观察")
+            JSONObject().put("injected",true).put("channel","native_accessibility").put("action",action)
+        } else {
+            if(!shellEnabled()) throw RuntimeFailure("DEVICE_SHELL_DISABLED","请在 Shizuku 设置中开启 AI Shell")
+            DeviceControlState.checkCurrent()
+            shizuku.mainScreenAction(JSONObject().put("action",action).put("width",lease.width).put("height",lease.height)
+                .put("x",x).put("y",y).put("endX",ex).put("endY",ey).put("durationMs",duration))
+        }
+        // A bounded rendering opportunity, not a claim that the target application has finished.
+        val value=JSONObject().put("action",receipt)
+        try {
+            val waitStarted=android.os.SystemClock.elapsedRealtime()
+            repeat(5) {DeviceControlState.checkCurrent();Thread.sleep(16)}
+            value.put("settleMs",android.os.SystemClock.elapsedRealtime()-waitStarted)
+            DeviceControlState.checkCurrent()
+            val observationRequest=JSONObject()
+            if(request.has("ocr")) observationRequest.put("ocr",request.get("ocr"))
+            if(request.has("region")) observationRequest.put("region",request.get("region"))
+            value.put("observation",observeScreen(context,observationRequest))
+        } catch(error:Exception) {
+            screenLease=null
+            value.put("observationError",if(error is RuntimeFailure) error.code else "SCREEN_OBSERVATION_FAILED")
+                .put("nextStep","动作已注入；先重新观察，不要直接重放")
+        }
+        return value
+    }
+
+    private fun observeImage(request:JSONObject):JSONObject {
+        DeviceControlState.checkCurrent()
+        val start=android.os.SystemClock.elapsedRealtime()
+        val frame=try {shizuku.mainScreenPixels(request)} catch(error:Exception) {
+            DeviceControlState.checkCurrent()
+            if(error is RuntimeFailure && error.code!="SCREEN_RAW_UNSUPPORTED") throw error
+            if(error !is RuntimeFailure && error !is java.io.IOException && error !is IllegalStateException) throw error
+            null
+        }
+        if(frame!=null) {
+            val captureMs=android.os.SystemClock.elapsedRealtime()-start
+            return frame.use {
+                DeviceControlState.checkCurrent()
+                io.deepseekharness.mobile.companion.ScreenObservation.text(it).put("captureMs",captureMs)
+            }
+        }
+        DeviceControlState.checkCurrent()
+        val capturedAt=System.currentTimeMillis()
+        val image=captureScreen()
+        if(!image.ok) throw RuntimeFailure(image.errorCode ?: "SCREEN_UNAVAILABLE","无法读取当前截图")
+        val captureMs=android.os.SystemClock.elapsedRealtime()-start
+        DeviceControlState.checkCurrent()
+        return io.deepseekharness.mobile.companion.ScreenObservation.text(image.text,request)
+            .put("capturedAtMs",capturedAt).put("captureSource","legacy_png").put("captureMs",captureMs)
+    }
+
+    private fun captureScreenImage():JSONObject {
+        screenLease=null
+        val started=android.os.SystemClock.elapsedRealtime()
+        val context=appContext ?: throw RuntimeFailure("SCREEN_UNAVAILABLE","屏幕服务不可用")
+        DeviceCommand.requireShellRoute(DeviceCommand.SCREENSHOT,false,shellEnabled())
+        DeviceControlState.checkCurrent()
+        val frame=try {shizuku.mainScreenPixels(JSONObject())} catch(error:RuntimeFailure) {
+            if(error.code!="SCREEN_RAW_UNSUPPORTED") throw error
+            null
+        } catch(_:java.io.IOException) {null}
+        val value=if(frame!=null) frame.use {
+            DeviceControlState.checkCurrent()
+            val bytes=java.io.ByteArrayOutputStream()
+            check(it.bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,82,bytes))
+            JSONObject().put("imageBase64",android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP))
+                .put("mediaType","image/jpeg").put("width",it.width).put("height",it.height).put("captureSource","shizuku_raw_jpeg")
+                .put("capturedAtMs",it.capturedAtMs)
+        } else {
+            val legacy=captureScreen()
+            if(!legacy.ok) throw RuntimeFailure(legacy.errorCode ?: "SCREEN_UNAVAILABLE","截图不可用")
+            val encoded=legacy.text.replace(Regex("\\s"),"")
+            val bytes=android.util.Base64.decode(encoded,android.util.Base64.DEFAULT)
+            val bounds=android.graphics.BitmapFactory.Options().apply {inJustDecodeBounds=true}
+            android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
+            if(bounds.outWidth<=0 || bounds.outHeight<=0) throw RuntimeFailure("SCREEN_UNAVAILABLE","截图不可用")
+            JSONObject().put("imageBase64",encoded).put("mediaType","image/png").put("width",bounds.outWidth).put("height",bounds.outHeight)
+                .put("captureSource","legacy_png")
+        }
+        DeviceControlState.checkCurrent()
+        val lease=ScreenLease(java.util.UUID.randomUUID().toString(),value.getInt("width"),value.getInt("height"),
+            DeviceControlState.executionVersion(),started,null)
+        screenLease=lease
+        return value.put("observationId",lease.id).put("captureMs",android.os.SystemClock.elapsedRealtime()-started)
+    }
+
     private fun captureScreen(): io.deepseekharness.mobile.shizuku.DeviceCommandResult = synchronized(screenshotLock) {
         val id = screenshotSession.get() ?: shizuku.create(DEFAULT_COLUMNS,DEFAULT_ROWS,suppressPublicOutput=true,
             permitted=running::get,onSessionExit={ session -> runner.onSessionExit(session); screenshotSession.compareAndSet(session,null) })
@@ -135,47 +316,77 @@ class DeviceBridgeServer(
         releaseScreenshot()
         try {
             server.close()
+            readiness.close()
         } catch (_: Throwable) {
         }
         activeSockets.forEach(::closeQuietly)
-        executor.shutdownNow()
+        listOf(executor,controlExecutor,mirrorExecutor).forEach{it.shutdownNow()}
         // 关掉与 server.close() 同时接受的 socket，再等一小段时间，确保运行时清理后
         // 不会有迟到的设备请求重新连上 Shizuku。
         activeSockets.forEach(::closeQuietly)
         try {
-            executor.awaitTermination(STOP_WAIT_MILLIS, TimeUnit.MILLISECONDS)
+            listOf(executor,controlExecutor,mirrorExecutor).forEach{it.awaitTermination(STOP_WAIT_MILLIS, TimeUnit.MILLISECONDS)}
         } catch (error: InterruptedException) {
             Thread.currentThread().interrupt()
         }
     }
 
+    /** Idle HTTP preconnections wait in the selector, never in a parsing or control thread. */
     private fun acceptLoop() {
-        while (running.get()) {
+        val idle=LinkedHashMap<java.nio.channels.SocketChannel,Long>()
+        while(running.get()) {
             try {
-                val socket = server.accept()
-                if (!running.get()) {
-                    closeQuietly(socket)
-                    break
-                }
-                activeSockets.add(socket)
-                try {
-                    executor.execute {
-                        try {
-                            handle(socket)
-                        } finally {
-                            activeSockets.remove(socket)
-                            closeQuietly(socket)
+                if(idle.isEmpty()) readiness.select() else readiness.select(1000)
+                val ready=ArrayList<Pair<java.nio.channels.SocketChannel,Int>>()
+                val keys=readiness.selectedKeys().iterator()
+                while(keys.hasNext()) {
+                    val key=keys.next();keys.remove()
+                    if(!key.isValid) continue
+                    if(key.isAcceptable) {
+                        for(accepted in 0 until 16) {
+                            val channel=serverChannel.accept() ?: break
+                            if(!running.get()) {channel.close();continue}
+                            if(idle.size>=64 || activeSockets.size>=128) {
+                                val oldest=idle.keys.firstOrNull()
+                                if(oldest==null) {channel.close();continue}
+                                idle.remove(oldest);activeSockets.remove(oldest.socket());oldest.close()
+                            }
+                            channel.configureBlocking(false)
+                            activeSockets.add(channel.socket())
+                            idle[channel]=android.os.SystemClock.elapsedRealtime()
+                            channel.register(readiness,java.nio.channels.SelectionKey.OP_READ)
+                        }
+                    } else if(key.isReadable) {
+                        val channel=key.channel() as java.nio.channels.SocketChannel
+                        val first=java.nio.ByteBuffer.allocate(1)
+                        val count=runCatching{channel.read(first)}.getOrDefault(-1)
+                        if(count!=0) {
+                            key.cancel();idle.remove(channel)
+                            if(count==1) ready.add(channel to (first.array()[0].toInt() and 255))
+                            else {activeSockets.remove(channel.socket());channel.close()}
                         }
                     }
-                } catch (_: RejectedExecutionException) {
-                    activeSockets.remove(socket)
-                    closeQuietly(socket)
                 }
-            } catch (_: SocketException) {
-                break // server.close() 后退出
-            } catch (_: Throwable) {
-                if (!running.get()) break
-            }
+                val now=android.os.SystemClock.elapsedRealtime()
+                val expired=idle.entries.iterator()
+                while(expired.hasNext()) {
+                    val (channel,at)=expired.next()
+                    if(now-at>=5000) {expired.remove();activeSockets.remove(channel.socket());channel.close()}
+                }
+                if(ready.isNotEmpty()) {
+                    // Process cancelled registrations before switching these channels to blocking HTTP reads.
+                    readiness.selectNow()
+                    for((channel,first) in ready) {
+                        val socket=channel.socket()
+                        try {
+                            channel.configureBlocking(true)
+                            executor.execute {handle(socket,first)}
+                        } catch(_:Exception) {activeSockets.remove(socket);closeQuietly(socket)}
+                    }
+                }
+            } catch(_:java.nio.channels.ClosedSelectorException) {break}
+            catch(_:java.nio.channels.ClosedChannelException) {if(!running.get()) break}
+            catch(_:Exception) {if(!running.get()) break}
         }
     }
 
@@ -186,11 +397,13 @@ class DeviceBridgeServer(
         }
     }
 
-    private fun handle(socket: Socket) {
+    private fun handle(socket: Socket,firstByte:Int) {
+        var transferred=false
         try {
-            socket.use { s ->
-                s.soTimeout = 10_000
-                val input = BufferedInputStream(s.getInputStream())
+            val s=socket
+            run {
+                s.soTimeout = 1500
+                val input = BufferedInputStream(java.io.SequenceInputStream(java.io.ByteArrayInputStream(byteArrayOf(firstByte.toByte())),s.getInputStream()))
                 val output = BufferedOutputStream(s.getOutputStream())
                 try {
                     val requestLine = readLine(input) ?: return
@@ -233,6 +446,7 @@ class DeviceBridgeServer(
                         respond(output, 401, "{\"ok\":false,\"text\":\"\",\"errorCode\":\"UNAUTHORIZED\"}")
                         return
                     }
+                    s.soTimeout=10_000
                     val body = readBody(input, contentLength)
                     val parsed = JSONObject(body)
                     val commandName = parsed.opt("command") as? String
@@ -242,526 +456,19 @@ class DeviceBridgeServer(
                     if (commandName.length > 32 || param.length > DeviceFilePolicy.MAX_PARAM_CHARS) {
                         throw RuntimeFailure("DEVICE_COMMAND_INVALID", "设备参数过长")
                     }
-                    if (commandName == "pluginMarketUpdateProposal") {
-                        val context = appContext ?: throw RuntimeFailure("MARKET_PROPOSAL_UNAVAILABLE", "更新请求服务不可用")
-                        val proposal = JSONObject(param)
-                        val name = proposal.opt("name") as? String ?: throw RuntimeFailure("MARKET_PROPOSAL_INVALID", "插件包名无效")
-                        val version = if (!proposal.has("suggestedVersion") || proposal.isNull("suggestedVersion")) null else proposal.opt("suggestedVersion") as? String
-                            ?: throw RuntimeFailure("MARKET_PROPOSAL_INVALID", "建议版本无效")
-                        io.deepseekharness.mobile.runtime.MarketProposalStore(context).propose(name, "update", version)
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
-                        return
-                    }
-                    if (commandName == "pluginMarketProposal") {
-                        val context = appContext ?: throw RuntimeFailure("MARKET_PROPOSAL_UNAVAILABLE", "安装请求服务不可用")
-                        io.deepseekharness.mobile.runtime.MarketProposalStore(context).propose(param)
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
-                        return
-                    }
-                    if (commandName in setOf("workerRecord", "workerRecordChunk", "workerUi", "superagentSettings", "superagentActors", "screenWatch", "screenWatchFrame", "featureAuthor", "featureWorkerAuthor")) {
-                        val context = appContext ?: throw RuntimeFailure("DEVICE_BRIDGE_UNAVAILABLE", "服务不可用")
-                        val request = JSONObject(param)
-                        val value = when (commandName) {
-                            "featureWorkerAuthor" -> io.deepseekharness.mobile.companion.WorkerDashboardStore(context).author(request).toString()
-                            "featureAuthor" -> {
-                                val features = io.deepseekharness.mobile.features.WhaleFeatureStore(context)
-                                when (request.getString("action")) {
-                                    "list" -> org.json.JSONArray(features.list()).toString()
-                                    "read" -> {
-                                        val row = requireNotNull(features.read(request.getString("id")))
-                                        val revision = row.getString("latest")
-                                        JSONObject(row.getJSONObject("versions").getJSONObject(revision).toString()).put("revision", revision).toString()
-                                    }
-                                    "draft" -> features.draft(request).toString()
-                                    else -> throw IllegalArgumentException("无效的创作操作")
-                                }
-                            }
-                            "workerRecord" -> { io.deepseekharness.mobile.companion.WorkerDashboardStore(context).put(request); "{}" }
-                            "workerRecordChunk" -> { io.deepseekharness.mobile.companion.WorkerDashboardStore(context).putChunk(request); "{}" }
-                            "superagentSettings" -> io.deepseekharness.mobile.companion.SuperagentSettings(context).runtime().toString()
-                            "superagentActors" -> { io.deepseekharness.mobile.companion.SuperagentSettings(context).setUnapproved(request); "{}" }
-                            "workerUi" -> {
-                                val store = io.deepseekharness.mobile.companion.WorkerDashboardStore(context)
-                                when {
-                                    request.optBoolean("contextMatters") -> io.deepseekharness.mobile.companion.ContextFollowupEvents.pendingMatters(context).toString()
-                                    request.has("ackMatter") -> { io.deepseekharness.mobile.companion.ContextFollowupEvents.acknowledgeMatter(context,request.getString("ackMatter")); "[]" }
-                                    request.optBoolean("hostCapacity") -> {
-                                        val power = context.getSystemService(android.os.PowerManager::class.java)
-                                        val thermal = if (android.os.Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else 0
-                                        val memory = android.app.ActivityManager.MemoryInfo()
-                                        context.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(memory)
-                                        JSONObject().put("thermal", thermal).put("conserve", power.isPowerSaveMode || memory.lowMemory).toString()
-                                    }
-                                    request.has("ack") -> { store.acknowledge(request.getString("ack"), request.optString("authorWorkerId").ifBlank { null }); "[]" }
-                                    request.has("deferred") -> { store.dispatchUnavailable(request.getString("deferred"), true); "[]" }
-                                    else -> {
-                                        val batch=store.batch(request.optInt("skip",0),request.optInt("sourceSessionProtocol",0) in 1..2,request.optInt("sourceSessionProtocol",0)==2)
-                                        if(request.optBoolean("includeMatters")) JSONObject().put("commands",batch)
-                                            .put("matters",io.deepseekharness.mobile.companion.ContextFollowupEvents.pendingMatters(context)).toString()
-                                        else batch.toString()
-                                    }
-                                }
-                            }
-                            "screenWatch" -> {
-                                val watch = io.deepseekharness.mobile.companion.ScreenWatchAccess(context)
-                                when (request.getString("action")) {
-                                    "start" -> watch.start(request.getString("session"))
-                                    "stop" -> { if (watch.status().getBoolean("active")) watch.requireOwner(request.getString("session")); watch.stop() }
-                                    "status" -> Unit
-                                    else -> throw IllegalArgumentException("unknown action")
-                                }
-                                watch.status().toString()
-                            }
-                            else -> {
-                                val watch = io.deepseekharness.mobile.companion.ScreenWatchAccess(context)
-                                val session = request.getString("session"); watch.requireOwner(session)
-                                val screenshot = runOneShot(DeviceCommand.SCREENSHOT, "")
-                                if (!screenshot.ok || screenshot.truncated) throw RuntimeFailure(screenshot.errorCode ?: "SCREENSHOT_FAILED", "截图失败")
-                                watch.frame(session, screenshot.text)
-                            }
-                        }
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, value, false, null))
-                        return
-                    }
-                    if (commandName == "companionNotifications") {
-                        if (param.length > 1024) throw RuntimeFailure("NOTIFICATIONS_INPUT_INVALID", "通知查询参数过长")
-                        val context = appContext ?: throw RuntimeFailure("NOTIFICATIONS_UNAVAILABLE", "通知服务不可用")
-                        val store = io.deepseekharness.mobile.companion.CompanionStore(context)
-                        val authorized = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
-                        val result = io.deepseekharness.mobile.companion.CompanionNotificationModel.execute(
-                            store.notificationModelAccess, param, System.currentTimeMillis(), store.notificationCapture, authorized,
-                            io.deepseekharness.mobile.companion.CompanionNotificationService.isConnected(), store.excludedPackages()
-                        ) { store.read() }
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
-                        return
-                    }
-                    if (commandName == "companionKnowledgeWrite") {
-                        val context = appContext ?: throw RuntimeFailure("KNOWLEDGE_UNAVAILABLE", "资料服务不可用")
-                        val result = io.deepseekharness.mobile.companion.CompanionKnowledgeWrite.execute(context, param)
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
-                        return
-                    }
-                    if (commandName == "companionKnowledge") {
-                        if (param.length > 1024) throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料查询参数过长")
-                        val context = appContext ?: throw RuntimeFailure("KNOWLEDGE_UNAVAILABLE", "资料服务不可用")
-                        val store = io.deepseekharness.mobile.companion.CompanionStore(context)
-                        val knowledge = io.deepseekharness.mobile.companion.CompanionKnowledgeStore(context)
-                        val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料查询参数无效") }
-                        val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
-                        access.requireKnowledge()
-                        if (request.optString("op") == "hybrid") {
-                            val result = io.deepseekharness.mobile.companion.SemanticKnowledgeSearch.execute(context, param)
-                            access.requireKnowledge()
-                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
-                            return
-                        }
-                        if (request.optString("op") == "forget" || request.optString("op") == "undo") {
-                            val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
-                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
-                            val result = if (request.optString("op") == "undo") {
-                                JSONObject().put("id", id).put("restored", knowledge.undoRemove(id))
-                                    .put("notice", "仅恢复资料记录；已删除的派生记忆不会自动恢复。")
-                            } else {
-                                val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
-                                val text = row.getString("text")
-                                if (request.optString("revision") != io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(text))
-                                    throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
-                                val earliestUndoUntil = System.currentTimeMillis() + 10 * 60_000L
-                                if (!knowledge.remove(id, text)) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
-                                JSONObject().put("id", id).put("deleted", 1).put("undoUntilMs", earliestUndoUntil)
-                                    .put("originalRetained", true).put("otherRecordsRetained", true)
-                                    .put("notice", "已删除选中的资料记录及关联派生记忆；原件、其他分段和外部副本仍保留。")
-                            }
-                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
-                            return
-                        }
-                        if (request.optString("op") == "forgetOriginal") {
-                            val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
-                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
-                            val originalId = (request.opt("originalId") as? String)?.takeIf { it.matches(Regex("[a-f0-9]{64}")) }
-                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "原件标识无效")
-                            val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
-                            val text = row.getString("text")
-                            if (row.optString("originalId") != originalId || request.optString("revision") != io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(text))
-                                throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料或原件关联已变化，请重新检索")
-                            val removal = knowledge.removeOriginal(originalId, id, text)
-                            if (removal.records == 0) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
-                            val result = JSONObject().put("originalId", originalId).put("deletedRecords", removal.records).put("objectDeleted", removal.objectDeleted)
-                                .put("undoAvailable", false).put("notice", if (removal.objectDeleted) "已删除这份原件及其所有本地资料分段，并抑制关联派生记忆；无法撤销，外部副本和已发送给模型的内容不受影响。" else "已删除这份原件的本地资料分段并抑制关联派生记忆；原件对象未删除或不可用，外部副本和已发送给模型的内容不受影响。")
-                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
-                            return
-                        }
-                        if (request.optString("op") == "image") {
-                            val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
-                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
-                            val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
-                            val hash = io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(row.getString("text"))
-                            if (request.optString("revision") != hash) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
-                            val originalId = row.optString("originalId").takeIf { it.matches(Regex("[a-f0-9]{64}")) }
-                                ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料没有关联的原图片")
-                            var image: String? = null
-                            if (!knowledge.withUnchangedRecord(id, row.getString("text")) {
-                                image = io.deepseekharness.mobile.companion.KnowledgeImageModel.preview(context, originalId)
-                            }) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
-                            access.requireKnowledge()
-                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, checkNotNull(image), false, null))
-                            return
-                        }
-                        if (request.optString("op") in setOf("status", "retry")) {
-                            val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
-                                ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
-                            val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
-                            val hash = io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(row.getString("text"))
-                            val revision = request.opt("revision") as? String ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料版本无效")
-                            if (revision != hash) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
-                            var status: JSONObject? = null
-                            val memoryEnabled = io.deepseekharness.mobile.companion.CompanionMemoryStore(context).enabled
-                            if (request.optString("op") == "retry" && !memoryEnabled) throw RuntimeFailure("MEMORY_DISABLED", "请先开启记忆整理")
-                            var retryScheduled = false
-                            if (!knowledge.withUnchangedRecord(id, row.getString("text")) {
-                                if (request.optString("op") == "retry") {
-                                    retryScheduled = io.deepseekharness.mobile.companion.SharedMemoryJobs.retryRecord(context, id, hash)
-                                    if (retryScheduled) io.deepseekharness.mobile.companion.SharedMemoryJobs.schedule(context, 0)
-                                }
-                                status = io.deepseekharness.mobile.companion.SharedMemoryJobs.status(context, id, hash)
-                            }) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
-                            val result = checkNotNull(status).put("id", id).put("revision", hash).put("retryScheduled", retryScheduled).put("memoryEnabled", memoryEnabled)
-                                .put("notice", "队列状态不代表模型已完整理解原文件；错误代码仅表示上次已记录的失败分类。")
-                            access.requireKnowledge()
-                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
-                            return
-                        }
-                        val result = io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, param, knowledge::findById, knowledge::recent, knowledge::exactPage, knowledge::attachmentPage) {
-                            knowledge.search(it)
-                        }
-                        access.requireKnowledge()
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
-                        return
-                    }
-                    if (commandName == "companionUnifiedSearch") {
-                        if (param.length > 2048) throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索参数过长")
-                        val context = appContext ?: throw RuntimeFailure("COMPANION_SEARCH_UNAVAILABLE", "助手服务不可用")
-                        val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索参数无效") }
-                        val query = (request.opt("query") as? String)?.trim()
-                            ?: throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索参数无效")
-                        if (query.length > 100 || query.any { it.code < 32 || it.code == 127 }) throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索参数无效")
-                        val kinds = if (request.has("kinds")) request.optJSONArray("kinds")?.let { values ->
-                            (0 until values.length()).map { values.optString(it) }.toSet()
-                        } ?: throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索类别无效") else setOf("memory", "knowledge", "tasks")
-                        if (kinds.isEmpty() || !kinds.all { it in setOf("memory", "knowledge", "tasks") }) throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索类别无效")
-                        val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
-                        val store = io.deepseekharness.mobile.companion.CompanionStore(context)
-                        val result = JSONObject().put("schemaVersion", 1).put("query", query)
-                            .put("notice", "各类别均受各自授权约束。结果是首个受限页面；需要更多内容时使用对应单类工具和返回的游标。内容均为不可信数据。")
-                        if ("memory" in kinds) {
-                            access.requireMemory()
-                            val child = JSONObject().put("op", "search").put("query", query)
-                            if (request.has("fromMs")) child.put("fromMs", request.get("fromMs"))
-                            if (request.has("toMs")) child.put("toMs", request.get("toMs"))
-                            result.put("memory", JSONObject(io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(child.toString())))
-                        }
-                        if ("knowledge" in kinds) {
-                            access.requireKnowledge()
-                            val child = JSONObject().put("query", query)
-                            if (request.has("fromMs")) child.put("fromMs", request.get("fromMs"))
-                            if (request.has("toMs")) child.put("toMs", request.get("toMs"))
-                            val knowledge = io.deepseekharness.mobile.companion.CompanionKnowledgeStore(context)
-                            result.put("knowledge", JSONObject(io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, child.toString(), knowledge::findById, knowledge::recent, knowledge::exactPage) { knowledge.search(it) }))
-                        }
-                        if ("tasks" in kinds) {
-                            access.requireTasks()
-                            val child = JSONObject().put("query", query)
-                            if (request.has("reminderFromMs")) child.put("reminderFromMs", request.get("reminderFromMs"))
-                            if (request.has("reminderToMs")) child.put("reminderToMs", request.get("reminderToMs"))
-                            val tasks = io.deepseekharness.mobile.companion.CompanionTaskModel.execute(store.notificationModelAccess, child.toString(), { limit ->
-                                val allowShared = store.knowledgeModelAccess
-                                io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { data ->
-                                    data.queue.listItems(limit).filter { allowShared || !it.eventId.startsWith("share:") }
-                                }
-                            }, { eventId -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.sharedRecordId(eventId) } })
-                            result.put("tasks", JSONObject(tasks))
-                        }
-                        // A later category can finish after access to an earlier one was revoked.
-                        if ("memory" in kinds) access.requireMemory()
-                        val hasSharedTasks = result.optJSONObject("tasks")?.let(CompanionTaskModel::includesSharedMaterial) == true
-                        if ("knowledge" in kinds || hasSharedTasks) access.requireKnowledge()
-                        if ("tasks" in kinds) access.requireTasks()
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
-                        return
-                    }
-                    if (commandName == "companionCalendar") {
-                        val context = appContext ?: throw RuntimeFailure("CALENDAR_UNAVAILABLE", "日历服务不可用")
-                        val zone = java.util.TimeZone.getDefault()
-                        val now = System.currentTimeMillis()
-                        val result = io.deepseekharness.mobile.companion.CompanionCalendarModel.execute(
-                            io.deepseekharness.mobile.companion.CompanionStore(context).calendarModelAccess, param, now, zone
-                        ) { io.deepseekharness.mobile.companion.CompanionCalendar.read(context, now, zone) }
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
-                        return
-                    }
-                    if (commandName == "companionMemory") {
-                        if (param.length > 4096) throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数过长")
-                        val context = appContext ?: throw RuntimeFailure("MEMORY_UNAVAILABLE", "记忆服务不可用")
-                        val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数无效") }
-                        val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
-                        if (request.optString("op") == "capabilities") {
-                            respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, access.capabilities(), false, null))
-                            return
-                        }
-                        access.requireMemory()
-                        val result = if (request.optString("op") == "hybrid")
-                            io.deepseekharness.mobile.companion.SemanticMemorySearch.execute(context, param)
-                        else io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(param,
-                            io.deepseekharness.mobile.companion.HarnessBubbleClient.isPetMemoryTurn(request.optString("callerSession")))
-                        // A remote embedding query can finish after the user revokes access.
-                        access.requireMemory()
-                        if (io.deepseekharness.mobile.companion.CompanionMemoryHint.shouldNotify(param, result)) {
-                            OverlayBallService.companionPendingMemoryHint()
-                        }
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
-                        return
-                    }
-                    if (commandName == "companionTasks") {
-                        if (param.length > 1024) throw RuntimeFailure("TASK_INPUT_INVALID", "事项查询参数过长")
-                        val context = appContext ?: throw RuntimeFailure("TASK_UNAVAILABLE", "事项服务不可用")
-                        val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("TASK_INPUT_INVALID", "事项查询参数无效") }
-                        val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
-                        access.requireTasks()
-                        val tasks = io.deepseekharness.mobile.companion.CompanionTaskModel
-                        val result = if (request.optString("op", "search") == "update") {
-                            val update = tasks.parseUpdate(param)
-                            val now = System.currentTimeMillis()
-                            val changed = io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
-                                val current = store.queue.item(update.id) ?: throw RuntimeFailure("TASK_NOT_FOUND", "事项不存在或已删除")
-                                if (current.eventId.startsWith("share:") && !io.deepseekharness.mobile.companion.CompanionStore(context).knowledgeModelAccess)
-                                    throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
-                                if (current.state != update.expectedState) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
-                                if (update.expectedRevision != null && update.expectedRevision != tasks.revision(current))
-                                    throw RuntimeFailure("TASK_CONFLICT", "事项内容或提醒已变化，请先重新读取")
-                                val saved = if (update.reminderAtMs != null) store.queue.setItemReminder(update.id, update.expectedState, update.reminderAtMs, now)
-                                else store.queue.updateItem(update.id, update.expectedState, update.nextState!!)
-                                if (!saved) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
-                                store.queue.item(update.id) ?: throw RuntimeFailure("TASK_CONFLICT", "事项已变化，请先重新读取")
-                            }
+                    val admission=DeviceControlState.admissionVersion()
+                    val target=if(commandName in setOf("workerRecord","workerRecordChunk")) mirrorExecutor else controlExecutor
+                    try {
+                        target.execute {
                             try {
-                                if (update.reminderAtMs != null) io.deepseekharness.mobile.companion.CompanionReminder(context).upsertLinked(changed.id, changed.title, update.reminderAtMs, changed.reminderRevision)
-                                else if (update.nextState in setOf("done", "cancelled")) io.deepseekharness.mobile.companion.CompanionReminder(context).removeLinked(changed.id)
-                            } catch (e: Exception) {
-                                if (update.reminderAtMs != null) runCatching { io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(changed.id, update.reminderAtMs, changed.reminderRevision) } }
-                                throw RuntimeFailure("TASK_REMINDER_UNAVAILABLE", "事项已更新，但关联提醒未能安排；已撤销本次提醒状态", e)
-                            }
-                            val refreshed = io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
-                                val item = store.queue.item(changed.id) ?: throw RuntimeFailure("TASK_NOT_FOUND", "事项不存在或已删除")
-                                tasks.updated(item, store.queue.sharedRecordId(item.eventId))
-                            }
-                            refreshed
-                        } else {
-                            io.deepseekharness.mobile.companion.CompanionTaskModel.execute(
-                                io.deepseekharness.mobile.companion.CompanionStore(context).notificationModelAccess,
-                                param,
-                                { limit ->
-                                    val allowShared = io.deepseekharness.mobile.companion.CompanionStore(context).knowledgeModelAccess
-                                    io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
-                                        store.queue.listItems(limit).filter { allowShared || !it.eventId.startsWith("share:") }
-                                    }
-                                },
-                                { eventId -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.sharedRecordId(eventId) } },
-                            )
+                                if(!running.get()) return@execute
+                                executeCommand(commandName,param,output,admission)
+                            } finally {activeSockets.remove(socket);closeQuietly(socket)}
                         }
-                        access.requireTasks()
-                        if (tasks.includesSharedMaterial(JSONObject(result))) access.requireKnowledge()
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
-                        return
+                        transferred=true
+                    } catch(_:RejectedExecutionException) {
+                        respondBusy(output)
                     }
-                    if (commandName == "companionRecurring") {
-                        val context = appContext ?: throw RuntimeFailure("REMINDER_UNAVAILABLE", "提醒服务不可用")
-                        val result = io.deepseekharness.mobile.companion.CompanionRecurringBridge(context).execute(param)
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
-                        return
-                    }
-                    if (commandName == "companionReminder") {
-                        val context = appContext ?: throw RuntimeFailure("REMINDER_UNAVAILABLE", "提醒服务不可用")
-                        val result = io.deepseekharness.mobile.companion.CompanionReminderBridge(context).execute(param)
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
-                        return
-                    }
-                    // 自动化授权与设备能力都不经过 Shell；能力判定复用原生统一策略，不在 AI 插件里另算一套。
-                    if (commandName == "screenObserve") {
-                        if (param.length > 1024) throw RuntimeFailure("SCREEN_INPUT_INVALID", "观察参数过长")
-                        val context = appContext ?: throw RuntimeFailure("SCREEN_UNAVAILABLE","屏幕服务不可用")
-                        val request = JSONObject(param)
-                        if(request.has("ocr") && request.opt("ocr") !is Boolean) throw RuntimeFailure("SCREEN_INPUT_INVALID","OCR 参数无效")
-                        val started = android.os.SystemClock.elapsedRealtime()
-                        val tree = DeepSeekAccessibilityService.current()?.execute("accessibilityTree","")
-                        val value = JSONObject().put("treeAvailable",tree?.ok == true)
-                            .put("observedAtMs",System.currentTimeMillis())
-                        val treeJson=if(tree?.ok==true) JSONObject(tree.text) else null
-                        if(treeJson!=null) value.put("tree",treeJson)
-                        else value.put("treeReason",tree?.errorCode ?: "ACCESSIBILITY_UNAVAILABLE")
-                        val nodes=treeJson?.optJSONArray("nodes")
-                        val useful=nodes!=null && (0 until nodes.length()).any { index ->
-                            val node=nodes.getJSONObject(index)
-                            node.optString("text").isNotBlank() || node.optString("contentDescription").isNotBlank()
-                        }
-                        if(request.has("region") && request.has("ocr") && !request.getBoolean("ocr"))
-                            throw RuntimeFailure("SCREEN_INPUT_INVALID","指定识别区域时不能关闭 OCR")
-                        val ocr=request.optBoolean("ocr",!useful || request.has("region"))
-                        value.put("method",if(ocr) "native_tree_and_local_ocr" else "native_tree")
-                        if(ocr) {
-                            DeviceCommand.requireShellRoute(DeviceCommand.SCREENSHOT,false,shellEnabled())
-                            val capturedAt=System.currentTimeMillis()
-                            val screenshot = runOneShot(DeviceCommand.SCREENSHOT,"")
-                            if(!screenshot.ok) throw RuntimeFailure(screenshot.errorCode ?: "SCREEN_UNAVAILABLE","无法读取当前截图")
-                            val result = DeviceControlState.execute(context,true,"本地文字识别") {
-                                val text = io.deepseekharness.mobile.companion.ScreenObservation.text(screenshot.text,request).put("capturedAtMs",capturedAt)
-                                io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,text.toString(),false,null)
-                            }
-                            value.put("image",JSONObject(result.text))
-                        }
-                        io.deepseekharness.mobile.runtime.DeviceObservationTiming.record(context,"screenObserve",android.os.SystemClock.elapsedRealtime()-started)
-                        respondResult(output,io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,value.toString(),false,null))
-                        return
-                    }
-                    if (commandName == "automationPolicy") {
-                        if (param.isNotEmpty()) throw RuntimeFailure("DEVICE_COMMAND_INVALID", "能力查询不接受参数")
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(
-                            true, 0, JSONObject().put("schemaVersion", 3).put("allowlistedAutomation", true)
-                                .put("shellEnabled", shellEnabled()).put("backgroundTasks", true)
-                                .put("virtualScreen", true)
-                                .put("directDeviceOperations", true).toString(), false, null,
-                        ))
-                        return
-                    }
-                    if (commandName == "deviceCapabilities") {
-                        if (param.isNotEmpty()) throw RuntimeFailure("DEVICE_COMMAND_INVALID", "设备能力查询不接受参数")
-                        val context = applicationContextOrNull()
-                            ?: throw RuntimeFailure("DEVICE_CAPABILITIES_UNAVAILABLE", "暂时无法读取设备能力")
-                        val shizukuState = shizuku.state()
-                        val root = io.deepseekharness.mobile.shizuku.RootEngineAccess.status(
-                            context,
-                            packageChecker = io.deepseekharness.mobile.shizuku.RootEngineAccess.packageChecker(context),
-                        )
-                        val facts = DeviceCapabilityFacts(
-                            sdkInt = Build.VERSION.SDK_INT,
-                            shizukuInstalled = shizukuState.installed,
-                            shizukuRunning = shizukuState.running,
-                            shizukuPermission = shizukuState.permission,
-                            shizukuConnected = shizukuState.connected,
-                            shellEnabled = shellEnabled(),
-                            accessibilityStatus = AccessibilityAutomationStore.serviceStatus(context),
-                            rootEngineEnabled = root.enabled,
-                            rootEngineStatus = if (root.enabled) root.kernelSuStatus else null,
-                            rootEngineReason = if (root.enabled) root.reason else null,
-                            rootSandboxDegraded = root.degraded,
-                        )
-                        val entries = org.json.JSONArray().also { array ->
-                            DeviceCapabilityPolicy.report(facts).forEach { capability ->
-                                array.put(JSONObject()
-                                    .put("id", capability.id)
-                                    .put("state", capability.state)
-                                    .put("reason", capability.reason)
-                                    .put("action", capability.action ?: JSONObject.NULL)
-                                    .put("alternative", capability.alternative ?: JSONObject.NULL))
-                            }
-                        }
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(
-                            true, 0,
-                            JSONObject().put("atMs", System.currentTimeMillis())
-                                .put("sdkInt", Build.VERSION.SDK_INT)
-                                .put("capabilities", entries).toString(),
-                            false, null,
-                        ))
-                        return
-                    }
-                    // 无障碍命令不经过 Shell：由用户手动开启的服务在原生侧再次校验
-                    // 白名单、前台包名、锁屏状态、敏感窗口和动作频率。
-                    // automationTask 与 accessibilityTree 同一条闸门：它只做计划式执行的闸门与记账，不执行动作。
-                    if (commandName in setOf(
-                            "accessibilityTree",
-                            "accessibilityAction",
-                            "accessibilityBack",
-                            "tap",
-                            "inputText",
-                            "automationTask",
-                        )
-                    ) {
-                        val service = DeepSeekAccessibilityService.current()
-                        val result = service?.execute(commandName, param)
-                            ?: io.deepseekharness.mobile.shizuku.DeviceCommandResult(
-                                ok = false,
-                                exitCode = 1,
-                                text = "请先在系统设置中手动开启 Harness 无障碍服务",
-                                truncated = false,
-                                errorCode = "ACCESSIBILITY_SERVICE_DISABLED",
-                            )
-                        respondResult(output, result)
-                        return
-                    }
-                    if (commandName in setOf("virtualScreenState", "virtualScreenCapture", "virtualScreenAction")) {
-                        if (!shellEnabled()) throw RuntimeFailure("DEVICE_SHELL_DISABLED", "请在 Shizuku 设置中开启 AI Shell")
-                        respondResult(output, io.deepseekharness.mobile.virtualscreen.VirtualScreenCommands.execute(commandName, param))
-                        return
-                    }
-                    // 副屏直通 Shell：把会话副屏的 displayId 注入脚本环境后，走与通用命令**同一条**
-                    // 一次性 Shell 路径。param 是 JSON：{"script":"…","displayId":38}（displayId 可省）。
-                    // 校验与错误码全部由 VirtualScreenShellPolicy 决定，这里只负责取只读状态并执行。
-                    if (commandName == VirtualScreenShellPolicy.COMMAND) {
-                        if (!shellEnabled()) throw RuntimeFailure("DEVICE_SHELL_DISABLED", "请在 Shizuku 设置中开启 AI Shell")
-                        val request = try {
-                            JSONObject(param)
-                        } catch (error: Throwable) {
-                            throw RuntimeFailure("DEVICE_COMMAND_INVALID", "副屏 Shell 参数不是合法 JSON", error)
-                        }
-                        // 只认 JSON 字符串与 JSON 数字：`{"script":null}` 这类形状不能变成一段可执行脚本文本。
-                        val script = request.opt("script") as? String
-                        val requestedDisplayId = when (val raw = request.opt("displayId")) {
-                            null -> null
-                            is Number -> raw.toInt()
-                            else -> throw RuntimeFailure("DEVICE_COMMAND_INVALID", "displayId 必须是整数")
-                        }
-                        val state = VirtualScreenService.current?.state()
-                        val plan = VirtualScreenShellPolicy.plan(
-                            script = script,
-                            requestedDisplayId = requestedDisplayId,
-                            active = state?.optBoolean("active") == true,
-                            sessionDisplayId = state?.optInt("displayId", 0) ?: 0,
-                        )
-                        respondResult(output, runOneShot(DeviceCommand.SHELL, plan.command), plan.displayId)
-                        return
-                    }
-                    // 访客侧「一轮任务已完成」的收单点（登记册 §5.5）。
-                    // 这条命令**只**能触发一条固定文案的通知，不读会话内容、不返回任何用户数据：
-                    // 访客进程因此无法用它在通知栏或锁屏上写任意文本。
-                    // 限流命中一律静默忽略（ok=true, accepted=false），不报错刷屏。
-                    if (commandName == "notify-turn-complete") {
-                        if (param.length > TurnCompletionPolicy.MAX_PARAM_CHARS) {
-                            throw RuntimeFailure("DEVICE_COMMAND_INVALID", "任务完成事件参数过长")
-                        }
-                        val receipt = TaskNotification.recordTurnCompleted(
-                            applicationContextOrNull(),
-                            param,
-                        )
-                        respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(
-                            ok = receipt.ok,
-                            exitCode = if (receipt.ok) 0 else 1,
-                            text = JSONObject()
-                                .put("accepted", receipt.accepted)
-                                .put("queued", receipt.queued)
-                                .toString(),
-                            truncated = false,
-                            errorCode = receipt.errorCode,
-                        ))
-                        return
-                    }
-                    val command = DeviceCommand.fromName(commandName)
-                        ?: throw RuntimeFailure("DEVICE_COMMAND_INVALID", "设备命令不支持")
-                    // 根通道（用户在设置里显式打开）时，SHELL 命令由应用进程自己起 `su -c`，
-                    // 既不建 Shizuku 会话，也不受「AI Shell」这个 Shizuku 通道开关约束——
-                    // 那条会话的父进程是 UID 2000 的 shell，根命令的归属会变得不确定。
-                    val rootEngine = DeviceCommand.requireShellRoute(
-                        command, command == DeviceCommand.SHELL && rootEngineUsable(), shellEnabled(),
-                    )
-                    respondResult(output, runOneShot(command, param, rootEngine))
                 } catch (error: Throwable) {
                     val code = (error as? RuntimeFailure)?.code ?: "BRIDGE_FAILED"
                     respond(
@@ -774,6 +481,526 @@ class DeviceBridgeServer(
             }
         } catch (_: Throwable) {
             // 连接异常：忽略
+        } finally {if(!transferred){activeSockets.remove(socket);closeQuietly(socket)}}
+    }
+
+    private fun respondBusy(output:BufferedOutputStream) {
+        respond(output,200,JSONObject().put("ok",false).put("text","").put("exitCode",1)
+            .put("truncated",false).put("errorCode","DEVICE_BRIDGE_BUSY").toString())
+    }
+
+    private fun executeCommand(commandName:String,param:String,output:BufferedOutputStream,admission:Long) {
+        try {
+            if(commandName in setOf("screenAct","tap","inputText","accessibilityAction","accessibilityBack","shell","launchApp","appLaunch"))
+                DeviceControlState.checkAdmission(admission)
+            if (commandName == "pluginMarketUpdateProposal") {
+                val context = appContext ?: throw RuntimeFailure("MARKET_PROPOSAL_UNAVAILABLE", "更新请求服务不可用")
+                val proposal = JSONObject(param)
+                val name = proposal.opt("name") as? String ?: throw RuntimeFailure("MARKET_PROPOSAL_INVALID", "插件包名无效")
+                val version = if (!proposal.has("suggestedVersion") || proposal.isNull("suggestedVersion")) null else proposal.opt("suggestedVersion") as? String
+                    ?: throw RuntimeFailure("MARKET_PROPOSAL_INVALID", "建议版本无效")
+                io.deepseekharness.mobile.runtime.MarketProposalStore(context).propose(name, "update", version)
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
+                return
+            }
+            if (commandName == "pluginMarketProposal") {
+                val context = appContext ?: throw RuntimeFailure("MARKET_PROPOSAL_UNAVAILABLE", "安装请求服务不可用")
+                io.deepseekharness.mobile.runtime.MarketProposalStore(context).propose(param)
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, "pending-user-review", false, null))
+                return
+            }
+            if (commandName in setOf("workerRecord", "workerRecordChunk", "workerUi", "superagentSettings", "superagentActors", "screenWatch", "screenWatchFrame", "featureAuthor", "featureWorkerAuthor")) {
+                val context = appContext ?: throw RuntimeFailure("DEVICE_BRIDGE_UNAVAILABLE", "服务不可用")
+                val request = JSONObject(param)
+                val value = when (commandName) {
+                    "featureWorkerAuthor" -> io.deepseekharness.mobile.companion.WorkerDashboardStore(context).author(request).toString()
+                    "featureAuthor" -> {
+                        val features = io.deepseekharness.mobile.features.WhaleFeatureStore(context)
+                        when (request.getString("action")) {
+                            "list" -> org.json.JSONArray(features.list()).toString()
+                            "read" -> {
+                                val row = requireNotNull(features.read(request.getString("id")))
+                                val revision = row.getString("latest")
+                                JSONObject(row.getJSONObject("versions").getJSONObject(revision).toString()).put("revision", revision).toString()
+                            }
+                            "draft" -> features.draft(request).toString()
+                            else -> throw IllegalArgumentException("无效的创作操作")
+                        }
+                    }
+                    "workerRecord" -> { io.deepseekharness.mobile.companion.WorkerDashboardStore(context).put(request); "{}" }
+                    "workerRecordChunk" -> { io.deepseekharness.mobile.companion.WorkerDashboardStore(context).putChunk(request); "{}" }
+                    "superagentSettings" -> io.deepseekharness.mobile.companion.SuperagentSettings(context).runtime().toString()
+                    "superagentActors" -> { io.deepseekharness.mobile.companion.SuperagentSettings(context).setUnapproved(request); "{}" }
+                    "workerUi" -> {
+                        val store = io.deepseekharness.mobile.companion.WorkerDashboardStore(context)
+                        when {
+                            request.optBoolean("contextMatters") -> io.deepseekharness.mobile.companion.ContextFollowupEvents.pendingMatters(context).toString()
+                            request.has("ackMatter") -> { io.deepseekharness.mobile.companion.ContextFollowupEvents.acknowledgeMatter(context,request.getString("ackMatter")); "[]" }
+                            request.optBoolean("hostCapacity") -> {
+                                val power = context.getSystemService(android.os.PowerManager::class.java)
+                                val thermal = if (android.os.Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else 0
+                                val memory = android.app.ActivityManager.MemoryInfo()
+                                context.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(memory)
+                                JSONObject().put("thermal", thermal).put("conserve", power.isPowerSaveMode || memory.lowMemory).toString()
+                            }
+                            request.has("ack") -> { store.acknowledge(request.getString("ack"), request.optString("authorWorkerId").ifBlank { null }); "[]" }
+                            request.has("deferred") -> { store.dispatchUnavailable(request.getString("deferred"), true); "[]" }
+                            else -> {
+                                val batch=store.batch(request.optInt("skip",0),request.optInt("sourceSessionProtocol",0) in 1..2,request.optInt("sourceSessionProtocol",0)==2)
+                                if(request.optBoolean("includeMatters")) JSONObject().put("commands",batch)
+                                    .put("matters",io.deepseekharness.mobile.companion.ContextFollowupEvents.pendingMatters(context)).toString()
+                                else batch.toString()
+                            }
+                        }
+                    }
+                    "screenWatch" -> {
+                        val watch = io.deepseekharness.mobile.companion.ScreenWatchAccess(context)
+                        when (request.getString("action")) {
+                            "start" -> watch.start(request.getString("session"))
+                            "stop" -> { if (watch.status().getBoolean("active")) watch.requireOwner(request.getString("session")); watch.stop() }
+                            "status" -> Unit
+                            else -> throw IllegalArgumentException("unknown action")
+                        }
+                        watch.status().toString()
+                    }
+                    else -> {
+                        val watch = io.deepseekharness.mobile.companion.ScreenWatchAccess(context)
+                        val session = request.getString("session"); watch.requireOwner(session)
+                        val screenshot = runOneShot(DeviceCommand.SCREENSHOT, "")
+                        if (!screenshot.ok || screenshot.truncated) throw RuntimeFailure(screenshot.errorCode ?: "SCREENSHOT_FAILED", "截图失败")
+                        watch.frame(session, screenshot.text)
+                    }
+                }
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, value, false, null))
+                return
+            }
+            if (commandName == "companionNotifications") {
+                if (param.length > 1024) throw RuntimeFailure("NOTIFICATIONS_INPUT_INVALID", "通知查询参数过长")
+                val context = appContext ?: throw RuntimeFailure("NOTIFICATIONS_UNAVAILABLE", "通知服务不可用")
+                val store = io.deepseekharness.mobile.companion.CompanionStore(context)
+                val authorized = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+                val result = io.deepseekharness.mobile.companion.CompanionNotificationModel.execute(
+                    store.notificationModelAccess, param, System.currentTimeMillis(), store.notificationCapture, authorized,
+                    io.deepseekharness.mobile.companion.CompanionNotificationService.isConnected(), store.excludedPackages()
+                ) { store.read() }
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                return
+            }
+            if (commandName == "companionKnowledgeWrite") {
+                val context = appContext ?: throw RuntimeFailure("KNOWLEDGE_UNAVAILABLE", "资料服务不可用")
+                val result = io.deepseekharness.mobile.companion.CompanionKnowledgeWrite.execute(context, param)
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
+                return
+            }
+            if (commandName == "companionKnowledge") {
+                if (param.length > 1024) throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料查询参数过长")
+                val context = appContext ?: throw RuntimeFailure("KNOWLEDGE_UNAVAILABLE", "资料服务不可用")
+                val store = io.deepseekharness.mobile.companion.CompanionStore(context)
+                val knowledge = io.deepseekharness.mobile.companion.CompanionKnowledgeStore(context)
+                val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料查询参数无效") }
+                val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
+                access.requireKnowledge()
+                if (request.optString("op") == "hybrid") {
+                    val result = io.deepseekharness.mobile.companion.SemanticKnowledgeSearch.execute(context, param)
+                    access.requireKnowledge()
+                    respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                    return
+                }
+                if (request.optString("op") == "forget" || request.optString("op") == "undo") {
+                    val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
+                        ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
+                    val result = if (request.optString("op") == "undo") {
+                        JSONObject().put("id", id).put("restored", knowledge.undoRemove(id))
+                            .put("notice", "仅恢复资料记录；已删除的派生记忆不会自动恢复。")
+                    } else {
+                        val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
+                        val text = row.getString("text")
+                        if (request.optString("revision") != io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(text))
+                            throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                        val earliestUndoUntil = System.currentTimeMillis() + 10 * 60_000L
+                        if (!knowledge.remove(id, text)) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                        JSONObject().put("id", id).put("deleted", 1).put("undoUntilMs", earliestUndoUntil)
+                            .put("originalRetained", true).put("otherRecordsRetained", true)
+                            .put("notice", "已删除选中的资料记录及关联派生记忆；原件、其他分段和外部副本仍保留。")
+                    }
+                    respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
+                    return
+                }
+                if (request.optString("op") == "forgetOriginal") {
+                    val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
+                        ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
+                    val originalId = (request.opt("originalId") as? String)?.takeIf { it.matches(Regex("[a-f0-9]{64}")) }
+                        ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "原件标识无效")
+                    val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
+                    val text = row.getString("text")
+                    if (row.optString("originalId") != originalId || request.optString("revision") != io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(text))
+                        throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料或原件关联已变化，请重新检索")
+                    val removal = knowledge.removeOriginal(originalId, id, text)
+                    if (removal.records == 0) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                    val result = JSONObject().put("originalId", originalId).put("deletedRecords", removal.records).put("objectDeleted", removal.objectDeleted)
+                        .put("undoAvailable", false).put("notice", if (removal.objectDeleted) "已删除这份原件及其所有本地资料分段，并抑制关联派生记忆；无法撤销，外部副本和已发送给模型的内容不受影响。" else "已删除这份原件的本地资料分段并抑制关联派生记忆；原件对象未删除或不可用，外部副本和已发送给模型的内容不受影响。")
+                    respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
+                    return
+                }
+                if (request.optString("op") == "image") {
+                    val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
+                        ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
+                    val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
+                    val hash = io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(row.getString("text"))
+                    if (request.optString("revision") != hash) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                    val originalId = row.optString("originalId").takeIf { it.matches(Regex("[a-f0-9]{64}")) }
+                        ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料没有关联的原图片")
+                    var image: String? = null
+                    if (!knowledge.withUnchangedRecord(id, row.getString("text")) {
+                        image = io.deepseekharness.mobile.companion.KnowledgeImageModel.preview(context, originalId)
+                    }) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                    access.requireKnowledge()
+                    respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, checkNotNull(image), false, null))
+                    return
+                }
+                if (request.optString("op") in setOf("status", "retry")) {
+                    val id = (request.opt("id") as? String)?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
+                        ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料标识无效")
+                    val row = knowledge.findById(id) ?: throw RuntimeFailure("KNOWLEDGE_NOT_FOUND", "资料已删除或不可用")
+                    val hash = io.deepseekharness.mobile.companion.CompanionMemorySuppression.digest(row.getString("text"))
+                    val revision = request.opt("revision") as? String ?: throw RuntimeFailure("KNOWLEDGE_INPUT_INVALID", "资料版本无效")
+                    if (revision != hash) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                    var status: JSONObject? = null
+                    val memoryEnabled = io.deepseekharness.mobile.companion.CompanionMemoryStore(context).enabled
+                    if (request.optString("op") == "retry" && !memoryEnabled) throw RuntimeFailure("MEMORY_DISABLED", "请先开启记忆整理")
+                    var retryScheduled = false
+                    if (!knowledge.withUnchangedRecord(id, row.getString("text")) {
+                        if (request.optString("op") == "retry") {
+                            retryScheduled = io.deepseekharness.mobile.companion.SharedMemoryJobs.retryRecord(context, id, hash)
+                            if (retryScheduled) io.deepseekharness.mobile.companion.SharedMemoryJobs.schedule(context, 0)
+                        }
+                        status = io.deepseekharness.mobile.companion.SharedMemoryJobs.status(context, id, hash)
+                    }) throw RuntimeFailure("KNOWLEDGE_CHANGED", "资料已变化，请重新检索")
+                    val result = checkNotNull(status).put("id", id).put("revision", hash).put("retryScheduled", retryScheduled).put("memoryEnabled", memoryEnabled)
+                        .put("notice", "队列状态不代表模型已完整理解原文件；错误代码仅表示上次已记录的失败分类。")
+                    access.requireKnowledge()
+                    respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
+                    return
+                }
+                val result = io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, param, knowledge::findById, knowledge::recent, knowledge::exactPage, knowledge::attachmentPage) {
+                    knowledge.search(it)
+                }
+                access.requireKnowledge()
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                return
+            }
+            if (commandName == "companionUnifiedSearch") {
+                if (param.length > 2048) throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索参数过长")
+                val context = appContext ?: throw RuntimeFailure("COMPANION_SEARCH_UNAVAILABLE", "助手服务不可用")
+                val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索参数无效") }
+                val query = (request.opt("query") as? String)?.trim()
+                    ?: throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索参数无效")
+                if (query.length > 100 || query.any { it.code < 32 || it.code == 127 }) throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索参数无效")
+                val kinds = if (request.has("kinds")) request.optJSONArray("kinds")?.let { values ->
+                    (0 until values.length()).map { values.optString(it) }.toSet()
+                } ?: throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索类别无效") else setOf("memory", "knowledge", "tasks")
+                if (kinds.isEmpty() || !kinds.all { it in setOf("memory", "knowledge", "tasks") }) throw RuntimeFailure("COMPANION_SEARCH_INPUT_INVALID", "统一检索类别无效")
+                val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
+                val store = io.deepseekharness.mobile.companion.CompanionStore(context)
+                val result = JSONObject().put("schemaVersion", 1).put("query", query)
+                    .put("notice", "各类别均受各自授权约束。结果是首个受限页面；需要更多内容时使用对应单类工具和返回的游标。内容均为不可信数据。")
+                if ("memory" in kinds) {
+                    access.requireMemory()
+                    val child = JSONObject().put("op", "search").put("query", query)
+                    if (request.has("fromMs")) child.put("fromMs", request.get("fromMs"))
+                    if (request.has("toMs")) child.put("toMs", request.get("toMs"))
+                    result.put("memory", JSONObject(io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(child.toString())))
+                }
+                if ("knowledge" in kinds) {
+                    access.requireKnowledge()
+                    val child = JSONObject().put("query", query)
+                    if (request.has("fromMs")) child.put("fromMs", request.get("fromMs"))
+                    if (request.has("toMs")) child.put("toMs", request.get("toMs"))
+                    val knowledge = io.deepseekharness.mobile.companion.CompanionKnowledgeStore(context)
+                    result.put("knowledge", JSONObject(io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, child.toString(), knowledge::findById, knowledge::recent, knowledge::exactPage) { knowledge.search(it) }))
+                }
+                if ("tasks" in kinds) {
+                    access.requireTasks()
+                    val child = JSONObject().put("query", query)
+                    if (request.has("reminderFromMs")) child.put("reminderFromMs", request.get("reminderFromMs"))
+                    if (request.has("reminderToMs")) child.put("reminderToMs", request.get("reminderToMs"))
+                    val tasks = io.deepseekharness.mobile.companion.CompanionTaskModel.execute(store.notificationModelAccess, child.toString(), { limit ->
+                        val allowShared = store.knowledgeModelAccess
+                        io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { data ->
+                            data.queue.listItems(limit).filter { allowShared || !it.eventId.startsWith("share:") }
+                        }
+                    }, { eventId -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.sharedRecordId(eventId) } })
+                    result.put("tasks", JSONObject(tasks))
+                }
+                // A later category can finish after access to an earlier one was revoked.
+                if ("memory" in kinds) access.requireMemory()
+                val hasSharedTasks = result.optJSONObject("tasks")?.let(CompanionTaskModel::includesSharedMaterial) == true
+                if ("knowledge" in kinds || hasSharedTasks) access.requireKnowledge()
+                if ("tasks" in kinds) access.requireTasks()
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
+                return
+            }
+            if (commandName == "companionCalendar") {
+                val context = appContext ?: throw RuntimeFailure("CALENDAR_UNAVAILABLE", "日历服务不可用")
+                val zone = java.util.TimeZone.getDefault()
+                val now = System.currentTimeMillis()
+                val result = io.deepseekharness.mobile.companion.CompanionCalendarModel.execute(
+                    io.deepseekharness.mobile.companion.CompanionStore(context).calendarModelAccess, param, now, zone
+                ) { io.deepseekharness.mobile.companion.CompanionCalendar.read(context, now, zone) }
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                return
+            }
+            if (commandName == "companionMemory") {
+                if (param.length > 4096) throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数过长")
+                val context = appContext ?: throw RuntimeFailure("MEMORY_UNAVAILABLE", "记忆服务不可用")
+                val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("MEMORY_INPUT_INVALID", "记忆参数无效") }
+                val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
+                if (request.optString("op") == "capabilities") {
+                    respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, access.capabilities(), false, null))
+                    return
+                }
+                access.requireMemory()
+                val result = if (request.optString("op") == "hybrid")
+                    io.deepseekharness.mobile.companion.SemanticMemorySearch.execute(context, param)
+                else io.deepseekharness.mobile.companion.CompanionMemoryStore(context).execute(param,
+                    io.deepseekharness.mobile.companion.HarnessBubbleClient.isPetMemoryTurn(request.optString("callerSession")))
+                // A remote embedding query can finish after the user revokes access.
+                access.requireMemory()
+                if (io.deepseekharness.mobile.companion.CompanionMemoryHint.shouldNotify(param, result)) {
+                    OverlayBallService.companionPendingMemoryHint()
+                }
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                return
+            }
+            if (commandName == "companionTasks") {
+                if (param.length > 1024) throw RuntimeFailure("TASK_INPUT_INVALID", "事项查询参数过长")
+                val context = appContext ?: throw RuntimeFailure("TASK_UNAVAILABLE", "事项服务不可用")
+                val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("TASK_INPUT_INVALID", "事项查询参数无效") }
+                val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
+                access.requireTasks()
+                val tasks = io.deepseekharness.mobile.companion.CompanionTaskModel
+                val result = if (request.optString("op", "search") == "update") {
+                    val update = tasks.parseUpdate(param)
+                    val now = System.currentTimeMillis()
+                    val changed = io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
+                        val current = store.queue.item(update.id) ?: throw RuntimeFailure("TASK_NOT_FOUND", "事项不存在或已删除")
+                        if (current.eventId.startsWith("share:") && !io.deepseekharness.mobile.companion.CompanionStore(context).knowledgeModelAccess)
+                            throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
+                        if (current.state != update.expectedState) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
+                        if (update.expectedRevision != null && update.expectedRevision != tasks.revision(current))
+                            throw RuntimeFailure("TASK_CONFLICT", "事项内容或提醒已变化，请先重新读取")
+                        val saved = if (update.reminderAtMs != null) store.queue.setItemReminder(update.id, update.expectedState, update.reminderAtMs, now)
+                        else store.queue.updateItem(update.id, update.expectedState, update.nextState!!)
+                        if (!saved) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
+                        store.queue.item(update.id) ?: throw RuntimeFailure("TASK_CONFLICT", "事项已变化，请先重新读取")
+                    }
+                    try {
+                        if (update.reminderAtMs != null) io.deepseekharness.mobile.companion.CompanionReminder(context).upsertLinked(changed.id, changed.title, update.reminderAtMs, changed.reminderRevision)
+                        else if (update.nextState in setOf("done", "cancelled")) io.deepseekharness.mobile.companion.CompanionReminder(context).removeLinked(changed.id)
+                    } catch (e: Exception) {
+                        if (update.reminderAtMs != null) runCatching { io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.disableItemReminder(changed.id, update.reminderAtMs, changed.reminderRevision) } }
+                        throw RuntimeFailure("TASK_REMINDER_UNAVAILABLE", "事项已更新，但关联提醒未能安排；已撤销本次提醒状态", e)
+                    }
+                    val refreshed = io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
+                        val item = store.queue.item(changed.id) ?: throw RuntimeFailure("TASK_NOT_FOUND", "事项不存在或已删除")
+                        tasks.updated(item, store.queue.sharedRecordId(item.eventId))
+                    }
+                    refreshed
+                } else {
+                    io.deepseekharness.mobile.companion.CompanionTaskModel.execute(
+                        io.deepseekharness.mobile.companion.CompanionStore(context).notificationModelAccess,
+                        param,
+                        { limit ->
+                            val allowShared = io.deepseekharness.mobile.companion.CompanionStore(context).knowledgeModelAccess
+                            io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
+                                store.queue.listItems(limit).filter { allowShared || !it.eventId.startsWith("share:") }
+                            }
+                        },
+                        { eventId -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.sharedRecordId(eventId) } },
+                    )
+                }
+                access.requireTasks()
+                if (tasks.includesSharedMaterial(JSONObject(result))) access.requireKnowledge()
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                return
+            }
+            if (commandName == "companionRecurring") {
+                val context = appContext ?: throw RuntimeFailure("REMINDER_UNAVAILABLE", "提醒服务不可用")
+                val result = io.deepseekharness.mobile.companion.CompanionRecurringBridge(context).execute(param)
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                return
+            }
+            if (commandName == "companionReminder") {
+                val context = appContext ?: throw RuntimeFailure("REMINDER_UNAVAILABLE", "提醒服务不可用")
+                val result = io.deepseekharness.mobile.companion.CompanionReminderBridge(context).execute(param)
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
+                return
+            }
+            // 自动化授权与设备能力都不经过 Shell；能力判定复用原生统一策略，不在 AI 插件里另算一套。
+            if(commandName=="screenCapture") {
+                if(param.isNotEmpty()) throw RuntimeFailure("SCREEN_INPUT_INVALID","截图不接受参数")
+                val context=appContext ?: throw RuntimeFailure("SCREEN_UNAVAILABLE","屏幕服务不可用")
+                val result=DeviceControlState.execute(context,true,"快速截图") {
+                    io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,captureScreenImage().toString(),false,null)
+                }
+                respondResult(output,result)
+                return
+            }
+            if (commandName in setOf("screenObserve","screenAct")) {
+                if(param.length>2048) throw RuntimeFailure("SCREEN_INPUT_INVALID","屏幕参数过长")
+                val context=appContext ?: throw RuntimeFailure("SCREEN_UNAVAILABLE","屏幕服务不可用")
+                val request=JSONObject(param)
+                val result=DeviceControlState.execute(context,commandName=="screenObserve",
+                    if(commandName=="screenObserve") "快速观察" else "操作并观察") {
+                    val value=if(commandName=="screenObserve") observeScreen(context,request) else actAndObserve(context,request)
+                    io.deepseekharness.mobile.shizuku.DeviceCommandResult(true,0,value.toString(),false,null)
+                }
+                respondResult(output,result)
+                return
+            }
+            if (commandName == "automationPolicy") {
+                if (param.isNotEmpty()) throw RuntimeFailure("DEVICE_COMMAND_INVALID", "能力查询不接受参数")
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(
+                    true, 0, JSONObject().put("schemaVersion", 3).put("allowlistedAutomation", true)
+                        .put("shellEnabled", shellEnabled()).put("backgroundTasks", true)
+                        .put("virtualScreen", true)
+                        .put("directDeviceOperations", true).toString(), false, null,
+                ))
+                return
+            }
+            if (commandName == "deviceCapabilities") {
+                if (param.isNotEmpty()) throw RuntimeFailure("DEVICE_COMMAND_INVALID", "设备能力查询不接受参数")
+                val context = applicationContextOrNull()
+                    ?: throw RuntimeFailure("DEVICE_CAPABILITIES_UNAVAILABLE", "暂时无法读取设备能力")
+                val shizukuState = shizuku.state()
+                val root = io.deepseekharness.mobile.shizuku.RootEngineAccess.status(
+                    context,
+                    packageChecker = io.deepseekharness.mobile.shizuku.RootEngineAccess.packageChecker(context),
+                )
+                val facts = DeviceCapabilityFacts(
+                    sdkInt = Build.VERSION.SDK_INT,
+                    shizukuInstalled = shizukuState.installed,
+                    shizukuRunning = shizukuState.running,
+                    shizukuPermission = shizukuState.permission,
+                    shizukuConnected = shizukuState.connected,
+                    shellEnabled = shellEnabled(),
+                    accessibilityStatus = AccessibilityAutomationStore.serviceStatus(context),
+                    rootEngineEnabled = root.enabled,
+                    rootEngineStatus = if (root.enabled) root.kernelSuStatus else null,
+                    rootEngineReason = if (root.enabled) root.reason else null,
+                    rootSandboxDegraded = root.degraded,
+                )
+                val entries = org.json.JSONArray().also { array ->
+                    DeviceCapabilityPolicy.report(facts).forEach { capability ->
+                        array.put(JSONObject()
+                            .put("id", capability.id)
+                            .put("state", capability.state)
+                            .put("reason", capability.reason)
+                            .put("action", capability.action ?: JSONObject.NULL)
+                            .put("alternative", capability.alternative ?: JSONObject.NULL))
+                    }
+                }
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(
+                    true, 0,
+                    JSONObject().put("atMs", System.currentTimeMillis())
+                        .put("sdkInt", Build.VERSION.SDK_INT)
+                        .put("capabilities", entries).toString(),
+                    false, null,
+                ))
+                return
+            }
+            // 无障碍命令不经过 Shell：由用户手动开启的服务在原生侧再次校验
+            // 白名单、前台包名、锁屏状态、敏感窗口和动作频率。
+            // automationTask 与 accessibilityTree 同一条闸门：它只做计划式执行的闸门与记账，不执行动作。
+            if (commandName in setOf(
+                    "accessibilityTree",
+                    "accessibilityAction",
+                    "accessibilityBack",
+                    "tap",
+                    "inputText",
+                    "automationTask",
+                )
+            ) {
+                val service = DeepSeekAccessibilityService.current()
+                val result = service?.execute(commandName, param)
+                    ?: io.deepseekharness.mobile.shizuku.DeviceCommandResult(
+                        ok = false,
+                        exitCode = 1,
+                        text = "请先在系统设置中手动开启 Harness 无障碍服务",
+                        truncated = false,
+                        errorCode = "ACCESSIBILITY_SERVICE_DISABLED",
+                    )
+                respondResult(output, result)
+                return
+            }
+            if (commandName in setOf("virtualScreenState", "virtualScreenCapture", "virtualScreenAction")) {
+                if (!shellEnabled()) throw RuntimeFailure("DEVICE_SHELL_DISABLED", "请在 Shizuku 设置中开启 AI Shell")
+                respondResult(output, io.deepseekharness.mobile.virtualscreen.VirtualScreenCommands.execute(commandName, param))
+                return
+            }
+            // 副屏直通 Shell：把会话副屏的 displayId 注入脚本环境后，走与通用命令**同一条**
+            // 一次性 Shell 路径。param 是 JSON：{"script":"…","displayId":38}（displayId 可省）。
+            // 校验与错误码全部由 VirtualScreenShellPolicy 决定，这里只负责取只读状态并执行。
+            if (commandName == VirtualScreenShellPolicy.COMMAND) {
+                if (!shellEnabled()) throw RuntimeFailure("DEVICE_SHELL_DISABLED", "请在 Shizuku 设置中开启 AI Shell")
+                val request = try {
+                    JSONObject(param)
+        } catch (error: Throwable) {
+                    throw RuntimeFailure("DEVICE_COMMAND_INVALID", "副屏 Shell 参数不是合法 JSON", error)
+                }
+                // 只认 JSON 字符串与 JSON 数字：`{"script":null}` 这类形状不能变成一段可执行脚本文本。
+                val script = request.opt("script") as? String
+                val requestedDisplayId = when (val raw = request.opt("displayId")) {
+                    null -> null
+                    is Number -> raw.toInt()
+                    else -> throw RuntimeFailure("DEVICE_COMMAND_INVALID", "displayId 必须是整数")
+                }
+                val state = VirtualScreenService.current?.state()
+                val plan = VirtualScreenShellPolicy.plan(
+                    script = script,
+                    requestedDisplayId = requestedDisplayId,
+                    active = state?.optBoolean("active") == true,
+                    sessionDisplayId = state?.optInt("displayId", 0) ?: 0,
+                )
+                respondResult(output, runOneShot(DeviceCommand.SHELL, plan.command), plan.displayId)
+                return
+            }
+            // 访客侧「一轮任务已完成」的收单点（登记册 §5.5）。
+            // 这条命令**只**能触发一条固定文案的通知，不读会话内容、不返回任何用户数据：
+            // 访客进程因此无法用它在通知栏或锁屏上写任意文本。
+            // 限流命中一律静默忽略（ok=true, accepted=false），不报错刷屏。
+            if (commandName == "notify-turn-complete") {
+                if (param.length > TurnCompletionPolicy.MAX_PARAM_CHARS) {
+                    throw RuntimeFailure("DEVICE_COMMAND_INVALID", "任务完成事件参数过长")
+                }
+                val receipt = TaskNotification.recordTurnCompleted(
+                    applicationContextOrNull(),
+                    param,
+                )
+                respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(
+                    ok = receipt.ok,
+                    exitCode = if (receipt.ok) 0 else 1,
+                    text = JSONObject()
+                        .put("accepted", receipt.accepted)
+                        .put("queued", receipt.queued)
+                        .toString(),
+                    truncated = false,
+                    errorCode = receipt.errorCode,
+                ))
+                return
+            }
+            val command = DeviceCommand.fromName(commandName)
+                ?: throw RuntimeFailure("DEVICE_COMMAND_INVALID", "设备命令不支持")
+            // 根通道（用户在设置里显式打开）时，SHELL 命令由应用进程自己起 `su -c`，
+            // 既不建 Shizuku 会话，也不受「AI Shell」这个 Shizuku 通道开关约束——
+            // 那条会话的父进程是 UID 2000 的 shell，根命令的归属会变得不确定。
+            val rootEngine = DeviceCommand.requireShellRoute(
+                command, command == DeviceCommand.SHELL && rootEngineUsable(), shellEnabled(),
+            )
+            respondResult(output, runOneShot(command, param, rootEngine))
+        } catch(error:Throwable) {
+            respond(output,200,JSONObject().put("ok",false).put("text","").put("exitCode",1)
+                .put("truncated",false).put("errorCode",(error as? RuntimeFailure)?.code ?: "BRIDGE_FAILED").toString())
         }
     }
 

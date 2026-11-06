@@ -9,6 +9,13 @@ import io.deepseekharness.mobile.DeviceControlState
 
 /** A compact always-visible control strip, separate from transient chat hints. */
 internal class DeviceControlOverlay(private val context: Context, private val wm: WindowManager) {
+    companion object {
+        @Volatile private var protectedBounds:android.graphics.Rect?=null
+        fun intersects(x:Int,y:Int,endX:Int=x,endY:Int=y):Boolean {
+            val r=protectedBounds ?: return false
+            return r.intersects(minOf(x,endX),minOf(y,endY),maxOf(x,endX)+1,maxOf(y,endY)+1)
+        }
+    }
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var root: LinearLayout? = null
     private var labelView: android.widget.TextView? = null
@@ -19,6 +26,7 @@ internal class DeviceControlOverlay(private val context: Context, private val wm
     private fun render(state: DeviceControlState.Snapshot) {
         if (state.phase == "idle" || !android.provider.Settings.canDrawOverlays(context)) {
             root?.let { runCatching { wm.removeView(it) } }; root = null
+            protectedBounds=null
             return
         }
         val ui = PetUi(context)
@@ -46,6 +54,10 @@ internal class DeviceControlOverlay(private val context: Context, private val wm
             background = ui.shape(ui.surface,14,if(state.phase == "operating") ui.alert else ui.line)
             contentDescription = "手机操作状态"
         }
+        panel.addOnLayoutChangeListener { view,_,_,_,_,_,_,_,_ ->
+            val xy=IntArray(2);view.getLocationOnScreen(xy)
+            protectedBounds=android.graphics.Rect(xy[0],xy[1],xy[0]+view.width,xy[1]+view.height)
+        }
         labelView = ui.text(text,13f,ui.ink)
         panel.addView(labelView,LinearLayout.LayoutParams(0,-2,1f))
         fun action(text: String, work: () -> Unit): android.widget.TextView {
@@ -69,5 +81,5 @@ internal class DeviceControlOverlay(private val context: Context, private val wm
         if(runCatching { wm.addView(panel,params) }.isSuccess) root=panel
     }
     fun refresh() { render(DeviceControlState.current) }
-    fun destroy() { DeviceControlState.unsubscribe(listener); handler.removeCallbacksAndMessages(null); root?.let { runCatching { wm.removeView(it) } }; root=null }
+    fun destroy() { DeviceControlState.unsubscribe(listener); handler.removeCallbacksAndMessages(null); root?.let { runCatching { wm.removeView(it) } }; root=null;protectedBounds=null }
 }

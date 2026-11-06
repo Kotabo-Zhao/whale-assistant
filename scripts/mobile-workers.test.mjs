@@ -388,3 +388,8 @@ test('a creation worker has only its draft and reporting tools; restart requires
   assert.equal(restored.state, 'interrupted')
   assert.equal(restored.revision, 1)
 })
+
+test('合并主屏动作只开放给持有设备执行权的 Worker', () => {
+  assert.equal(workerToolAllowed('device','mobile_screen_act'),true)
+  for(const mode of ['read','create','unknown']) assert.equal(workerToolAllowed(mode,'mobile_screen_act'),false)
+})

@@ -13,7 +13,14 @@ internal object DeviceControlState {
     private val listeners = java.util.concurrent.CopyOnWriteArraySet<(Snapshot) -> Unit>()
     private val main by lazy { Handler(Looper.getMainLooper()) }
     private val cancelExecutor by lazy { java.util.concurrent.Executors.newSingleThreadExecutor() }
+    private val activeTicket=ThreadLocal<Long>()
     private var generation = 0L
+    private var revocation = 0L
+    @Synchronized fun executionVersion():Long = generation
+    @Synchronized fun admissionVersion():Long = revocation
+    @Synchronized fun checkAdmission(value:Long) {
+        if(halted || value!=revocation) throw RuntimeFailure("DEVICE_CONTROL_PAUSED","暂停前的排队动作已撤销，请重新观察")
+    }
     @Volatile var current = Snapshot()
         private set
     private var cancel: (() -> Unit)? = null
@@ -45,24 +52,46 @@ internal object DeviceControlState {
             if(!halted && current.phase=="waiting") publish("idle")
         }
     }
-    @Synchronized fun cancellation(action: (() -> Unit)?) { cancel = action }
+    fun cancellation(action: (() -> Unit)?) {
+        val revoked=synchronized(this) {
+            val ticket=activeTicket.get()
+            if(action!=null && (halted || ticket!=null && ticket!=generation)) true
+            else {cancel=action;false}
+        }
+        if(revoked) {
+            runCatching{action?.invoke()}
+            throw RuntimeFailure("DEVICE_CONTROL_PAUSED","手机操作已暂停，未开始后续步骤")
+        }
+    }
+    @Synchronized fun checkCurrent() {
+        val ticket=activeTicket.get()
+        if(halted || ticket!=null && ticket!=generation)
+            throw RuntimeFailure("DEVICE_CONTROL_PAUSED","手机操作已暂停，未开始后续步骤")
+    }
     private fun publish(phase: String, action: String = current.action) {
         current = Snapshot(phase, action, SystemClock.elapsedRealtime())
         listeners.forEach { it(current) }
     }
     fun subscribe(listener: (Snapshot) -> Unit) { listeners.add(listener) }
     fun unsubscribe(listener: (Snapshot) -> Unit) { listeners.remove(listener) }
-    @Synchronized fun disconnected() {
-        holder=null; holderRun=""; cancel=null
-        if(!halted && current.phase!="idle") { generation++; publish("idle") }
+    fun disconnected() {
+        val action=synchronized(this) {
+            holder=null;holderRun="";generation++;revocation++
+            if(!halted && current.phase!="idle") publish("idle")
+            cancel.also{cancel=null}
+        }
+        cancelExecutor.execute{runCatching{action?.invoke()}}
     }
-    @Synchronized fun pause() { halted = true; generation++; publish("paused") }
-    @Synchronized fun resume() { halted = false; generation++; publish(if(holder==null) "idle" else "waiting") }
+    fun pause() {
+        val action=synchronized(this) {halted=true;generation++;revocation++;publish("paused");cancel.also{cancel=null}}
+        cancelExecutor.execute{runCatching{action?.invoke()}}
+    }
+    @Synchronized fun resume() { halted = false; generation++; revocation++; publish(if(holder==null) "idle" else "waiting") }
     fun holdWorker(id: String, runId: String) {
         synchronized(this) { if(holder?.first==id && holderRun==runId) stop() }
     }
     fun stop() {
-        val (action,task) = synchronized(this) { halted = true; generation++; publish("stopped"); (cancel to holder).also { cancel = null } }
+        val (action,task) = synchronized(this) { halted = true; generation++; revocation++; publish("stopped"); (cancel to holder).also { cancel = null } }
         cancelExecutor.execute {
             runCatching { action?.invoke() }
             runCatching { io.deepseekharness.mobile.accessibility.DeepSeekAccessibilityService.current()?.cancelAutomationTask() }
@@ -74,19 +103,23 @@ internal object DeviceControlState {
 
     fun execute(context: Context, observing: Boolean, name: String, cancelAction: (() -> Unit)? = null,
                 block: () -> DeviceCommandResult): DeviceCommandResult {
+        if(activeTicket.get()!=null) {checkCurrent();return block().also{checkCurrent()}}
         refreshIndicator(context)
+        val admission=synchronized(this){revocation}
         execution.lock()
         try {
         val ticket = synchronized(this) {
-            if (halted)
+            if (halted || admission!=revocation)
                 throw RuntimeFailure("DEVICE_CONTROL_PAUSED", "手机操作已由用户暂停，请在桌宠状态条中继续")
             generation++; cancel = cancelAction
             publish(if (observing) "observing" else "operating", name)
             generation
         }
+        activeTicket.set(ticket)
         val started = SystemClock.elapsedRealtime()
         try {
             return block().also { result ->
+                checkCurrent()
                 synchronized(this) {
                     if (ticket == generation) {
                         cancel = null
@@ -105,6 +138,6 @@ internal object DeviceControlState {
                 }
             }, if (observing) 3000 else 30_000)
         }
-        } finally { execution.unlock() }
+        } finally { activeTicket.remove();execution.unlock() }
     }
 }

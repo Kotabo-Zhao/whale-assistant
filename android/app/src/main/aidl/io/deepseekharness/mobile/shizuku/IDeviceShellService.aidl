@@ -17,6 +17,10 @@ interface IDeviceShellService {
     ParcelFileDescriptor virtualScreenSnapshot(String sessionId) = 8;
     VirtualScreenFrameHandle virtualScreenFrame(String sessionId) = 9;
     ParcelFileDescriptor virtualScreenSnapshotEnvelope(String sessionId) = 10;
+    ParcelFileDescriptor mainScreenPixels(String requestId, IBinder owner) = 11;
+    void cancelMainScreenPixels(String requestId) = 12;
+    String mainScreenAction(String requestId, String parameters, IBinder owner) = 13;
+    void cancelMainScreenAction(String requestId) = 14;
     // Shizuku reserves this transaction for removing a UserService.
     void destroy() = 16777114;
 }

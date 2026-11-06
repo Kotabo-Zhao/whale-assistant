@@ -312,8 +312,8 @@ test('任务台账的错误给固定恢复建议，不转发设备原文也不�
 test('副屏流程按需选择树或截图，但保留同屏观察与动作后验证', t => {
   const f = fixture(t, () => ok('{}'))
   const prompt = f.prompts[0].text
-  assert.match(prompt, /For main-screen operations only/)
-  assert.match(prompt, /must not be used to observe a virtual-screen task/)
+  assert.match(prompt, /主屏优先 mobile_screen_observe/)
+  assert.match(prompt, /副屏任务仍只用副屏工具/)
   assert.match(prompt, /首次读取 mobile_virtual_screen_state/)
   assert.match(prompt, /不必每步重复查状态/)
   assert.match(prompt, /不要无条件同时读取树和截图/)
@@ -846,4 +846,45 @@ test('记忆访问被后端拒绝时保留错误，不回退到其他调用', as
   const f = fixture(t, () => ({ ok: false, exitCode: 1, text: '', truncated: false, errorCode: 'MEMORY_BUBBLE_DISABLED' }))
   await assert.rejects(f.tools.get('mobile_memory_search').execute({ query: '' }, memoryExec), /MEMORY_BUBBLE_DISABLED/)
   assert.equal(f.requests.length, 1)
+})
+
+test('主屏动作合并返回新观察，参数校验失败不发送桥请求', async t => {
+  const f = fixture(t, () => ok('{"action":{"injected":true},"observation":{"observationId":"next"}}'))
+  const tool = f.tools.get('mobile_screen_act')
+  const observationId = '00000000-1111-2222-3333-444444444444'
+  await tool.execute({ observationId, action:'tap', x:320, y:480, ocr:true }, {})
+  assert.deepEqual(f.requests, [{ command:'screenAct', param:JSON.stringify({observationId,action:'tap',x:320,y:480,ocr:true}) }])
+  for (const args of [
+    {observationId,action:'tap',x:1.5,y:3},
+    {observationId,action:'swipe',x:1,y:2,endX:3,endY:4,durationMs:1},
+    {observationId:'old',action:'back'},
+    {observationId,action:'home'},
+    {observationId,action:'back',region:[0,0,-1,2]},
+  ]) await assert.rejects(async () => tool.execute(args, {}), /SCREEN_|invalid arguments/)
+  assert.equal(f.requests.length,1)
+  const value=tool.output.render({}, {output:'untrusted target text'})
+  assert.match(value[0].text,/Untrusted Android device data/)
+})
+
+test('主屏 JPEG 截图保留真实格式、物理尺寸和单次观察编号', async t => {
+  let saved
+  const observationId='00000000-1111-2222-3333-444444444444'
+  const f=fixture(t, () => ok(JSON.stringify({imageBase64:Buffer.from([0xff,0xd8,0xff,0xd9]).toString('base64'),
+    mediaType:'image/jpeg',width:1440,height:2560,observationId})),{
+    llm:{resolveModelInfo:async()=>({inputModalities:['image']})},
+    attachments:{saveImage:async options=>{
+      saved=options
+      return {attachmentId:'main-jpeg',mediaType:'image/jpeg',bytes:4,width:450,height:800,
+        originalDimensions:{width:900,height:1600}}
+    }},
+  })
+  const result=await f.tools.get('mobile_device_screenshot').execute({},{
+    agent:{session:{id:virtualSession,requestHeader:()=>({config:{provider:'test',model:'vision'}})}},
+  })
+  assert.deepEqual(f.requests,[{command:'screenCapture',param:''}])
+  assert.equal(saved.mediaType,'image/jpeg')
+  assert.equal(saved.name,'android-screen.jpg')
+  assert.deepEqual(result.image.originalDimensions,{width:1440,height:2560})
+  assert.equal(result.image.observationId,observationId)
+  assert.match(f.tools.get('mobile_device_screenshot').output.render({},result)[0].text,/x coordinates by 3.2/)
 })
