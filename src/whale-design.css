@@ -35,7 +35,7 @@ body { color:var(--ink); -webkit-font-smoothing:antialiased; }
 .sidebar-item,.bottom-navigation-item { transition:background-color 120ms ease,color 120ms ease; }
 .sidebar-item.is-active,.bottom-navigation-item.is-active { background:var(--blue-soft); color:var(--blue); }
 .screen-heading h1,.screen-heading h2 { letter-spacing:-.025em; font-weight:650; }
-.settings-section,.runtime-card,.worker-card,.memory-card,.knowledge-card { border-radius:var(--radius-card); }
+.settings-section,.runtime-card,.memory-card,.knowledge-card { border-radius:var(--radius-card); }
 .management-row { min-height:64px; padding:16px 18px; border-radius:var(--radius-inner); }
 .management-icon { background:var(--blue-soft); color:var(--blue); border-radius:var(--radius-control); }
 .management-copy strong { font-weight:600; }

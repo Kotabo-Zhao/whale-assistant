@@ -121,20 +121,3 @@ internal class DeepSeekUnderstandingModel(
         } finally { cancellation.close(); connection.disconnect() }
     }
 }
-
-/** Called by an explicitly authorized worker, never by notification capture itself. */
-internal class UnderstandingProcessor(private val queue: UnderstandingQueue, private val model: UnderstandingModel) {
-    fun processOne(now: Long, retryAt: Long): Boolean {
-        require(retryAt >= now)
-        val claim = queue.claim(now) ?: return false
-        try {
-            val event = queue.eventFor(claim) ?: error("event unavailable or permission revoked")
-            val output = model.analyze(event.first, event.second)
-            UnderstandingModelContract.validate(output, event.first)
-            return queue.commitResult(claim, event.first, output)
-        } catch (e: Exception) {
-            queue.retry(claim, retryAt)
-            throw e
-        }
-    }
-}

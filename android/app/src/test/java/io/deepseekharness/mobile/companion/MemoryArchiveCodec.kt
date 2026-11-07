@@ -6,7 +6,7 @@ import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
-/** Lossless archive payload. Metadata is stored separately from compressed bytes. */
+/** Format prototype used to test size and hash validation for archived memory. */
 internal object MemoryArchiveCodec {
     data class Payload(val data: ByteArray, val originalSize: Int, val sha256: String)
 

@@ -304,8 +304,7 @@ interface NativeRuntimePlugin {
   addListener(eventName: 'runtimeProgress', listener: (event: RuntimeProgress) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'featureToolsChanged', listener: () => void): Promise<PluginListenerHandle>
   addListener(eventName: 'knowledgeCapturesChanged', listener: () => void): Promise<PluginListenerHandle>
-  addListener(eventName: 'petExecutionsChanged', listener: () => void): Promise<PluginListenerHandle>
-  addListener(eventName: 'workerDashboardChanged', listener: () => void): Promise<PluginListenerHandle>
+  addListener(eventName: 'assistantBriefingsChanged', listener: () => void): Promise<PluginListenerHandle>
   addListener(eventName: 'appUpdateProgress', listener: (event: AppUpdateProgress) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'terminalOutput', listener: (event: TerminalChunk) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'terminalExit', listener: (event: TerminalExit) => void): Promise<PluginListenerHandle>
@@ -750,8 +749,7 @@ function createNativeBridge(): RuntimeBridge {
     addRuntimeProgressListener: listener => NativeRuntime.addListener('runtimeProgress', validatedListener(validateRuntimeProgress, listener)),
     addFeatureToolsListener: listener => NativeRuntime.addListener('featureToolsChanged', listener),
     addKnowledgeCapturesListener: listener => NativeRuntime.addListener('knowledgeCapturesChanged', listener),
-    addPetExecutionsListener: listener => NativeRuntime.addListener('petExecutionsChanged', listener),
-    addWorkerDashboardListener: listener => NativeRuntime.addListener('workerDashboardChanged', listener),
+    addAssistantBriefingsListener: listener => NativeRuntime.addListener('assistantBriefingsChanged', listener),
   addHarnessProgressListener: listener => NativeRuntime.addListener('harnessProgress', validatedListener(validateHarnessProgress, listener)),
     addAppUpdateProgressListener: listener => NativeRuntime.addListener('appUpdateProgress', validatedListener(validateAppUpdateProgress, listener)),
     addTerminalOutputListener: listener => NativeRuntime.addListener('terminalOutput', validatedListener(validateTerminalChunk, listener)),

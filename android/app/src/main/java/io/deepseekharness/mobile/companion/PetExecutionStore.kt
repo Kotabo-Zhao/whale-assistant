@@ -23,7 +23,6 @@ internal class PetExecutionStore(context: Context) {
         val output = file.startWrite()
         try { output.write(row.toString().toByteArray(Charsets.UTF_8)); file.finishWrite(output) }
         catch (error: Exception) { file.failWrite(output); throw error }
-        listeners.forEach { runCatching(it) }
     }
 
     fun page(offset: Int): JSONObject = synchronized(lock) {
@@ -41,9 +40,6 @@ internal class PetExecutionStore(context: Context) {
     }
 
     companion object {
-        private val listeners = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
-        fun subscribe(listener: () -> Unit) { listeners.add(listener) }
-        fun unsubscribe(listener: () -> Unit) { listeners.remove(listener) }
         private val lock = Any()
         private val process = UUID.randomUUID().toString()
     }

@@ -338,19 +338,13 @@ class MobileRuntimePlugin : Plugin() {
      * 订阅者对象：插件销毁后取消订阅，运行时不会继续向已销毁的 WebView 派发事件。
      */
     private val eventSink = PluginEventSink()
-    private val workerEvents = Handler(Looper.getMainLooper())
-    private val workerChangeQueued = java.util.concurrent.atomic.AtomicBoolean()
-    private val workerChange = Runnable {
-        workerChangeQueued.set(false)
-        if (!destroying.get()) notifyListeners("workerDashboardChanged", JSObject())
+    private val mainEvents = Handler(Looper.getMainLooper())
+    private val briefingChange = Runnable {
+        if (!destroying.get()) notifyListeners("assistantBriefingsChanged", JSObject())
     }
-    private val executionChangeQueued = java.util.concurrent.atomic.AtomicBoolean()
-    private val executionChange = Runnable {
-        executionChangeQueued.set(false)
-        if (!destroying.get()) notifyListeners("petExecutionsChanged", JSObject())
-    }
-    private val onExecutionChange: () -> Unit = {
-        if (!destroying.get() && executionChangeQueued.compareAndSet(false,true)) workerEvents.postDelayed(executionChange,120)
+    private val onBriefingChange: (org.json.JSONObject) -> Unit = {
+        mainEvents.post(briefingChange)
+        Unit
     }
     private val captureChangeQueued = java.util.concurrent.atomic.AtomicBoolean()
     private val captureChange = Runnable {
@@ -358,15 +352,11 @@ class MobileRuntimePlugin : Plugin() {
         if (!destroying.get()) notifyListeners("knowledgeCapturesChanged", JSObject())
     }
     private val onCaptureChange: () -> Unit = {
-        if (!destroying.get() && captureChangeQueued.compareAndSet(false, true)) workerEvents.postDelayed(captureChange, 120)
+        if (!destroying.get() && captureChangeQueued.compareAndSet(false, true)) mainEvents.postDelayed(captureChange, 120)
     }
     private val onFeatureChange: (String,String) -> Unit = { _,_ ->
-        workerEvents.post { if (!destroying.get()) notifyListeners("featureToolsChanged", JSObject()) }
+        mainEvents.post { if (!destroying.get()) notifyListeners("featureToolsChanged", JSObject()) }
         Unit
-    }
-
-    private val onWorkerChange: () -> Unit = {
-        if (!destroying.get() && workerChangeQueued.compareAndSet(false, true)) workerEvents.postDelayed(workerChange, 120)
     }
 
     /**
@@ -661,7 +651,7 @@ class MobileRuntimePlugin : Plugin() {
             loadRuntimePlugin()
         } catch (failure: RuntimeFailure) {
             if (failure.code == "RUNTIME_CLOSING") {
-                RuntimeHost.afterCurrentTeardown { workerEvents.post { attachWhenAvailable(deferred = true) } }
+                RuntimeHost.afterCurrentTeardown { mainEvents.post { attachWhenAvailable(deferred = true) } }
                 return
             }
             failInitialization(failure, deferred)
@@ -708,8 +698,7 @@ class MobileRuntimePlugin : Plugin() {
         shizukuAutoConnect.request()
         io.deepseekharness.mobile.features.WhaleFeatureStore.subscribe(onFeatureChange)
         io.deepseekharness.mobile.companion.CompanionKnowledgeStore.subscribeCaptures(onCaptureChange)
-        io.deepseekharness.mobile.companion.WorkerDashboardStore.subscribe(onWorkerChange)
-        io.deepseekharness.mobile.companion.PetExecutionStore.subscribe(onExecutionChange)
+        io.deepseekharness.mobile.companion.WorkerReportInbox.subscribe(onBriefingChange)
         // 悬浮球可以在插件加载时恢复，keep-alive 不能：后者要求运行时确实在跑，
         // 没跑就启动只会留下一个无法解释的通知；悬浮球与运行时无关，只取决于
         // 「用户开关 + 系统权限」（syncOverlayBallService 内部判断），所以重启应用后
@@ -767,12 +756,10 @@ class MobileRuntimePlugin : Plugin() {
      */
     override fun handleOnDestroy() {
         io.deepseekharness.mobile.features.WhaleFeatureStore.unsubscribe(onFeatureChange)
-        io.deepseekharness.mobile.companion.WorkerDashboardStore.unsubscribe(onWorkerChange)
-        io.deepseekharness.mobile.companion.PetExecutionStore.unsubscribe(onExecutionChange)
-        workerEvents.removeCallbacks(executionChange)
+        io.deepseekharness.mobile.companion.WorkerReportInbox.unsubscribe(onBriefingChange)
+        mainEvents.removeCallbacks(briefingChange)
         io.deepseekharness.mobile.companion.CompanionKnowledgeStore.unsubscribeCaptures(onCaptureChange)
-        workerEvents.removeCallbacks(captureChange)
-        workerEvents.removeCallbacks(workerChange)
+        mainEvents.removeCallbacks(captureChange)
         if (!destroying.compareAndSet(false, true)) return
         runtimeReady.countDown()
         harnessOpenRequests.invalidate()

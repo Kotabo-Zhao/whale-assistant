@@ -87,8 +87,8 @@ class UnderstandingQueueTest {
         UnderstandingQueue(file).use { q ->
             q.setSourceEnabled("app", true)
             q.ingest("app", "event-1", "会议改期")
-            val processed = UnderstandingProcessor(q) { id, _ -> """{"version":1,"claims":[{"text":"会议改期","evidence_ids":["$id"]}]}""" }.processOne(1, 2)
-            assertTrue(processed)
+            val claim = requireNotNull(q.claim(1))
+            assertTrue(q.commitResult(claim, "event-1", """{"version":1,"claims":[{"text":"会议改期","evidence_ids":["event-1"]}]}"""))
             assertNull(q.claim(2))
             assertEquals("event-1", q.recentResults(10).single().first)
         }
