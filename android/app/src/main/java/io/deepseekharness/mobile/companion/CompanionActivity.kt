@@ -19,8 +19,11 @@ import android.content.res.ColorStateList
 import android.graphics.drawable.RippleDrawable
 import androidx.activity.OnBackPressedCallback
 import io.deepseekharness.mobile.AppLanguage
+import io.deepseekharness.mobile.AppForeground
 import io.deepseekharness.mobile.AppThemePreference
 import io.deepseekharness.mobile.R
+import io.deepseekharness.mobile.WorkspaceCardGrid
+import io.deepseekharness.mobile.WorkspaceColumn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import java.text.DateFormat
@@ -358,10 +361,7 @@ class CompanionActivity : AppCompatActivity() {
         CompanionRecurringReminder.requestRecovery(applicationContext)
         memoryExecutor.execute { runCatching { CompanionReminder(applicationContext).restore() } }
         store = CompanionStore(this)
-        content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            val pad = dp(20)
-            setPadding(pad, pad, pad, pad)
+        content = WorkspaceColumn(this).apply {
             setBackgroundColor(palette.getColor(R.color.harness_toolbar_background))
         }
         scroll = ScrollView(this).apply { isFillViewport = true; addView(content) }
@@ -373,6 +373,16 @@ class CompanionActivity : AppCompatActivity() {
         }
         setContentView(root)
         io.deepseekharness.mobile.AppWindowInsets.apply(this)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AppForeground.onActivityStarted()
+    }
+
+    override fun onStop() {
+        AppForeground.onActivityStopped()
+        super.onStop()
     }
 
     private fun go(next: CompanionPreferencePage) {
@@ -1270,12 +1280,22 @@ class CompanionActivity : AppCompatActivity() {
     private fun showKnowledgeResults(rows: org.json.JSONArray) {
         val input = android.widget.EditText(this).apply {
             hint = "搜索资料"; setSingleLine(true)
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH or
+                android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
             filters = arrayOf(android.text.InputFilter.LengthFilter(200))
         }
-        val list = android.widget.ListView(this)
+        val list = object : android.widget.ListView(this) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val cap = dp(380)
+                val available = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) cap
+                    else minOf(cap, MeasureSpec.getSize(heightMeasureSpec))
+                super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(available, MeasureSpec.AT_MOST))
+            }
+        }
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(16), 0)
-            addView(input); addView(list, LinearLayout.LayoutParams(-1, dp(380)))
+            addView(input)
+            addView(list, LinearLayout.LayoutParams(-1, -2))
         }
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("本地资料（${rows.length()} 条）")
             .setView(layout).setNegativeButton("关闭", null).create()
@@ -1365,7 +1385,9 @@ class CompanionActivity : AppCompatActivity() {
                         }.setNegativeButton("取消", null).show()
                 }.show()
         }
-        update(); dialog.show()
+        update()
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        dialog.show()
     }
 
     private fun showRecentKnowledgeTrash() {
@@ -2446,33 +2468,11 @@ class CompanionActivity : AppCompatActivity() {
         }
         addView(PetPortrait(this@CompanionActivity, PetUi(this@CompanionActivity), R.drawable.ic_pet_whale),
             LinearLayout.LayoutParams(dp(36), dp(36)))
-        addView(pageTitle)
+        addView(pageTitle, LinearLayout.LayoutParams(0, -2, 1f))
     }
 
     private fun links(vararg pages: CompanionPreferencePage) {
-        val cards = pages.map(::preferenceCard)
-        content.addView(object : LinearLayout(this) {
-            private var columns = 0
-            init { orientation = VERTICAL }
-            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-                val innerWidth = View.MeasureSpec.getSize(widthMeasureSpec)
-                val wanted = if (innerWidth >= dp(560) && cards.size > 1) 2 else 1
-                if (wanted != columns) {
-                    columns = wanted
-                    cards.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it) }
-                    removeAllViews()
-                    for (group in cards.chunked(columns)) {
-                        val row = LinearLayout(context)
-                        group.forEachIndexed { index, card ->
-                            row.addView(card, LayoutParams(0, -2, 1f).apply { if (index > 0) marginStart = dp(10) })
-                        }
-                        if (columns == 2 && group.size == 1) row.addView(View(context), LayoutParams(0, 1, 1f).apply { marginStart = dp(10) })
-                        addView(row, LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
-                    }
-                }
-                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-            }
-        }, LinearLayout.LayoutParams(-1, -2))
+        content.addView(WorkspaceCardGrid(this, pages.map(::preferenceCard)), LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun preferenceCard(target: CompanionPreferencePage): View = LinearLayout(this).apply {

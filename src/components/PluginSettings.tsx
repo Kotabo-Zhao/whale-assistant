@@ -322,7 +322,7 @@ export function PluginSettings({ bridge, runtime, onBack, onStopRequested, backL
 
   return <div className="screen plugin-screen">
     <div className="screen-heading management-heading">
-      <div><p className="eyebrow">{t('应用管理')}</p><h1>{t('插件管理')}</h1></div>
+      <div><h1>{t('插件管理')}</h1></div>
       <div className="heading-actions">
         <button className="button button-secondary compact-button" type="button" disabled={busy || stopping || proposalBusy} onClick={() => { void run({ operation: 'list' }); void refreshProposal() }}><RefreshCw size={18} />{t('刷新')}</button>
         <button className="icon-button" type="button" title={t(backLabel)} aria-label={t(backLabel)} onClick={onBack} disabled={stopping || (busy && !loadingList)}><ArrowLeft size={19} /></button>

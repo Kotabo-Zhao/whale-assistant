@@ -636,11 +636,10 @@ export function VirtualScreenSettings({
   const overlayWidth = draft === null ? 0 : overlayWidthOf(draft)
 
   return (
-    <div className={embedded ? 'virtual-screen-embedded' : 'screen virtual-screen-screen'}>
+    <div className={embedded ? 'virtual-screen-screen virtual-screen-embedded' : 'screen virtual-screen-screen'}>
       <div className="screen-heading management-heading">
         {!embedded && (
           <div>
-            <p className="eyebrow">{t('应用管理')}</p>
             <h1>{t('目标应用副屏')}</h1>
           </div>
         )}

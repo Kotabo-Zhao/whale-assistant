@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 /** 阅读和详情共享一个可返回、可键盘操作的阅读层。 */
 export function KnowledgeDialog({ titleId, onClose, children, pageKey }: {
@@ -9,14 +10,14 @@ export function KnowledgeDialog({ titleId, onClose, children, pageKey }: {
     const previous = document.activeElement
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    page.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    page.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
     return () => {
       document.body.style.overflow = overflow
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true })
     }
   }, [])
   useEffect(() => { page.current?.scrollTo?.(0, 0) }, [pageKey])
-  return <div className="knowledge-detail-backdrop" onKeyDown={event => {
+  return createPortal(<div className="knowledge-detail-backdrop" onKeyDown={event => {
     if (event.key === 'Escape') { event.stopPropagation(); onClose() }
     if (event.key !== 'Tab') return
     const controls = Array.from(page.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]') ?? [])
@@ -26,5 +27,5 @@ export function KnowledgeDialog({ titleId, onClose, children, pageKey }: {
     if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
   }}>
     <section ref={page} className="knowledge-detail-page capture-reader" role="dialog" aria-modal="true" aria-labelledby={titleId}>{children}</section>
-  </div>
+  </div>, document.body)
 }

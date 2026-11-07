@@ -114,7 +114,7 @@ export function AssistantTasks({ onOpenSession }: { onOpenSession?: (id: string)
   }
 
   return <section className="assistant-tasks" aria-labelledby="assistant-tasks-title">
-    <header><div><span className="workspace-kicker">任务中心</span><h2 id="assistant-tasks-title">事项</h2>
+    <header className="page-heading"><div><h2 id="assistant-tasks-title">事项</h2>
       <p>{section === 'briefings' ? '交代给小鲸的事，有进展时会在这里告诉你。' : '核对从通知与资料中整理出的待办，安排提醒。'}</p></div>
       {section === 'todo' && <button className="icon-button" type="button" aria-label="刷新事项" disabled={loading || busyId !== null} onClick={() => setRevisionToken(value => value + 1)}><RefreshCw size={18} /></button>}</header>
     {onOpenSession && <nav className="task-destinations" aria-label="事项工作区">

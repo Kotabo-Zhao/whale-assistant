@@ -68,7 +68,7 @@ describe('自动化设置：三条腿分成三个页面', () => {
   it('三级页的返回键回到自动化设置', async () => {
     await openAutomation('无障碍')
     await screen.findByRole('heading', { name: '无障碍应用自动化' })
-    fireEvent.click(screen.getByRole('button', { name: '返回设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回自动化设置' }))
     expect(await screen.findByRole('heading', { name: '自动化设置', level: 1 })).toBeVisible()
     expect(screen.queryByRole('heading', { name: '无障碍应用自动化' })).toBeNull()
   })

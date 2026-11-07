@@ -172,7 +172,7 @@ class Page {
       const wanted = ${wanted}
       const buttons = [...document.querySelectorAll('button')]
       const names = ${BUTTON_NAMES}
-      const hit = buttons.find(node => wanted.some(text => names(node).includes(text)))
+      const hit = buttons.find(node => node.offsetHeight && wanted.some(text => names(node).includes(text)))
       if (!hit) return false
       hit.click()
       return true
@@ -185,7 +185,7 @@ class Page {
   clickReal(text) {
     return this.evaluate(`(() => {
       const names = ${BUTTON_NAMES}
-      const node = [...document.querySelectorAll("button")].find(item => names(item).includes(${JSON.stringify(text)}))
+      const node = [...document.querySelectorAll("button")].find(item => item.offsetHeight && names(item).includes(${JSON.stringify(text)}))
       if (!node) return null
       node.scrollIntoView({ block: "center" })
       const box = node.getBoundingClientRect()
@@ -270,29 +270,83 @@ async function advanceOnboarding(page, navSelector) {
   if (onboardingLeft) throw new LayoutFailure(`引导流程没有走完；当前按钮：${JSON.stringify(await buttonTexts())}`)
 }
 
+const navigationFor = (width, height) => width >= 900 || (width >= 600 && width > height) ? '.sidebar-nav' : '.bottom-navigation'
+
 async function checkShell(page, url, width, height) {
   await page.send('Page.navigate', { url })
   await page.waitFor('document.readyState === "complete"', '外壳页面没有加载完')
-  const navSelector = width < 900 ? '.bottom-navigation' : '.sidebar-nav'
+  const navSelector = navigationFor(width, height)
   await advanceOnboarding(page, navSelector)
 
-  const mobile = width < 900
-  await page.waitFor(`document.querySelector(${JSON.stringify(navSelector)}) !== null`, '预期导航没有显示')
-  if (mobile) {
-    const count = await page.evaluate('document.querySelectorAll(".bottom-navigation button").length')
-    check(count === 3, `手机底栏必须恰好三个图标，实际 ${count} 个`)
-    const sidebar = await page.evaluate('(() => { const node = document.querySelector(".app-sidebar"); return node !== null && getComputedStyle(node).display !== "none" })()')
-    check(!sidebar, '手机不应保留侧栏')
+  await page.waitFor(`document.querySelector('${navSelector}')?.offsetHeight`, '预期导航没有显示')
+  const labels = await page.evaluate(`[...document.querySelectorAll('${navSelector} button')].map(b => b.getAttribute('aria-label')).join(',')`)
+  check(labels === '对话,资料,任务,工具,我的', `主导航不完整：${labels}`)
+  async function fit(selector) {
+    const sel = JSON.stringify(selector)
+    await page.waitFor(`document.querySelector(${sel})?.offsetHeight`, `没有出现 ${selector}`)
+    check(await page.evaluate(`(() => {
+      const m = document.querySelector('.app-main'), h = m.querySelector('h1,h2');
+      return m.scrollWidth <= m.clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1 &&
+        Math.abs(h.getBoundingClientRect().left - m.getBoundingClientRect().left - parseFloat(getComputedStyle(m).paddingLeft)) < 2;
+    })()`), `页面越界或标题错位：${selector}`)
+  }
+  async function tap(selector) {
+    check(await page.evaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)}); if (!el?.offsetHeight) return false;
+      el.scrollIntoView({block:'nearest'}); el.click(); return true;
+    })()`), `点不到 ${selector}`)
   }
 
-  check(await page.clickText([mobile ? '设置' : '应用设置']), '点不到设置入口')
-  await page.waitFor('[...document.querySelectorAll("h1,h2,h3,[role=heading]")].some(node => (node.textContent ?? "").trim() === "设置")', '没有出现「设置」标题')
-  check(await page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), '设置页出现整体横向溢出')
+  await tap(`${navSelector} button[aria-label="资料"]`)
+  await fit('.memory-workspace')
+  for (const tab of ['memory', 'reminders', 'knowledge']) {
+    await tap(`#companion-workspace-tab-${tab}`)
+    await fit(`#companion-workspace-panel-${tab}`)
+  }
+  await tap('.library-intake [aria-label="记一笔"]')
+  await fit('.library-editor')
+  await tap(`${navSelector} button[aria-label="任务"]`)
+  await fit('.assistant-tasks')
+  await tap(`${navSelector} button[aria-label="我的"]`)
+  await fit('.account-workspace')
   await page.screenshot(`shell-settings-${width}x${height}.png`)
 
-  check(await page.clickText([mobile ? '插件' : '插件管理']), '点不到插件入口')
-  await page.waitFor('[...document.querySelectorAll("h1,h2,h3,[role=heading]")].some(node => (node.textContent ?? "").trim() === "插件管理")', '没有出现「插件管理」标题')
-  check(await page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), '插件页出现整体横向溢出')
+  for (const [label, parent, children] of [
+    ['后台', 'runtime', []], ['模型与密钥', 'models', []], ['设备 Shell 设置', 'device-shell', []],
+    ['主题', 'terminal', ['terminal-background', 'terminal-dsh-background']],
+    ['自动化设置', 'automation', ['automation-accessibility', 'automation-subscreen', 'automation-params']],
+    ['诊断', 'diagnostics', ['diagnostics-log', 'diagnostics-capability', 'diagnostics-feedback']],
+  ]) {
+    await page.evaluate(`document.querySelector('.settings-search input').value = ${JSON.stringify(label)}`)
+    await tap('.settings-search-go')
+    const entry = `[...document.querySelectorAll('.management-row')].find(b => b.offsetHeight && b.querySelector('strong')?.textContent.includes(${JSON.stringify(label)}))`
+    await page.waitFor(`!!(${entry})`, `没有设置入口：${label}`)
+    await page.evaluate(`(${entry}).click()`)
+    const root = `.settings-detail-page[data-page="${parent}"]`
+    await fit(root)
+    const parentTitle = await page.evaluate("document.querySelector('.settings-detail-heading h1').textContent")
+    if (parent === 'runtime') check(await page.evaluate("document.querySelector('#pet-start-settings').getBoundingClientRect().width > 65"), '桌宠标题列过窄')
+    for (const [i, child] of children.entries()) {
+      if (parent === 'terminal') await tap('.appearance-details:has(.settings-subpage-links) > summary')
+      await tap(`.settings-subpage-links button:nth-child(${i + 1})`)
+      await fit(`.settings-detail-page[data-page="${child}"]`)
+      check(await page.evaluate("document.querySelector('.page-parent').textContent.trim()") === parentTitle, `父页标签错误：${child}`)
+      await tap('.page-parent')
+      await fit(root)
+    }
+    await tap('.page-parent')
+    await fit('.account-workspace')
+  }
+
+  await tap(`${navSelector} button[aria-label="工具"]`)
+  await fit('.tools-workspace')
+  await tap('.tools-plugin-link')
+  await fit('.plugin-screen')
+  await tap('.plugin-workspace-nav button:first-child')
+  await fit('.plugin-screen [role=tab][aria-selected=true]')
+  await tap('.plugin-workspace-nav button:last-child')
+  await tap('#plugin-import-title')
+  await fit('.plugin-import-collapsible[open] input')
   await page.screenshot(`shell-plugins-${width}x${height}.png`)
 }
 
@@ -302,12 +356,14 @@ async function checkShell(page, url, width, height) {
 async function checkTheme(page, url, width, height, theme) {
   await page.send('Page.navigate', { url })
   await page.waitFor('document.readyState === "complete"', '外壳页面没有加载完')
-  const navSelector = width < 900 ? '.bottom-navigation' : '.sidebar-nav'
+  const navSelector = navigationFor(width, height)
   await advanceOnboarding(page, navSelector)
   const applied = await page.evaluate('document.documentElement.dataset.theme')
   check(applied === theme, `系统偏好为 ${theme} 时 <html data-theme> 应为 ${theme}，实际 ${applied}`)
   const meta = await page.evaluate('document.querySelector("meta[name=\'theme-color\']")?.getAttribute("content") ?? ""')
-  check(meta.toLowerCase() === THEME_COLORS[theme], `状态栏色应为 ${THEME_COLORS[theme]}，实际 ${meta || '（没有 meta）'}`)
+  const pageColor = await page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()")
+  const expectedColor = /^#[a-f\d]{6}$/iu.test(pageColor) ? pageColor.toLowerCase() : THEME_COLORS[theme]
+  check(meta.toLowerCase() === expectedColor, `状态栏色应为 ${expectedColor}，实际 ${meta || '（没有 meta）'}`)
   check(await page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), `${theme} 主题下出现整体横向溢出`)
   await page.screenshot(`theme-${theme}-${width}x${height}.png`)
   return page.evaluate('getComputedStyle(document.body).backgroundColor')

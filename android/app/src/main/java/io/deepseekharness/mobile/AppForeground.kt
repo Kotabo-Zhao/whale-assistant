@@ -5,10 +5,8 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * 应用是否处于前台（登记册 §5.5：应用在前台时不该弹任务通知）。
  *
- * **为什么用计数器而不是布尔标志**：本应用有两个 Activity（`MainActivity` 外壳与
- * `HarnessActivity` 控制台），而且后者会叠在前者之上——用布尔值的话，控制台关闭时会把
- * 「仍在前台」误判成「已切后台」，于是一次正常的返回操作就会弹出一条「Harness 已停止」。
- * 计数器在 `onStart` 加、`onStop` 减，只有两者都停了才算后台。
+ * 主界面、控制台、助手偏好与全屏功能工坊共享计数器。在页面交接时，
+ * 一个页面停止仍可能有另一个页面可见。最后一个完整页面停止后再恢复桌宠。
  *
  * **为什么不引入生命周期库**：`androidx.lifecycle.ProcessLifecycleOwner` 会多一个依赖与初始化时机
  * 问题，而这里需要的语义只有「有没有任何一个 Activity 处于 started 状态」，

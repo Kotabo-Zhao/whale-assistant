@@ -850,7 +850,6 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
     <div className="screen conversation-gate">
       <div className="screen-heading home-section-heading">
         <div>
-          <p className="eyebrow">{t("工作台")}</p>
           <h1>{updateRequired ? t("更新运行环境") : runtime.phase === 'error' ? t("运行环境需要处理") : installed ? (launchingHarness ? t("正在进入对话") : stoppingHarness ? t("正在停止运行环境") : t("对话已就绪")) : t("准备运行环境")}</h1>
         </div>
         <img className="whale-signature" src={whaleWave} alt="" width={53} height={32} />
@@ -1024,7 +1023,6 @@ function EnvironmentScreen({ busy, bundledSource, runtime, onBack, onInstall, on
     <div className="screen environment-screen">
       <div className="screen-heading management-heading">
         <div>
-          <p className="eyebrow">{t("应用管理")}</p>
           <h1>{t("Ubuntu 运行时")}</h1>
         </div>
         <div className="heading-actions">
@@ -1166,7 +1164,6 @@ function TerminalScreen({ bridge, fontSize, onAuthorize, onBack, onConnect, onEr
     <div className="screen terminal-screen">
       <div className="screen-heading terminal-heading">
         <div>
-          <p className="eyebrow">{t("应用管理")}</p>
           <h1>{t("终端")}</h1>
         </div>
         <div className="heading-actions">
@@ -1303,53 +1300,58 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
         <div>
           <h1>{t("设置")}</h1>
         </div>
-        <img className="whale-signature" src={whaleWave} alt="" width={53} height={32} />
+        <div className="heading-actions account-heading-actions">
+          <img className="whale-signature" src={whaleWave} alt="" width={53} height={32} />
+          {!searching && <button type="button" className="account-advanced-toggle" aria-controls="account-categories" aria-expanded={advanced}
+            onClick={() => { setAdvanced(value => !value); if (expanded === 'device' || expanded === 'workspace') toggleGroup(expanded) }}>
+            <SlidersHorizontal size={18}/><strong>{t('高级设置')}</strong>
+          </button>}
+        </div>
       </div>
-
-
-
       {/* 搜索框固定在入口列表上方：入口一多，用户第一反应是找框，而不是往下翻。
           刻意不做边输边筛：输入法组合中途触发筛选会把候选词顶掉，改为点搜索图标或回车确认。 */}
-      <div className="settings-search" role="search" aria-label={t("搜索入口")}>
-        <input
-          type="search"
-          ref={searchInputRef}
-          value={query}
-          onChange={event => setQuery(event.target.value)}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={event => {
-            setIsComposing(false)
-            const val = event.currentTarget?.value ?? (event.target as HTMLInputElement)?.value ?? ''
-            setQuery(val)
-          }}
-          /* 失焦兜底：移动端软键盘选词或直接收起键盘时偶尔丢失 compositionend，
-             不补这一条会让 `isComposing` 卡在 true，回车再也提交不了。 */
-          onBlur={event => {
-            setIsComposing(false)
-            // captureInput 可能只改 DOM；先把失焦时仍可见的文字同步回受控状态，
-            // 避免结束输入法组合时 React 重绘把它清掉。
-            setQuery(event.currentTarget.value.slice(0, 120))
-          }}
-          onKeyDown={event => {
-            // 组合中的 Enter 交给输入法确认候选词，不当作提交。
-            if (event.key === 'Enter' && !isComposing) {
-              event.preventDefault()
-              applySearch(event.currentTarget.value)
-            }
-          }}
-          maxLength={120}
-          placeholder={t("搜索设置")}
-          aria-label={t("搜索设置")}
-          autoComplete="off"
-        />
-        {query !== '' && (
-          <button className="settings-search-clear" type="button" onClick={() => { setQuery(''); setAppliedQuery('') }} aria-label={t("清空查找词")}>
-            <X size={16} />
+      <div className="account-controls">
+        <div className="settings-search" role="search" aria-label={t("搜索入口")}>
+          <input
+            type="search"
+            ref={searchInputRef}
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={event => {
+              setIsComposing(false)
+              const val = event.currentTarget?.value ?? (event.target as HTMLInputElement)?.value ?? ''
+              setQuery(val)
+            }}
+            /* 失焦兜底：移动端软键盘选词或直接收起键盘时偶尔丢失 compositionend，
+               不补这一条会让 `isComposing` 卡在 true，回车再也提交不了。 */
+            onBlur={event => {
+              setIsComposing(false)
+              // captureInput 可能只改 DOM；先把失焦时仍可见的文字同步回受控状态，
+              // 避免结束输入法组合时 React 重绘把它清掉。
+              setQuery(event.currentTarget.value.slice(0, 120))
+            }}
+            onKeyDown={event => {
+              // 组合中的 Enter 交给输入法确认候选词，不当作提交。
+              if (event.key === 'Enter' && !isComposing) {
+                event.preventDefault()
+                applySearch(event.currentTarget.value)
+              }
+            }}
+            maxLength={120}
+            placeholder={t("搜索设置")}
+            aria-label={t("搜索设置")}
+            autoComplete="off"
+          />
+          {query !== '' && (
+            <button className="settings-search-clear" type="button" onClick={() => { setQuery(''); setAppliedQuery('') }} aria-label={t("清空查找词")}>
+              <X size={16} />
+            </button>
+          )}
+          <button className="settings-search-go" type="button" onClick={() => applySearch(searchInputRef.current?.value ?? query)} aria-label={t("搜索入口")}>
+            <Search size={18} />
           </button>
-        )}
-        <button className="settings-search-go" type="button" onClick={() => applySearch(searchInputRef.current?.value ?? query)} aria-label={t("搜索入口")}>
-          <Search size={18} />
-        </button>
+        </div>
       </div>
 
       {/* 收起时保留隐藏容器：aria-controls 指向的元素始终存在（与 harness-log-body 同一约定）。 */}
@@ -1362,13 +1364,11 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
         </p>
       )}
 
-      {!searching && <nav className="account-sections" aria-label={t('设置分类')}>
+      {!searching && <nav id="account-categories" className="account-sections" data-advanced={advanced} aria-label={t('设置分类')}>
         {SETTINGS_HOME_GROUPS.filter(group => advanced || !['device', 'workspace'].includes(group.id)).map(group => <button key={group.id} type="button" className="account-group-toggle"
           aria-label={t(group.label)} aria-expanded={expanded === group.id} aria-controls={'settings-group-' + group.id} onClick={() => toggleGroup(group.id)}>
           {group.id === 'assistant' ? <Bot size={18}/> : group.id === 'workspace' ? <HardDrive size={18}/> : group.id === 'models' ? <KeyRound size={18}/> : group.id === 'notifications' ? <Bell size={18}/> : group.id === 'appearance' ? <Image size={18}/> : <SlidersHorizontal size={18}/>}
           <strong>{t(group.label)}</strong></button>)}
-        <button type="button" className="account-group-toggle" aria-expanded={advanced} onClick={() => { setAdvanced(value => !value); if (expanded === 'device' || expanded === 'workspace') toggleGroup(expanded) }}>
-          <SlidersHorizontal size={18}/><strong>{t('高级设置')}</strong></button>
       </nav>}
       <div className="settings-directory">
       {groups.map(({ group, entries }) => (
@@ -2305,11 +2305,14 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
     }
   }
 
+  const parent = SETTINGS_PAGE_META[page].parent
+  const parentTitle = parent ? t(SETTINGS_PAGE_META[parent].title) : t("设置")
+  const backLabel = parent ? t("返回{0}", parentTitle) : t("返回设置")
+
   return (
-    <div className="screen settings-screen">
-      <div className="screen-heading management-heading">
+    <div className="screen settings-screen settings-detail-page" data-page={page}>
+      <div className="screen-heading management-heading settings-detail-heading">
         <div>
-          <p className="eyebrow">{t("应用管理")}</p>
           <div className="heading-title-row">
             <h1>{t(SETTINGS_PAGE_META[page].title)}</h1>
             {busy === 'save-settings' && (
@@ -2319,8 +2322,8 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             )}
           </div>
         </div>
-        <button className="icon-button" type="button" aria-label={t("返回设置")} title={t("返回设置")} onClick={onBack}>
-          <ArrowLeft size={19} />
+        <button className="button button-secondary page-parent" type="button" aria-label={backLabel} title={backLabel} onClick={onBack}>
+          <ArrowLeft size={17} /><span>{parentTitle}</span>
         </button>
       </div>
 
@@ -2608,8 +2611,10 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
           </label>
         </section>
         {page === 'terminal' && <details className="appearance-details"><summary>{t("背景与对话外观")}</summary>
-          <SettingsPageRow icon={<Image size={20} />} page="terminal-background" onOpen={onOpenSubpage} />
-          <SettingsPageRow icon={<RefreshCw size={20} />} page="terminal-dsh-background" onOpen={onOpenSubpage} />
+          <div className="settings-subpage-links">
+            <SettingsPageRow icon={<Image size={20} />} page="terminal-background" onOpen={onOpenSubpage} />
+            <SettingsPageRow icon={<RefreshCw size={20} />} page="terminal-dsh-background" onOpen={onOpenSubpage} />
+          </div>
         </details>}
         </>
         )}
@@ -2617,7 +2622,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         {page === 'terminal-dsh-background' && <AppearanceSettings scope="dsh" />}
 
         {page === 'runtime' && <section className="settings-section" aria-labelledby="pet-start-settings">
-          <div className="section-title"><div><h2 id="pet-start-settings">{t('设置桌宠')}</h2><p>{t('开启悬浮球并保存后，即可在桌面打开鲸鱼娘。')}</p></div></div>
+          <div className="section-title section-title-plain"><div><h2 id="pet-start-settings">{t('设置桌宠')}</h2><p>{t('开启悬浮球并保存后，即可在桌面打开鲸鱼娘。')}</p></div></div>
           {/* 悬浮球与「后台保持」是两个互相独立的开关，但各自都会提高本应用进程被系统回收的优先级：
               开悬浮球不会去拉起运行时的保活服务；悬浮球自身由独立的前台服务承载，
               与「后台保持」一样只提高优先级，不保证进程不被系统结束。 */}
@@ -2814,9 +2819,11 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
               <span className="section-icon"><Bot size={19} /></span>
               <div><h3 id="automation-subpages">{t("自动化能力")}</h3><p>{t("三条腿分开摆：读取界面、副屏画面、执行参数")}</p></div>
             </div>
-            <SettingsPageRow icon={<Accessibility size={20} />} page="automation-accessibility" onOpen={onOpenSubpage} />
-            <SettingsPageRow icon={<Smartphone size={20} />} page="automation-subscreen" onOpen={onOpenSubpage} />
-            <SettingsPageRow icon={<SlidersHorizontal size={20} />} page="automation-params" onOpen={onOpenSubpage} />
+            <div className="settings-subpage-links">
+              <SettingsPageRow icon={<Accessibility size={20} />} page="automation-accessibility" onOpen={onOpenSubpage} />
+              <SettingsPageRow icon={<Smartphone size={20} />} page="automation-subscreen" onOpen={onOpenSubpage} />
+              <SettingsPageRow icon={<SlidersHorizontal size={20} />} page="automation-params" onOpen={onOpenSubpage} />
+            </div>
           </div>
           <div className="settings-subsection" aria-labelledby="automation-disclaimer">
             <div className="section-title section-title-action">
@@ -3260,7 +3267,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
           */
         }
         {page === 'automation-subscreen' && (
-          <VirtualScreenSettings bridge={runtimeBridge} />
+          <VirtualScreenSettings bridge={runtimeBridge} embedded />
         )}
 
         {page === 'diagnostics' && (
@@ -3304,9 +3311,11 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             <span className="section-icon"><ScrollText size={19} /></span>
             <div><h3 id="diagnostics-subpages">{t("排查与反馈")}</h3><p>{t("日志、能力与反馈分开放，导出日志在「日志与采集」里")}</p></div>
           </div>
-          <SettingsPageRow icon={<ScrollText size={20} />} page="diagnostics-log" onOpen={onOpenSubpage} />
-          <SettingsPageRow icon={<Gauge size={20} />} page="diagnostics-capability" onOpen={onOpenSubpage} />
-          <SettingsPageRow icon={<MessageSquare size={20} />} page="diagnostics-feedback" onOpen={onOpenSubpage} />
+          <div className="settings-subpage-links">
+            <SettingsPageRow icon={<ScrollText size={20} />} page="diagnostics-log" onOpen={onOpenSubpage} />
+            <SettingsPageRow icon={<Gauge size={20} />} page="diagnostics-capability" onOpen={onOpenSubpage} />
+            <SettingsPageRow icon={<MessageSquare size={20} />} page="diagnostics-feedback" onOpen={onOpenSubpage} />
+          </div>
         </div>
         </>
         )}

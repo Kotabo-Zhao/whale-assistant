@@ -82,7 +82,7 @@ export function CompanionPersona({ onBack }: { onBack: () => void }) {
     setMessage('JSON 已生成，可复制保存。')
   }
   return <section className="persona-page" aria-labelledby="persona-title">
-    <header className="persona-hero"><div><span className="persona-eyebrow">CHARACTER STUDIO</span><h2 id="persona-title">鲸鱼娘人格</h2><p>让她以你喜欢的方式陪伴。角色设定与长期记忆分开保存。</p></div><button type="button" onClick={onBack}>返回</button></header>
+    <header className="persona-hero page-heading"><div><h2 id="persona-title">鲸鱼娘人格</h2><p>让她以你喜欢的方式陪伴。角色设定与长期记忆分开保存。</p></div><button type="button" onClick={onBack}>返回</button></header>
     <nav className="persona-tabs" aria-label="角色管理"><button type="button" aria-pressed={tab === 'cards'} onClick={() => setTab('cards')}>我的角色</button><button type="button" aria-pressed={tab === 'discover'} onClick={() => setTab('discover')}>发现角色</button><button type="button" aria-pressed={tab === 'transfer'} onClick={() => setTab('transfer')}>导入导出</button></nav>
     {message && <p role="status" className="persona-notice">{message}</p>}
     {loading ? <p>正在读取角色卡…</p> : <>{tab === 'cards' && <><div className="persona-section-heading"><div><h3>我的角色</h3><p>当前角色会在每次桌宠回复时提供给模型。</p></div><button type="button" onClick={() => setDraft(blank())}>＋ 新建</button></div><div className="persona-cards">{cards.map(card => <button type="button" key={card.id} className={draft.id === card.id ? 'is-selected' : ''} onClick={() => setDraft({ ...card })}><span className="persona-avatar">{card.name.slice(0, 1)}</span><strong>{card.name}</strong><small>{activeId === card.id ? '● 使用中' : '选择编辑'}</small></button>)}</div>

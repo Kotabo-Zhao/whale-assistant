@@ -484,7 +484,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
     if (result) { setSelectedMemoryIds(new Set()); setMemorySelectionMode(false) }
   }
   return <section className={library ? "companion-workspace memory-workspace" : "companion-workspace"} aria-labelledby="companion-workspace-title">
-    <div className="workspace-heading"><div>{library ? <><h1 id="companion-workspace-title">{t("记忆")}</h1><p className="library-intro">随手存下，需要时轻松找回。</p></> : <><h3 id="companion-workspace-title">助手工作台</h3><p>管理本地资料、长期记忆和提醒。</p></>}</div>
+    <div className={library ? "workspace-heading page-heading" : "workspace-heading"}><div>{library ? <><h1 id="companion-workspace-title">{t("记忆")}</h1><p className="library-intro">随手存下，需要时轻松找回。</p></> : <><h3 id="companion-workspace-title">助手工作台</h3><p>管理本地资料、长期记忆和提醒。</p></>}</div>
       <button className="icon-button" type="button" aria-label="刷新助手数据" disabled={busy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></div>
     <div className="workspace-tabs" role="tablist" aria-label="助手工作台分类">
       {([{ id: 'knowledge', label: '资料', icon: <BookOpen size={17} /> }, { id: 'memory', label: '长期记忆', icon: <Brain size={17} /> }, { id: 'reminders', label: '提醒', icon: <Bell size={17} /> }] as const).map(tab =>

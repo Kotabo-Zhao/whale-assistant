@@ -1,4 +1,48 @@
 /* Management destinations share the same rail and surface hierarchy as the embedded chat. */
+.management-shell {
+  --page-width: 1040px;
+  --page-gutter: clamp(14px, 2.6vw, 32px);
+  --page-start: max(var(--page-gutter), env(safe-area-inset-left), calc((100% - var(--page-width)) / 2));
+  --page-end: max(var(--page-gutter), env(safe-area-inset-right), calc((100% - var(--page-width)) / 2));
+  --page-gap: clamp(12px, 2.3vh, 20px);
+}
+.management-shell .app-main, .management-shell .mobile-header {
+  padding-inline: var(--page-start) var(--page-end);
+}
+.management-shell .app-main {
+  padding-block: var(--page-gap) max(24px, env(safe-area-inset-bottom));
+  scroll-padding-block: var(--page-gap) 24px;
+}
+/* The scrolling host owns the page inset. Its border box also positions the native chat. */
+.management-shell .app-main > :is(.screen, .memory-workspace, .assistant-tasks, .persona-page) {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.management-shell .app-main :is(.screen-heading, .page-heading) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 0 var(--page-gap);
+}
+.management-shell .app-main :is(.screen-heading, .page-heading) > div:first-child { flex: 1 1 12rem; min-width: 0; }
+.management-shell .app-main :is(.screen-heading, .page-heading) :is(h1,h2) {
+  margin: 0;
+  font-size: clamp(1.45rem, 1.23rem + .85vw, 1.9rem);
+  line-height: 1.24;
+  letter-spacing: -.025em;
+  overflow-wrap: anywhere;
+}
+.management-shell .app-main :is(.screen-heading, .page-heading) p {
+  margin: 4px 0 0;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.management-shell .heading-actions { max-width: 100%; flex-wrap: wrap; }
 .brand-home { appearance:none; border:0; background:transparent; cursor:pointer; color:var(--ink); padding:0; min-height:40px; }
 .brand-home .brand-symbol { box-shadow:none; background:transparent; }
 .brand-home .brand-name { font-size:1.03rem; letter-spacing:.02em; }
@@ -50,11 +94,9 @@
   .management-shell .sidebar-mark .app-mark { width:20px; height:20px; }
   .management-shell .sidebar-item span, .management-shell .sidebar-mark span { display:block; max-width:100%; opacity:1; font-size:.7rem; line-height:1.1; }
   .management-shell .sidebar-item.is-active { background:var(--blue-soft); border-color:transparent; }
-  .management-shell .app-main { padding:12px clamp(14px,2.7vw,34px) 18px; }
   .memory-workspace .workspace-heading, .assistant-tasks > header { display:flex; }
 }
 @media (max-width:599px) {
-  .management-shell .app-main { padding:12px max(12px,env(safe-area-inset-right)) 18px max(12px,env(safe-area-inset-left)); }
   .library-command-row .library-search { flex-basis:100%; }
   .desk-shortcuts { gap:6px; }
   .desk-shortcuts button { padding:7px; font-size:.83rem; }
@@ -66,7 +108,7 @@
 .result-kind { grid-column:1; padding:2px 7px; border-radius: var(--radius-control); background:var(--blue-soft); color:var(--blue); font-size:.72rem; line-height:1.5; }
 .result-title { grid-column:2; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow-wrap:anywhere; font-weight:600; line-height:1.45; }
 .library-result small { grid-column:2; color:var(--muted); font-size:.78rem; }
-.memory-workspace .workspace-card > .workspace-card-actions { flex:none; }
+.memory-workspace .workspace-card > .workspace-card-actions { flex:0 1 auto; min-width:0; max-width:100%; }
 .memory-workspace .library-row-more > summary { white-space:nowrap; }
 .memory-workspace .workspace-card:has(.library-row-more[open]) { flex-wrap:wrap; }
 .memory-workspace .workspace-card:has(.library-row-more[open]) > .workspace-card-actions { width:100%; }
@@ -100,13 +142,67 @@
 
 .directory-runtime-action { margin:4px 14px 12px; }
 
-.account-workspace .settings-directory { max-width:850px; margin-inline:auto; gap:8px; }
-.account-sections { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; max-width:850px; margin:0 auto 8px; padding:3px; border-radius: var(--radius-inner); background:var(--surface-muted); }
+.account-workspace .settings-directory { max-width:none; margin-inline:0; gap:8px; }
+.account-controls { margin-bottom:10px; }
+.account-controls .settings-search { width:100%; min-width:0; margin:0; max-width:none; }
+.management-shell .app-main .account-workspace > .screen-heading { align-items:center; }
+.management-shell .app-main .account-workspace > .screen-heading > div:first-child { flex-basis:min-content; }
+@media (max-width:599px) { .account-heading-actions .whale-signature { display:none; } }
+.account-advanced-toggle { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 10px; min-height:44px; border:1px solid var(--line); border-radius:var(--radius-control); background:var(--surface); color:var(--muted); font:inherit; cursor:pointer; }
+.account-advanced-toggle[aria-expanded=true] { color:var(--blue); border-color:var(--blue); }
+.account-sections { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; margin:0 0 10px; padding:4px; border-radius:var(--radius-inner); background:var(--surface-muted); }
 .account-sections .account-group-toggle { display:flex; width:100%; min-width:0; min-height:44px; padding:6px 8px; gap:6px; align-items:center; justify-content:center; text-align:center; cursor:pointer; }
-.account-group-toggle strong { font-weight:600; font-size:.9rem; }
+.account-group-toggle strong { min-width:0; font-weight:600; font-size:.9rem; line-height:1.35; overflow-wrap:anywhere; }
+.account-group-toggle svg, .account-advanced-toggle svg { flex:none; }
 .account-workspace .management-list[hidden] { display:none; }
-@media (max-width:450px) {
-  .account-sections .account-group-toggle { flex-direction:column; gap:2px; padding:5px 1px; }
-  .account-group-toggle strong { font-size:.75rem; white-space:nowrap; }
+@media (min-width:680px) {
+  .account-sections { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .account-sections[data-advanced=true] { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+@media (min-width:1100px) {
+  .account-sections[data-advanced=true] { grid-template-columns:repeat(6,minmax(0,1fr)); }
+}
+@media (min-width:600px) and (orientation:landscape) and (max-height:390px) {
+  .management-shell .sidebar-item, .management-shell .sidebar-mark { min-height:44px; gap:1px; padding-block:2px; }
+  .management-shell .app-sidebar { gap:2px; }
 }
 .whale-signature { flex: 0 0 auto; align-self: center; width: 53px; height: 32px; margin-inline-start: auto; }
+.management-shell .tools-workspace > .page-heading { margin-block-end:0; }
+.memory-workspace .page-heading + .workspace-tabs, .assistant-tasks .page-heading + .task-destinations { margin-block-start:0; }
+
+.settings-subpage-links {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));
+  gap:8px;
+}
+.settings-subpage-links .management-row {
+  height:100%;
+  min-width:0;
+  border:1px solid var(--line);
+  border-radius:var(--radius-inner);
+}
+.settings-detail-page .settings-form > :is(section,div,details),
+.settings-detail-page .section-title > div { min-width:0; }
+.settings-detail-page .settings-form > :has(> .settings-subpage-links) { grid-column:1 / -1; }
+.settings-detail-page .heading-title-row { flex-wrap:wrap; }
+.management-shell .app-main .settings-detail-heading > div:first-child { flex-basis: min-content; }
+.settings-detail-page .heading-title-row h1 { min-width: min(100%, 4em); }
+.settings-detail-page .virtual-screen-embedded { grid-column:1 / -1; }
+.management-shell .app-main .virtual-screen-embedded > .screen-heading { justify-content:flex-end; margin:0; }
+.management-shell .app-main .virtual-screen-embedded > .screen-heading > .heading-actions { flex:0 1 auto; }
+.settings-detail-page .page-parent { min-height:44px; max-width:100%; align-self:flex-start; }
+.settings-detail-page :is(.toggle-row,.range-field) small { font-size:.8125rem; line-height:1.5; }
+.settings-detail-page :is(.toggle-row,.range-field) strong { font-size:.9rem; line-height:1.4; }
+.settings-detail-page .section-title :is(h2,h3,p), .settings-detail-page .management-copy { overflow-wrap:anywhere; }
+.settings-detail-page :is(select,input:not([type=range],[type=checkbox],[type=radio],[type=color]),textarea) { max-width:100%; }
+@media (min-height:440px) {
+  .management-shell .settings-detail-heading {
+    position:sticky;
+    top:0;
+    z-index:2;
+    padding-block:4px 8px;
+    background:var(--bg);
+    border-bottom:1px solid var(--line);
+  }
+  .management-shell .app-main:has(> .settings-detail-page) { scroll-padding-block-start:4rem; }
+}

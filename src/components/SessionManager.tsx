@@ -324,7 +324,6 @@ export function SessionManager({ onBack, onOpenHarness, embedded = false, disabl
     <div className={embedded ? 'session-manager-embedded' : 'screen session-screen'}>
       {!embedded && <div className="screen-heading management-heading session-heading">
         <div>
-          <p className="eyebrow">{t('会话工作区')}</p>
           <h1>{t('会话管理')}</h1>
         </div>
         <div className="heading-actions">

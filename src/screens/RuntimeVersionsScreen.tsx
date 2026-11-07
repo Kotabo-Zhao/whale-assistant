@@ -678,7 +678,6 @@ export function RuntimeVersionsScreen({
     <div className="screen versions-screen">
       <div className="screen-heading management-heading">
         <div>
-          <p className="eyebrow">{t("应用管理")}</p>
           <h1>{t("版本管理")}</h1>
         </div>
         <div className="heading-actions">

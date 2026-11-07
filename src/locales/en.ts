@@ -499,6 +499,7 @@ export const english: Readonly<Record<string, string>> = {
   "安装": "Install",
   "就绪": "Ready",
   "返回设置": "Back to settings",
+  "返回{0}": "Back to {0}",
   "等待安装": "Awaiting installation",
   "运行时 {0}": "Runtime {0}",
   "安装阶段": "Installation stage",

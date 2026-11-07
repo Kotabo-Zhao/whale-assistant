@@ -1,5 +1,9 @@
 package io.deepseekharness.mobile.features
 
+import io.deepseekharness.mobile.AppForeground
+import io.deepseekharness.mobile.AppWindowInsets
+import io.deepseekharness.mobile.WorkspaceCardGrid
+import io.deepseekharness.mobile.WorkspaceColumn
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -71,6 +75,7 @@ open class WhaleFeatureActivity : Activity() {
     private fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppWindowInsets.apply(this)
         WhaleFeatureStore.subscribe(onActivation)
         direct = savedInstanceState?.getBoolean("direct") ?: intent.hasExtra(EXTRA_ID)
         val id = savedInstanceState?.getString("featureId") ?: intent.getStringExtra(EXTRA_ID)
@@ -80,6 +85,16 @@ open class WhaleFeatureActivity : Activity() {
             openedId = id; openedRevision = revision
             read({ store.read(id)?.optString("active").orEmpty() }) { showReplacement(id,it) }
         } else open(id,revision,savedInstanceState?.getBoolean("preview") ?: intent.getBooleanExtra("draftPreview",false))
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (!window.isFloating) AppForeground.onActivityStarted()
+    }
+
+    override fun onStop() {
+        if (!window.isFloating) AppForeground.onActivityStopped()
+        super.onStop()
     }
 
     override fun onSaveInstanceState(state: Bundle) {
@@ -122,16 +137,8 @@ open class WhaleFeatureActivity : Activity() {
             setBackgroundColor(ui.surface)
             addView(content,android.widget.FrameLayout.LayoutParams(-1,-1))
         }
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(frame) { view,insets ->
-            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or
-                androidx.core.view.WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(bars.left,bars.top,bars.right,bars.bottom)
-            insets
-        }
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false)
         setContentView(frame)
         io.deepseekharness.mobile.AppThemePreference.applySafely(this,ui.surface)
-        androidx.core.view.ViewCompat.requestApplyInsets(frame)
     }
     private fun <T> read(action: () -> T, failed: () -> Unit = {
         Toast.makeText(this, "无法读取或更新功能，请刷新后重试", Toast.LENGTH_LONG).show()
@@ -151,7 +158,7 @@ open class WhaleFeatureActivity : Activity() {
     private fun library() {
         releasePage()
         openedId = null; replacement = null; direct = false
-        val body = column()
+        val body = WorkspaceColumn(this)
         screen(ScrollView(this).apply { addView(body); setBackgroundColor(ui.surface) })
         body.addView(ui.header("功能工坊",icon=io.deepseekharness.mobile.R.drawable.ic_pet_assign))
         body.addView(label("告诉桌宠你想做什么小工具，完成后在这里预览，喜欢再启用。", 15f))
@@ -162,24 +169,14 @@ open class WhaleFeatureActivity : Activity() {
         })
         read({ store.list() to native.entries() }) { (items, candidates) ->
             if (items.isEmpty() && candidates.isEmpty()) body.addView(label("还没有自建功能", 18f))
-            val columns = if (resources.configuration.screenWidthDp / resources.configuration.fontScale >= 600) 2 else 1
-            val shelf = android.widget.GridLayout(this).apply { columnCount = columns; alignmentMode = android.widget.GridLayout.ALIGN_MARGINS }
-            body.addView(shelf,LinearLayout.LayoutParams(-1,-2))
-            fun addCard(card: LinearLayout) {
-                shelf.addView(card,android.widget.GridLayout.LayoutParams().apply {
-                    width = 0; height = -2
-                    columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED,1f)
-                    setGravity(Gravity.FILL_HORIZONTAL or Gravity.TOP)
-                    topMargin = dp(12); leftMargin = if (columns == 2) dp(4) else 0; rightMargin = leftMargin
-                })
-            }
+            val cards = mutableListOf<LinearLayout>()
             candidates.groupBy { it.id }.forEach { (id, versions) ->
                 val expected = native.prefs.getString("active." + id, null)
                 val entry = versions.firstOrNull { it.revision == expected } ?: versions.maxBy { native.prefs.getLong("order." + it.revision,0) }
                 val previous = versions.firstOrNull { it.revision != expected && it.revision == native.prefs.getString("previous." + id,null) }
                 val enabled = expected == entry.revision
                 val card = column().apply { background = ui.shape(ui.canvas,16,ui.line) }
-                addCard(card)
+                cards.add(card)
                 card.addView(label(entry.title,20f))
                 card.addView(label(if (enabled) "已在桌宠启用 · 原生工具" else "待启用 · 原生工具",14f))
                 card.addView(button("预览原生窗口") { previewNative(entry) })
@@ -209,7 +206,7 @@ open class WhaleFeatureActivity : Activity() {
                 val id = item.getString("id")
                 val active = item.getString("active"); val latest = item.getString("latest"); val previous = item.getString("previous")
                 val card = column().apply { background = ui.shape(ui.canvas,16,ui.line) }
-                addCard(card); card.addView(label(item.getString("title"), 20f))
+                cards.add(card); card.addView(label(item.getString("title"), 20f))
                 card.addView(label(if (active.isEmpty()) "待启用" else if (active != latest) "已启用 · 有新草稿" else "已在桌宠启用",14f))
                 if (active.isNotEmpty()) {
                     if (active != latest) card.addView(label("当前启用 · " + item.getString("activeTitle"), 14f))
@@ -225,6 +222,7 @@ open class WhaleFeatureActivity : Activity() {
                 if (previous.isNotEmpty() && active != previous) manage.addView(button("恢复上一版") { read({ store.activate(id, previous, active) }) { library() } })
                 if (active.isNotEmpty()) manage.addView(button("停用") { read({ store.activate(id, "", active) }) { library() } })
             }
+            body.addView(WorkspaceCardGrid(this, cards), LinearLayout.LayoutParams(-1, -2))
         }
     }
     private fun previewNative(entry: NativeFeatureRegistry.Entry) {
@@ -259,7 +257,7 @@ open class WhaleFeatureActivity : Activity() {
         review?.dismiss()
         releasePage()
         replacement = active
-        val body = column().apply { setBackgroundColor(ui.surface) }
+        val body = WorkspaceColumn(this).apply { setBackgroundColor(ui.surface) }
         screen(body)
         body.addView(label(if (active.isEmpty()) "此工具已停用" else "工具版本已变更",20f))
         if (active.isNotEmpty()) body.addView(button("打开当前版本") { open(id,active,false) })
@@ -279,7 +277,7 @@ open class WhaleFeatureActivity : Activity() {
             openedId = id; openedRevision = version; preview = isPreview
             if (requested != version) Toast.makeText(this, "已打开当前启用的版本", Toast.LENGTH_SHORT).show()
             releasePage()
-            val body = column().apply { setBackgroundColor(ui.surface) }
+            val body = WorkspaceColumn(this).apply { setBackgroundColor(ui.surface) }
             body.addView(label(content.getString("title"), 18f).apply {
                 maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
                 androidx.core.view.ViewCompat.setAccessibilityHeading(this,true)

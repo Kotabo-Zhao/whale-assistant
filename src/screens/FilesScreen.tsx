@@ -214,7 +214,6 @@ export function FilesScreen({ busy, mailbox, mailboxReadFailed, mailboxDirectory
     <div className="screen files-screen">
       <div className="screen-heading management-heading">
         <div>
-          <p className="eyebrow">{t("应用管理")}</p>
           <h1>{t("文件管理")}</h1>
         </div>
         <div className="heading-actions">
