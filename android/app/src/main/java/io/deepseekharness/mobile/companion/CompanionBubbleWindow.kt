@@ -78,18 +78,20 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var captureDialog: android.app.AlertDialog? = null
     private var positionUpdater: (() -> Unit)? = null
     private val workerPanel = CompanionWorkerPanel(context, { id -> hide(); openSession(id) }, onWorkerCounts, ::hide)
-    private var renderWorkerReport: ((org.json.JSONObject) -> Unit)? = null
+    private val workerInbox = WorkerReportInbox(context)
+    private var renderWorkerReport: ((org.json.JSONObject) -> Boolean)? = null
     private var showRecentBriefings = false
     private val workerReportListener: (org.json.JSONObject) -> Unit = { report ->
         handler.post {
             if (!closed && report.optString("kind") == "coordination" &&
-                WorkerReportInbox(context).briefings().any { it.optString("id") == report.optString("id") }) {
-                onState("reply")
-                if (visible) renderWorkerReport?.let { render ->
-                    render(report); WorkerReportInbox(context).markSeen(listOf(report.optString("id")))
-                } else if (onBackgroundReport != null) {
-                    onBackgroundReport.invoke(report.optString("state"))
-                } else if (autoOpenOnDelivery) show()
+                workerInbox.unseen().any { it.optString("id") == report.optString("id") }) {
+                if (visible) {
+                    if (renderWorkerReport?.invoke(report) == true) onState("reply")
+                } else {
+                    onState("reply")
+                    if (onBackgroundReport != null) onBackgroundReport.invoke(report.optString("state"))
+                    else if (autoOpenOnDelivery) show()
+                }
             }
         }
     }
@@ -233,7 +235,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         deliveryWatcher?.stop(); deliveryWatcher = null
         hide()
         executor.execute {
-            val result = runCatching { historyStore.archiveAndClear(); deliveryInbox.clear(); chat.resumeSession(sessionId) }
+            val result = runCatching { historyStore.archiveAndClear(); deliveryInbox.clear(); chat.resumeSession(sessionId); workerInbox.startTopic(sessionId) }
             handler.post {
                 if (closed || request != generation) return@post
                 busy = false
@@ -587,12 +589,30 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             content.addView(view, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.START; bottomMargin = dp(6) })
             if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
         }
-        if (history.isEmpty()) bubble(opening ?: CompanionPersonaStore(context).active().optString("greeting").ifBlank { "嗨，想聊什么？" }, false)
-        else history.takeLast(8).forEach {
+        fun conversationMessage(it: CompanionBubbleChat.Message) {
             val parsed = if (it.role == "assistant") CompanionBubbleChatPolicy.parseInlineImages(it.text) else CompanionBubbleChatPolicy.InlineImages(it.text, emptyList())
             val user = it.role == "user"
             bubble(parsed.text, user).also { view -> renderCompleted(view, parsed.text, user) }; (it.images + parsed.images).distinct().take(6).forEach(::imageBubble); if (!user) CompanionBubbleChatPolicy.citedSources(parsed.text, it.citations).forEach(::citationCard)
         }
+        val renderedReports = mutableSetOf<String>()
+        fun workerReport(report: org.json.JSONObject): Boolean {
+            if (report.optString("kind") != "coordination" || !renderedReports.add(report.getString("id"))) return false
+            val text = report.getString("text").trim()
+            bubble(text, false).also { view -> renderCompleted(view, text, false) }
+            return true
+        }
+        val display = workerInbox.forConversation(chat.presentationSessionId(),showRecentBriefings)
+        val deliveries = deliveryInbox.load().filter { it.sessionId == chat.currentSessionId() }
+        val timeline = mutableListOf<Pair<Long, () -> Unit>>()
+        history.takeLast(8).forEach { message -> timeline.add(message.atMs to { conversationMessage(message) }) }
+        display.rows.forEach { report -> timeline.add(report.optLong("at") to { workerReport(report); Unit }) }
+        deliveries.forEach { item -> timeline.add(item.atMs to {
+            val parsed = CompanionBubbleChatPolicy.parseInlineImages(item.text)
+            bubble(parsed.text, false).also { view -> renderCompleted(view, parsed.text, false) }
+            parsed.images.forEach(::imageBubble)
+        }) }
+        if (history.isEmpty()) bubble(opening ?: CompanionPersonaStore(context).active().optString("greeting").ifBlank { "嗨，想聊什么？" }, false)
+        timeline.sortedBy { it.first }.forEach { it.second() }
         if (history.isNotEmpty() && opening != null) bubble(opening, false)
         if (initiativeQuestion == null && opening == null && !busy && chat.pendingUser == null && (draft.isBlank() || resumeInitiativeDraft) &&
             CompanionStore(context).let { it.modelInitiative || it.contextFollowup }) {
@@ -609,30 +629,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
         }
-        fun workerReport(report: org.json.JSONObject) {
-            if (report.optString("kind") != "coordination") return
-            val text = report.optString("text").trim()
-            bubble(text, false).also { view -> renderCompleted(view, text, false) }
-        }
-        val workerInbox = WorkerReportInbox(context)
-        val unseenReports = workerInbox.unseen()
-        val visibleReports = if (showRecentBriefings) workerInbox.briefings().takeLast(5) else unseenReports
-        visibleReports.forEach(::workerReport)
-        if (showRecentBriefings && visibleReports.isEmpty()) bubble("想了解哪件事的进展，直接告诉我。", false)
+        if (showRecentBriefings && display.rows.isEmpty()) bubble("想了解哪件事的进展，直接告诉我。", false)
         showRecentBriefings = false
-        renderWorkerReport = ::workerReport
         liveMotion = true
-        // 后台任务结果：用户那一轮已经结束，回执是在同一会话里新起的一轮，历史里没有它。
-        // 单独从收件箱追加，既不改对话历史（历史要求用户/助手严格交替），也不会被误当成新提问。
-        val deliveries = deliveryInbox.unseen()
-        if (deliveries.isNotEmpty()) {
-            deliveries.forEach { item ->
-                val parsed = CompanionBubbleChatPolicy.parseInlineImages(item.text)
-                bubble(parsed.text, false).also { view -> renderCompleted(view, parsed.text, false) }
-                parsed.images.forEach(::imageBubble)
-            }
-            scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
-        }
         if (busy) {
             (inFlightUser ?: chat.pendingUser)?.let { bubble(it, true) }
             val live = bubble(mainQuestion ?: liveText.ifBlank { "正在回复…" }, false)
@@ -669,9 +668,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val newTopic = TextView(context).apply {
             text = "新话题"; setTextColor(continueButton.textColors); textSize = 13f; setPadding(dp(4), dp(12), dp(4), dp(12))
             contentDescription = "开始新话题并保留之前的聊天记录"
-            isEnabled = !busy && (history.isNotEmpty() || lastError != null)
+            isEnabled = !busy && (history.isNotEmpty() || lastError != null || renderedReports.isNotEmpty())
             setOnClickListener {
-                if (busy || (history.isEmpty() && lastError == null)) return@setOnClickListener
+                if (busy || (history.isEmpty() && lastError == null && renderedReports.isEmpty())) return@setOnClickListener
                 val canPark = synchronized(intakeLock) {
                     if (followups.any { it.deciding && it.handingOff } || recoveringDispatch.isNotEmpty()) false
                     else { followups.forEach { it.parked = true }; true }
@@ -688,7 +687,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     val result = runCatching {
                         // Preserve queued inputs for explicit review, never replay them into a different topic.
                         val retained = journal.entries()
-                        historyStore.archiveAndClear(); deliveryInbox.clear(); chat.startNewTopic()
+                        historyStore.archiveAndClear(); deliveryInbox.clear(); chat.startNewTopic(); workerInbox.startTopic(null)
                         retained
                     }
                     handler.post {
@@ -704,6 +703,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     }
                 }
             }
+        }
+        renderWorkerReport = { report ->
+            val page = workerInbox.forConversation(chat.presentationSessionId())
+            val id = report.getString("id")
+            val added = id in page.localIds && workerReport(report)
+            if (added) { workerInbox.displayed(page,setOf(id)); newTopic.isEnabled = !busy }
+            added
         }
         sessionActions.addView(LinearLayout(context).apply {
             for (action in listOf(continueButton,newTopic)) {
@@ -1002,9 +1008,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         }
                     }
                     val answer = item?.receipt?.let { receipt ->
-                        val finished = requireNotNull(chat.snapshot((prior + CompanionBubbleChat.Message("assistant",receipt)).takeLast(18)))
+                        val answer = CompanionBubbleChat.Reply(receipt, emptyList(), emptyList())
+                        val finished = requireNotNull(chat.snapshot((prior + answer.message()).takeLast(18)))
                         PetReplyOperation.commitReply { historyStore.save(finished,requireWritable=true) }
-                        CompanionBubbleChat.Reply(receipt, emptyList(), emptyList())
+                        answer
                     } ?: replyRunner(chat, prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
                     // A failed cleanup leaves a reviewable entry. The completed turn must not be retried.
                     if (item != null) runCatching { journal.remove(item.id) }
@@ -1021,7 +1028,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     result.onSuccess { answer ->
                         pendingQuestion = null; questionDialog?.dismiss(); questionDialog = null; answerQuestion.visibility = android.view.View.GONE
                         onState("reply")
-                        history.add(CompanionBubbleChat.Message("user", message)); history.add(CompanionBubbleChat.Message("assistant", answer.text, answer.images, answer.citations))
+                        history.add(prior.last()); history.add(answer.message())
                         while (history.size > 18) { history.removeAt(0); history.removeAt(0) }
                         chat.snapshot(history)?.let { snapshot -> executor.execute {
                             runCatching {
@@ -1197,7 +1204,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             selectedTool?.let { presentTool?.invoke(it) }
             showLivePartials = context.getSystemService(android.os.PowerManager::class.java).isInteractive
             if (showLivePartials) flushPartial?.invoke()
-            workerInbox.markSeen(unseenReports.map { it.optString("id") })
+            workerInbox.displayed(display,renderedReports)
             deliveryInbox.markSeen(deliveries)
             workerPanel.refreshStatus()
             executor.execute { chat.prewarm() }

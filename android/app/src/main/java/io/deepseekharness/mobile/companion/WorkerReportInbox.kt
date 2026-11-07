@@ -33,6 +33,57 @@ internal class WorkerReportInbox(context: Context) {
         it.optString("kind") == "coordination" && it.optString("state") == "briefing"
     }
 
+    data class Display(val topic: String, val rows: List<JSONObject>, val localIds: Set<String>)
+
+    /** A new pet conversation may receive reports before its first user turn creates a session. */
+    fun startTopic(sessionId: String?) = synchronized(lock) {
+        val topic = sessionId ?: "draft/${java.util.UUID.randomUUID()}"
+        check(prefs.edit().putString("display_topic",topic).commit())
+    }
+
+    private fun topicFor(sessionId: String?): String {
+        val previous = prefs.getString("display_topic",null)
+        val topic = sessionId ?: previous?.takeIf { it.startsWith("draft/") } ?: "draft/${java.util.UUID.randomUUID()}"
+        if (previous != topic) {
+            val edit = prefs.edit().putString("display_topic",topic)
+            if (previous?.startsWith("draft/") == true && sessionId != null) {
+                val links = JSONObject(prefs.getString("display_links","{}")!!)
+                links.keys().asSequence().toList().filter { links.optString(it) == previous }.forEach { links.put(it,topic) }
+                edit.putString("display_links",links.toString())
+            }
+            check(edit.commit())
+        }
+        return topic
+    }
+
+    fun forConversation(sessionId: String?, recent: Boolean = false): Display = synchronized(lock) {
+        val topic = topicFor(sessionId)
+        val links = JSONObject(prefs.getString("display_links","{}")!!)
+        val seen = prefs.getStringSet("seen_ids",emptySet()).orEmpty()
+        val rows = briefings()
+        val local = rows.filter { row ->
+            val id = row.getString("id")
+            if (links.has(id)) links.getString(id) == topic
+            else row.optString("owner") == sessionId || id !in seen
+        }
+        Display(topic, if (recent) rows else local, local.mapTo(mutableSetOf()) { it.getString("id") })
+    }
+
+    /** Record first presentation and notification acknowledgement together, only after attachment. */
+    fun displayed(page: Display, rendered: Set<String>) = synchronized(lock) {
+        if (rendered.isEmpty() || prefs.getString("display_topic",null) != page.topic) return@synchronized
+        val existing = briefings().mapTo(mutableSetOf()) { it.getString("id") }
+        val original = prefs.getString("display_links","{}")!!
+        val links = JSONObject(original)
+        links.keys().asSequence().toList().filterNot { it in existing }.forEach(links::remove)
+        for (id in rendered) if (id in existing && id in page.localIds && !links.has(id)) links.put(id,page.topic)
+        val seen = prefs.getStringSet("seen_ids",emptySet()).orEmpty()
+        val nextSeen = (seen + rendered).intersect(existing)
+        if (seen != nextSeen || original != links.toString()) {
+            check(prefs.edit().putStringSet("seen_ids",nextSeen).putString("display_links",links.toString()).commit())
+        }
+    }
+
     fun prompt(): String {
         val rows = briefings().takeLast(3)
         if (rows.isEmpty()) return ""

@@ -110,8 +110,10 @@ internal class CompanionBubbleChat(
     },
 ) {
     data class Citation(val id: String, val revision: String, val displayName: String, val documentId: String?, val originalId: String?, val chunkIndex: Int, val chunkCount: Int, val parsingCoverage: String)
-    data class Message(val role: String, val text: String, val images: List<String> = emptyList(), val citations: List<Citation> = emptyList())
-    data class Reply(val text: String, val images: List<String>, val citations: List<Citation>, val tools: Set<String> = emptySet(), val turn: Int? = null)
+    data class Message(val role: String, val text: String, val images: List<String> = emptyList(), val citations: List<Citation> = emptyList(), val atMs: Long = System.currentTimeMillis())
+    data class Reply(val text: String, val images: List<String>, val citations: List<Citation>, val tools: Set<String> = emptySet(), val turn: Int? = null, val atMs: Long = System.currentTimeMillis()) {
+        fun message() = Message("assistant",text,images,citations,atMs)
+    }
     @Volatile private var sessionId: String? = restored?.sessionId
     private var sessionAccess: HarnessAccess? = null
     private var sessionScope: String? = restored?.scope
@@ -159,6 +161,7 @@ internal class CompanionBubbleChat(
     }
     /** 当前桌宠会话 id；没建立过 Harness 会话（例如纯角色直连）时返回 null。 */
     fun currentSessionId(): String? = sessionId?.takeIf { it.startsWith("session-") }
+    fun presentationSessionId(): String? = sessionId
 
     /**
      * 读 `turn` 之后、由后台投递（Worker 回执 / 屏幕陪看唤醒）触发的新回合助手文本。
@@ -252,9 +255,10 @@ internal class CompanionBubbleChat(
                 else "「$title」我来跟进，有结果或需要你决定时会告诉你。"
             }
         }
-        val finished = requireNotNull(snapshot((history + Message("assistant", answer)).takeLast(18))).copy(pending = null)
+        val reply = Reply(answer, emptyList(), emptyList())
+        val finished = requireNotNull(snapshot((history + reply.message()).takeLast(18))).copy(pending = null)
         PetReplyOperation.commitReply { store.save(finished, requireWritable = true); pending = null }
-        return Reply(answer, emptyList(), emptyList())
+        return reply
     }
 
     fun fusedReply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit): Reply {
@@ -297,9 +301,10 @@ internal class CompanionBubbleChat(
         delegated?.let { return it }
         check(pendingDirect) { "原请求已转入主对话，请核对原会话。" }
         PetReplyOperation.checkpoint()
-        val finished = requireNotNull(snapshot((history + Message("assistant",result)).takeLast(18))).copy(pending=null)
+        val reply = Reply(result, emptyList(), emptyList())
+        val finished = requireNotNull(snapshot((history + reply.message()).takeLast(18))).copy(pending=null)
         PetReplyOperation.commitReply { historyStore.save(finished, requireWritable=true); pending = null }
-        return Reply(result, emptyList(), emptyList())
+        return reply
     }
 
     fun reply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit = {}): Reply {
@@ -368,7 +373,7 @@ internal class CompanionBubbleChat(
         } catch (error: Exception) { state(if (error is BubbleTurnFailed) "failed" else "interrupted"); throw error }
         PetReplyOperation.checkpoint()
         state("completed")
-        val finished = requireNotNull(snapshot((history + Message("assistant",answer.text,answer.images,answer.citations)).takeLast(18))).copy(pending=null)
+        val finished = requireNotNull(snapshot((history + answer.message()).takeLast(18))).copy(pending=null)
         PetReplyOperation.commitReply { store.save(finished,requireWritable=true); pending = null }
         return answer
 

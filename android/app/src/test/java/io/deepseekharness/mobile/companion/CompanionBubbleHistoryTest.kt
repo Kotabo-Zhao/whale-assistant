@@ -25,6 +25,10 @@ class CompanionBubbleHistoryTest {
         val old = org.json.JSONObject().put("version", 1).put("sessionId", "session-1").put("scope", "b".repeat(64))
             .put("messages", org.json.JSONArray().put(org.json.JSONObject().put("role", "user").put("text", "你好").put("images", org.json.JSONArray()))
                 .put(org.json.JSONObject().put("role", "assistant").put("text", "答案").put("images", org.json.JSONArray())))
-        assertTrue(CompanionBubbleHistory.decode(old.toString().toByteArray()).messages[1].citations.isEmpty())
+        val restored = CompanionBubbleHistory.decode(old.toString().toByteArray())
+        assertTrue(restored.messages[1].citations.isEmpty())
+        assertEquals(0L, restored.messages[1].atMs)
+        val stored = org.json.JSONObject(String(CompanionBubbleHistory.encode(restored))).getJSONArray("messages")
+        assertFalse(stored.getJSONObject(0).has("atMs"))
     }
 }
