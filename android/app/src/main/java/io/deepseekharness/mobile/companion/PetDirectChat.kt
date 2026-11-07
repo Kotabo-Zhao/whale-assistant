@@ -40,7 +40,9 @@ internal class PetDirectChat(private val context: android.content.Context) {
         onPartial("正在理解你的意思…")
         val query = history.last().text.replace(Regex("\\s+")," ").take(100).dropLastWhile(Char::isHighSurrogate)
         val (decision, recall) = PetRecallSpeculation(context,query).use { prediction ->
-            val routed = trace.measure(PetReplyTrace.Stage.ROUTE) { PetIntentRouter.classify(key, model, history, briefings = WorkerReportInbox(context).prompt()) }
+            val routed = PetIntentRouter.foreground {
+                trace.measure(PetReplyTrace.Stage.ROUTE) { PetIntentRouter.classify(key, model, history, briefings = WorkerReportInbox(context).prompt()) }
+            }
             routed to if (routed.intent == PetIntentRouter.Intent.KNOWLEDGE) prediction.consume() ?: CompanionRecall(context).recall(query) else null
         }
         val intent = decision.intent
@@ -103,7 +105,7 @@ internal class PetDirectChat(private val context: android.content.Context) {
                 val task = runCatching { JSONObject(call.arguments.toString()).getString("task").trim() }.getOrDefault("")
                 PetReplyOperation.checkpoint()
                 val result = if (task.isBlank() || task.length > 2000) "工具请求无效，未执行。"
-                    else runCatching { trace.measure(PetReplyTrace.Stage.HANDOFF) { delegate(task, false) } }.getOrElse { "工具执行失败：${it.message?.take(200) ?: "请检查本机服务"}" }
+                    else trace.measure(PetReplyTrace.Stage.HANDOFF) { delegate(task, false) }
                 results.add(result)
             }
             return results.joinToString("\n\n")

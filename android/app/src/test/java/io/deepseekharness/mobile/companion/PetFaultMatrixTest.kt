@@ -100,4 +100,34 @@ class PetFaultMatrixTest {
             assertEquals("next", executor.submit<String> { PetReplyOperation().run { "next" } }.get(1, TimeUnit.SECONDS))
         } finally { executor.shutdownNow() }
     }
+
+    @Test fun inferenceRetriesOneRejectedGatewayResponseWithinTheSameDeadline() {
+        checkInference(listOf(500 to null,200 to null),success=true)
+        checkInference(listOf(503 to "0",200 to null),success=true)
+        checkInference(listOf(502 to null,503 to "0"),success=false)
+        checkInference(listOf(503 to "120"),success=false)
+        checkInference(listOf(401 to null),success=false)
+    }
+
+    private fun checkInference(replies: List<Pair<Int,String?>>, success: Boolean) {
+        val server=ServerSocket(0,4,java.net.InetAddress.getByName("127.0.0.1"))
+        val executor=Executors.newSingleThreadExecutor()
+        val peer=executor.submit {
+            for ((code,delay) in replies) server.accept().use { socket ->
+                val header=socket.getInputStream().bufferedReader()
+                while (header.readLine()?.isNotEmpty() == true) { }
+                val retry=delay?.let { "Retry-After: $it\r\n" }.orEmpty()
+                socket.getOutputStream().write("HTTP/1.1 $code Test\r\n${retry}Content-Length: 2\r\nConnection: close\r\n\r\nok".toByteArray())
+            }
+            server.soTimeout=250
+            try { server.accept().use { fail("模型请求额外重试") } } catch (_: java.net.SocketTimeoutException) { }
+        }
+        val request=okhttp3.Request.Builder().url("http://127.0.0.1:${server.localPort}/").build()
+        try {
+            val result=runCatching { PetModelHttp.inference(request,3000) { it.readText() } }
+            if (success) assertEquals("ok",result.getOrThrow())
+            else assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("HTTP ${replies.last().first}"))
+            peer.get(4,TimeUnit.SECONDS)
+        } finally { server.close(); executor.shutdownNow() }
+    }
 }

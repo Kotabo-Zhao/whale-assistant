@@ -28,13 +28,16 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     },
     private val parallelReply: (List<CompanionBubbleChat.Message>, org.json.JSONObject?, (String) -> Unit) -> String = { messages, evidence, partial -> PetDirectChat(context).readOnly(messages,evidence,partial) },
     private val receiveTask: ((String, String, String, String, String) -> org.json.JSONObject)? = null,
+    private val replyTimeoutMillis: Long = 180_000,
     private val petBounds: () -> IntArray) {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val replyExecutor = java.util.concurrent.ThreadPoolExecutor(0, 4, 30, java.util.concurrent.TimeUnit.SECONDS,
+        java.util.concurrent.SynchronousQueue()) { job: Runnable -> Thread(job,"pet-reply").apply { isDaemon = true } }
     private val anchorStore = CompanionSessionAnchorStore(context)
     private val restored = historyStore.load()
     private val history = restored?.messages?.toMutableList() ?: mutableListOf()
-    private val chat = CompanionBubbleChat(context, restored, historyStore, ::dispatchTask)
+    private var chat = CompanionBubbleChat(context, restored, historyStore, ::dispatchTask)
     private var root: LinearLayout? = null
     private var previewDialog: android.app.AlertDialog? = null
     private var recoveryDialog: android.app.AlertDialog? = null
@@ -45,7 +48,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private var renderLive: ((String) -> Unit)? = null
     @Volatile private var showLivePartials = false
     private var flushPartial: (() -> Unit)? = null
-    private var request = 0L
+    @Volatile private var request = 0L
     private var busy = false
     private var activeReply: PetReplyOperation? = null
     private class Followup(val text: String, val id: String, var deciding: Boolean = false, var receipt: String? = null) {
@@ -59,22 +62,39 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     private val intakeLock = Any()
     private val journal = historyStore.followups
     private val recovery = runCatching { journal.entries() }
-    private val restoredRequestId = restored?.pending?.let { org.json.JSONObject(it).optString("requestId") }
-    private val recovered = recovery.getOrDefault(emptyList()).filterNot { it.id == restoredRequestId && it.stage in setOf("queued", "reply") }.toMutableList()
+    private val restoredRequestId = restored?.pending?.let { org.json.JSONObject(it) }?.let { it.optString("followupId",it.getString("requestId")) }
+    private val queuedStages = setOf("queued","handoff","answered")
+    private val pendingRows = recovery.getOrDefault(emptyList()).filter { it.id != restoredRequestId &&
+        it.topic != null && it.topic == restored?.topicId && it.stage in queuedStages }
+    private val recovered = recovery.getOrDefault(emptyList()).filterNot { it in pendingRows || it.id == restoredRequestId }.toMutableList()
     private var failedFollowup: Followup? = recovery.getOrNull()?.firstOrNull {
         it.id == restoredRequestId && it.stage in setOf("queued", "reply")
-    }?.let { Followup(it.text, it.id) }
+    }?.let { Followup(it.text, it.id,receipt=it.receipt.takeIf(String::isNotBlank)) }
     private val recoveringDispatch = mutableSetOf<String>()
-    private val followups = ArrayDeque<Followup>()
+    private val followups = ArrayDeque(pendingRows.map { Followup(it.text,it.id,receipt=it.receipt.takeIf(String::isNotBlank)) })
     private val intake = java.util.concurrent.ThreadPoolExecutor(0, 1, 30, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue())
     private var sendNext: (() -> Unit)? = null
     private var renderFollowups: (() -> Unit)? = null
     private var renderParallel: ((Followup) -> Unit)? = null
     @Volatile private var closed = false
     private var draft = chat.pendingUser.orEmpty()
-    private var lastError: String? = if (chat.pendingDirect) "上次回复中断，点此重新生成。" else null
+    private var lastError: String? = if (chat.pendingDirect || chat.pendingStopped) "上一条回复未完成，点此重试。" else null
     private var inFlightUser: String? = null
-    private var failedUser: String? = null
+    private var failedUser: String? = chat.pendingUser.takeIf { lastError != null }
+    @Volatile private var lastProgressAt = 0L
+    private val checkBacklog = object : Runnable {
+        override fun run() {
+            val operation = activeReply ?: return
+            if (followups.isEmpty()) return
+            val remaining = 30_000L - (android.os.SystemClock.uptimeMillis() - lastProgressAt)
+            if (remaining > 0) handler.postDelayed(this,remaining)
+            else operation.cancel("回复长时间没有进展，正在处理后续消息。")
+        }
+    }
+    private fun armBacklog() {
+        handler.removeCallbacks(checkBacklog)
+        if (activeReply != null && followups.isNotEmpty()) handler.postDelayed(checkBacklog,30_000)
+    }
     private var captureDialog: android.app.AlertDialog? = null
     private var positionUpdater: (() -> Unit)? = null
     private val workerPanel = CompanionWorkerPanel(context, { id -> hide(); openSession(id) }, onWorkerCounts, ::hide)
@@ -95,7 +115,16 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
         }
     }
-    init { WorkerReportInbox.subscribe(workerReportListener) }
+    init {
+        // A process can stop between journaling the failed turn and releasing the history slot.
+        val parked = recovery.getOrNull()?.firstOrNull { it.id == restoredRequestId && it.stage in setOf("draft","host","dispatch","review") }
+        if (parked != null) {
+            runCatching { chat.parkPending(history) }.onSuccess {
+                recovered.add(it); failedUser=null; failedFollowup=null; lastError=null; draft=""
+            }.onFailure { lastError="对话恢复记录暂时不可写，点此重试。" }
+        }
+        WorkerReportInbox.subscribe(workerReportListener)
+    }
     private val richViews = mutableListOf<android.webkit.WebView>()
     /** 后台投递回合（Worker 回执等）的本地收件箱；不参与对话历史与导出。 */
     private val deliveryInbox = CompanionDeliveryInbox(context)
@@ -127,7 +156,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         intake.execute {
             var receipt: String? = null
             runCatching {
-                if (closed) return@runCatching
+                if (closed || item.parked) return@runCatching
                 val decision = item.classification.run { classifyWaiting(messages) } ?: return@runCatching
                 if (closed || item.parked || !decision.independent || request != sourceRequest) return@runCatching
                 if (decision.intent in setOf(PetIntentRouter.Intent.TASK_STATUS,PetIntentRouter.Intent.TASK_CANCEL)) {
@@ -143,7 +172,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 if (decision.intent in setOf(PetIntentRouter.Intent.CHAT,PetIntentRouter.Intent.KNOWLEDGE)) {
                     val evidence = if (decision.intent == PetIntentRouter.Intent.KNOWLEDGE) speculation.consume()
                         ?: CompanionRecall(context).recall(item.text.replace(Regex("\\s+")," ").take(100).dropLastWhile(Char::isHighSurrogate)) else null
-                    item.parallel = true
+                    synchronized(intakeLock) { if (item.parked) return@runCatching; item.parallel = true }
                     handler.post { if (!closed && !item.parked) renderParallel?.invoke(item) }
                     var postedAt = 0L
                     val answer = item.replyOperation.run { parallelReply(completedHistory + CompanionBubbleChat.Message("user",item.text),evidence) { partial ->
@@ -151,7 +180,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         val now = android.os.SystemClock.elapsedRealtime()
                         if (now-postedAt >= 80) { postedAt=now; handler.post { if (!closed && !item.parked) renderParallel?.invoke(item) } }
                     } }
-                    if (closed || item.parked || request != sourceRequest) return@runCatching
+                    if (closed || item.parked) return@runCatching
                     if (evidence != null && !CompanionRecall(context).isCurrent(evidence)) {
                         item.live = "资料或权限已变化，刚才的候选回复已作废，消息保留待重新核对。"
                         return@runCatching
@@ -213,12 +242,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val prefs = CompanionStore(context)
         val denial = chat.deniedBackground(mode, needs, prefs.bubbleMemoryAccess && CompanionMemoryStore(context).enabled, prefs.knowledgeModelAccess)
         val dashboard = WorkerDashboardStore(context)
-        val receipt = if (denial != null) dashboard.hold(id,text,mode,needs,title,denial,source)
-        else if (dashboard.isHeld(id)) "「$title」还缺少所需权限，我会说明需要你处理的部分。"
+        val task = plan.optString("task").ifBlank { text }
+        val command = plan.optString("requestId").ifBlank { id }
+        val receipt = if (denial != null) dashboard.hold(command,task,mode,needs,title,denial,source)
+        else if (dashboard.isHeld(command)) "「$title」还缺少所需权限，我会说明需要你处理的部分。"
         else {
-            val accepted = if (source == null) dispatchTask(text,mode,id,title,needs)
-                else WorkerRuntimeWake.submit(context,text,mode,commandId=id,title=title,needs=needs,sourceSession=source)
-            check(accepted.getString("commandId") == id)
+            val accepted = if (source == null) dispatchTask(task,mode,command,title,needs)
+                else WorkerRuntimeWake.submit(context,task,mode,commandId=command,title=title,needs=needs,sourceSession=source)
+            check(accepted.getString("commandId") == command)
             "「$title」我来跟进，有结果或需要你决定时会告诉你。"
         }
         journal.advance(id,"handoff",receipt)
@@ -601,7 +632,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             bubble(text, false).also { view -> renderCompleted(view, text, false) }
             return true
         }
-        val display = workerInbox.forConversation(chat.presentationSessionId(),showRecentBriefings)
+        val display = workerInbox.forConversation(chat.presentationSessionId(),showRecentBriefings,chat.currentSessionId())
         val deliveries = deliveryInbox.load().filter { it.sessionId == chat.currentSessionId() }
         val timeline = mutableListOf<Pair<Long, () -> Unit>>()
         history.takeLast(8).forEach { message -> timeline.add(message.atMs to { conversationMessage(message) }) }
@@ -637,9 +668,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val live = bubble(mainQuestion ?: liveText.ifBlank { "正在回复…" }, false)
             renderLive = { text -> live.text = text; panel.post { positionUpdater?.invoke() } }
         }
-        val input = EditText(context).apply {
+        val input = object : EditText(context) {
+            override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo): android.view.inputmethod.InputConnection? {
+                val connection = super.onCreateInputConnection(outAttrs)
+                outAttrs.imeOptions = outAttrs.imeOptions and android.view.inputmethod.EditorInfo.IME_FLAG_NO_ENTER_ACTION.inv()
+                return connection
+            }
+        }.apply {
             hint = ui.string(R.string.pet_ui_input); setTextColor(foreground); setHintTextColor(secondary)
-            imeOptions = imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
             background = null; setPadding(dp(10), dp(8), dp(2), dp(8)); minHeight = dp(44); textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
             setText(draft); setSelection(text.length)
             addTextChangedListener(object : android.text.TextWatcher {
@@ -705,7 +742,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
         }
         renderWorkerReport = { report ->
-            val page = workerInbox.forConversation(chat.presentationSessionId())
+            val page = workerInbox.forConversation(chat.presentationSessionId(),ownerSession=chat.currentSessionId())
             val id = report.getString("id")
             val added = id in page.localIds && workerReport(report)
             if (added) { workerInbox.displayed(page,setOf(id)); newTopic.isEnabled = !busy }
@@ -726,8 +763,23 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             panel.post { positionUpdater?.invoke() }
         }
         footer.addView(send)
-        val status = ui.text("",12f,secondary).apply { setPadding(dp(12),dp(4),dp(12),dp(4)) }
-        controls.addView(status)
+        input.setOnEditorActionListener { _, action, key ->
+            val enter = key?.keyCode == android.view.KeyEvent.KEYCODE_ENTER || key?.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+            if (enter && android.view.inputmethod.BaseInputConnection.getComposingSpanStart(input.text) >= 0) return@setOnEditorActionListener false
+            val submit = key == null && action == android.view.inputmethod.EditorInfo.IME_ACTION_SEND ||
+                enter && key != null && !key.isShiftPressed && !key.isAltPressed
+            if (submit && (key == null || key.action == android.view.KeyEvent.ACTION_DOWN && key.repeatCount == 0) &&
+                input.text.isNotBlank() && send.isEnabled) send.performClick()
+            submit
+        }
+        val sendState = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        val stateRow = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
+        sendState.addView(stateRow)
+        val status = ui.text("",12f,secondary).apply {
+            minHeight=dp(36); gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(2),dp(4),dp(2))
+            accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        stateRow.addView(status,LinearLayout.LayoutParams(0,-2,1f))
         val endWait = ui.text("结束等待", 13f, accent).apply {
             minHeight=dp(44); gravity=Gravity.CENTER
             contentDescription="结束等待并保留原消息；已提交的后台任务不会取消"
@@ -738,14 +790,16 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 text="正在结束等待…"; isEnabled=false
             }
         }
-        controls.addView(endWait)
+        stateRow.addView(endWait)
         val progress = ui.text("", 12f, secondary).apply {
             setPadding(dp(12), dp(4), dp(12), dp(5))
             accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
-        controls.addView(progress)
+        val queueRow = LinearLayout(context).apply { gravity=Gravity.CENTER_VERTICAL }
+        sendState.addView(queueRow)
+        queueRow.addView(progress,LinearLayout.LayoutParams(0,-2,1f))
         val recoveryChip = ui.text("", 13f, accent).apply { minHeight = dp(44); gravity = Gravity.CENTER }
-        controls.addView(recoveryChip)
+        queueRow.addView(recoveryChip)
         fun recoveryLabel() {
             recoveryChip.text = if (recovery.isFailure) "待处理消息暂时无法读取" else "待处理消息 · ${recovered.size}"
             recoveryChip.visibility = if (recovered.isEmpty() && recovery.isSuccess) android.view.View.GONE else android.view.View.VISIBLE
@@ -756,8 +810,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val note = when (entry.stage) {
                 "dispatch" -> "上次交办回执尚未保存，可以使用原任务编号恢复交办。"
                 "queued" -> "这条消息尚未接取，可继续放回对话。"
+                "draft" -> "这条消息未完成，可以重新发送。"
+                "host" -> "原请求可能仍在主对话中执行，可打开原会话核对。"
                 "handoff" -> entry.receipt.ifBlank { "已开始交办，请到后台任务核对接取状态。" }
                 "answered" -> entry.receipt
+                "review" -> entry.receipt
                 else -> "已开始回复，可在对话记录中核对。"
             }
             fun forget() {
@@ -788,10 +845,19 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         }
                     }
                 }
-            } else if (entry.stage == "queued") {
+            } else if (entry.stage == "host") {
+                builder.setPositiveButton("查看原会话") { _,_ -> entry.plan?.getString("sourceSession")?.let { hide(); openSession(it) } }
+                    .setNeutralButton("已核对") { _,_ -> forget() }
+            } else if (entry.stage == "queued" || entry.stage == "draft") {
                 builder.setPositiveButton("继续这条消息") { _,_ ->
+                    // A terminal Host turn cannot run again with its old ID. A user-selected resend
+                    // gets a fresh ID, atomically replacing the parked draft in the journal.
+                    val id = runCatching { journal.requeue(entry,chat.presentationSessionId()) }.getOrElse {
+                        android.widget.Toast.makeText(context,"暂时无法恢复消息，请重试。",android.widget.Toast.LENGTH_SHORT).show()
+                        return@setPositiveButton
+                    }
                     recovered.remove(entry); recoveryLabel()
-                    followups.addLast(Followup(entry.text,entry.id))
+                    followups.addLast(Followup(entry.text,id))
                     renderFollowups?.invoke(); sendNext?.invoke()
                 }.setNeutralButton("移除消息") { _,_ -> forget() }
             } else {
@@ -801,7 +867,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             recoveryDialog = builder.create().apply { window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY); show() }
         }
         val progressDetails = ui.text("", 12f, secondary).apply { setPadding(dp(12),0,dp(12),dp(6)) }
-        controls.addView(progressDetails)
+        progressDetails.maxLines=2
+        sendState.addView(progressDetails)
         var expanded = false
         renderFollowups = {
             val deciding = followups.count { it.deciding }
@@ -830,7 +897,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             visibility = if (pendingQuestion != null) android.view.View.VISIBLE else android.view.View.GONE
             setOnClickListener { showQuestion() }
         }
-        controls.addView(answerQuestion)
+        stateRow.addView(answerQuestion)
+        panel.addView(sendState)
         panel.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(10), dp(4), dp(10), dp(9)) })
         // Message bubbles always precede the input, regardless of the pet's screen position.
         status.text = if (busy) "正在回复…" else lastError.orEmpty()
@@ -862,11 +930,38 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             panel.post { positionUpdater?.invoke(); if (atBottom()) scroll.fullScroll(android.view.View.FOCUS_DOWN) }
         }
         followups.filter { it.parallel }.forEach { renderParallel?.invoke(it) }
+        fun releaseFailed(): Boolean {
+            val failed = failedUser ?: chat.pendingUser ?: return true
+            return runCatching {
+                if (chat.pendingUser == null) chat.preserveDirectInput(history,failed,failedFollowup?.id)
+                val entry = chat.parkPending(history)
+                recovered.removeAll { it.id == entry.id }
+                recovered.add(entry)
+                recoveryLabel()
+                if (draft == failed) { draft = ""; if (root === panel) input.text.clear() }
+                failedUser = null; failedFollowup = null; lastError = null
+                true
+            }.getOrElse {
+                lastError = "对话记录暂时无法保存，后续消息已保留，点此重试。"
+                status.text = lastError; status.visibility = android.view.View.VISIBLE
+                false
+            }
+        }
         sendNext = {
-            if (!busy && !closed && chat.pendingUser == null && failedUser == null && followups.firstOrNull()?.deciding == false) {
-                queued = followups.removeFirst()
-                renderFollowups?.invoke()
-                send.performClick()
+            if (!busy && !closed && followups.isNotEmpty() && releaseFailed()) {
+                // Once the foreground slot is free, unclaimed speculative classifications
+                // must not delay ordered delivery. Already dispatched work keeps its own ID.
+                val item = followups.firstOrNull { entry -> synchronized(intakeLock) {
+                    if (entry.deciding && !entry.handingOff && !entry.parallel) {
+                        entry.parked = true; entry.deciding = false; entry.classification.cancel()
+                    }
+                    !entry.deciding
+                } }
+                if (item != null) {
+                    followups.remove(item); queued = item
+                    renderFollowups?.invoke()
+                    send.performClick()
+                }
             }
         }
         status.setOnClickListener {
@@ -879,16 +974,17 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (busy || (newInput && (pendingTurn != null || followups.isNotEmpty()))) {
                 if (busy && inFlightUser == null) return@setOnClickListener
                 val next = runCatching { CompanionBubbleChatPolicy.validateMessage(input.text.toString()) }.getOrNull() ?: return@setOnClickListener
-                val id = runCatching { journal.accept(next,followups.lastOrNull()?.text ?: pendingTurn.orEmpty()) }.getOrElse {
+                val id = runCatching { journal.accept(next,followups.lastOrNull()?.text ?: pendingTurn.orEmpty(),chat.presentationSessionId()) }.getOrElse {
                     android.widget.Toast.makeText(context,it.message?.takeIf { note -> note.startsWith("待处理消息已满") } ?: "无法保存待处理消息，输入已保留",android.widget.Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
                 val item = Followup(next,id)
-                if (pendingTurn != null) {
+                if (busy && pendingTurn != null) {
                     val outstanding = (listOf(pendingTurn) + followups.map { it.text } + next).takeLast(6)
                     classifyFollowup(item, outstanding.map { CompanionBubbleChat.Message("user", it) })
                 }
                 followups.addLast(item)
+                if (followups.size == 1) armBacklog()
                 renderFollowups?.invoke()
                 input.text.clear()
                 sendLabel()
@@ -912,9 +1008,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 status.text = "上一条消息需要恢复，点此重试。"; status.visibility = android.view.View.VISIBLE
                 return@setOnClickListener
             }
-            if (item?.receipt == null && runCatching {
+            if (runCatching {
                 chat.preserveDirectInput(history,message,item?.id)
-                if (item != null) journal.advance(item.id,"reply")
+                if (item != null) journal.advance(item.id,"reply",item.receipt.orEmpty())
             }.isFailure) {
                 failedFollowup = item; failedUser = message
                 lastError = "对话记录写入失败，请检查存储空间。输入已保留，点此重试。"
@@ -930,15 +1026,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             failedMessage?.let { content.removeView(it) }; failedMessage = null
             lastError = null
             val parallelViews = item?.id?.let(parallelBubbles::remove)
-            val sentBubble = parallelViews?.first ?: bubble(message, true).also { renderCompleted(it,message,true) }
-            val streamingBubble = parallelViews?.second ?: bubble("正在输入…", false)
+            val sentBubble = parallelViews?.first ?: if (root === panel) bubble(message, true).also { renderCompleted(it,message,true) } else TextView(context)
+            val streamingBubble = parallelViews?.second ?: if (root === panel) bubble("正在输入…", false) else TextView(context)
             liveText = ""
-            renderLive = { text -> streamingBubble.text = text; panel.post { positionUpdater?.invoke() } }
+            if (root === panel) renderLive = { text -> streamingBubble.text = text; panel.post { positionUpdater?.invoke() } }
             mainQuestion = null
             busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = chat.handoffSessionId() != null; sendLabel(); status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
             chat.onInteractionNeeded = { question -> handler.post {
-                if (!closed && request == generation) {
+                if (!closed && busy && request == generation) {
                     mainQuestion = question
                     if (root !== panel) {
                         if (visible) { hide(); show() }
@@ -952,7 +1048,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             } }
             chat.onQuestion = { question -> handler.post {
-                if (!closed && request == generation) {
+                if (!closed && busy && request == generation) {
                     pendingQuestion = question
                     mainQuestion = null
                     if (root === panel) {
@@ -986,11 +1082,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
             flushPartial = ::schedulePartial
-            val operation = PetReplyOperation()
+            val operation = PetReplyOperation(replyTimeoutMillis)
+            val turnChat = chat
             activeReply = operation
+            lastProgressAt = android.os.SystemClock.uptimeMillis()
+            armBacklog()
             endWait.visibility=android.view.View.VISIBLE; endWait.isEnabled=true; endWait.text="结束等待"
-            executor.execute {
-                val result = runCatching { operation.run {
+            operation.submit(replyExecutor, {
                     val settings = CompanionStore(context)
                     val memoryStore = CompanionMemoryStore(context)
                     val memoryAllowed = settings.bubbleMemoryAccess && memoryStore.enabled
@@ -1003,23 +1101,23 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     )
                     val onPartial: (String) -> Unit = { partial ->
                         if (acceptingPartials.get()) {
+                            lastProgressAt = android.os.SystemClock.uptimeMillis()
                             latestPartial.set(partial)
                             schedulePartial()
                         }
                     }
                     val answer = item?.receipt?.let { receipt ->
                         val answer = CompanionBubbleChat.Reply(receipt, emptyList(), emptyList())
-                        val finished = requireNotNull(chat.snapshot((prior + answer.message()).takeLast(18)))
-                        PetReplyOperation.commitReply { historyStore.save(finished,requireWritable=true) }
-                        answer
-                    } ?: replyRunner(chat, prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
+                        turnChat.finishReply(prior,answer)
+                    } ?: replyRunner(turnChat, prior, scope, memoryAllowed, knowledgeAllowed, onPartial)
                     // A failed cleanup leaves a reviewable entry. The completed turn must not be retried.
-                    if (item != null) runCatching { journal.remove(item.id) }
+                    if (item != null) PetReplyOperation.whileActive { runCatching { journal.remove(item.id) } }
                     answer
-                } }
+            }) { result ->
                 handler.post {
                     if (closed || request != generation) return@post
                     if (activeReply === operation) activeReply=null
+                    handler.removeCallbacks(checkBacklog)
                     endWait.visibility=android.view.View.GONE
                     acceptingPartials.set(false); latestPartial.set(null)
                     flushPartial = null
@@ -1047,6 +1145,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         if (samePanel) { streamingBubble.text = CompanionRichText.render(answer.text, ui); renderCompleted(streamingBubble, answer.text, false); answer.images.forEach(::imageBubble); answer.citations.take(2).forEach(::citationCard) }
                         status.text = ""; status.visibility = android.view.View.GONE
                     }.onFailure { error ->
+                        // Detach the old runner from UI state even if native cancellation has
+                        // not returned. Only its last durable pending ID can be recovered.
+                        chat = CompanionBubbleChat(context,historyStore.load(),historyStore,::dispatchTask)
+                        runCatching { chat.markStopped(history,error is BubbleTurnFailed) }
+                        pendingQuestion = null; questionDialog?.dismiss(); questionDialog = null
+                        answerQuestion.visibility = android.view.View.GONE
                         onState("idle")
                         failedMessage = sentBubble; failedUser = message; failedFollowup = item
                         if (draft.isEmpty()) {
@@ -1063,7 +1167,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     if (samePanel) { continueButton.isEnabled = chat.handoffSessionId() != null; newTopic.isEnabled = history.isNotEmpty() || lastError != null }
                     if (!samePanel && root != null) { hide(); show() }
                     sendLabel()
-                    if (result.isSuccess) sendNext?.invoke()
+                    sendNext?.invoke()
                     if (root == null && !busy && followups.isEmpty()) sendNext = null
                     panel.post { positionUpdater?.invoke() }
                 }
@@ -1075,6 +1179,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             scroll.visibility = android.view.View.VISIBLE
             shortcuts.visibility = android.view.View.VISIBLE
             footer.visibility = android.view.View.VISIBLE
+            sendState.visibility = android.view.View.VISIBLE
             syncControls()
             panel.post { positionUpdater?.invoke() }
         }, sendResult = { result -> input.setText(result); input.setSelection(input.text.length) })
@@ -1086,6 +1191,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             shortcuts.visibility = android.view.View.GONE
             controlsScroll.visibility = android.view.View.GONE
             footer.visibility = android.view.View.GONE
+            sendState.visibility = android.view.View.GONE
             toolView.open(tool)
             io.deepseekharness.mobile.WhaleMotion.enter(toolView)
             panel.post { positionUpdater?.invoke() }
@@ -1209,7 +1315,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             workerPanel.refreshStatus()
             executor.execute { chat.prewarm() }
             armDeliveryWatcherIfNeeded()
-            if (!busy && !chat.pendingDirect && chat.pendingUser != null) handler.post { if (root === panel && !busy) { retryText = chat.pendingUser; send.performClick() } }
+            if (!busy) handler.post {
+                if (root === panel && !busy) {
+                    if (followups.isNotEmpty()) sendNext?.invoke()
+                    else if (lastError == null && !chat.pendingDirect && chat.pendingUser != null) {
+                        retryText = chat.pendingUser; send.performClick()
+                    }
+                }
+            }
         }
     }
     /** Reply to the original tool call, without another chat prompt. */
@@ -1355,5 +1468,5 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
 
     fun followPet() { positionUpdater?.invoke() }
     fun hide() { inlineTool?.destroy(); inlineTool = null; presentTool = null; selectedTool = null; showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; renderParallel = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
-    fun destroy() { inlineTool?.destroy(); activeReply?.cancel(); activeReply=null; closed = true; followups.forEach { it.classification.cancel(); it.replyOperation.cancel() }; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); executor.shutdownNow() }
+    fun destroy() { inlineTool?.destroy(); activeReply?.cancel(); activeReply=null; closed = true; handler.removeCallbacks(checkBacklog); followups.forEach { it.classification.cancel(); it.replyOperation.cancel() }; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); replyExecutor.shutdownNow(); executor.shutdownNow() }
 }

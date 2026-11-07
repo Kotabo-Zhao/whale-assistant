@@ -46,12 +46,12 @@ class PetDisruptionDeviceTest {
             inst.runOnMainSync {
                 window = CompanionBubbleWindow(context,app.getSystemService(WindowManager::class.java),
                     autoOpenOnDelivery=false, historyStore=history, classifyWaiting=classify, receiveTask=receive, parallelReply=parallel,
-                    replyRunner={ _,_,_,_,_,_ ->
+                    replyRunner={ chat,h,_,_,_,_ ->
                         if (replies.incrementAndGet() == 1) {
                             firstReply.countDown()
                             if (stall == null) CountDownLatch(1).await(160,TimeUnit.SECONDS) else stall()
                         }
-                        CompanionBubbleChat.Reply("夹具回复", emptyList(), emptyList())
+                        chat.finishReply(h,CompanionBubbleChat.Reply("夹具回复", emptyList(), emptyList()))
                     }) { intArrayOf(32,120,100,100) }
                 window.show()
             }
@@ -74,12 +74,9 @@ class PetDisruptionDeviceTest {
         fun click(label: String) = inst.runOnMainSync {
             labels().single { it.text == label || it.contentDescription == label }.performClick()
         }
-        fun assignFromPet(text: String) = inst.runOnMainSync {
-            window.composeTask()
-            val panel = window.javaClass.getDeclaredField("workerPanel").apply { isAccessible=true }.get(window)
-            val dialog = panel.javaClass.getDeclaredField("editDialog").apply { isAccessible=true }.get(panel) as AlertDialog
-            views(checkNotNull(dialog.window).decorView).filterIsInstance<EditText>().single().setText(text)
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        fun assignFromPet(text: String) {
+            inst.runOnMainSync { window.composeTask() }
+            send(text)
         }
         fun confirmRecovery() = inst.runOnMainSync {
             val dialog = window.javaClass.getDeclaredField("recoveryDialog").apply { isAccessible=true }.get(window) as AlertDialog
@@ -171,7 +168,10 @@ class PetDisruptionDeviceTest {
             val html = """<input id="n" value="4"><button onclick="out.textContent=Number(n.value)*2">计算</button><output id="out"></output>"""
             val revision = catalog.draft(JSONObject().put("id", id).put("title", title).put("html", html)).getString("latest")
             catalog.activate(id, revision, "")
-            pet.open({ null })
+            pet.open({ h ->
+                if (h.last().text == "浮窗打开期间的独立后台工单") PetIntentRouter.Decision(
+                    PetIntentRouter.Intent.BACKGROUND_READ,independent=true) else null
+            }, receive={ text,mode,id,title,needs -> pet.desk.submit(text,mode,id,title=title,needs=needs) })
             pet.click("我的工具")
             until { runCatching { pet.click("打开工具 · $title"); true }.getOrDefault(false) }
             fun toolRoot() = android.view.inspector.WindowInspector.getGlobalWindowViews().singleOrNull {
@@ -297,28 +297,28 @@ class PetDisruptionDeviceTest {
         }
     }
 
-    @Test fun sustainedBacklogParksSlowClassifiersAndAcceptsFreshTopic() {
+    @Test fun fullQueueDrainsAfterSilentHeadAndPreservesOverflowDraft() {
         Pet(fresh()).use { pet ->
             pet.open({ Thread.sleep(4000); null })
             pet.send("阻塞中的前台回合")
             assertTrue(pet.firstReply.await(5,TimeUnit.SECONDS))
             val accepted = (1..PetFollowupJournal.CAPACITY).map { "积压消息 "+it }
             val start = SystemClock.elapsedRealtime()
-            accepted.take(60).forEach(pet::send)
-            Thread.sleep(65_000)
-            accepted.drop(60).forEach(pet::send)
+            accepted.forEach(pet::send)
             val rows = pet.history.followups.entries()
             assertEquals(accepted,rows.map { it.text }); assertEquals(rows.size,rows.map { it.id }.toSet().size)
             pet.send("队列满时的草稿"); assertEquals("队列满时的草稿",pet.draft())
-            pet.click("结束等待")
-            until { pet.history.load()?.pending != null && !busy(pet.window) }
+            until(75_000) { pet.replies.get()==accepted.size+1 && !busy(pet.window) }
+            assertEquals(accepted.takeLast(9),pet.history.load()?.messages?.filter { it.role=="user" }?.map { it.text })
+            val parked=pet.history.followups.entries().single()
+            assertEquals("阻塞中的前台回合",parked.text)
             pet.click("会话选项"); pet.click("新话题")
             until { !busy(pet.window) && pet.history.load()==null }
             assertEquals("队列满时的草稿",pet.draft())
             pet.send("新话题中的新单")
-            until { pet.replies.get()==2 && !busy(pet.window) }
-            assertEquals(rows,pet.history.followups.entries())
-            inst.sendStatus(0,android.os.Bundle().apply { putLong("backlogElapsedMs",SystemClock.elapsedRealtime()-start); putInt("retained",rows.size) })
+            until { pet.replies.get()==accepted.size+2 && !busy(pet.window) }
+            assertEquals(parked,pet.history.followups.entries().single())
+            inst.sendStatus(0,android.os.Bundle().apply { putLong("backlogElapsedMs",SystemClock.elapsedRealtime()-start); putInt("drained",rows.size) })
         }
     }
     private fun busy(window: CompanionBubbleWindow): Boolean {
@@ -351,12 +351,11 @@ class PetDisruptionDeviceTest {
                 assertTrue(queued.all { it.stage=="queued" }); assertEquals(2,queued.map { it.id }.distinct().size)
                 assertEquals("",pet.draft())
                 pet.assignFromPet("两个连接都挂起时明确交办的工单")
-                until(4000) { pet.desk.pending().length()==1 }
-                val order = pet.desk.pending().getJSONObject(0)
-                assertEquals("两个连接都挂起时明确交办的工单",order.getString("task"))
-                UUID.fromString(order.getString("commandId"))
+                assertEquals("两个连接都挂起时明确交办的工单",pet.history.followups.entries().last().text)
+                assertEquals(3,pet.history.followups.entries().size)
+                assertEquals(0,pet.desk.pending().length())
                 assertTrue(busy(pet.window))
-                inst.sendStatus(0,android.os.Bundle().apply { putString("silentPaths","two durable messages and one explicit local work order while both sockets remain unanswered") })
+                inst.sendStatus(0,android.os.Bundle().apply { putString("silentPaths","three durable inputs while both sockets remain unanswered") })
             }
         } finally { release.countDown(); server.close(); peer.join(2000) }
     }

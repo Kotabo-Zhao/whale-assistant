@@ -56,7 +56,7 @@ internal class WorkerReportInbox(context: Context) {
         return topic
     }
 
-    fun forConversation(sessionId: String?, recent: Boolean = false): Display = synchronized(lock) {
+    fun forConversation(sessionId: String?, recent: Boolean = false, ownerSession: String? = sessionId): Display = synchronized(lock) {
         val topic = topicFor(sessionId)
         val links = JSONObject(prefs.getString("display_links","{}")!!)
         val seen = prefs.getStringSet("seen_ids",emptySet()).orEmpty()
@@ -64,7 +64,7 @@ internal class WorkerReportInbox(context: Context) {
         val local = rows.filter { row ->
             val id = row.getString("id")
             if (links.has(id)) links.getString(id) == topic
-            else row.optString("owner") == sessionId || id !in seen
+            else row.optString("owner") == ownerSession || id !in seen
         }
         Display(topic, if (recent) rows else local, local.mapTo(mutableSetOf()) { it.getString("id") })
     }

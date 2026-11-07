@@ -4,6 +4,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PetIntentRouterTest {
+    @Test fun temporaryOrMalformedForegroundClassificationCanUseNormalReplyWithoutDispatchingWork() {
+        for (failure in listOf(PetModelHttp.HttpFailure(500,null,"temporary"),PetIntentRouter.InvalidIntent(),org.json.JSONException("invalid"))) {
+            val decision = PetIntentRouter.foreground { throw failure }
+            assertEquals(PetIntentRouter.Intent.CHAT,decision.intent)
+            assertFalse(decision.independent)
+        }
+        for (failure in listOf(PetModelHttp.HttpFailure(401,null,"credential"),PetModelHttp.HttpFailure(503,"120","busy"))) {
+            assertSame(failure,assertThrows(PetModelHttp.HttpFailure::class.java) { PetIntentRouter.foreground { throw failure } })
+        }
+    }
     @Test fun immediateHandoffRequiresAnExplicitBooleanAndACompletePlan() {
         fun decision(extra: String) = PetIntentRouter.parse("""{"intent":"background_read","needs":"none","reference":""$extra}""")
         assertFalse(decision("").independent)

@@ -8,7 +8,7 @@ import java.io.File
 
 /** A bounded private copy of recent messages for restoring the pet after service restart. */
 internal class CompanionBubbleHistory(context: Context, private val writer: TaskStateWriter = TaskStateWriter()) {
-    data class Snapshot(val sessionId: String, val scope: String, val messages: List<CompanionBubbleChat.Message>, val pending: String? = null, val continuedMain: Boolean = false)
+    data class Snapshot(val sessionId: String, val scope: String, val messages: List<CompanionBubbleChat.Message>, val pending: String? = null, val continuedMain: Boolean = false, val topicId: String = sessionId)
     private val app = context.applicationContext
     private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "companion-bubble-history-v1.json"))
     internal val sourceFile: File get() = file.baseFile
@@ -26,7 +26,7 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
         if (writable == null) load()
         if (writable != true) { check(!requireWritable) { "对话记录不可写，未交办新任务。" }; return@synchronized }
         val bytes = encode(snapshot)
-        writer.replace(file.baseFile, bytes)
+        PetReplyOperation.whileActive { writer.replace(file.baseFile, bytes) }
         if (snapshot.pending == null && snapshot.messages.lastOrNull()?.role == "assistant") ContextFollowupEvents.chat(app, "pet")
     }
     fun exportArchive(): ByteArray? = load()?.copy(pending = null)?.let(::encode)
@@ -64,6 +64,7 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
                 CompanionBubbleChatPolicy.validateMessage(request.getString("user"))
             }
             require(snapshot.sessionId.isNotBlank() && snapshot.sessionId.length <= 256)
+            require(snapshot.topicId.isNotBlank() && snapshot.topicId.length <= 256)
             require(snapshot.scope.matches(Regex("[0-9a-f]{64}")))
             require(snapshot.messages.size in 0..18 && snapshot.messages.size % 2 == 0)
             val rows = JSONArray()
@@ -85,7 +86,7 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
                     .apply { if (message.atMs > 0) put("atMs", message.atMs) })
             }
             return JSONObject().put("version", 3).put("sessionId", snapshot.sessionId).put("scope", snapshot.scope).put("messages", rows)
-                .put("pending", snapshot.pending).put("continuedMain", snapshot.continuedMain)
+                .put("pending", snapshot.pending).put("continuedMain", snapshot.continuedMain).put("topicId",snapshot.topicId)
                 .toString().toByteArray(Charsets.UTF_8).also { require(it.size <= 2_000_000) }
         }
         fun decode(bytes: ByteArray): Snapshot {
@@ -100,7 +101,7 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
                     } } ?: emptyList()
                     CompanionBubbleChat.Message(row.getString("role"), row.getString("text"), row.optJSONArray("images")?.let { images -> (0 until images.length()).map { images.getString(it) } } ?: emptyList(), citations, row.optLong("atMs",0L))
                 }
-            }, root.optString("pending").takeIf { it.isNotBlank() && it != "null" }, root.optBoolean("continuedMain"))
+            }, root.optString("pending").takeIf { it.isNotBlank() && it != "null" }, root.optBoolean("continuedMain"), root.optString("topicId",root.getString("sessionId")))
             encode(snapshot)
             return snapshot
         }

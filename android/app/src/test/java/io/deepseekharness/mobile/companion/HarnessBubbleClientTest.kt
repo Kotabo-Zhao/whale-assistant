@@ -11,6 +11,16 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class HarnessBubbleClientTest {
+    @Test fun closedPortReleasesBothReadinessWaitsWithoutSubmitting() {
+        val port = ServerSocket(0,1,java.net.InetAddress.getByName("127.0.0.1")).use { it.localPort }
+        val client = HarnessBubbleClient(HarnessAccess("http://127.0.0.1:$port/","u","p"))
+        val start = System.nanoTime()
+        var submitted = false
+        assertThrows(IllegalStateException::class.java) { client.followReplyWithImages("session-one","req") { submitted=true } }
+        assertFalse(submitted)
+        assertTrue(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime()-start) < 5)
+    }
+
     @Test fun unaryUsesRuntimeGatewayEnvelopeAndLoopbackAuth() {
         val server = ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))
         val pool = Executors.newSingleThreadExecutor()

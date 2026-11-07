@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class PetReplyRecoveryDeviceTest {
     @Test fun stalledBackendCanBeDetachedAndNewTopicAcceptsAnotherMessage() = recovery(false)
-    @Test fun queuedFollowupDoesNotTrapUserInFailedTopic() = recovery(true)
+    @Test fun endingStalledWaitDrainsQueuedFollowupInSameTopic() = recovery(true)
 
     private fun recovery(withQueuedMessage: Boolean) {
         val inst=InstrumentationRegistry.getInstrumentation(); val app=inst.targetContext
@@ -52,9 +52,9 @@ class PetReplyRecoveryDeviceTest {
         try {
             inst.runOnMainSync {
                 window=CompanionBubbleWindow(ctx,app.getSystemService(WindowManager::class.java),autoOpenOnDelivery=false,
-                    replyRunner={ _,_,_,_,_,_ ->
+                    classifyWaiting={ null }, replyRunner={ chat,h,_,_,_,_ ->
                         if(calls.incrementAndGet()==1) PetModelHttp.execute(okhttp3.Request.Builder().url("http://127.0.0.1:${server.localPort}/").build(),60_000) { it.readText() }
-                        CompanionBubbleChat.Reply("恢复后回复",emptyList(),emptyList())
+                        chat.finishReply(h,CompanionBubbleChat.Reply("恢复后回复",emptyList(),emptyList()))
                     }) { intArrayOf(36,140,120,120) }
                 created=true
                 window.show()
@@ -75,24 +75,28 @@ class PetReplyRecoveryDeviceTest {
                 assertTrue(nodes().single { it.text=="结束等待" }.isShown)
                 nodes().single { it.text=="结束等待" }.performClick()
             }
-            until { !busy() }
-            assertTrue(CompanionBubbleHistory(ctx).load()?.pending.orEmpty().contains("不会响应的测试请求"))
+            until { !busy() && (!withQueuedMessage || calls.get()==2) }
+            val store=CompanionBubbleHistory(ctx)
+            if (withQueuedMessage) {
+                assertEquals("不会响应的测试请求",store.followups.entries().single().text)
+                assertEquals(listOf("随后补充的消息","恢复后回复"),store.load()?.messages?.map { it.text })
+                assertNull(store.load()?.pending)
+            } else assertTrue(store.load()?.pending.orEmpty().contains("不会响应的测试请求"))
             inst.runOnMainSync {
                 nodes().single { it.contentDescription=="会话选项" }.performClick()
                 val next=nodes().single { it.text=="新话题" }; assertTrue(next.isEnabled); next.performClick()
             }
             until { !busy() && nodes().filterIsInstance<EditText>().single().text.isEmpty() }
             if (withQueuedMessage) {
-                assertEquals("随后补充的消息", CompanionBubbleHistory(ctx).followups.entries().single().text)
+                assertEquals("不会响应的测试请求",store.followups.entries().single().text)
                 inst.runOnMainSync { assertTrue(nodes().any { it.text.toString().contains("待处理消息 · 1") }) }
-                assertEquals(1, calls.get()) // Switching topics must not silently replay the old followup.
+                assertEquals(2,calls.get()) // Switching topics must not replay the parked request.
             }
             inst.runOnMainSync {
                 nodes().filterIsInstance<EditText>().single().setText("恢复后的新消息")
                 nodes().single { it.text=="发送" }.performClick()
             }
-            until { calls.get()==2 && !busy() }
-            inst.sendStatus(0,android.os.Bundle().apply { putString("petRecovery","stalled HTTP -> hide/reopen -> end wait -> pending retained -> new topic -> next reply; isolated fixture") })
+            until { calls.get()==(if (withQueuedMessage) 3 else 2) && !busy() }
         } finally {
             if(created) inst.runOnMainSync { window.destroy() }
             release.countDown(); server.close(); peer.join(1000)

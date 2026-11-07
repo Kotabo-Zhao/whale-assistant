@@ -5,6 +5,7 @@ import org.json.JSONObject
 
 /** Classifies the user's intent using the same model and recent conversational context. */
 internal object PetIntentRouter {
+    internal class InvalidIntent : IllegalStateException("模型返回的对话意图无效。")
     enum class Intent { CHAT, KNOWLEDGE, AGENT, BACKGROUND_READ, BACKGROUND_CREATE, TASK_STATUS, TASK_CANCEL }
 
     data class Decision(val intent: Intent, val reference: String = "", val needs: String = "none", val label: String = "", val independent: Boolean = false) {
@@ -29,7 +30,7 @@ internal object PetIntentRouter {
             "background_create" -> Intent.BACKGROUND_CREATE
             "task_status" -> Intent.TASK_STATUS
             "task_cancel" -> Intent.TASK_CANCEL
-            else -> error("模型返回的对话意图无效，请重试。")
+            else -> throw InvalidIntent()
         }
         if (intent in setOf(Intent.TASK_STATUS,Intent.TASK_CANCEL)) return Decision(intent,
             label=(row.opt("title") as? String).orEmpty().trim().take(60), independent=row.opt("independent")==true)
@@ -70,9 +71,22 @@ internal object PetIntentRouter {
             .put("max_tokens", 320).put("response_format", JSONObject().put("type", "json_object"))
             .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", system + briefings))
                 .put(JSONObject().put("role", "user").put("content", context.toString())))
-        return PetModelHttp.post(key,body.toString(),30_000) { reader ->
+        return PetModelHttp.post(key,body.toString(),30_000,retryRejected=false) { reader ->
             val response=JSONObject(reader.readText())
-            parse(response.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content"))
+            val choice=response.getJSONArray("choices").getJSONObject(0)
+            check(choice.optString("finish_reason") != "content_filter") { "模型服务未返回可用的分类结果。" }
+            parse(choice.getJSONObject("message").getString("content"))
         }
+    }
+
+    fun foreground(classify: () -> Decision): Decision = try {
+        classify()
+    } catch (error: Exception) {
+        PetReplyOperation.checkpoint()
+        // The classifier has no tools. On a malformed decision or temporary service error,
+        // the regular reply can still answer and delegate through the permission-checked agent.
+        if (error is InvalidIntent || error is org.json.JSONException ||
+            error is PetModelHttp.HttpFailure && error.temporary && error.retryAfter == null) Decision(Intent.CHAT)
+        else throw error
     }
 }
