@@ -118,7 +118,8 @@ internal object HarnessPageUrl {
             "$RUNTIME_VERSION_PARAM=$runtimeKey",
             validSession?.let { "$SESSION_ID_PARAM=$it" },
         ).joinToString("&")
-        return URI(entry.scheme, null, entry.host, entry.port, entry.path, query, null).toASCIIString()
+        val fragment = validSession?.let { "dshMobileSession=$it" }
+        return URI(entry.scheme, null, entry.host, entry.port, entry.path, query, fragment).toASCIIString()
     }
 
     /**

@@ -10,10 +10,9 @@ import android.webkit.WebView
  * 撞到过一次：Chrome 低于 124 的 WebView 打开「选择工作区目录」时，页面直接显示
  * `AbortSignal.any is not a function`，目录列不出来，弹窗只能取消。
  *
- * 为什么是 `onPageFinished` 之后注入就够：这些 API 是**调用时**才查表的
- * （`AbortSignal.any([...])`），而触发它的操作（打开目录选择、发起请求）都发生在页面加载
- * 之后。boot 阶段就用到的 API 不在本脚本的射程内——那类只能靠 document-start 注入，
- * 而 document-start 要额外的 WebKitX 依赖，这里按实际故障点收窄，不提前上重武器。
+ * 此处是页面加载后的兼容兜底。主对话网关在 boot 阶段已经使用 AbortSignal.any，
+ * 因此运行时连接模块必须在工厂启动前加载 scripts/mobile-main-browser-compat.js；
+ * 不能依赖本处 onPageFinished 来完成连接初始化。
  *
  * 边界：只补缺失项，已经是函数就原样返回；不覆盖、不代理、不读页面状态，也不接触凭据。
  * 脚本是纯 ECMAScript，不依赖任何页面全局变量，可被重复执行（幂等）。

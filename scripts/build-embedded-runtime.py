@@ -707,6 +707,19 @@ def add_windows_tree(
                 for prefix in executable_prefixes
             )
             mode = 0o755 if executable else 0o644
+            queue_patches = {
+                "/dsh-agent-loop/lib/index.js": "patch_agent",
+                "/dsh-api-session-controller/lib/client.js": "patch_client",
+                "/dsh-client-ui-conversation/lib/client.js": "patch_conversation",
+                "/dsh-client-connection/lib/client.browser.js": "patch_connection",
+            }
+            patch_name = next((patch for suffix, patch in queue_patches.items() if archive_name.endswith(suffix)), None)
+            if patch_name is not None:
+                import runpy
+                patches = runpy.run_path(str(Path(__file__).with_name("main-queue-patches.py")))
+                transform = patches[patch_name]
+                writer.add_bytes(archive_name, transform(path.read_text(encoding="utf-8")).encode("utf-8"), mode)
+                continue
             if (
                 file_stat.st_nlink > 1
                 and dedupes_hardlinks(archive_name, hardlink_dedupe_prefixes, forced_regular_paths)

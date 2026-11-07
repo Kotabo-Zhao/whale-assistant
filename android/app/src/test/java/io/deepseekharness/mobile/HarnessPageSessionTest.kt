@@ -174,7 +174,7 @@ class HarnessPageSessionTest {
     @Test
     fun harnessEntryUrlIncludesValidatedSessionId() {
         assertEquals(
-            "http://127.0.0.1:3080/?appVersion=0.1.21&runtimeVersion=0.1.12&sessionId=session-xyz_123.4",
+            "http://127.0.0.1:3080/?appVersion=0.1.21&runtimeVersion=0.1.12&sessionId=session-xyz_123.4#dshMobileSession=session-xyz_123.4",
             HarnessPageUrl.withVersions(
                 "http://127.0.0.1:3080/",
                 "0.1.21",

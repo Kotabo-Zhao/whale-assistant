@@ -16,6 +16,7 @@ source = assets / 'rootfs.bundle'
 def open_source():
     return archive.open('assets/runtime/rootfs.bundle') if archive else source.open('rb')
 expected_bases = {
+    '0.3.93-whale-main-queue': 'd8b6050a6a85e6cd63f5d502505cb4e7f3833ce08a326bf9837e8a235a9552ab',
     '0.3.92-whale-pet-front': '524b8291442958fd28d3bb25c5df8a87a53cfb42669822f26ae2de610cd9e4f8',
     '0.3.91-whale-pet-front': '44ae98aaf94ef9670404fc62bf4d8a45921756cbd43e740aa7ac22397aaf943f',
     '0.3.90-whale-pet-front': 'daf31437f27b9175febaa76c34f5f06fbef669ee3d29df4c81ac0e327e9f609f',
@@ -78,6 +79,15 @@ files = {prefix + p.relative_to(plugin).as_posix(): p.read_bytes()
          (p.relative_to(plugin).parts[0] == 'lib' or p.name in ('package.json', 'cordis.patch.yml'))}
 files['usr/local/lib/dsh-mobile-auth.cjs'] = (root / 'scripts/mobile-auth-preload.cjs').read_bytes()
 files['usr/local/lib/mobile-reviewer-context.cjs'] = (root / 'scripts/mobile-reviewer-context.cjs').read_bytes()
+if '--main-queue' in sys.argv:
+    import runpy
+    patches = runpy.run_path(str(root / 'scripts/main-queue-patches.py'))
+    members = {}
+    with open_source() as stream, tarfile.open(fileobj=stream, mode='r|gz') as base:
+        for item in base:
+            if item.isfile() and item.name.endswith(('/dsh-agent-loop/lib/index.js', '/dsh-api-session-controller/lib/client.js', '/dsh-client-ui-conversation/lib/client.js', '/dsh-client-connection/lib/client.browser.js')):
+                members[item.name] = base.extractfile(item).read()
+    files.update(patches['replacements'](members))
 seen = set()
 delta = 0
 version = sys.argv[3] if len(sys.argv) > 3 else '0.3.46-whale-superagent-manager'
