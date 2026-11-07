@@ -37,17 +37,6 @@ internal object TurnCompletionNotificationPolicy {
     const val MAX_BATCH = 20
 
     /**
-     * 为什么这一笔没有发出去。只有这两个取值，便于审计按同一组码排查。
-     */
-    enum class Hold {
-        /** 应用在前台：不发也不累计，界面自己会说。 */
-        FOREGROUND,
-
-        /** 攒着（静默期未到 / 最小间隔未到），到点再发。 */
-        COALESCED,
-    }
-
-    /**
      * 一次事件之后该等多久再发通知。
      *
      * @param nowMs 事件到达时刻（`SystemClock.elapsedRealtime()`）。

@@ -40,15 +40,6 @@
 .memory-workspace .workspace-list { margin:8px 0; }
 .memory-workspace .workspace-card { box-shadow:none; }
 .library-row-more[open] { width:100%; }
-.worker-workspace .worker-dispatch { display:grid; grid-template-columns:minmax(0,1fr) minmax(105px,auto) auto; align-items:end; gap:10px; padding:13px; background:var(--surface); border:1px solid var(--line); border-radius: var(--radius-inner); }
-.worker-dispatch label { display:grid; gap:5px; font-size:.82rem; font-weight:650; color:var(--muted); }
-.worker-dispatch textarea, .worker-dispatch select { resize:vertical; border:1px solid var(--line); border-radius: var(--radius-control); padding:8px; width:100%; min-width:0; font:inherit; color:var(--ink); background:var(--surface-sunken); }
-.worker-dispatch textarea { min-height:52px; }
-.worker-dispatch select, .worker-dispatch button { min-height:44px; }
-.worker-dispatch button { padding:0 16px; background:var(--blue); color:var(--on-blue,var(--on-accent)); font-weight:650; border:0; border-radius: var(--radius-control); }
-.worker-dispatch small { grid-column:1/-1; grid-row:2; color:var(--muted); }
-.worker-secondary-settings { margin:14px 0; color:var(--muted); }
-.worker-secondary-settings summary { cursor:pointer; min-height:40px; }
 @media (min-width:600px) and (orientation:landscape) {
   .management-shell.app-shell { grid-template-columns:72px minmax(0,1fr); grid-template-rows:minmax(0,1fr); }
   .management-shell .app-sidebar { display:flex; padding:4px; gap:3px; align-items:center; box-shadow:none; overflow-y:auto; background:var(--surface-muted); }
@@ -65,9 +56,6 @@
 @media (max-width:599px) {
   .management-shell .app-main { padding:12px max(12px,env(safe-area-inset-right)) 18px max(12px,env(safe-area-inset-left)); }
   .library-command-row .library-search { flex-basis:100%; }
-  .worker-workspace .worker-dispatch { grid-template-columns:minmax(0,1fr) auto; }
-  .worker-dispatch label:first-child { grid-column:1/-1; }
-  .worker-dispatch small { grid-row:auto; }
   .desk-shortcuts { gap:6px; }
   .desk-shortcuts button { padding:7px; font-size:.83rem; }
 }
@@ -122,4 +110,3 @@
   .account-group-toggle strong { font-size:.75rem; white-space:nowrap; }
 }
 .whale-signature { flex: 0 0 auto; align-self: center; width: 53px; height: 32px; margin-inline-start: auto; }
-.worker-manual-actions { display: flex; justify-content: flex-end; }

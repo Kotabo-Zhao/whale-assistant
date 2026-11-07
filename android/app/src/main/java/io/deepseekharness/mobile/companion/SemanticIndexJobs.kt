@@ -3,7 +3,6 @@ package io.deepseekharness.mobile.companion
 import android.app.job.JobParameters
 import android.app.job.JobService
 import android.content.Context
-import java.util.Calendar
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -33,13 +32,6 @@ internal object SemanticIndexJobs {
             start = end
         }
         return result
-    }
-
-    private fun nextDayDelay(): Long {
-        val tomorrow = Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_YEAR, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 5); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }
-        return (tomorrow.timeInMillis - System.currentTimeMillis()).coerceAtLeast(60_000L)
     }
 
     /** Returns delay until next batch, or null when caught up or disabled. */

@@ -6,12 +6,6 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionBubbleChatPolicyTest {
-    @org.junit.Test fun collectsAllAssistantMessagesWithoutDuplicatingUpdates() {
-        val replies = BubbleReplyCollector()
-        org.junit.Assert.assertEquals("第一段\n包含第二个文本块", replies.put("message-1", listOf("第一段", "包含第二个文本块")))
-        org.junit.Assert.assertEquals("第一段\n包含第二个文本块\n\n第二段", replies.put("message-2", listOf("第二段")))
-        org.junit.Assert.assertEquals("第一段\n包含第二个文本块\n\n第二段（更新）", replies.put("message-2", listOf("第二段（更新）")))
-    }
     @Test fun personaIsInjectedWithCharacterMacrosAndKeepsPermissionsSeparate() {
         val card = JSONObject().put("name", "小鲸").put("description", "{{char}}陪伴{{user}}")
             .put("personality", "温柔").put("scenario", "手机桌面").put("examples", "用户：你好\n小鲸：你好呀")

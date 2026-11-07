@@ -1,9 +1,9 @@
 type Subscription = { remove: () => Promise<void> | void }
 
-/** Event-driven reads, with bounded fallback only when the bridge cannot subscribe. */
+/** Refresh on changes and retry failed reads while the page is visible. */
 export function observeWhileVisible(
   subscribe: ((changed: () => void) => Promise<Subscription>) | undefined,
-  read: (current: () => boolean) => Promise<void>,
+  read: (current: () => boolean) => Promise<void | false>,
 ): () => void {
   let stopped = false
   let running = false
@@ -21,12 +21,13 @@ export function observeWhileVisible(
     dirty = false
     running = true
     const round = generation
-    try { await read(() => visible() && generation === round) }
+    let retry = false
+    try { retry = await read(() => visible() && generation === round) === false }
     finally {
       running = false
       if (visible()) {
         if (dirty) { dirty = false; void refresh() }
-        else if (fallback) timer = window.setTimeout(() => { void refresh() },15000)
+        else if (retry || fallback) timer = window.setTimeout(changed, retry ? 8000 : 15000)
       }
     }
   }

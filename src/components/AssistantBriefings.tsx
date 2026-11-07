@@ -1,29 +1,25 @@
 import { useEffect, useState } from 'react'
 import { runtimeBridge } from '../platform/native'
 import { companionRows, type CompanionRow } from '../platform/companion'
+import { observeWhileVisible } from '../observeWhileVisible'
 
 /** Front-agent prose only. Worker receipts and execution metadata never enter this view. */
 export function AssistantBriefings({ onOpenSession }: { onOpenSession: (id: string) => void }) {
   const [items, setItems] = useState<CompanionRow[]>([])
   const [message, setMessage] = useState('正在听小鲸整理近况…')
-  useEffect(() => {
-    let active = true, loading = false
-    const refresh = async () => {
-      if (loading || document.hidden) return
-      loading = true
-      try {
-        const result = await runtimeBridge.companionDashboard({ operation: 'assistantBriefings' })
+  useEffect(() => observeWhileVisible(runtimeBridge.addAssistantBriefingsListener, async current => {
+    try {
+      const result = await runtimeBridge.companionDashboard({ operation: 'assistantBriefings' })
+      if (current()) {
         const next = companionRows(result.items).filter(row => row.kind === 'coordination')
-        if (active) { setItems(next); setMessage(next.length ? '' : '有值得告诉你的进展，小鲸会主动来聊。') }
-      } catch { if (active) setMessage('暂时没能读取近况，稍后会再试。') }
-      finally { loading = false }
+        setItems(next)
+        setMessage(next.length ? '' : '有值得告诉你的进展，小鲸会主动来聊。')
+      }
+    } catch {
+      if (current()) setMessage('暂时没能读取近况，稍后会再试。')
+      return false
     }
-    void refresh()
-    const timer = window.setInterval(() => { void refresh() }, 8000)
-    const onVisible = () => { void refresh() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [])
+  }), [])
   return <div className="assistant-task-list" aria-label="小鲸近况">
     {message && <p role="status">{message}</p>}
     {items.map(row => <article key={row.id} className="assistant-task-card assistant-briefing">

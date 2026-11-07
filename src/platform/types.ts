@@ -2216,8 +2216,7 @@ export interface RuntimeBridge {
   addRuntimeProgressListener: (listener: (event: RuntimeProgress) => void) => Promise<ListenerHandle>
   addFeatureToolsListener?: (listener: () => void) => Promise<ListenerHandle>
   addKnowledgeCapturesListener?: (listener: () => void) => Promise<ListenerHandle>
-  addPetExecutionsListener?: (listener: () => void) => Promise<ListenerHandle>
-  addWorkerDashboardListener?: (listener: () => void) => Promise<ListenerHandle>
+  addAssistantBriefingsListener?: (listener: () => void) => Promise<ListenerHandle>
   /**
    * 应用更新包下载进度：只在 [RuntimeBridge.downloadAppUpdate] 进行中推送。
    *

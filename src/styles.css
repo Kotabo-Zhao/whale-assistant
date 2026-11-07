@@ -218,8 +218,6 @@
 :root[data-style='cute'][data-theme='dark'] { --bg: #191724; --surface: #242131; --surface-muted: #302b3d; --surface-hover: #342f43; --line: #494157; --line-alt: #494157; }
 .appearance-options button[aria-pressed] { min-height: 44px; min-width: 6em; background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius-control); }
 .appearance-options button[aria-pressed='true'] { color: var(--accent); border-color: currentColor; font-weight: var(--weight-bold); }
-:root[data-style='cute'] .worker-card { border-radius: var(--radius-card); }
-:root[data-style='simple'] .worker-card { border-radius: var(--radius-card); box-shadow: none; }
 :root[data-accent='mint'] {
   --blue: #087f73;
   --blue-hover: #06665d;
@@ -3761,7 +3759,7 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
 .capability-technical .settings-note { overflow-wrap: anywhere; }
 
 /* Both appearance styles share density, keyboard focus and touch targets. */
-:where(.workspace-card, .worker-card, .assistant-overview, .assistant-tasks, .authored-tools, .settings-subsection) { box-shadow: var(--shadow-card); }
+:where(.workspace-card, .assistant-overview, .assistant-tasks, .authored-tools, .settings-subsection) { box-shadow: var(--shadow-card); }
 :where(.workspace-card-actions, .task-actions, .library-command-row) button { min-height:44px; }
 :where(.desk-heading, .workspace-heading) > div { min-width:0; }
 :where(.desk-heading, .workspace-heading) :is(h1,h2,p) { overflow-wrap:anywhere; }

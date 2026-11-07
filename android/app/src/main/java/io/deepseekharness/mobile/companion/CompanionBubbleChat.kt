@@ -94,16 +94,6 @@ internal object CompanionBubbleChatPolicy {
 
 }
 
-/** Preserves each visible assistant message from a turn in arrival order. */
-internal class BubbleReplyCollector {
-    private val messages = linkedMapOf<String, String>()
-    fun put(id: String, parts: List<String>): String {
-        val text = parts.joinToString("\n")
-        if (text.isNotBlank()) messages[id] = text
-        return messages.values.joinToString("\n\n")
-    }
-}
-
 /** 由后台投递（不是用户本轮请求）触发的回合来源；只有这些来源的回合需要推到桌宠。 */
 // Worker results use the durable foreground briefing inbox; never duplicate its delivery.
 internal val DELIVERY_SOURCES = setOf("mobile-screen-watch")

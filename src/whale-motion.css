@@ -16,7 +16,7 @@
   animation: whale-panel-enter var(--motion-normal) var(--motion-enter) backwards;
   transform-origin: 50% 25%;
 }
-.worker-card, .library-editor, .library-intake, .worker-recovery, .worker-dispatch, .worker-add-form, .worker-reply-form {
+.library-editor, .library-intake {
   animation: whale-page-enter var(--motion-normal) var(--motion-enter) backwards;
 }
 .toast { animation: whale-panel-enter var(--motion-normal) var(--motion-enter) backwards; }
@@ -32,7 +32,6 @@ button { transition-property: background-color, border-color, color, box-shadow,
 .bottom-navigation-item svg, .sidebar-item svg { transition: scale var(--motion-fast) var(--motion-enter); }
 .bottom-navigation-item[aria-current='page'] svg, .sidebar-item[aria-current='page'] svg { scale: 1.06; }
 .toggle-row input[role="switch"]::after { transition: transform var(--motion-normal) var(--motion-enter); }
-.worker-card[data-state='completed'] { transition: border-color var(--motion-normal) ease-out, background-color var(--motion-normal) ease-out; }
 
 @media (hover: hover) and (pointer: fine) {
   button:not(:disabled):hover { transition-duration: 160ms; }
