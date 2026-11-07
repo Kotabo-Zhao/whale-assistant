@@ -82,10 +82,14 @@ class PetCelAssetsDeviceTest {
             val neutral=cell(idle,0)
             for((name,returnName) in PetCels.exits) {
                 val source=atlas(name);val exit=atlas(returnName)
+                val entryName = PetCels.entries.getValue(name)
+                val entry = atlas(entryName)
                 try {
                     assertArrayEquals("$name -> $returnName",cell(source,PetCels.clips.getValue(name).exitFrame),cell(exit,0))
                     assertArrayEquals("$returnName -> idle",neutral,cell(exit,PetCels.clips.getValue(returnName).exitFrame))
-                } finally {source.recycle();exit.recycle()}
+                    assertArrayEquals("idle -> $entryName",neutral,cell(entry,0))
+                    assertArrayEquals("$entryName -> $name",cell(entry,PetCels.clips.getValue(entryName).exitFrame),cell(source,0))
+                } finally {source.recycle();exit.recycle();entry.recycle()}
             }
         } finally {idle.recycle()}
     }

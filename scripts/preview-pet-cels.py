@@ -1,10 +1,12 @@
 """Build an offline inspection page from the exact runtime atlases and Kotlin cel timings."""
 from pathlib import Path
-import base64, json, re
+import argparse, base64, json, re
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/"reports/pet-independent-20261106"
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--output',type=Path,default=ROOT/"reports/pet-independent-20261106")
+OUT=parser.parse_args().output
 OUT.mkdir(parents=True,exist_ok=True)
 ASSETS=ROOT/"android/app/src/main/assets/pet-cels"
 source=(ROOT/"android/app/src/main/java/io/deepseekharness/mobile/overlay/PetCels.kt").read_text(encoding="utf-8")
@@ -42,6 +44,10 @@ for name,clip in clips.items():
         if i==clip['cells']-1 and name not in looping:holds.append([i*2,ms])
         else:holds.extend([[i*2,ms-min(ms,80)//2],[i*2+1,min(ms,80)//2]])
     clip.update(holds=holds,loop=clip['loop']*2,still=clip['still']*2,cells=clip['cells']*2)
+for name in primary_names:
+    if name != 'idle':
+        names[name+'_enter'] = names[name]+' · 进场'
+        clips[name+'_enter'] = {'holds': [[i,28] for i in range(32)], 'loop':31,'still':0,'cells':32}
 data={}
 for name in names:
     path=ASSETS/f"{name}.webp"
@@ -65,7 +71,7 @@ canvas{max-width:100%;object-fit:contain}.status{display:flex;justify-content:sp
 @media(max-width:850px){.gallery{grid-template-columns:repeat(6,1fr)}.stages{grid-template-columns:1fr}.stage{min-height:330px}}
 @media(max-width:550px){.gallery{grid-template-columns:repeat(3,1fr)}main{padding:16px}}
 </style><main><h1>鲸鱼助手 · 独立动作预览</h1>
-<p>独立原画加离线光流插值。偶数索引保留原画，奇数索引为中间帧；动作播完会收尾并回到待机。可暂停逐帧检查。</p>
+<p>选择单张图集可以暂停逐帧查看。依次播放会经过各动作的进场、主体和收尾。</p>
 <div class="controls"><select id="action" aria-label="动作"></select><button id="play">暂停</button><button id="prev">上一帧</button><button id="next">下一帧</button>
 <select id="size" aria-label="显示尺寸"><option value="264">实机 264 像素</option><option value="88">88 像素</option><option value="480">放大检查</option></select>
 <select id="speed" aria-label="播放速度"><option value="1">正常速度</option><option value=".5">半速</option></select><button id="tour">依次播放全部</button></div>
@@ -73,7 +79,7 @@ canvas{max-width:100%;object-fit:contain}.status{display:flex;justify-content:sp
 <div class="status"><strong id="label"></strong><label>逐帧 <input id="scrub" type="range" min="0" max="7" step="1" value="0"></label><span id="frame"></span></div>
 <div class="gallery" id="gallery"></div></main>
 <script>const DATA=__DATA__;
-const images={},order=Object.keys(DATA),primary=order.filter(n=>!n.endsWith('_return')),selector=document.querySelector('#action'),gallery=document.querySelector('#gallery');
+const images={},order=Object.keys(DATA),primary=order.filter(n=>!n.includes('_')),selector=document.querySelector('#action'),gallery=document.querySelector('#gallery');
 const canvases=[document.querySelector('#light'),document.querySelector('#dark')];
 let selected='drink',playing=true,frame=0,elapsed=0,last=performance.now(),speed=1,size=264,tour=false,tourIndex=0,timer=null;
 function sample(name,t){const d=DATA[name],total=d.holds.reduce((s,h)=>s+h[1],0);let start=0;
@@ -88,8 +94,8 @@ function paint(){for(const c of canvases){c.width=c.height=size;c.style.width=c.
  document.querySelector('#play').textContent=playing?'暂停':'播放'}
 function tick(){clearTimeout(timer);const now=performance.now();if(playing)elapsed+=(now-last)*speed;last=now;
  const duration=DATA[selected].holds.reduce((s,h)=>s+h[1],0);
- if(playing&&selected!=='idle'&&elapsed>=duration){selected=selected.endsWith('_return')?'idle':selected+'_return';elapsed-=duration}
- if(tour&&selected==='idle'&&elapsed>=2600){tourIndex=(tourIndex+1)%primary.length;selected=primary[tourIndex];elapsed=0}
+ if(playing&&selected!=='idle'&&elapsed>=duration){selected=selected.endsWith('_enter')?selected.slice(0,-6):selected.endsWith('_return')?'idle':selected+'_return';elapsed-=duration}
+ if(tour&&selected==='idle'&&elapsed>=2600){tourIndex=(tourIndex+1)%primary.length;selected=primary[tourIndex]==='idle'?'idle':primary[tourIndex]+'_enter';elapsed=0}
  const s=sample(selected,elapsed);if(playing)frame=s.frame;paint();
  if(playing)timer=setTimeout(tick,Math.max(10,s.next/speed))}
 function choose(name){selected=name;elapsed=0;frame=DATA[name].holds[0][0];last=performance.now();tick()}

@@ -71,7 +71,10 @@ internal object PetCels {
         clip("drag", 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, still = 0, cells = 16),
     ).associateBy { it.name }
     val exits = primaryClips.keys.filter { it != "idle" }.associateWith { "${it}_return" }
-    val clips = primaryClips + exits.values.associateWith { name ->
+    val entries = exits.keys.associateWith { "${it}_enter" }
+    val clips = primaryClips + entries.values.associateWith { name ->
+        PetCelClip(name, (0 until 32).map { PetCelHold(it, 28) }, loopFrom = 31, cells = 32)
+    } + exits.values.associateWith { name ->
         // First and last key cels are pixel-identical to the source endpoint and idle frame 0.
         // The initial hold also gives the background decoder time to load the return atlas.
         clip(name, 140, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 160,

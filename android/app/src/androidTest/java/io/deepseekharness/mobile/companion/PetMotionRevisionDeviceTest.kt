@@ -26,21 +26,28 @@ class PetMotionRevisionDeviceTest {
             prefs.reduceMotion=false;store.setOverlayBallEnabled(true)
             inst.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
             OverlayBallService.start(app)
-            PetControlDeviceUi.await("live review pet") {
-                OverlayBallService.updateForHostAppForeground(false)
-                PetControlDeviceUi.service()?.let{PetControlDeviceUi.field(it,"petDrawable")}!=null
-            }
-            val service=PetControlDeviceUi.service() as OverlayBallService
-            val actor=PetControlDeviceUi.field(service,"petActing") as PetActing
+            lateinit var service: OverlayBallService
             val crop=Rect()
+            PetControlDeviceUi.await("live review pet") {
+                inst.runOnMainSync {
+                    OverlayBallService.updateForHostAppForeground(false)
+                    val active = PetControlDeviceUi.service() as? OverlayBallService ?: return@runOnMainSync
+                    val view = PetControlDeviceUi.field(active,"ballView") as? android.view.View ?: return@runOnMainSync
+                    if (view.isShown && view.isAttachedToWindow && view.width > 0 && view.height > 0 &&
+                        PetControlDeviceUi.field(active,"petDrawable") != null) {
+                        service = active
+                        val xy=IntArray(2);view.getLocationOnScreen(xy)
+                        crop.set(xy[0],xy[1],xy[0]+view.width,xy[1]+view.height)
+                    }
+                }
+                !crop.isEmpty
+            }
+            val actor=PetControlDeviceUi.field(service,"petActing") as PetActing
             inst.runOnMainSync {
                 val running=actor.runningTasks;val waiting=actor.waitingTasks;val thinking=actor.chatThinking
                 val dragging=actor.dragging
                 restoreDirector={actor.runningTasks=running;actor.waitingTasks=waiting;actor.chatThinking=thinking;actor.dragging=dragging}
                 actor.runningTasks=0;actor.waitingTasks=0;actor.chatThinking=false;actor.dragging=false
-                val view=PetControlDeviceUi.field(service,"ballView") as android.view.View
-                val xy=IntArray(2);view.getLocationOnScreen(xy)
-                crop.set(xy[0],xy[1],xy[0]+view.width,xy[1]+view.height)
             }
             inst.sendStatus(0,android.os.Bundle().apply{putString("liveReviewCrop","${crop.width()}:${crop.height()}:${crop.left}:${crop.top}")})
             for(action in listOf(PetAction.IDLE,PetAction.THINK,PetAction.WORK,PetAction.CONTROL)) {
@@ -98,8 +105,17 @@ class PetMotionRevisionDeviceTest {
             inst.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
             OverlayBallService.start(app)
             PetControlDeviceUi.await("visible decoded pet") {
-                OverlayBallService.updateForHostAppForeground(false)
-                PetControlDeviceUi.service()?.let{PetControlDeviceUi.field(it,"petDrawable")}!=null
+                var ready = false
+                inst.runOnMainSync {
+                    OverlayBallService.updateForHostAppForeground(false)
+                    PetControlDeviceUi.service()?.let { active ->
+                        val view = PetControlDeviceUi.field(active,"ballView") as? android.view.View
+                        ready = view?.isAttachedToWindow == true && view.isShown &&
+                            PetControlDeviceUi.field(active,"petDrawable") != null &&
+                            PetControlDeviceUi.field(active,"companionFrame") != null
+                    }
+                }
+                ready
             }
             val service=PetControlDeviceUi.service() as OverlayBallService
             val pet=PetControlDeviceUi.field(service,"petDrawable") as CompanionPetDrawable

@@ -1074,7 +1074,7 @@ class OverlayBallService : Service() {
                 companionFrameCount++
                 lastCompanionFrameAt=now
                 // Save power during ambient rest, not by turning hand gestures into a 5 FPS slideshow.
-                drawable.setPose(current, petPlayback.sample(current, now, quietIdle = petPowerSave))
+                drawable.setAnimatedPose(current, petPlayback, now, quietIdle = petPowerSave)
                 // Held cels sleep until their next boundary. No mesh, separate blink tick or idle FPS loop.
                 val delay=minOf(drawable.nextFrameDelayMs,petActing.untilStateChange(now))
                 if(delay!=Long.MAX_VALUE) hintHandler.postAtTime(this,now+delay.coerceIn(1L,60_000L))
@@ -1113,7 +1113,11 @@ class OverlayBallService : Service() {
                     val old = petDrawable
                     companionFrame?.let(hintHandler::removeCallbacks);companionFrame=null
                     petDrawable = next
-                    if (companionVisible()) next.setPose(if(companionMotionEnabled()) petActing.sample(SystemClock.uptimeMillis()) else petActing.still())
+                    if (old != null) next.retainVisibleFrom(old)
+                    next.onAtlasReady = {
+                        if (petDrawable === next && companionSurfaceVisible() && companionMotionEnabled()) wakePetMotion()
+                    }
+                    if (companionVisible() && !companionMotionEnabled()) next.setPose(petActing.still())
                     view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
                     old?.close()
                     // Replacing a decoded image (initial load/resize) is not a lifecycle resume:

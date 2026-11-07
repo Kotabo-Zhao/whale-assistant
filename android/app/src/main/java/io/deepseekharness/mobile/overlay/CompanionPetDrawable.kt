@@ -30,6 +30,8 @@ internal class CompanionPetDrawable(
     private var displayedClip = "idle"
     private var displayedFrame = 0
     private var displayed: Bitmap
+    private var retainedCel: Bitmap? = null
+    var onAtlasReady: (() -> Unit)? = null
     val displayedClipName get() = displayedClip
     val cachedAtlasCount get() = cache.size
     val cachedBitmapBytes get() = cache.values.sumOf { it.allocationByteCount.toLong() }
@@ -69,8 +71,36 @@ internal class CompanionPetDrawable(
         else request(wanted)
     }
 
+    fun setAnimatedPose(next: PetPose, playback: PetPlayback, now: Long, quietIdle: Boolean) {
+        if (closed) return
+        pose = next
+        val visible = PetCelSample(displayedClip, displayedFrame, currentCel.nextMs)
+        currentCel = playback.sample(next, now, quietIdle, visible) { name ->
+            wanted = name
+            if (name in cache) true else { request(name); false }
+        }
+        cache[currentCel.clip]?.let { show(it, currentCel) }
+        playback.nextAtlas?.let { name ->
+            if (name !in cache) { wanted = name; request(name) }
+        }
+    }
+
+    /** A resized window keeps the actual previous cel until its new-size atlas is ready. */
+    fun retainVisibleFrom(other: CompanionPetDrawable) {
+        val rect = other.displayedSource()
+        val pixels = other.retainedCel ?: other.displayed
+        val cel = Bitmap.createBitmap(pixels, rect.left, rect.top, rect.width(), rect.height())
+        retainedCel = if (cel === pixels) pixels.copy(Bitmap.Config.ARGB_8888, false) else cel
+        displayedClip = other.displayedClip
+        displayedFrame = other.displayedFrame
+        currentCel = other.currentCel.copy(clip = displayedClip, frame = displayedFrame)
+        pose = other.pose
+    }
+
     private fun show(bitmap: Bitmap, cel: PetCelSample) {
-        if (displayed === bitmap && displayedClip == cel.clip && displayedFrame == cel.frame) return
+        if (retainedCel == null && displayed === bitmap && displayedClip == cel.clip && displayedFrame == cel.frame) return
+        retainedCel?.recycle()
+        retainedCel = null
         displayed = bitmap; displayedClip = cel.clip; displayedFrame = cel.frame
         invalidateSelf()
     }
@@ -89,8 +119,9 @@ internal class CompanionPetDrawable(
                     if (bitmap != null) {
                         if (wanted == name) {
                             cache[name] = bitmap
-                            show(bitmap, currentCel)
+                            if (currentCel.clip == name) show(bitmap, currentCel)
                             trim()
+                            onAtlasReady?.invoke()
                         } else bitmap.recycle()
                     } else if (result?.isFailure == true) {
                         failed.add(name)
@@ -122,18 +153,23 @@ internal class CompanionPetDrawable(
         trim()
     }
 
-    override fun draw(canvas: Canvas) {
-        if (closed) return
+    private fun displayedSource(): Rect {
+        retainedCel?.let { source.set(0, 0, it.width, it.height); return source }
         val cellW = displayed.width / PetCels.COLUMNS
         val cellH = displayed.height / PetCels.clips.getValue(displayedClip).rows
         val col = displayedFrame % PetCels.COLUMNS
         val row = displayedFrame / PetCels.COLUMNS
         source.set(col * cellW, row * cellH, (col + 1) * cellW, (row + 1) * cellH)
+        return source
+    }
+
+    override fun draw(canvas: Canvas) {
+        if (closed) return
         val side = minOf(bounds.width(), bounds.height()).toFloat()
         val x = bounds.exactCenterX() - side / 2
         val y = bounds.exactCenterY() - side / 2
         destination.set(x, y, x + side, y + side)
-        canvas.drawBitmap(displayed, source, destination, paint)
+        canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
     }
 
     override fun getIntrinsicWidth() = PetCels.CELL
@@ -143,6 +179,9 @@ internal class CompanionPetDrawable(
     @Deprecated("Deprecated in Android") override fun getOpacity() = PixelFormat.TRANSLUCENT
     override fun close() {
         closed = true
+        onAtlasReady = null
+        retainedCel?.recycle()
+        retainedCel = null
         cache.values.forEach { if (!it.isRecycled) it.recycle() }
         cache.clear()
     }

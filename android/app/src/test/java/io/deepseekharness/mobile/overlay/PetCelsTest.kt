@@ -8,7 +8,8 @@ class PetCelsTest {
         assertEquals(PetAction.entries.toSet(), PetCels.actionClips.keys)
         assertEquals(17, PetCels.actionClips.values.toSet().size)
         assertEquals(18, PetCels.primaryClips.size)
-        assertEquals(35, PetCels.clips.size)
+        assertEquals(52, PetCels.clips.size)
+        assertEquals(PetCels.exits.keys, PetCels.entries.keys)
         assertEquals(PetCels.primaryClips.keys - "idle", PetCels.exits.keys)
         assertTrue("drink" in PetCels.clips)
     }

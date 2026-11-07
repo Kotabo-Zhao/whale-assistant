@@ -138,6 +138,8 @@ if __name__ == "__main__":
         reports += [pack_return(n,output) for n in returns]
         subprocess.run([sys.executable,str(ROOT/'scripts/interpolate-pet-cels.py'),'--input',str(output),
                         '--output',str(OUTPUT),'--names',*[r['name'] for r in reports]],check=True)
+        subprocess.run([sys.executable, str(ROOT/'scripts/prepare-pet-entries.py'), '--assets', str(OUTPUT),
+                        '--cv-python', str(ROOT/'reports/pet-independent-20261106/qa-python')], check=True)
         for report in reports:
             report['keyCells']=report['cells'];report['keyAtlasSha256']=report['assetSha256']
             report['cells']*=2;report['atlasSize'][1]*=2
@@ -146,6 +148,9 @@ if __name__ == "__main__":
     report={"artSource":"host_image","route":"native image_gen","sharedSkeleton":False,
             "interpolatedFrames":args.interpolate,"sourceArtworkPreserved":True,
             "actions":reports,"missing":[n for n in NAMES if n not in names]}
+    if args.interpolate:
+        report["entries"] = [{"name": f"{n}_enter", "source": f"{n}_return", "cells": 32,
+                              "assetSha256": sha(OUTPUT/f"{n}_enter.webp")} for n in returns]
     out=ROOT/"art/pet-independent/package.json"
     out.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     print(json.dumps({"packed":len(reports),"bytes":sum(r["assetBytes"] for r in reports),"missing":report["missing"]},ensure_ascii=False))
