@@ -59,7 +59,8 @@ internal object PersonalKnowledgePackage {
             require(packageFile.length() in (HEADER_BYTES + TAG_BYTES)..MAX_PACKAGE_BYTES) { "知识包大小无效" }
             target = File(context.applicationContext.cacheDir, "whale-personal-restore-${java.util.UUID.randomUUID()}.zip")
             BufferedInputStream(packageFile.inputStream()).use { input ->
-                val header = input.readNBytes(HEADER_BYTES); require(header.size == HEADER_BYTES)
+                val header = ByteArray(HEADER_BYTES)
+                java.io.DataInputStream(input).readFully(header)
                 val fields = parseHeader(header)
                 val cipher = cipher(Cipher.DECRYPT_MODE, passphrase, fields.salt, fields.iv, header)
                 CipherInputStream(input, cipher).use { encrypted -> requireNotNull(target).outputStream().buffered().use { output -> copyBounded(encrypted, output, UnifiedFullBackup.MAX_BYTES) } }

@@ -708,6 +708,7 @@ def add_windows_tree(
             )
             mode = 0o755 if executable else 0o644
             queue_patches = {
+                "/dsh-api-session-controller/lib/index.js": "patch_host",
                 "/dsh-agent-loop/lib/index.js": "patch_agent",
                 "/dsh-api-session-controller/lib/client.js": "patch_client",
                 "/dsh-client-ui-conversation/lib/client.js": "patch_conversation",

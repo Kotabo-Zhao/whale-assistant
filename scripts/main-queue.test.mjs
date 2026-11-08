@@ -44,11 +44,13 @@ test('parent cancellation closes the request and normal streams preserve order',
   await assert.rejects(async () => { for await (const ignored of next.stream(source())) void ignored }, /user cancelled/)
 })
 
-test('productive streams have no total-duration cutoff; heartbeats cannot hide a stall', async () => {
+test('productive streams have no total-duration cutoff; heartbeats cannot hide a stall', async t => {
+  t.mock.timers.enable({apis:["Date"]})
   const config = {idleMs: 20, maxMs: 25, pollMs: 2}
   async function * productive() {
     for (let index=0; index<8; index++) {
       await new Promise(resolve=>setTimeout(resolve,5))
+      t.mock.timers.tick(5)
       yield {type:'text',text:String(index)}
     }
   }
@@ -57,6 +59,7 @@ test('productive streams have no total-duration cutoff; heartbeats cannot hide a
   async function * heartbeat() {
     while(true) {
       await new Promise(resolve=>setTimeout(resolve,5))
+      t.mock.timers.tick(5)
       yield {type:'heartbeat'}
     }
   }

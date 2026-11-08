@@ -34,9 +34,9 @@ before(() => {
   class RemoteError extends Error { constructor(code,message) { super(message); this.code=code } }
   const storage = new Map()
   const localStorage = {getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)}
-  Session = new Function('RemoteError','randomUUID','resolvedClientTimeZone','localStorage','setTimeout','clearTimeout',
-    'return class {'+readFileSync(join(directory,'prompt.txt'),'utf8')+'}')(
-    RemoteError,randomUUID,()=> 'Asia/Shanghai',localStorage,(f)=>setTimeout(f,25),clearTimeout)
+  Session = new Function('mobileJournal','RemoteError','randomUUID','resolvedClientTimeZone','localStorage','setTimeout','clearTimeout',
+    'return class {'+readFileSync(join(directory,'settlements.txt'),'utf8')+readFileSync(join(directory,'prompt.txt'),'utf8')+'}')(
+    async()=>{},RemoteError,randomUUID,()=> 'Asia/Shanghai',localStorage,(f)=>setTimeout(f,25),clearTimeout)
 })
 after(()=>{ if(directory) rmSync(directory,{recursive:true,force:true}) })
 
@@ -65,7 +65,7 @@ test('actual driver does not spin on an unclaimed failure or user cancellation',
 function session(remote){
   const value=new Session()
   Object.assign(value,{sessionId:randomUUID(),blankBit:true,options:{},notifier:{markDirty(){}},
-    submissionSettlements:new Map(),pendingSubmissions:[],remote:{session:{prompt:remote}},
+    submissionSettlements:new Map(),pendingSubmissions:[],remote:{session:{prompt:remote}},mobileRetryChoice: async ids=>ids[0],
     retireFailedSubmission(id){this.submissionSettlements.delete(id)},
   })
   return value
@@ -110,6 +110,7 @@ test('accepted attachment submission cannot wait forever for a missing observati
     fileUploads:{getSnapshot(){return {file:{status:'ready',file:{},receiptId:'receipt'}}}},
   }
   const addressed={
+    mobileChooseRequest:async()=>randomUUID(), mobileAttachmentRequests:new Set(),
     beginSubmission(){return {requestId:randomUUID(),abandon(){abandoned=true}}},
     async prompt(){return {ok:true,value:{accepted:true}}},
   }
@@ -152,3 +153,90 @@ test('loopback connection remains usable when the browser reports offline',{skip
   assert.equal(watched,0)
   assert.equal(calls,1)
 })
+
+function hostFixture() {
+  const messages = []
+  const agent = {
+    id: 'device-test',
+    inbox: {nextTurn: messages, nextStep: []},
+    session: {snapshotEvents: () => []},
+    followup: message => messages.push(message),
+  }
+  const method = readFileSync(join(directory,'host-prompt.txt'),'utf8')
+  const dedup = readFileSync(join(directory,'host-dedup.txt'),'utf8')
+  const prompt = new Function('resolvePromptFileReceipts','createUserMessage',
+    '__addDisposableResource$3','__disposeResources$3',
+    dedup+';return ({'+method+'}).prompt')(
+    content=>({content,receiptIds:[]}), message=>message, (_,binding)=>binding, ()=>{})
+  const owner = {resolveAgent: async()=>agent,ctx:{
+    agents:{get:()=>agent}, attachments:{admitPromptContent:async content=>content},
+    fileUploads:{bindPrompt:()=>({commit(){}})},
+  }}
+  return {messages,remote:async request=>({ok:true,value:await prompt.call(owner,request,{
+    kind:'user',rpcId:request.requestId,
+  })})}
+}
+
+test('Host admits once across reload before ack; a new identical send still executes',
+  {skip:!available},async()=>{
+    const host=hostFixture()
+    let admitted
+    const ready=new Promise(resolve=>{admitted=resolve})
+    let release
+    const first=session(async request=>{
+      const result=await host.remote(request)
+      admitted()
+      return new Promise(resolve=>{release=()=>resolve(result)})
+    })
+    const content=[{type:'text',text:'again'}]
+    const original=randomUUID()
+    const pending=first.prompt(content,'queue',undefined,original)
+    await ready
+    const reopened=session(host.remote)
+    reopened.sessionId=first.sessionId
+    await reopened.prompt(content,'queue',undefined,randomUUID())
+    assert.equal(host.messages.length,1)
+    release()
+    await pending
+    await reopened.prompt(content,'queue',undefined,randomUUID())
+    assert.equal(host.messages.length,2)
+    assert.notEqual(host.messages[0].source.rpcId,host.messages[1].source.rpcId)
+  })
+
+test('two independent identical submissions while the first is waiting both enter the Host',
+  {skip:!available},async()=>{
+    const host=hostFixture()
+    const value=session(host.remote)
+    const content=[{type:'text',text:'same instruction'}]
+    await Promise.all([value.prompt(content,'queue',undefined,randomUUID()),
+      value.prompt(content,'queue',undefined,randomUUID())])
+    assert.equal(host.messages.length,2)
+    assert.notEqual(host.messages[0].source.rpcId,host.messages[1].source.rpcId)
+  })
+
+test('concurrent same-ID file retries racing attachment admission enter the Host once',
+  {skip:!available},async()=>{
+    const host=hostFixture()
+    const request={requestId:randomUUID(),mode:'queue',content:[{type:'file',receiptId:'file'}]}
+    await Promise.all([host.remote(request),host.remote(request)])
+    assert.equal(host.messages.length,1)
+  })
+
+test('two lost attachment observations retire their own echoes and allow the next text through',
+  {skip:!available},async()=>{
+    const host=hostFixture()
+    const value=session(host.remote)
+    const conversation={
+      resolveDraftAttachments:()=>[{id:'file',kind:'file'}],
+      fileUploads:{getSnapshot:()=>({file:{status:'ready',file:{},receiptId:'file'}})},
+      settleSubmittedAttachments(){},
+    }
+    for(let attempt=0;attempt<2;attempt++){
+      assert.equal((await sendSession.call(conversation,value,'file',['file'],'queue')).kind,'error')
+      assert.equal(value.pendingSubmissions.length,0)
+      assert.equal(value.submissionSettlements.size,0)
+    }
+    assert.equal(host.messages.length,1)
+    assert.equal((await value.prompt([{type:'text',text:'next'}],'queue',undefined,randomUUID())).ok,true)
+    assert.equal(host.messages.length,2)
+  })

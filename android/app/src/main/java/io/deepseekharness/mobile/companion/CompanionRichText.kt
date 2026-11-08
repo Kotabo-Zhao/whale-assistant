@@ -197,7 +197,7 @@ internal object CompanionRichText {
 
     private fun code(text: SpannableStringBuilder, start: Int, end: Int, ui: PetUi?) {
         if (end <= start) return
-        text.setSpan(TypefaceSpan(Typeface.MONOSPACE), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        text.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         text.setSpan(BackgroundColorSpan(ui?.soft ?: Color.rgb(239, 242, 247)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 

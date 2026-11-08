@@ -20,6 +20,9 @@ with tarfile.open(sys.argv[1], "r|gz") as archive:
             source = archive.extractfile(member).read().decode()
             if "async mobilePromptRequest(" not in source:
                 source = patches["patch_client"](source)
+            begin = source[source.index("beginSubmission(input) {"):source.index("\n\t\t\t/**",source.index("beginSubmission(input) {"))]
+            finish = source[source.index("finishSubmission(requestId, retirement) {"):source.index("\n\t\t\t/**",source.index("finishSubmission(requestId, retirement) {"))]
+            (out / "settlements.txt").write_text(begin+"\n"+finish,encoding="utf-8")
             start = source.index("_mobileRetryIds;") if "_mobileRetryIds;" in source else source.index("mobileRetryIds = new Map()")
             end = source.index("\n\t\t\t/**\n\t\t\t* Resolve one image",start)
             (out / "prompt.txt").write_text(source[start:end],encoding="utf-8")
@@ -40,3 +43,12 @@ with tarfile.open(sys.argv[1], "r|gz") as archive:
             start = source.index("function installConnection(ctx, options = {})")
             end = source.index("\n\t\tfunction apply(ctx)",start)
             (out / "install-connection.txt").write_text(source[start:end],encoding="utf-8")
+
+        if member.name.endswith("/dsh-api-session-controller/lib/index.js"):
+            source = archive.extractfile(member).read().decode()
+            start = source.index("async prompt(request, source) {")
+            end = source.index("\n\tasync requireModel",start)
+            (out / "host-prompt.txt").write_text(source[start:end],encoding="utf-8")
+            start = source.index("function hasPromptRequest(agent, requestId)")
+            end = source.index("function imageBlockIn",start)
+            (out / "host-dedup.txt").write_text(source[start:end],encoding="utf-8")

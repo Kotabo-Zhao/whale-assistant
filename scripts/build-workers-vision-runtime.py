@@ -16,6 +16,7 @@ source = assets / 'rootfs.bundle'
 def open_source():
     return archive.open('assets/runtime/rootfs.bundle') if archive else source.open('rb')
 expected_bases = {
+    "0.3.94-whale-main-queue": "c20973a6b624a34de4314168e865164e09805653cddb2a4a946eb8cf8e926a78",
     '0.3.93-whale-main-queue': 'd8b6050a6a85e6cd63f5d502505cb4e7f3833ce08a326bf9837e8a235a9552ab',
     '0.3.92-whale-pet-front': '524b8291442958fd28d3bb25c5df8a87a53cfb42669822f26ae2de610cd9e4f8',
     '0.3.91-whale-pet-front': '44ae98aaf94ef9670404fc62bf4d8a45921756cbd43e740aa7ac22397aaf943f',
@@ -85,7 +86,7 @@ if '--main-queue' in sys.argv:
     members = {}
     with open_source() as stream, tarfile.open(fileobj=stream, mode='r|gz') as base:
         for item in base:
-            if item.isfile() and item.name.endswith(('/dsh-agent-loop/lib/index.js', '/dsh-api-session-controller/lib/client.js', '/dsh-client-ui-conversation/lib/client.js', '/dsh-client-connection/lib/client.browser.js')):
+            if item.isfile() and item.name.endswith(('/dsh-api-session-controller/lib/index.js', '/dsh-agent-loop/lib/index.js', '/dsh-api-session-controller/lib/client.js', '/dsh-client-ui-conversation/lib/client.js', '/dsh-client-connection/lib/client.browser.js')):
                 members[item.name] = base.extractfile(item).read()
     files.update(patches['replacements'](members))
 seen = set()
