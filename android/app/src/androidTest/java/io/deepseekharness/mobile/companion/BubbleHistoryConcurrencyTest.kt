@@ -54,6 +54,7 @@ class BubbleHistoryConcurrencyTest {
             file.writeText("损坏的测试记录")
             val fresh = CompanionBubbleHistory(ctx)
             assertThrows(IllegalStateException::class.java) { fresh.save(snapshot("new"),requireWritable=true) }
+            assertThrows(IllegalStateException::class.java) { fresh.exportArchive() }
             assertEquals("损坏的测试记录",file.readText())
             file.writeBytes(archive.readBytes())
             assertNotNull(fresh.load())

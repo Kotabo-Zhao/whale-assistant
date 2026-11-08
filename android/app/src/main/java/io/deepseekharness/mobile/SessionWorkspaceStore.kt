@@ -17,7 +17,7 @@ internal class SessionWorkspaceStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val lock = lockFor(context.applicationContext)
 
-    fun entries(): List<Entry> = synchronized(lock) { read().values.sortedBy { it.id } }
+    fun entries(): List<Entry> = synchronized(lock) { runCatching { read().values.sortedBy { it.id } }.getOrDefault(emptyList()) }
 
     /** Applies exactly the supplied fields. Null title/group removes that local annotation. */
     fun update(id: String, title: String?, hasTitle: Boolean, group: String?, hasGroup: Boolean, pinned: Boolean?, hasPinned: Boolean, archived: Boolean?, hasArchived: Boolean): List<Entry> = synchronized(lock) {
@@ -40,28 +40,35 @@ internal class SessionWorkspaceStore(context: Context) {
     /** Contains only user-created annotations, suitable for the encrypted app-private full backup. */
     fun exportArchive(): ByteArray = synchronized(lock) { encode(read().values).toString().toByteArray(Charsets.UTF_8) }
 
-    fun mergeArchive(bytes: ByteArray): Int = synchronized(lock) {
-        val imported = decode(bytes)
-        val values = read().toMutableMap()
-        var added = 0
-        for (entry in imported) {
-            if (entry.id !in values) added++
-            values[entry.id] = entry
-        }
-        require(values.size <= MAX_ENTRIES) { "会话组织记录过多" }
-        save(values)
-        added
+    fun validateMerge(bytes: ByteArray): Unit = synchronized(lock) {
+        merged(read(), bytes)
+        Unit
     }
 
-    private fun read(): Map<String, Entry> = runCatching {
-        decode(prefs.getString(KEY, null)?.toByteArray(Charsets.UTF_8) ?: return emptyMap()).associateBy { it.id }
-    }.getOrElse { emptyMap() }
+    fun mergeArchive(bytes: ByteArray): Int = synchronized(lock) {
+        val current = read()
+        val values = merged(current, bytes)
+        save(values)
+        values.size - current.size
+    }
+
+    private fun merged(current: Map<String, Entry>, bytes: ByteArray): Map<String, Entry> {
+        val values = current.toMutableMap()
+        for (entry in decode(bytes)) values[entry.id] = entry
+        require(values.size <= MAX_ENTRIES) { "会话组织记录过多" }
+        return values
+    }
+
+    private fun read(): Map<String, Entry> {
+        return decode(prefs.getString(KEY, null)?.toByteArray(Charsets.UTF_8) ?: return emptyMap()).associateBy { it.id }
+    }
 
     private fun save(values: Map<String, Entry>) {
         check(prefs.edit().putString(KEY, encode(values.values).toString()).commit()) { "无法保存会话组织信息" }
     }
 
     companion object {
+        const val ARCHIVE_BYTES = 1_000_000
         private const val PREFS = "session_workspace_v1"
         private const val KEY = "entries"
         private const val MAX_ENTRIES = 500
@@ -80,7 +87,7 @@ internal class SessionWorkspaceStore(context: Context) {
             }) }
         })
         fun decode(bytes: ByteArray): List<Entry> {
-            require(bytes.size <= 150_000) { "会话组织备份过大" }
+            require(bytes.size <= ARCHIVE_BYTES) { "会话组织备份过大" }
             val root = JSONObject(String(bytes, Charsets.UTF_8)); require(root.getInt("version") == 1)
             val rows = root.getJSONArray("entries"); require(rows.length() <= MAX_ENTRIES)
             val seen = mutableSetOf<String>()

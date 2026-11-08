@@ -101,8 +101,9 @@ internal object UnifiedMemoryBackup {
                 source.rawQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name='backup_private'", null).use {
                     require(it.moveToFirst() && it.getString(0) == PRIVATE_SCHEMA) { "备份保护记录结构无效" }
                 }
+                val allowedTriggers = KnowledgeTextIndex.triggers + ("secretary_item_cleanup" to SecretaryLedger.CLEANUP_TRIGGER)
                 source.rawQuery("SELECT type,name,sql FROM sqlite_master WHERE type IN ('trigger','view')", null).use { c ->
-                    while (c.moveToNext()) require(c.getString(0) == "trigger" && KnowledgeTextIndex.triggers[c.getString(1)] == c.getString(2)) {
+                    while (c.moveToNext()) require(c.getString(0) == "trigger" && allowedTriggers[c.getString(1)] == c.getString(2)) {
                         "备份包含不受支持的触发器或视图"
                     }
                 }
@@ -141,11 +142,11 @@ internal object UnifiedMemoryBackup {
                     val forgottenEvents = mutableListOf<String>()
                     live.rawQuery("SELECT event_id FROM understanding_forget", null).use { c -> while(c.moveToNext()) forgottenEvents.add(c.getString(0)) }
                     val generation = live.rawQuery("SELECT value FROM shared_jobs_meta WHERE key='generation'",null).use { if(it.moveToFirst()) it.getLong(0) else 0L }
-                    for (table in schema.keys) {
-                        if (table in setOf("sources", "jobs") || table in KnowledgeTextIndex.derivedTables) continue
-                        live.delete(table, null, null)
-                        live.execSQL("INSERT INTO $table SELECT * FROM incoming_backup.$table")
-                    }
+                    // Delete all old rows before inserting any new ones: deleting an old
+                    // understanding item fires the trigger that removes its secretary metadata.
+                    val restoredTables = schema.keys - setOf("sources", "jobs") - KnowledgeTextIndex.derivedTables
+                    for (table in restoredTables) live.delete(table, null, null)
+                    for (table in restoredTables) live.execSQL("INSERT INTO $table SELECT * FROM incoming_backup.$table")
                     // Local explicit delete/undo decisions win over older imported decisions.
                     for ((key, value) in localKnowledgeDecisions) {
                         live.execSQL("INSERT OR REPLACE INTO knowledge_meta(key,value) VALUES (?,?)", arrayOf(key, value))

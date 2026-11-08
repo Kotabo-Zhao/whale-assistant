@@ -29,7 +29,11 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
         PetReplyOperation.whileActive { writer.replace(file.baseFile, bytes) }
         if (snapshot.pending == null && snapshot.messages.lastOrNull()?.role == "assistant") ContextFollowupEvents.chat(app, "pet")
     }
-    fun exportArchive(): ByteArray? = load()?.copy(pending = null)?.let(::encode)
+    fun exportArchive(): ByteArray? = synchronized(lock) {
+        val snapshot = load()
+        check(writable == true) { "桌宠对话记录损坏，备份未完成" }
+        snapshot?.copy(pending = null)?.let(::encode)
+    }
     /** Never overwrites a current local conversation during restore. */
     fun restoreArchive(bytes: ByteArray): Boolean = synchronized(lock) {
         // Imported history is an archive, not permission to submit unfinished work on another installation.
@@ -55,6 +59,7 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
         check(!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) { "无法切换话题，原记录已保留" }
     }
     companion object {
+        const val ARCHIVE_BYTES = 2_000_000
         // The live pet and backup controller construct separate handles for the same AtomicFile.
         private val lock = Any()
         fun encode(snapshot: Snapshot): ByteArray {
@@ -87,10 +92,10 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
             }
             return JSONObject().put("version", 3).put("sessionId", snapshot.sessionId).put("scope", snapshot.scope).put("messages", rows)
                 .put("pending", snapshot.pending).put("continuedMain", snapshot.continuedMain).put("topicId",snapshot.topicId)
-                .toString().toByteArray(Charsets.UTF_8).also { require(it.size <= 2_000_000) }
+                .toString().toByteArray(Charsets.UTF_8).also { require(it.size <= ARCHIVE_BYTES) }
         }
         fun decode(bytes: ByteArray): Snapshot {
-            require(bytes.size <= 2_000_000)
+            require(bytes.size <= ARCHIVE_BYTES)
             val root = JSONObject(Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes)).toString())
             require(root.getInt("version") in 1..3)
             val rows = root.getJSONArray("messages")

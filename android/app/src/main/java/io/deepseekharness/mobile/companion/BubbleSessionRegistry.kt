@@ -20,7 +20,7 @@ internal class BubbleSessionRegistry(context: Context) {
     }
     /** Exported identities contain no transcript or credentials. */
     fun exportArchive(): ByteArray = synchronized(lock) {
-        JSONArray(prefs.getStringSet("sessions", emptySet()).orEmpty().sorted()).toString().toByteArray(Charsets.UTF_8)
+        JSONArray(prefs.getStringSet("sessions", emptySet()).orEmpty().sorted()).toString().toByteArray(Charsets.UTF_8).also { validateArchive(it) }
     }
     fun mergeArchive(bytes: ByteArray): Int = synchronized(lock) {
         val values = validateArchive(bytes)
@@ -31,12 +31,13 @@ internal class BubbleSessionRegistry(context: Context) {
         sessions.size - before
     }
     companion object {
+        const val ARCHIVE_BYTES = 2_000_000
         private val lock = Any()
         fun valid(id: String): Boolean = id.matches(Regex("[A-Za-z0-9._-]{1,200}"))
         fun validateArchive(bytes: ByteArray): JSONArray {
-            require(bytes.size <= 50_000)
+            require(bytes.size <= ARCHIVE_BYTES)
             val values = JSONArray(String(bytes, Charsets.UTF_8))
-            require(values.length() <= 200)
+            require(values.length() <= 10_000)
             for (i in 0 until values.length()) require(valid(values.getString(i)))
             return values
         }

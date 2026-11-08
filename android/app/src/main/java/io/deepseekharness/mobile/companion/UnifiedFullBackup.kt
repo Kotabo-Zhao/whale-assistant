@@ -114,7 +114,7 @@ internal object UnifiedFullBackup {
                 while (enumeration.hasMoreElements()) {
                     val entry = enumeration.nextElement()
                     require(!entry.isDirectory && (entry.name == "format" || entry.name == SNAPSHOT || entry.name == BUBBLE_HISTORY || entry.name == BUBBLE_SESSIONS || entry.name == SESSION_WORKSPACE || entry.name == SESSION_ANCHORS || entry.name.matches(Regex("objects/[a-f0-9]{64}")))) { "备份包含未知文件" }
-                    require(entries.put(entry.name, entry) == null && entries.size <= MAX_OBJECTS + 5) { "备份条目重复或过多" }
+                    require(entries.put(entry.name, entry) == null && entries.size <= MAX_OBJECTS + 6) { "备份条目重复或过多" }
                 }
                 val format = zip.getInputStream(requireNotNull(entries["format"])).use { input ->
                     val bytes = java.io.ByteArrayOutputStream(); copyBounded(input, bytes, 64); bytes.toString("UTF-8")
@@ -123,20 +123,23 @@ internal object UnifiedFullBackup {
                 hasBubbleHistory = BUBBLE_HISTORY in entries
                 hasBubbleSessions = BUBBLE_SESSIONS in entries
                 if (hasBubbleHistory) bubbleHistory = zip.getInputStream(requireNotNull(entries[BUBBLE_HISTORY])).use { input ->
-                    java.io.ByteArrayOutputStream().also { copyBounded(input, it, 150_000) }.toByteArray()
+                    java.io.ByteArrayOutputStream().also { copyBounded(input, it, CompanionBubbleHistory.ARCHIVE_BYTES.toLong()) }.toByteArray()
                 }
                 if (hasBubbleSessions) bubbleSessions = zip.getInputStream(requireNotNull(entries[BUBBLE_SESSIONS])).use { input ->
-                    java.io.ByteArrayOutputStream().also { copyBounded(input, it, 50_000) }.toByteArray()
+                    java.io.ByteArrayOutputStream().also { copyBounded(input, it, BubbleSessionRegistry.ARCHIVE_BYTES.toLong()) }.toByteArray()
                 }
                 if (SESSION_WORKSPACE in entries) sessionWorkspace = zip.getInputStream(requireNotNull(entries[SESSION_WORKSPACE])).use { input ->
-                    java.io.ByteArrayOutputStream().also { copyBounded(input, it, 150_000) }.toByteArray()
+                    java.io.ByteArrayOutputStream().also { copyBounded(input, it, SessionWorkspaceStore.ARCHIVE_BYTES.toLong()) }.toByteArray()
                 }
-                if (SESSION_ANCHORS in entries) sessionAnchors = zip.getInputStream(requireNotNull(entries[SESSION_ANCHORS])).use { input -> java.io.ByteArrayOutputStream().also { copyBounded(input, it, 20_000) }.toByteArray() }
+                if (SESSION_ANCHORS in entries) sessionAnchors = zip.getInputStream(requireNotNull(entries[SESSION_ANCHORS])).use { input -> java.io.ByteArrayOutputStream().also { copyBounded(input, it, CompanionSessionAnchorStore.ARCHIVE_BYTES.toLong()) }.toByteArray() }
                 bubbleHistory?.let { CompanionBubbleHistory.decode(it) }
                 bubbleSessions?.let { BubbleSessionRegistry.validateArchive(it) }
-                sessionWorkspace?.let { SessionWorkspaceStore.decode(it) }
-                sessionAnchors?.let { CompanionSessionAnchorStore.validateArchive(it) }
-                var totalBytes = 0L
+                sessionWorkspace?.let { SessionWorkspaceStore(app).validateMerge(it) }
+                sessionAnchors?.let {
+                    CompanionSessionAnchorStore.validateArchive(it)
+                    CompanionSessionAnchorStore(app).exportArchive() // Check existing rows before replacing the database.
+                }
+                var totalBytes = listOfNotNull(bubbleHistory, bubbleSessions, sessionWorkspace, sessionAnchors).sumOf { it.size.toLong() }
                 zip.getInputStream(requireNotNull(entries[SNAPSHOT])).use { input -> snapshot.outputStream().use { output ->
                     totalBytes += copyBounded(input, output, UnifiedMemoryBackup.MAX_BYTES); output.fd.sync()
                 } }

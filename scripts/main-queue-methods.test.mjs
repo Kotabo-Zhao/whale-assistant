@@ -9,6 +9,8 @@ import { randomUUID } from 'node:crypto'
 let directory
 let kick
 let Session
+let journalAction = async () => {}
+let storage
 let sendSession
 let Connection
 let installConnection
@@ -32,11 +34,11 @@ before(() => {
   installConnection = watcher => new Function('ConnectionController','watchBrowserNetwork','isLoopbackHostname',
     'return '+readFileSync(join(directory,'install-connection.txt'),'utf8'))(Connection,watcher,host=>host==='127.0.0.1')
   class RemoteError extends Error { constructor(code,message) { super(message); this.code=code } }
-  const storage = new Map()
+  storage = new Map()
   const localStorage = {getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)}
   Session = new Function('mobileJournal','RemoteError','randomUUID','resolvedClientTimeZone','localStorage','setTimeout','clearTimeout',
     'return class {'+readFileSync(join(directory,'settlements.txt'),'utf8')+readFileSync(join(directory,'prompt.txt'),'utf8')+'}')(
-    async()=>{},RemoteError,randomUUID,()=> 'Asia/Shanghai',localStorage,(f)=>setTimeout(f,25),clearTimeout)
+    (...args)=>journalAction(...args),RemoteError,randomUUID,()=> 'Asia/Shanghai',localStorage,(f)=>setTimeout(f,25),clearTimeout)
 })
 after(()=>{ if(directory) rmSync(directory,{recursive:true,force:true}) })
 
@@ -154,12 +156,12 @@ test('loopback connection remains usable when the browser reports offline',{skip
   assert.equal(calls,1)
 })
 
-function hostFixture() {
+function hostFixture(events = []) {
   const messages = []
   const agent = {
     id: 'device-test',
     inbox: {nextTurn: messages, nextStep: []},
-    session: {snapshotEvents: () => []},
+    session: {snapshotEvents: () => events},
     followup: message => messages.push(message),
   }
   const method = readFileSync(join(directory,'host-prompt.txt'),'utf8')
@@ -240,3 +242,39 @@ test('two lost attachment observations retire their own echoes and allow the nex
     assert.equal((await value.prompt([{type:'text',text:'next'}],'queue',undefined,randomUUID())).ok,true)
     assert.equal(host.messages.length,2)
   })
+
+test('an acknowledged message stays successful when local cleanup fails', {skip:!available}, async () => {
+  const host = hostFixture()
+  const value = session(host.remote)
+  journalAction = async (_session, operation) => {
+    if (operation === 'delete') throw new Error('synthetic database unavailable')
+  }
+  try {
+    const result = await value.prompt([{type:'text',text:'accepted'}], 'queue', undefined, randomUUID())
+    assert.equal(result.ok, true)
+    assert.equal(host.messages.length, 1)
+  } finally {
+    journalAction = async () => {}
+  }
+})
+
+test('corrupt retry index does not permanently block the next send', {skip:!available}, async () => {
+  const host = hostFixture()
+  const value = session(host.remote)
+  storage.set('dsh.mobile.prompt-retry.' + value.sessionId, '{invalid')
+  const result = await value.prompt([{type:'text',text:'next'}], 'queue', undefined, randomUUID())
+  assert.equal(result.ok, true)
+  assert.equal(host.messages.length, 1)
+})
+
+test('replay after inbox claim but before transcript append does not execute twice', {skip:!available}, async () => {
+  const id = randomUUID()
+  const host = hostFixture([{type:'agent/inbox/spliced',data:{
+    target:'next-turn',start:0,inserted:[{source:{kind:'user',rpcId:id}}],
+  }}, {type:'agent/inbox/spliced',data:{target:'next-turn',start:0,removedCount:1,inserted:[]}}])
+  const result = await host.remote({requestId:id,mode:'queue',content:[{type:'text',text:'original'}]})
+  assert.equal(result.ok,true)
+  assert.equal(host.messages.length,0)
+  await host.remote({requestId:randomUUID(),mode:'queue',content:[{type:'text',text:'original'}]})
+  assert.equal(host.messages.length,1)
+})

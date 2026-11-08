@@ -40,7 +40,11 @@ def patch_client(text):
             mobileAttachmentRequests = new Set();
             mobileRecord(key,id,keep) {
                 const storageKey = "dsh.mobile.prompt-retry."+this.sessionId;
-                const saved = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
+                const raw = localStorage.getItem(storageKey);
+                let saved;
+                try { saved = JSON.parse(raw); } catch { saved = null; }
+                if (!saved || typeof saved !== "object" || Array.isArray(saved)) saved = {};
+
                 for (const [oldKey,oldId] of Object.entries(saved)) {
                     if (oldId === id) delete saved[oldKey];
                 }
@@ -87,7 +91,7 @@ def patch_client(text):
             async mobileRestorePending() {
                 if (JSON.parse(localStorage.getItem("dsh.sessions.current") ?? "{}").sessionId !== this.sessionId) return;
                 const rows = await mobileJournal(this.sessionId,"list");
-                if (!rows.length) return;
+                if (!rows.length || JSON.parse(localStorage.getItem("dsh.sessions.current") ?? "{}")?.sessionId !== this.sessionId) return;
                 const dialog = document.createElement("dialog");
                 dialog.setAttribute("aria-label","恢复待确认消息");
                 const title = document.createElement("p");
@@ -143,8 +147,13 @@ def patch_client(text):
                     const result = await Promise.race([this.mobilePromptRequest(content,mode,abort.signal,requestId),timeout]);
                     if (result.ok && this.mobileObserved.has(requestId)) this.scheduleObservedRetirement(requestId,this.mobileObserved.get(requestId));
                     if (result.ok && !this.mobileAttachmentRequests.has(requestId)) {
-                        await mobileJournal(this.sessionId,"delete",{id:requestId});
-                        this.mobileRecord(key,requestId,false);
+                        // Host acknowledgement is authoritative even if local cleanup fails.
+                        try {
+                            await mobileJournal(this.sessionId,"delete",{id:requestId});
+                            this.mobileRecord(key,requestId,false);
+                        } catch (error) {
+                            console.warn("Pending message cleanup unavailable",error);
+                        }
                         this.mobileObserved.delete(requestId);
                     }
                     return result;
@@ -226,6 +235,10 @@ def patch_conversation(text):
                 }""")
 
 def patch_host(text):
+    # Claim removes a row from the inbox before the model transcript is appended.
+    # Its durable insertion is the admission receipt throughout this interval.
+    text = replace_once(text, 'if (event.type !== "user/message") return false;',
+        'if (event.type === "agent/inbox/spliced") return event.data.inserted.some(matches);\n        if (event.type !== "user/message") return false;')
     anchor = "const binding = __addDisposableResource$3(env_2, this.ctx.fileUploads.bindPrompt"
     return replace_once(text,anchor,"if (hasPromptRequest(agent, request.requestId)) return {accepted:true};\n                    "+anchor)
 

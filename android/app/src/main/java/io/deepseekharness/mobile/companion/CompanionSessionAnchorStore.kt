@@ -27,14 +27,14 @@ internal class CompanionSessionAnchorStore(context: Context) {
 
     fun list(sessionId: String): List<Anchor> = synchronized(lock) {
         require(BubbleSessionRegistry.valid(sessionId))
-        read().filter { it.sessionId == sessionId }
+        runCatching { read().filter { it.sessionId == sessionId } }.getOrDefault(emptyList())
     }
 
     /**
      * Bounded, summary-only rows for the owner-facing session list.  This must
      * never be used as a substitute for a Harness transcript or prompt input.
      */
-    fun listAll(): List<Anchor> = synchronized(lock) { read().sortedByDescending { it.atMs } }
+    fun listAll(): List<Anchor> = synchronized(lock) { runCatching { read().sortedByDescending { it.atMs } }.getOrDefault(emptyList()) }
 
     fun exportArchive(): ByteArray = synchronized(lock) { encode(read()).toByteArray(Charsets.UTF_8) }
     fun mergeArchive(bytes: ByteArray): Int = synchronized(lock) {
@@ -43,15 +43,10 @@ internal class CompanionSessionAnchorStore(context: Context) {
         save(current.sortedBy { it.atMs }.takeLast(MAX_ANCHORS)); current.size - before
     }
 
-    private fun read(): List<Anchor> = runCatching {
+    private fun read(): List<Anchor> {
         val raw = prefs.getString(KEY, null) ?: return emptyList()
-        val root = JSONArray(raw); require(root.length() <= MAX_ANCHORS)
-        (0 until root.length()).map { index -> root.getJSONObject(index).let { row ->
-            Anchor(row.getString("sessionId"), row.getString("role"), row.getLong("atMs"), row.getString("summary"), decodeCitations(row.optJSONArray("citations"))).also {
-                require(BubbleSessionRegistry.valid(it.sessionId) && it.role in setOf("user", "assistant") && it.atMs > 0 && it.summary.isNotBlank() && it.summary.length <= MAX_SUMMARY && !CONTROLS.containsMatchIn(it.summary))
-            }
-        } }
-    }.getOrElse { emptyList() }
+        return decode(raw.toByteArray(Charsets.UTF_8))
+    }
 
     private fun save(rows: List<Anchor>) {
         val value = encode(rows)
@@ -59,6 +54,7 @@ internal class CompanionSessionAnchorStore(context: Context) {
     }
 
     companion object {
+        const val ARCHIVE_BYTES = 1_000_000
         private const val PREFS = "companion_session_anchors_v1"
         private const val KEY = "anchors"
         private const val MAX_ANCHORS = 40
@@ -77,7 +73,7 @@ internal class CompanionSessionAnchorStore(context: Context) {
         private fun validateCitation(value: Citation) {
             require(UUID.matches(value.id) && REVISION.matches(value.revision) && value.displayName.isNotBlank() && value.displayName.length <= 160 && !CONTROLS.containsMatchIn(value.displayName) && value.chunkIndex >= 0 && value.chunkCount in 1..10_000 && value.chunkIndex < value.chunkCount && value.parsingCoverage.length <= 64 && !CONTROLS.containsMatchIn(value.parsingCoverage))
         }
-        private fun decode(bytes: ByteArray): List<Anchor> { require(bytes.size <= 80_000); val root = JSONArray(String(bytes, Charsets.UTF_8)); require(root.length() <= MAX_ANCHORS); return (0 until root.length()).map { index -> root.getJSONObject(index).let { Anchor(it.getString("sessionId"), it.getString("role"), it.getLong("atMs"), it.getString("summary"), decodeCitations(it.optJSONArray("citations"))) } }.also { rows -> rows.forEach { require(BubbleSessionRegistry.valid(it.sessionId) && it.role in setOf("user", "assistant") && it.atMs > 0 && it.summary.isNotBlank() && it.summary.length <= MAX_SUMMARY && !CONTROLS.containsMatchIn(it.summary)) } } }
+        private fun decode(bytes: ByteArray): List<Anchor> { require(bytes.size <= ARCHIVE_BYTES); val root = JSONArray(String(bytes, Charsets.UTF_8)); require(root.length() <= MAX_ANCHORS); return (0 until root.length()).map { index -> root.getJSONObject(index).let { Anchor(it.getString("sessionId"), it.getString("role"), it.getLong("atMs"), it.getString("summary"), decodeCitations(it.optJSONArray("citations"))) } }.also { rows -> rows.forEach { require(BubbleSessionRegistry.valid(it.sessionId) && it.role in setOf("user", "assistant") && it.atMs > 0 && it.summary.isNotBlank() && it.summary.length <= MAX_SUMMARY && !CONTROLS.containsMatchIn(it.summary)) } } }
         fun validateArchive(bytes: ByteArray) { decode(bytes) }
     }
 }

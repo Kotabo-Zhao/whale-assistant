@@ -91,8 +91,8 @@ class MainQueueDeviceTest {
                 evaluate("""(()=>{const original=window.fetch;window.__mainQueueIds=[];window.fetch=function(input,init){if(String(input).split('?')[0].endsWith('api/session/prompt')){const body=JSON.parse(init.body);window.__mainQueueIds.push(body.payload.args.request.requestId);if(window.__mainQueueIds.length===1){sessionStorage.setItem('whale.test.firstId',body.payload.args.request.requestId);sessionStorage.setItem('whale.test.payload',JSON.stringify(body.payload.args.request.content));return original.call(this,input,init).then(response=>{window.__firstAdmitted=response.ok;return new Promise(()=>{})})}}return original.call(this,input,init)};return true})()""")
                 assertEquals("true",evaluate("""(()=>{const e=document.querySelector('[contenteditable=true]');e.focus();const r=document.createRange();r.selectNodeContents(e);r.collapse(false);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(r);document.execCommand('insertText',false,'请只回复数字，37加19是多少？');return true})()"""))
                 until { evaluate("document.querySelector('[contenteditable=true]')?.textContent.includes('37')")=="true" }
-                until { evaluate("""Array.from(document.querySelectorAll('button')).some(b=>/^(发送|Send)/i.test(b.getAttribute('aria-label')||b.title||'')&&!b.disabled)""")=="true" }
-                val sent=evaluate("""(()=>{const b=Array.from(document.querySelectorAll('button')).find(b=>/^(发送|Send)/i.test(b.getAttribute('aria-label')||b.title||''));if(!b||b.disabled)return false;b.click();return true})()""")
+                until { evaluate("""Array.from(document.querySelectorAll('button')).some(b=>/^(发送|排队发送|Send|Queue)/i.test(b.getAttribute('aria-label')||b.title||'')&&!b.disabled)""")=="true" }
+                val sent=evaluate("""(()=>{const b=Array.from(document.querySelectorAll('button')).find(b=>/^(发送|排队发送|Send|Queue)/i.test(b.getAttribute('aria-label')||b.title||''));if(!b||b.disabled)return false;b.click();return true})()""")
                 assertEquals("主对话发送按钮不存在", "true",sent)
                 until { evaluate("window.__mainQueueIds.length===1")=="true" }
                 until { evaluate("window.__firstAdmitted===true")=="true" }
@@ -111,12 +111,18 @@ class MainQueueDeviceTest {
                     }
                 }
                 until { evaluate("document.body.textContent.includes('56')")=="true" }
-                val admitted = host.recentRecords(id).objects().count { row ->
-                    val event=row.optJSONObject("event") ?: row
-                    event.optString("type")=="user/message" &&
-                        event.optJSONObject("data")?.optJSONArray("content")?.toString()?.contains("37")==true
-                }
-                assertEquals("重试只能形成一条已接受消息",1,admitted)
+                val requestId = org.json.JSONTokener(evaluate("window.__mainQueueIds[0]")).nextValue() as String
+                val users = host.recentRecords(id).objects().map { it.optJSONObject("event") ?: it }
+                    .filter { it.optString("type")=="user/message" }
+                    .mapNotNull { it.optJSONObject("data") }
+                assertEquals("原请求只能被接收一次",1,users.count {
+                    it.optJSONObject("source")?.optString("rpcId")==requestId
+                })
+                assertEquals("同一提问不能以另一编号重复执行",1,users.count { message ->
+                    message.optJSONArray("content")?.objects()?.any {
+                        it.optString("type")=="text" && it.optString("text")=="请只回复数字，37加19是多少？"
+                    } == true
+                })
                 repeat(2) { index ->
                     evaluate("""(()=>{const e=document.querySelector('[contenteditable=true]');e.focus();const range=document.createRange();range.selectNodeContents(e);range.collapse(false);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);document.execCommand('insertText',false,'请只回复数字，24加13是多少？');return true})()""")
                     until { evaluate("""(()=>{const e=document.querySelector('[contenteditable=true]');const b=Array.from(document.querySelectorAll('button')).find(b=>/^(发送消息|排队发送|Send|Queue)/i.test(b.getAttribute('aria-label')||b.title||''));if(!e?.textContent.includes('24')||!b||b.disabled)return false;b.click();return true})()""")=="true" }

@@ -140,10 +140,11 @@ internal class SecretaryLedger(private val db: SQLiteDatabase, private val queue
         }
     }
     companion object {
+        const val CLEANUP_TRIGGER = "CREATE TRIGGER secretary_item_cleanup AFTER DELETE ON understanding_items BEGIN DELETE FROM secretary_items WHERE item_id=OLD.id; END"
         fun create(db: SQLiteDatabase) {
             db.execSQL("CREATE TABLE IF NOT EXISTS secretary_items (item_id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL, due_at INTEGER)")
             db.execSQL("CREATE INDEX IF NOT EXISTS secretary_due ON secretary_items(due_at)")
-            db.execSQL("CREATE TRIGGER IF NOT EXISTS secretary_item_cleanup AFTER DELETE ON understanding_items BEGIN DELETE FROM secretary_items WHERE item_id=OLD.id; END")
+            db.execSQL(CLEANUP_TRIGGER.replaceFirst("CREATE TRIGGER ", "CREATE TRIGGER IF NOT EXISTS "))
             db.execSQL("CREATE TABLE IF NOT EXISTS secretary_operations (operation_key TEXT PRIMARY KEY NOT NULL, request_hash TEXT NOT NULL, item_id TEXT NOT NULL)")
         }
         private fun text(request: JSONObject,key: String,max: Int,empty: Boolean): String {
