@@ -37,20 +37,18 @@ async function flushOnHide(): Promise<void> {
 describe('App conversation gate', () => {
   beforeEach(beforeEachAppTest)
 
-  it('安卓启动后停留在首页，只有用户点击才打开对话', async () => {
+  it('安卓就绪后直接进入对话，焦点变化不会重复打开', async () => {
     const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
     try {
       const view = render(<App />)
       await arriveAtShell()
-      expect(bridge.startHarness).not.toHaveBeenCalled()
-      expect(bridge.openHarness).not.toHaveBeenCalled()
+      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
       view.rerender(<App />)
       fireEvent.focus(window)
       await act(async () => { await Promise.resolve() })
-      expect(bridge.openHarness).not.toHaveBeenCalled()
-      fireEvent.click(screen.getByRole('button', { name: '打开对话' }))
-      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
-      expect(screen.getByRole('navigation', { name: '工作台快捷入口' })).toBeInTheDocument()
+      expect(bridge.openHarness).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('button', { name: '打开对话' })).toBeNull()
+      expect(screen.getByRole('region', { name: '内嵌会话' })).toBeInTheDocument()
     } finally { native.mockRestore() }
   })
 
@@ -88,13 +86,12 @@ describe('App conversation gate', () => {
     } finally { native.mockRestore() }
   })
 
-  it('手动打开失败后不会自动重试，用户可以再次尝试', async () => {
+  it('直接进入失败后不会自动重试，用户可以再次尝试', async () => {
     const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
     bridge.startHarness.mockRejectedValueOnce(new Error('启动失败'))
     try {
       render(<App />)
       await arriveAtShell()
-      fireEvent.click(screen.getByRole('button', { name: '打开对话' }))
       const retry = await screen.findByRole('button', { name: /打开对话|打开 Harness/ })
       await waitFor(() => expect(retry).toBeEnabled())
       fireEvent.focus(window)
@@ -205,10 +202,9 @@ describe('App conversation gate', () => {
     render(<App />)
     await arriveAtShell()
 
-    /*
-     * 浏览器预览不应触发原生运行时操作；安卓的单次直接进入行为由上面的专门用例覆盖。
-     */
-    expect(screen.getByRole('button', { name: /打开对话|打开 Harness/ })).toBeInTheDocument()
+    // 预览直接显示会话页，但不调用原生启动或打开，也不内嵌一个假的对话页。
+    expect(screen.getByRole('region', { name: '当前对话' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '打开对话' })).toBeNull()
     expect(bridge.startHarness).not.toHaveBeenCalled()
     expect(bridge.openHarness).not.toHaveBeenCalled()
     expect(document.querySelector('iframe')).not.toBeInTheDocument()
@@ -249,9 +245,9 @@ describe('App conversation gate', () => {
      * 开机停在门屏是常态，但卡片照旧写着「正在进入对话 / 正在打开 Harness 对话」，
      * 看上去像卡在启动流程里。这条用例把「空闲态不许出现进行时」钉死。
      */
-    expect(screen.getByRole('heading', { name: '对话已就绪' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '点击「打开对话」开始' })).toBeInTheDocument()
-    expect(screen.getByText('打开对话时才会启动本机服务。')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '当前对话' })).toBeInTheDocument()
+    expect(screen.getByText('这一页就是对话。服务就绪后会直接进入，不用再点一次。')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '点击「打开对话」开始' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '正在进入对话' })).not.toBeInTheDocument()
     expect(screen.queryByText('正在打开 Harness 对话')).not.toBeInTheDocument()
   })
@@ -263,23 +259,22 @@ describe('App conversation gate', () => {
     await arriveAtShell()
 
     // 「已在运行」与「已就绪」是两件事：前者打开不用等，后者打开要等启动。
-    expect(screen.getByRole('heading', { name: '点击「打开对话」进入对话' })).toBeInTheDocument()
-    expect(screen.getByText('本机服务正在运行，打开后即可继续对话。')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '当前对话' })).toBeInTheDocument()
+    expect(screen.getByText('会话已接上，可以直接继续。')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '点击「打开对话」进入对话' })).not.toBeInTheDocument()
     expect(screen.queryByText('打开对话时才会启动本机服务。')).not.toBeInTheDocument()
   })
 
-  it('点开对话后门屏如实显示正在启动，直到桥返回', async () => {
-    // 桥永不 settle：把 busy 固定在 'launch'，观察这段时间的文案。
+  it('直接进入时如实显示正在启动，直到桥返回', async () => {
+    const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
     bridge.startHarness.mockImplementation(() => new Promise(() => {}))
-
-    render(<App />)
-    await arriveAtShell()
-
-    fireEvent.click(screen.getByRole('button', { name: '打开对话' }))
-
-    expect(await screen.findByRole('heading', { name: '正在进入对话' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '正在打开 Harness 对话' })).toBeInTheDocument()
-    expect(screen.getByText('正在启动本机服务并进入对话…')).toBeInTheDocument()
+    try {
+      render(<App />)
+      await arriveAtShell()
+      expect(await screen.findByRole('heading', { name: '正在进入对话' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: '正在打开 Harness 对话' })).toBeInTheDocument()
+      expect(screen.getByText('正在启动本机服务并进入对话…')).toBeInTheDocument()
+    } finally { native.mockRestore() }
   })
 
   it('停止过程中说明正在停止，而不是提示「点击打开」', async () => {
@@ -311,27 +306,23 @@ describe('App conversation gate', () => {
     expect(screen.queryByRole('heading', { name: '正在进入对话' })).not.toBeInTheDocument()
   })
 
-  it('预启动还没回来时点打开对话：等它，不重复启动也不报错', async () => {
+  it('预启动还没回来时直接进入：等它，不重复启动也不报错', async () => {
+    const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
     bridge.getSettings.mockResolvedValue({ ...settings, prewarmHarness: true })
     let finishPrewarm!: (state: typeof runningState) => void
     bridge.startHarness.mockImplementationOnce(() => new Promise(resolve => { finishPrewarm = resolve }))
-
-    render(<App />)
-    await arriveAtShell()
-    await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
-
-    fireEvent.click(screen.getByRole('button', { name: '打开对话' }))
-    await act(async () => { await Promise.resolve() })
-
-    // 关键：不能因为「预启动在飞」就再发一次 startHarness——原生会立刻回报未运行，
-    // 紧接着的打开请求就会失败，用户明明点了打开却收到一条错误。
-    expect(bridge.startHarness).toHaveBeenCalledTimes(1)
-
-    await act(async () => { finishPrewarm({ ...runningState }); await Promise.resolve() })
-
-    await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
-    expect(bridge.startHarness).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    try {
+      render(<App />)
+      await arriveAtShell()
+      await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
+      await act(async () => { await Promise.resolve() })
+      // 不能因为预启动在飞就再发一次 startHarness。
+      expect(bridge.startHarness).toHaveBeenCalledTimes(1)
+      await act(async () => { finishPrewarm({ ...runningState }); await Promise.resolve() })
+      await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
+      expect(bridge.startHarness).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    } finally { native.mockRestore() }
   })
 
   it('开机时服务已在运行，用户手动停止后不会被预启动再拉起来', async () => {
@@ -388,11 +379,10 @@ describe('App conversation gate', () => {
       manifestUrl: settings.manifestUrl,
       manifestSha256: settings.manifestSha256,
     }))
-    // 安装完成回到对话门禁页，启动仍要用户点一下：不再有「装完自动开门」。
-    const open = await screen.findByRole('button', { name: /打开对话|打开 Harness/ })
+    // 浏览器预览在安装完成后直接显示会话，不调用原生启动，也不再要求点「打开对话」。
+    expect(await screen.findByRole('region', { name: '当前对话' })).toBeInTheDocument()
     expect(bridge.startHarness).not.toHaveBeenCalled()
-    fireEvent.click(open)
-    await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('button', { name: '打开对话' })).toBeNull()
   })
 
   it('waits for an in-progress install to become ready before launching', async () => {

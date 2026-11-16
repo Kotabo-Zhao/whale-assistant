@@ -359,7 +359,7 @@ describe('§5.6-B 渲染测量', () => {
       bridge.getSettings.mockResolvedValue({ ...settings})
       const { profile } = mountProfiledApp()
 
-      await screen.findByRole('heading', { name: '对话已就绪' })
+      await screen.findByRole('region', { name: '当前对话' })
       await tick(6_000)
       const callsBefore = bridge.getKeepAliveState.mock.calls.length
       profile.reset()

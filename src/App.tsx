@@ -89,6 +89,7 @@ import {
 } from 'lucide-react'
 import { Onboarding, ONBOARDING_STORAGE_KEY } from './components/Onboarding'
 import { hasConfiguredModelCredential, MODEL_PROVIDERS } from './modelProviders'
+import { canEnterConversation } from './ui/conversationEntry'
 import { firstCatalogModelId, isValidModelId } from './platform/modelCatalog'
 import { ApiKeyInput } from './components/ApiKeyInput'
 import { AppUpdateReminderDialog } from './components/AppUpdateReminderDialog'
@@ -845,6 +846,7 @@ function withBridgeTimeout<T>(promise: Promise<T>, milliseconds: number): Promis
 }
 
 interface ConversationScreenProps {
+  mode?: 'gate' | 'session'
   busy: string | null
   keepAlive: KeepAliveState
   runtime: RuntimeState
@@ -858,7 +860,7 @@ interface ConversationScreenProps {
   onUpdate: () => void
 }
 
-function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onStop, onOpenTerminal, onOpenTasks, onNavigate, onUpdate }: ConversationScreenProps) {
+function ConversationScreen({ mode = 'gate', busy, keepAlive, runtime, onInstall, onLaunch, onStop, onOpenTerminal, onOpenTasks, onNavigate, onUpdate }: ConversationScreenProps) {
   const installed = runtimeInstalled(runtime)
   const transitioning = runtimeTransitioning(runtime)
   const updateRequired = installed && runtime.updateAvailable && !transitioning
@@ -875,6 +877,39 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
   const serviceRunning = runtime.phase === 'running'
   // 停止要几秒，期间打开按钮是禁用的：此时还写「点击「打开对话」开始」，用户点了没反应。
   const stoppingHarness = busy === 'stop'
+  const [previewNote, setPreviewNote] = useState('')
+  if (mode === 'session' && installed && !transitioning && !updateRequired && runtime.phase !== 'error') {
+    return (
+      <div className="screen conversation-stage">
+        <section className="conversation-thread" aria-label={t('当前对话')}>
+          {launchingHarness || stoppingHarness ? (
+            <div className="launch-copy">
+              <h1>{launchingHarness ? t('正在进入对话') : t('正在停止运行环境')}</h1>
+              <h2>{launchingHarness ? t('正在打开 Harness 对话') : t('正在停止本机服务')}</h2>
+              <p>{launchingHarness ? t('正在启动本机服务并进入对话…') : t('停止完成后即可重新打开对话。')}</p>
+            </div>
+          ) : Capacitor.isNativePlatform() ? (
+            <div className="conversation-native-slot" role="region" aria-label={t('内嵌会话')} />
+          ) : (
+            <>
+              <div className="conversation-log" role="log" aria-label={t('对话记录')}>
+                <p>{serviceRunning ? t('会话已接上，可以直接继续。') : t('这一页就是对话。服务就绪后会直接进入，不用再点一次。')}</p>
+                <p className="conversation-preview-note">{t('浏览器预览没有本机对话服务。手机上，这一区域由内嵌会话盖住。')}</p>
+                {previewNote !== '' && <p role="status">{previewNote}</p>}
+              </div>
+              <form className="conversation-composer" onSubmit={event => { event.preventDefault(); setPreviewNote(t('浏览器预览不能代替手机上的会话。')) }}>
+                <textarea aria-label={t('消息')} placeholder={t('输入消息')} rows={2} />
+                <button className="button button-primary" type="submit">{t('发送')}</button>
+              </form>
+            </>
+          )}
+          {(serviceRunning || stoppingHarness) && !launchingHarness && (
+            <button className="button button-secondary" type="button" onClick={onStop} disabled={busy !== null}>{t('停止')}</button>
+          )}
+        </section>
+      </div>
+    )
+  }
 
   return (
     <div className="screen conversation-gate">
@@ -3539,6 +3574,7 @@ export function App() {
   const [shizuku, setShizuku] = useState<ShizukuState>(EMPTY_SHIZUKU)
   const [accessibility, setAccessibility] = useState<AccessibilityAutomationState>(EMPTY_ACCESSIBILITY)
   const [keepAlive, setKeepAlive] = useState<KeepAliveState>(EMPTY_KEEP_ALIVE)
+  const [keepAliveKnown, setKeepAliveKnown] = useState(false)
   // 查询失败与「没有权限」分开记录，保留最近一次快照供开关关闭操作使用。
   const [overlayBall, setOverlayBall] = useState<OverlayBallState | null>(null)
   const [overlayBallReadFailed, setOverlayBallReadFailed] = useState(false)
@@ -3843,6 +3879,14 @@ export function App() {
     setActiveViewState(next)
     pushViewEntry(next, current)
   }, [])
+  /** 就绪后把栈底从门屏换成会话，避免返回键先落回「点击打开」再被立刻送走。 */
+  const replaceActiveView = useCallback((next: AppView) => {
+    if (activeViewRef.current === next) return
+    activeViewRef.current = next
+    previousViewRef.current = null
+    setActiveViewState(next)
+    replaceViewEntry(next)
+  }, [])
 
   // 原生对话页的标签只发送固定视图名，不接收来自访客 WebView 的导航指令。
   useEffect(() => {
@@ -3905,7 +3949,7 @@ export function App() {
    * 且向右滑动超过 75px 且纵向偏差较小时，触发返回上一级并伴随轻微触感振动。
    */
   useEffect(() => {
-    if (activeView === ROOT_VIEW || resetOpen || pendingInstall !== null || onboardingOpen) return
+    if (activeView === ROOT_VIEW || activeView === 'harness' || resetOpen || pendingInstall !== null || onboardingOpen) return
 
     let startX = 0
     let startY = 0
@@ -4127,10 +4171,12 @@ export function App() {
       .then(next => {
         if (cancelled) return
         setKeepAlive(next)
+        setKeepAliveKnown(true)
         // 用户已在系统设置里补齐权限/后台策略后返回时，关闭滞留的指引弹窗。
         setPermissionGuide(previous => (keepAliveGuideResolved(previous, next) ? null : previous))
       })
       .catch(() => {
+        if (!cancelled) setKeepAliveKnown(true)
         // 后台保持状态读取失败不阻塞界面：保持上一次的已知状态。
       })
 
@@ -4699,6 +4745,7 @@ export function App() {
         }
       } catch (error) {
         if (tabOnly && activeViewRef.current !== 'harness') return
+        conversationEntrySuppressed.current = true
         setActiveView('conversation')
         // 错误后的状态刷新不能阻止释放打开按钮，尤其是桥本身无响应时。
         const revision = runtimeStateRevision.current
@@ -4723,6 +4770,15 @@ export function App() {
 
   /** 用户已确认「密钥在 Harness 里配置过」时的放行入口，只在显式按钮上使用。 */
   const launchHarnessConfirmed = useCallback((sessionId?: string) => openHarness(true, sessionId), [openHarness])
+
+  // 打开失败后停在门屏，等用户再试；不要立刻被「就绪即进入」送回去。
+  const conversationEntrySuppressed = useRef(false)
+  useEffect(() => {
+    if (activeViewRef.current !== 'conversation' || conversationEntrySuppressed.current) return
+    if (booting || !keepAliveKnown || onboardingOpen || busy !== null || keepAlive.reconnectRequired) return
+    if (!canEnterConversation(runtime, settings)) return
+    replaceActiveView('harness')
+  }, [activeView, booting, keepAliveKnown, onboardingOpen, busy, keepAlive.reconnectRequired, runtime, settings, replaceActiveView])
 
   // 每次进入对话标签自动装载一次；失败后保留手动重试，避免无限循环。
   const harnessTabAttempted = useRef(false)
@@ -5420,9 +5476,9 @@ export function App() {
   const screen = (() => {
     switch (activeView) {
       case 'harness':
-        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
+        return <ConversationScreen mode={canEnterConversation(runtime, settings) ? 'session' : 'gate'} busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; setActiveView('harness') }} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
       case 'conversation':
-        return <ConversationScreen busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => launchHarness()} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
+        return <ConversationScreen mode="gate" busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; if (canEnterConversation(runtime, settings) && !keepAlive.reconnectRequired) setActiveView('harness'); else launchHarness() }} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
       case 'sessions':
         return <SessionManager onBack={() => backToView('conversation')} onOpenHarness={launchHarness} />
       case 'assistant-memory':
@@ -5502,11 +5558,11 @@ export function App() {
       <AppSidebar activeView={activeView} onNavigate={setActiveView} />
       <div className="app-frame">
         <header className="mobile-header">
-          <button className="header-brand-group brand-home" type="button" aria-label={t('工作台')} onClick={() => setActiveView('conversation')}><Brand /></button>
+          <button className="header-brand-group brand-home" type="button" aria-label={t('工作台')} onClick={() => setActiveView(canEnterConversation(runtime, settings) && !conversationEntrySuppressed.current ? 'harness' : 'conversation')}><Brand /></button>
           <div className="header-actions">
             <PhaseBadge phase={runtime.phase} />
             <button type="button" className="icon-button mobile-session-entry" title={t('会话管理')} aria-label={t('会话管理')} onClick={() => setActiveView('sessions')}><MessageSquare size={18} /></button>
-            {activeView === 'conversation' && (
+            {(activeView === 'conversation' || activeView === 'harness') && (
               <button className="icon-button header-settings" type="button" aria-label={t("打开应用设置")} title={t("应用设置")} onClick={() => setActiveView('settings')}>
                 <Settings2 size={19} />
               </button>

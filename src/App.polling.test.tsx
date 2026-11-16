@@ -220,7 +220,7 @@ describe('任务完成回到对话界面（5.6-F）', () => {
       reportSequence(8)
       await vi.advanceTimersByTimeAsync(5_000)
       await waitFor(() => expect(screen.queryByRole('heading', { name: '设置' })).not.toBeInTheDocument())
-      expect(screen.getByRole('heading', { name: '对话已就绪' })).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: '当前对话' })).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }

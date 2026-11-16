@@ -150,15 +150,15 @@ const storageAccess: StorageAccessState = {
   sdkInt: 34,
 }
 
-/** 主视图（对话门面）的标题。 */
+/** 就绪后的主视图是会话本身，不再用「点击打开」门屏当首页。 */
 function mainViewHeading(): HTMLElement {
-  return screen.getByRole('heading', { name: '对话已就绪' })
+  return screen.getByRole('region', { name: '当前对话' })
 }
 
 /** 等待首屏渲染完成并停在外壳主视图。 */
 async function renderAtMainView(): Promise<void> {
   render(<App />)
-  expect(await screen.findByRole('heading', { name: '对话已就绪' })).toBeVisible()
+  expect(await screen.findByRole('region', { name: '当前对话' })).toBeVisible()
 }
 
 /**
@@ -253,9 +253,9 @@ describe('返回键与视图历史', () => {
 
     // 一级 → 主视图。
     await pressBack()
-    expect(await screen.findByRole('heading', { name: '对话已就绪' })).toBeVisible()
-    expect(window.location.hash).toBe('')
-    expect(window.history.state).toMatchObject({ dshView: 'conversation' })
+    expect(await screen.findByRole('region', { name: '当前对话' })).toBeVisible()
+    expect(window.location.hash).toBe('#harness')
+    expect(window.history.state).toMatchObject({ dshView: 'harness' })
   })
 
   it('退回主视图后历史已见底：再按返回不离开界面，也不新增记录', async () => {
@@ -264,7 +264,7 @@ describe('返回键与视图历史', () => {
     fireEvent.click(screen.getByRole('button', { name: '打开应用设置' }))
     await screen.findByRole('heading', { name: '设置' })
     await pressBack()
-    expect(await screen.findByRole('heading', { name: '对话已就绪' })).toBeVisible()
+    expect(await screen.findByRole('region', { name: '当前对话' })).toBeVisible()
 
     // 主视图是历史栈底：原生侧此时 canGoBack() 为 false，会把任务退到后台而不是结束应用。
     const pushState = vi.spyOn(window.history, 'pushState')
@@ -272,7 +272,7 @@ describe('返回键与视图历史', () => {
 
     expect(mainViewHeading()).toBeVisible()
     expect(pushState).not.toHaveBeenCalled()
-    expect(window.location.hash).toBe('')
+    expect(window.location.hash).toBe('#harness')
   })
 
   it('浏览器的前进/后退与视图状态保持一致', async () => {
@@ -294,8 +294,8 @@ describe('返回键与视图历史', () => {
 
     await pressBack()
     await pressBack()
-    expect(await screen.findByRole('heading', { name: '对话已就绪' })).toBeVisible()
-    expect(window.location.hash).toBe('')
+    expect(await screen.findByRole('region', { name: '当前对话' })).toBeVisible()
+    expect(window.location.hash).toBe('#harness')
   })
 
   it('重复导航到同一视图不会写入冗余历史', async () => {
@@ -316,7 +316,7 @@ describe('返回键与视图历史', () => {
 
     // 收尾：回到栈底，避免把历史位置留给下一个用例。
     await pressBack()
-    expect(await screen.findByRole('heading', { name: '对话已就绪' })).toBeVisible()
+    expect(await screen.findByRole('region', { name: '当前对话' })).toBeVisible()
   })
 
   it('系统返回时保留当前视图内的资料阅读位置', async () => {
@@ -337,7 +337,9 @@ describe('返回键与视图历史', () => {
     act(() => { window.dispatchEvent(new CustomEvent('dsh-native-tab', { detail: 'harness' })) })
     await waitFor(() => expect(window.location.hash).toBe('#harness'))
     expect(nav.getByRole('button', { name: '对话' })).toHaveAttribute('aria-current', 'page')
-    fireEvent.click(screen.getByRole('button', { name: '我的工具' }))
+    fireEvent.click(nav.getByRole('button', { name: '我的' }))
+    expandSettingsGroup('日常')
+    fireEvent.click(screen.getByRole('button', { name: /^工具/ }))
     fireEvent.click(await screen.findByRole('button', { name: /插件管理.*Harness/ }))
     expect(await screen.findByRole('heading', { name: '插件管理' })).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: '返回工具' }))
@@ -361,8 +363,8 @@ describe('返回键与视图历史', () => {
 
     // 因此此时按系统返回必须回主视图，而不是被送回二级页。
     await pressBack()
-    expect(await screen.findByRole('heading', { name: '对话已就绪' })).toBeVisible()
-    expect(window.location.hash).toBe('')
+    expect(await screen.findByRole('region', { name: '当前对话' })).toBeVisible()
+    expect(window.location.hash).toBe('#harness')
   })
 
   it('历史状态无法识别时回落到主视图并校正地址', async () => {
@@ -377,8 +379,8 @@ describe('返回键与视图历史', () => {
       window.dispatchEvent(new PopStateEvent('popstate', { state: null }))
     })
 
-    expect(await screen.findByRole('heading', { name: '对话已就绪' })).toBeVisible()
-    expect(window.location.hash).toBe('')
+    expect(await screen.findByRole('region', { name: '当前对话' })).toBeVisible()
+    expect(window.location.hash).toBe('#harness')
 
     // 收尾：回到栈底。
     await pressBack()
@@ -394,7 +396,7 @@ describe('返回键与视图历史', () => {
 
     await pressBack()
     expect(mainViewHeading()).toBeVisible()
-    expect(window.location.hash).toBe('')
+    expect(window.location.hash).toBe('#harness')
   })
 
   it('底部标签切换页面并保持唯一选中项与返回历史', async () => {
@@ -402,14 +404,14 @@ describe('返回键与视图历史', () => {
     const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
     expect(nav.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['对话', '我的'])
     expect(nav.getAllByRole('button').map(button => button.textContent)).toEqual(['对话', '我的'])
-    for (const [name, hash] of [['对话', '#harness'], ['我的', '#settings']]) {
-      fireEvent.click(nav.getByRole('button', { name: new RegExp(`^${name}$`) }))
-      await waitFor(() => expect(window.location.hash).toBe(hash))
-      expect(nav.getAllByRole('button', { current: 'page' })).toHaveLength(1)
-      expect(nav.getByRole('button', { name: new RegExp(`^${name}$`) })).toHaveAttribute('aria-current', 'page')
-      await pressBack()
-    }
-    expect(window.location.hash).toBe('')
+    expect(window.location.hash).toBe('#harness')
+    expect(nav.getByRole('button', { name: '对话' })).toHaveAttribute('aria-current', 'page')
+    fireEvent.click(nav.getByRole('button', { name: '我的' }))
+    await waitFor(() => expect(window.location.hash).toBe('#settings'))
+    expect(nav.getAllByRole('button', { current: 'page' })).toHaveLength(1)
+    expect(nav.getByRole('button', { name: '我的' })).toHaveAttribute('aria-current', 'page')
+    await pressBack()
+    expect(window.location.hash).toBe('#harness')
   })
 
   it('屏幕左边缘向右滑动触发边缘手势返回上一级', async () => {
@@ -423,7 +425,7 @@ describe('返回键与视图历史', () => {
     fireEvent.touchEnd(window, { changedTouches: [{ clientX: 120, clientY: 210 }] })
 
     // 应自动返回到主视图
-    await waitFor(() => expect(window.location.hash).toBe(''))
+    await waitFor(() => expect(window.location.hash).toBe('#harness'))
     expect(mainViewHeading()).toBeVisible()
   })
 })
