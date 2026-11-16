@@ -26,6 +26,19 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
         if (!store.knowledgeModelWrite) throw RuntimeFailure("KNOWLEDGE_WRITE_DISABLED", "请在我的 → 助手偏好 → 记忆与资料中开启「允许对话写入资料库」")
     }
 
+    fun taskScope() = CompanionTaskModel.ReadScope(
+        notifications = store.notificationModelAccess,
+        sharedMaterial = store.knowledgeModelAccess,
+        conversation = memory.enabled,
+    )
+    /** 至少一项事项来源仍开启。全部关闭时说明可重新打开哪一项，而不是只报一个总开关。 */
+    fun requireReadableTasks() {
+        if (!taskScope().any) throw RuntimeFailure(
+            "TASK_MODEL_DISABLED",
+            "长期记忆、资料检索和通知事项访问都已关闭。可在助手偏好中重新打开需要的一项；通知正文、日历和系统权限仍需单独允许。",
+        )
+    }
+    /** 通知正文单独授权。秘书事项不走这道闸门。 */
     fun requireTasks() {
         if (!store.notificationModelAccess) throw RuntimeFailure("TASK_MODEL_DISABLED", "用户未允许对话访问通知事项")
     }
@@ -54,10 +67,7 @@ internal class CompanionAgentAccess(context: Context, request: JSONObject) {
                 .put("readTool", "mobile_knowledge_read").put("imageTool", "mobile_knowledge_image")
                 .put("statusTool", "mobile_knowledge_status")
                 .put("semanticAllowed", canReadKnowledge && semantic.enabled))
-            .put("tasks", JSONObject().put("allowed", store.notificationModelAccess)
-                .put("errorCode", if (store.notificationModelAccess) JSONObject.NULL else "TASK_MODEL_DISABLED")
-                .put("searchTool", "mobile_task_search").put("updateTool", "mobile_task_update")
-                .put("sharedMaterialIncluded", store.notificationModelAccess && canReadKnowledge))
+            .put("tasks", CompanionTaskModel.taskCapability(taskScope()))
             .put("secretary",JSONObject().put("allowed",canReadMemory).put("tool","mobile_secretary")
                 .put("notice","只含用户交办的秘书事项，与主人档案共用长期记忆访问开关；不因此开放通知内容。"))
             .put("notice", "按需检索，不自动读取全部内容；未知资料关键词时查询最近资料，再用 id/revision 读取原文。权限状态可能变化，以每次工具回执为准。")

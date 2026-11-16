@@ -879,23 +879,27 @@ class DeviceBridgeServer(
                     result.put("knowledge", JSONObject(io.deepseekharness.mobile.companion.CompanionKnowledgeModel.execute(store.knowledgeModelAccess, child.toString(), knowledge::findById, knowledge::recent, knowledge::exactPage) { knowledge.search(it) }))
                 }
                 if ("tasks" in kinds) {
-                    access.requireTasks()
+                    access.requireReadableTasks()
                     val child = JSONObject().put("query", query)
                     if (request.has("reminderFromMs")) child.put("reminderFromMs", request.get("reminderFromMs"))
                     if (request.has("reminderToMs")) child.put("reminderToMs", request.get("reminderToMs"))
-                    val tasks = io.deepseekharness.mobile.companion.CompanionTaskModel.execute(store.notificationModelAccess, child.toString(), { limit ->
-                        val allowShared = store.knowledgeModelAccess
+                    val tasks = io.deepseekharness.mobile.companion.CompanionTaskModel.execute(access.taskScope(), child.toString(), { limit ->
                         io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { data ->
-                            data.queue.listItems(limit).filter { allowShared || !it.eventId.startsWith("share:") }
+                            data.queue.listItems(limit)
                         }
                     }, { eventId -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.sharedRecordId(eventId) } })
                     result.put("tasks", JSONObject(tasks))
                 }
                 // A later category can finish after access to an earlier one was revoked.
                 if ("memory" in kinds) access.requireMemory()
-                val hasSharedTasks = result.optJSONObject("tasks")?.let(CompanionTaskModel::includesSharedMaterial) == true
+                val taskResult = result.optJSONObject("tasks")
+                val hasSharedTasks = taskResult?.let(CompanionTaskModel::includesSharedMaterial) == true
                 if ("knowledge" in kinds || hasSharedTasks) access.requireKnowledge()
-                if ("tasks" in kinds) access.requireTasks()
+                if ("tasks" in kinds) {
+                    access.requireReadableTasks()
+                    if (taskResult != null && CompanionTaskModel.includesSource(taskResult, "notification")) access.requireTasks()
+                    if (taskResult != null && CompanionTaskModel.includesSource(taskResult, "conversation")) access.requireMemory()
+                }
                 respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result.toString(), false, null))
                 return
             }
@@ -959,15 +963,14 @@ class DeviceBridgeServer(
                 val context = appContext ?: throw RuntimeFailure("TASK_UNAVAILABLE", "事项服务不可用")
                 val request = try { JSONObject(param) } catch (_: Exception) { throw RuntimeFailure("TASK_INPUT_INVALID", "事项查询参数无效") }
                 val access = io.deepseekharness.mobile.companion.CompanionAgentAccess(context, request)
-                access.requireTasks()
+                access.requireReadableTasks()
                 val tasks = io.deepseekharness.mobile.companion.CompanionTaskModel
                 val result = if (request.optString("op", "search") == "update") {
                     val update = tasks.parseUpdate(param)
                     val now = System.currentTimeMillis()
                     val changed = io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
                         val current = store.queue.item(update.id) ?: throw RuntimeFailure("TASK_NOT_FOUND", "事项不存在或已删除")
-                        if (current.eventId.startsWith("share:") && !io.deepseekharness.mobile.companion.CompanionStore(context).knowledgeModelAccess)
-                            throw RuntimeFailure("KNOWLEDGE_MODEL_DISABLED", "请先允许对话访问本地资料")
+                        tasks.assertMutable(current, access.taskScope())
                         if (current.state != update.expectedState) throw RuntimeFailure("TASK_CONFLICT", "事项状态已变化，请先重新读取")
                         if (update.expectedRevision != null && update.expectedRevision != tasks.revision(current))
                             throw RuntimeFailure("TASK_CONFLICT", "事项内容或提醒已变化，请先重新读取")
@@ -990,19 +993,21 @@ class DeviceBridgeServer(
                     refreshed
                 } else {
                     io.deepseekharness.mobile.companion.CompanionTaskModel.execute(
-                        io.deepseekharness.mobile.companion.CompanionStore(context).notificationModelAccess,
+                        access.taskScope(),
                         param,
                         { limit ->
-                            val allowShared = io.deepseekharness.mobile.companion.CompanionStore(context).knowledgeModelAccess
                             io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { store ->
-                                store.queue.listItems(limit).filter { allowShared || !it.eventId.startsWith("share:") }
+                                store.queue.listItems(limit)
                             }
                         },
                         { eventId -> io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(context).use { it.queue.sharedRecordId(eventId) } },
                     )
                 }
-                access.requireTasks()
-                if (tasks.includesSharedMaterial(JSONObject(result))) access.requireKnowledge()
+                val taskPayload = JSONObject(result)
+                access.requireReadableTasks()
+                if (tasks.includesSource(taskPayload, "notification")) access.requireTasks()
+                if (tasks.includesSource(taskPayload, "conversation")) access.requireMemory()
+                if (tasks.includesSharedMaterial(taskPayload)) access.requireKnowledge()
                 respondResult(output, io.deepseekharness.mobile.shizuku.DeviceCommandResult(true, 0, result, false, null))
                 return
             }

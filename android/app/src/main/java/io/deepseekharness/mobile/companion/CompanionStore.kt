@@ -4,6 +4,19 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
+/**
+ * 未写入偏好时的对话访问默认值。
+ * 缺键视为开启记忆与资料检索；已经保存成 false 的选择保持关闭。
+ * 通知正文、日历、写入资料和完全权限不在这里放行。
+ */
+internal object CompanionAccessDefaults {
+    const val BUBBLE_MEMORY = true
+    const val KNOWLEDGE_READ = true
+    const val KNOWLEDGE_WRITE = false
+    const val NOTIFICATION_MODEL = false
+    const val CALENDAR_MODEL = false
+}
+
 /** 本地有界记录；不通过 Harness 或网络发送。 */
 class CompanionStore(context: Context) {
     private val app = context.applicationContext
@@ -21,7 +34,7 @@ class CompanionStore(context: Context) {
         set(value) { prefs.edit().putString("chat_height_mode", value).apply() }
 
     var bubbleMemoryAccess: Boolean
-        get() = prefs.getBoolean("bubble_memory_access", false)
+        get() = prefs.getBoolean("bubble_memory_access", CompanionAccessDefaults.BUBBLE_MEMORY)
         set(value) { prefs.edit().putBoolean("bubble_memory_access", value).apply() }
     var proactiveMemoryChat: Boolean
         get() = prefs.getBoolean("proactive_memory_chat", false)
@@ -114,11 +127,11 @@ class CompanionStore(context: Context) {
         }
     /** Separate from collection: allowing model access can send notification text externally. */
     var notificationModelAccess: Boolean
-        get() = prefs.getBoolean("notification_model_access", false)
+        get() = prefs.getBoolean("notification_model_access", CompanionAccessDefaults.NOTIFICATION_MODEL)
         set(value) { prefs.edit().putBoolean("notification_model_access", value).apply() }
     /** Separate consent for sharing excerpts with the configured model. */
     var knowledgeModelAccess: Boolean
-        get() = prefs.getBoolean("knowledge_model_access", false)
+        get() = prefs.getBoolean("knowledge_model_access", CompanionAccessDefaults.KNOWLEDGE_READ)
         set(value) {
             check(prefs.edit().putBoolean("knowledge_model_access", value).commit())
             if (!value) {
@@ -129,11 +142,11 @@ class CompanionStore(context: Context) {
             }
         }
     var knowledgeModelWrite: Boolean
-        get() = prefs.getBoolean("knowledge_model_write", false)
+        get() = prefs.getBoolean("knowledge_model_write", CompanionAccessDefaults.KNOWLEDGE_WRITE)
         set(value) { check(prefs.edit().putBoolean("knowledge_model_write", value).commit()) }
     /** Explicit separate consent for sharing calendar titles with the configured model. */
     var calendarModelAccess: Boolean
-        get() = prefs.getBoolean("calendar_model_access", false)
+        get() = prefs.getBoolean("calendar_model_access", CompanionAccessDefaults.CALENDAR_MODEL)
         set(value) { prefs.edit().putBoolean("calendar_model_access", value).apply() }
     var dailyBriefEnabled: Boolean
         get() = prefs.getBoolean("daily_brief_enabled", false)
