@@ -337,7 +337,7 @@ describe('返回键与视图历史', () => {
     act(() => { window.dispatchEvent(new CustomEvent('dsh-native-tab', { detail: 'harness' })) })
     await waitFor(() => expect(window.location.hash).toBe('#harness'))
     expect(nav.getByRole('button', { name: '对话' })).toHaveAttribute('aria-current', 'page')
-    fireEvent.click(nav.getByRole('button', { name: '工具' }))
+    fireEvent.click(screen.getByRole('button', { name: '我的工具' }))
     fireEvent.click(await screen.findByRole('button', { name: /插件管理.*Harness/ }))
     expect(await screen.findByRole('heading', { name: '插件管理' })).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: '返回工具' }))
@@ -400,9 +400,9 @@ describe('返回键与视图历史', () => {
   it('底部标签切换页面并保持唯一选中项与返回历史', async () => {
     await renderAtMainView()
     const nav = within(screen.getByRole('navigation', { name: '底部导航' }))
-    expect(nav.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['对话', '资料', '任务', '工具', '我的'])
-    expect(nav.getAllByRole('button').map(button => button.textContent)).toEqual(['对话', '资料', '任务', '工具', '我的'])
-    for (const [name, hash] of [['对话', '#harness'], ['资料', '#assistant-memory'], ['任务', '#assistant-tasks'], ['工具', '#tools'], ['我的', '#settings']]) {
+    expect(nav.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['对话', '我的'])
+    expect(nav.getAllByRole('button').map(button => button.textContent)).toEqual(['对话', '我的'])
+    for (const [name, hash] of [['对话', '#harness'], ['我的', '#settings']]) {
       fireEvent.click(nav.getByRole('button', { name: new RegExp(`^${name}$`) }))
       await waitFor(() => expect(window.location.hash).toBe(hash))
       expect(nav.getAllByRole('button', { current: 'page' })).toHaveLength(1)

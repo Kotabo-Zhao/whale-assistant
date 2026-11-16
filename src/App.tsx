@@ -1,6 +1,5 @@
 import './components/WorkspaceShell.css'
 import { ToolsWorkspace } from './components/ToolsWorkspace'
-import { AssistantOverview } from './components/AssistantOverview'
 import type { AppView } from './ui/appNavigation'
 import { AppSidebar, BottomNavigation } from './components/AppNavigation'
 import { useHarnessViewport } from './useHarnessViewport'
@@ -9,11 +8,11 @@ import appMark from './assets/app-mark.png'
 import whaleWave from './assets/whale-wave.svg'
 import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
-import { TaskStarter } from './components/TaskStarter'
 import { AssistantTasks } from './components/AssistantTasks'
 import { CompanionPersona } from './components/CompanionPersona'
 import { CompanionSettingsButton } from './components/CompanionSettingsButton'
 import { CompanionWorkspace } from './components/CompanionWorkspace'
+import { SuperagentSettings } from './components/SuperagentSettings'
 import type { AutomationRuleDefaults } from './components/AutomationRuleForm'
 import { AutomationDisclaimer } from './components/AutomationDisclaimer'
 import { AutomationTaskCard } from './components/AutomationTaskCard'
@@ -44,6 +43,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   BellRing,
+  BookOpen,
   Bot,
   CheckCircle2,
   ChevronRight,
@@ -58,6 +58,7 @@ import {
   Image,
   KeyRound,
   LogIn,
+  ListTodo,
   Loader2,
   LockKeyhole,
   Pencil,
@@ -79,6 +80,7 @@ import {
   SquareTerminal,
   Trash2,
   Wifi,
+  Wrench,
   X,
   ListChecks,
   MessageSquare,
@@ -209,9 +211,10 @@ function isSettingsView(view: AppView): boolean {
 }
 
 /** 按用户用途分类；分类只影响入口展示，不改动设置草稿。 */
-type SettingsHomeGroup = 'assistant' | 'workspace' | 'device' | 'models' | 'appearance' | 'notifications'
+type SettingsHomeGroup = 'daily' | 'assistant' | 'workspace' | 'device' | 'models' | 'appearance' | 'notifications'
 
 const SETTINGS_HOME_GROUPS: { id: SettingsHomeGroup; label: string }[] = [
+  { id: 'daily', label: '日常' },
   { id: 'models', label: '模型连接' },
   { id: 'assistant', label: '桌宠与主动跟进' },
   { id: 'notifications', label: '通知与免打扰' },
@@ -245,6 +248,33 @@ interface SettingsHomeEntry {
  * 兜底的是 `src/App.settingsHome.test.tsx` 里「切成英文后整屏入口都是英文」那条用例。
  */
 const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
+  {
+    id: 'library',
+    group: 'daily',
+    title: '资料',
+    hint: '查看、搜索和整理已保存的资料',
+    keywords: ['资料', '笔记', '知识', 'library', 'knowledge'],
+    target: { kind: 'view', view: 'assistant-memory' },
+    icon: <BookOpen size={20} />,
+  },
+  {
+    id: 'tasks',
+    group: 'daily',
+    title: '任务',
+    hint: '后台任务、近况与继续',
+    keywords: ['任务', '近况', '待办', 'task', 'tasks'],
+    target: { kind: 'view', view: 'assistant-tasks' },
+    icon: <ListTodo size={20} />,
+  },
+  {
+    id: 'tools-home',
+    group: 'daily',
+    title: '工具',
+    hint: '已启用的工具与插件',
+    keywords: ['工具', '插件', 'tools', 'plugin'],
+    target: { kind: 'view', view: 'tools' },
+    icon: <Wrench size={20} />,
+  },
   {
     id: 'models',
     group: 'models',
@@ -952,7 +982,6 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
         <button type="button" onClick={() => onNavigate('assistant-memory')}>{t('查看资料')}<ChevronRight size={16}/></button>
         <button type="button" onClick={() => onNavigate('tools')}>{t('我的工具')}<ChevronRight size={16}/></button>
       </nav>
-      <AssistantOverview onOpenTasks={onOpenTasks} />
 
       {keepAlive.reconnectRequired && !transitioning && (
         <div className="inline-alert warning" role="alert">
@@ -973,8 +1002,6 @@ function ConversationScreen({ busy, keepAlive, runtime, onInstall, onLaunch, onS
           <div><strong>{t("缺少本机运行组件")}</strong><span>{t("请安装支持当前 arm64 设备的新版应用。")}</span></div>
         </div>
       )}
-      <TaskStarter />
-      {installed && !transitioning && !updateRequired && <SessionManager embedded disabled={busy !== null} onBack={() => undefined} onOpenHarness={onLaunch} />}
     </div>
   )
 }
@@ -1367,7 +1394,7 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
       {!searching && <nav id="account-categories" className="account-sections" data-advanced={advanced} aria-label={t('设置分类')}>
         {SETTINGS_HOME_GROUPS.filter(group => advanced || !['device', 'workspace'].includes(group.id)).map(group => <button key={group.id} type="button" className="account-group-toggle"
           aria-label={t(group.label)} aria-expanded={expanded === group.id} aria-controls={'settings-group-' + group.id} onClick={() => toggleGroup(group.id)}>
-          {group.id === 'assistant' ? <Bot size={18}/> : group.id === 'workspace' ? <HardDrive size={18}/> : group.id === 'models' ? <KeyRound size={18}/> : group.id === 'notifications' ? <Bell size={18}/> : group.id === 'appearance' ? <Image size={18}/> : <SlidersHorizontal size={18}/>}
+          {group.id === 'daily' ? <BookOpen size={18}/> : group.id === 'assistant' ? <Bot size={18}/> : group.id === 'workspace' ? <HardDrive size={18}/> : group.id === 'models' ? <KeyRound size={18}/> : group.id === 'notifications' ? <Bell size={18}/> : group.id === 'appearance' ? <Image size={18}/> : <SlidersHorizontal size={18}/>}
           <strong>{t(group.label)}</strong></button>)}
       </nav>}
       <div className="settings-directory">
@@ -3317,6 +3344,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             <SettingsPageRow icon={<MessageSquare size={20} />} page="diagnostics-feedback" onOpen={onOpenSubpage} />
           </div>
         </div>
+        <SuperagentSettings />
         </>
         )}
         {page === 'diagnostics-log' && (
@@ -3430,7 +3458,7 @@ export function App() {
    * 未知时为 null：历史回退/前进之后无法再知道相邻记录是谁。
    */
   const previousViewRef = useRef<AppView | null>(null)
-  const lastSettingsGroup = useRef<SettingsHomeGroup | null>('assistant')
+  const lastSettingsGroup = useRef<SettingsHomeGroup | null>('daily')
   const [runtime, setRuntime] = useState<RuntimeState>(EMPTY_RUNTIME)
   const [settings, setSettings] = useState<RuntimeSettings | null>(null)
   /**

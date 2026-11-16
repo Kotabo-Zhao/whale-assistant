@@ -46,8 +46,13 @@ describe('设置首页：分组与分类筛选', () => {
       await screen.findByRole('heading', { name: '设置' }, { timeout: SETTINGS_HOME_TIMEOUT_MS })
   }
 
-  it('首页只展开助手设置，低频设置按目的聚合', async () => {
+  it('首页先展开日常，模型与设备仍按分组收起', async () => {
     await openSettingsHome()
+    expect(screen.getByRole('button', { name: /^资料/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /^任务/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /^工具/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /助手偏好/ })).toBeNull()
+    expandSettingsGroup('桌宠与主动跟进')
     expect(screen.getByRole('button', { name: /助手偏好/ })).toBeVisible()
     expect(screen.queryByRole('button', { name: /模型与密钥/ })).toBeNull()
     expandSettingsGroup('模型连接')
@@ -156,7 +161,7 @@ describe('设置首页：分组与分类筛选', () => {
     // 只输入不确认：列表不筛选——输入法组合中途不能被列表刷新打断。
     fireEvent.change(searchInput, { target: { value: '主题' } })
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.getByRole('region', { name: '桌宠与主动跟进' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '日常' })).toBeVisible()
 
     // 点搜索图标确认：应只保留外观与显示分组，隐藏其他分组如模型连接
     fireEvent.click(screen.getByRole('button', { name: '搜索入口' }))
@@ -170,7 +175,7 @@ describe('设置首页：分组与分类筛选', () => {
     fireEvent.click(clearButton)
     expect(searchInput).toHaveValue('')
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.getByRole('region', { name: '桌宠与主动跟进' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '日常' })).toBeVisible()
 
     // 回车确认无匹配词：显示空提示
     fireEvent.change(searchInput, { target: { value: '不存在的设置项xyz' } })
@@ -190,7 +195,7 @@ describe('设置首页：分组与分类筛选', () => {
     fireEvent.change(searchInput, { target: { value: '主' } })
     fireEvent.keyDown(searchInput, { key: 'Enter' })
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.getByRole('region', { name: '桌宠与主动跟进' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '日常' })).toBeVisible()
 
     // 组合结束（候选词落定）后再回车，这才该提交。
     fireEvent.compositionEnd(searchInput, { target: { value: '主题' } })

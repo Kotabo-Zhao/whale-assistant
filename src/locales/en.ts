@@ -1,6 +1,13 @@
 // 应用界面英文词典；不翻译用户输入、凭据或终端输出。
 export const english: Readonly<Record<string, string>> = {
   '高级设置': 'Advanced settings',
+  '日常': 'Everyday',
+  '任务': 'Tasks',
+  '查看、搜索和整理已保存的资料': 'View, search and organize saved notes',
+  '后台任务、近况与继续': 'Background tasks, updates and follow-up',
+  '已启用的工具与插件': 'Enabled tools and plugins',
+  '新安装默认开启，可随时关闭。需要同时开启长期记忆。桌宠可按需检索、保存和按你的要求修改记忆；相关内容可能发送给当前模型服务。': 'On for new installs and can be turned off. Long-term memory must also be on. The pet can search, save and edit memories when you ask; matching text may be sent to the current model service.',
+  '新安装默认开启，可随时关闭。检索到的资料可能发送给当前模型服务。通知正文和日历仍需单独允许。': 'On for new installs and can be turned off. Matching notes may be sent to the current model service. Notification text and calendar events still need their own permission.',
   '小鲸近况': 'Updates from Whale',
   "桌宠与主动跟进": "Pet and proactive follow-up",
   "外观与语言": "Appearance and language",

@@ -2498,7 +2498,8 @@ button:disabled {
   .mobile-session-entry { display: inline-flex; flex-shrink: 0; color: var(--blue); }
   .bottom-navigation {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 4px;
     padding: 5px max(8px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
     border-top: 1px solid var(--line);

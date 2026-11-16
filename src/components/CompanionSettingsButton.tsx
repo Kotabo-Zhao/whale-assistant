@@ -6,10 +6,10 @@ import './CompanionSettingsButton.css'
 
 const options: { key: keyof CompanionQuickSettings; title: string; hint: string }[] = [
   { key: 'memoryEnabled', title: '允许使用长期记忆', hint: '已确认的记忆可供助手检索，相关内容可能发送给当前模型服务。' },
-  { key: 'bubbleMemoryAccess', title: '允许桌宠访问长期记忆', hint: '需要同时开启长期记忆。允许桌宠按需检索、保存和按你的要求修改记忆；相关内容可能发送给当前模型服务。' },
+  { key: 'bubbleMemoryAccess', title: '允许桌宠访问长期记忆', hint: '新安装默认开启，可随时关闭。需要同时开启长期记忆。桌宠可按需检索、保存和按你的要求修改记忆；相关内容可能发送给当前模型服务。' },
   { key: 'contextFollowup', title: '结合最近对话和资料主动跟进', hint: '新对话结束或资料更新后，桌宠会匹配近 7 天的对话，将最多 4 条对话摘录、1 段相关资料及已提醒的相关事项名交给后台模型判断。只在空闲时提醒，同一件事会去重。需开启资料检索。' },
   { key: 'knowledgeModelWrite', title: '允许对话写入资料库', hint: '主对话和桌宠可按你的要求保存文字。修改已有笔记还需开启资料检索。' },
-  { key: 'knowledgeModelAccess', title: '允许对话检索本地资料', hint: '开启后检索到的资料可能发送给当前模型服务。' },
+  { key: 'knowledgeModelAccess', title: '允许对话检索本地资料', hint: '新安装默认开启，可随时关闭。检索到的资料可能发送给当前模型服务。通知正文和日历仍需单独允许。' },
   { key: 'automaticAssistantMemory', title: '自动记住对话中的偏好', hint: '开启后助手提出的长期事实会直接保存，无需逐条确认；可能记错，可随时查看、修改或删除。' },
   { key: 'automaticUsageMemory', title: '自动整理应用使用习惯', hint: '需要系统使用情况访问权限和悬浮助手运行；本机汇总近 7 天使用时长，不读取应用内部内容。检索时可能发送给模型。' },
   { key: 'automaticNotificationMemory', title: '自动记住其他应用通知', hint: '需要开启通知摘要及系统通知读取权限。符合条件的新通知会自动作为未经核实的记忆保存在本机；检索时可能发送给模型。' },

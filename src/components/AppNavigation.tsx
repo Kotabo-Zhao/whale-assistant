@@ -1,4 +1,4 @@
-import { BookOpen, History, ListTodo, MessageSquare, Settings2, Wrench } from 'lucide-react'
+import { History, MessageSquare, Settings2 } from 'lucide-react'
 import appMark from '../assets/app-mark.png'
 import { t, useLanguage } from '../i18n'
 import { primaryDestination, type AppView } from '../ui/appNavigation'
@@ -8,11 +8,9 @@ interface AppSidebarProps {
   onNavigate: (view: AppView) => void
 }
 
+/** 主路径只留对话和设置。资料、任务、工具从对话快捷入口和「我的 → 日常」进入。 */
 const destinations = [
   { view: 'harness', label: '对话', Icon: MessageSquare },
-  { view: 'assistant-memory', label: '资料', Icon: BookOpen },
-  { view: 'assistant-tasks', label: '任务', Icon: ListTodo },
-  { view: 'tools', label: '工具', Icon: Wrench },
   { view: 'settings', label: '我的', Icon: Settings2 },
 ] as const
 
