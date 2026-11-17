@@ -87,7 +87,8 @@ class WorkspaceLayoutDeviceTest {
         fun settingsEntry(query: String, selector: String) {
             assertTrue(nav("我的"))
             val group = when (query) {
-                "后台", "文件管理", "版本管理", "Ubuntu 运行时", "诊断", "会话" -> "workspace"
+                "会话" -> "daily"
+                "后台", "文件管理", "版本管理", "Ubuntu 运行时", "诊断" -> "workspace"
                 "设备 Shell 设置", "自动化设置" -> "device"
                 "鲸鱼娘人格" -> "assistant"
                 "主题" -> "appearance"

@@ -277,6 +277,15 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
     icon: <Wrench size={20} />,
   },
   {
+    id: 'sessions',
+    group: 'daily',
+    title: '会话',
+    hint: '查看和切换已保存的对话',
+    keywords: ['会话', '历史', 'session', 'sessions'],
+    target: { kind: 'view', view: 'sessions' },
+    icon: <MessageSquare size={20} />,
+  },
+  {
     id: 'models',
     group: 'models',
     title: '模型与密钥',
@@ -321,15 +330,6 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
     // 搜「导入」「投递区」的人要找的是这一页。
     target: { kind: 'view', view: 'files' },
     icon: <FolderInput size={20} />,
-  },
-  {
-    id: 'sessions',
-    group: 'workspace',
-    title: '会话',
-    hint: '查看和切换已保存的对话',
-    keywords: ['会话', '历史', 'session', 'sessions'],
-    target: { kind: 'view', view: 'sessions' },
-    icon: <MessageSquare size={20} />,
   },
 
   // —— 版本管理：磁盘上有哪几份运行时、现在用哪一份。
@@ -5570,6 +5570,9 @@ export function App() {
           <button className="header-brand-group brand-home" type="button" aria-label={t('鲸鱼助手')} onClick={() => setActiveView(canEnterConversation(runtime, settings) && !conversationEntrySuppressed.current ? 'harness' : 'conversation')}><Brand /></button>
           <div className="header-actions">
             <PhaseBadge phase={runtime.phase} />
+            {(activeView === 'conversation' || activeView === 'harness') && (
+              <button type="button" className="icon-button mobile-session-entry" title={t('会话')} aria-label={t('会话')} onClick={() => setActiveView('sessions')}><MessageSquare size={18} /></button>
+            )}
             {(activeView === 'conversation' || activeView === 'harness') && (
               <button className="icon-button header-settings" type="button" aria-label={t("打开应用设置")} title={t("应用设置")} onClick={() => setActiveView('settings')}>
                 <Settings2 size={19} />

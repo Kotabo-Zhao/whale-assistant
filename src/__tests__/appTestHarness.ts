@@ -826,7 +826,7 @@ export function expandSettingsGroup(name: string): void {
 
 export async function openSettingsPage(name: string, sub?: string): Promise<void> {
   await openSettingsHome()
-  expandSettingsGroup(/自动化|设备 Shell/.test(name) ? '设备控制' : /后台|文件|版本|运行时|诊断|会话/.test(name) ? '运行与数据' : /模型|连接/.test(name) ? '模型连接' : /外观|主题|语言/.test(name) ? '外观与语言' : '桌宠与主动跟进')
+  expandSettingsGroup(/会话/.test(name) ? '日常' : /自动化|设备 Shell/.test(name) ? '设备控制' : /后台|文件|版本|运行时|诊断/.test(name) ? '运行与数据' : /模型|连接/.test(name) ? '模型连接' : /外观|主题|语言/.test(name) ? '外观与语言' : '桌宠与主动跟进')
   const entry = await screen.findByRole('button', { name: new RegExp(name) }, {
     timeout: SETTINGS_NAV_TIMEOUT_MS,
   })
