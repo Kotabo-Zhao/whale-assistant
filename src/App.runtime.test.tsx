@@ -584,7 +584,7 @@ describe('空闲自行停止', () => {
       emitProgress({ phase: 'ready', downloadedBytes: readyState.totalBytes, totalBytes: readyState.totalBytes })
     })
 
-    expect(await screen.findByText('运行环境已自行停止（可能是空闲自动停止）；点「打开 Harness」会重新启动，旧会话需要重新连接。')).toBeVisible()
+    expect(await screen.findByText('运行环境已自行停止（可能是空闲自动停止）；回到对话会重新启动，旧会话需要重新连接。')).toBeVisible()
     expect(bridge.startHarness).not.toHaveBeenCalled()
 
     // 事后也能查到这次停止是谁发起的，而不是只看到「已就绪」。

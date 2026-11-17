@@ -198,7 +198,7 @@ describe('Onboarding', () => {
     renderOnboarding({ runtime: { ...runtime, phase: 'running' } })
     next()
     expect(screen.getByRole('button', { name: /已安装/ })).toBeDisabled()
-    expect(screen.getByText('装好运行环境后打开 Harness 就能直接对话。')).toBeDefined()
+    expect(screen.getByText('装好运行环境后就可以直接对话。')).toBeDefined()
   })
 
   it('skips the wizard via the close button', () => {

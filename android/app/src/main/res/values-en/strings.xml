@@ -12,15 +12,15 @@
     <string name="harness_tab_settings">Settings</string>
 
     <string name="harness_return_home">‹ Back</string>
-    <string name="harness_page_title">DeepSeek Chat</string>
-    <string name="app_name">DeepSeek Harness</string>
-    <string name="harness_title">Harness chat</string>
+    <string name="harness_page_title">Whale Assistant</string>
+    <string name="app_name">Whale Assistant</string>
+    <string name="harness_title">Chat</string>
     <string name="harness_back_to_app">Back to app</string>
     <string name="harness_companion">Companion</string>
     <string name="harness_manage_return_hint">Use system Back to return to the current conversation.</string>
     <string name="harness_manage">Manage and settings</string>
-    <string name="harness_exit_confirm_title">Exit DSH</string>
-    <string name="harness_exit_confirm_message">Return to the app? The current DSH page will remain in the background.</string>
+    <string name="harness_exit_confirm_title">Return to the app</string>
+    <string name="harness_exit_confirm_message">Return to the app? The current conversation stays in the background.</string>
     <string name="harness_exit_confirm_cancel">Continue</string>
     <string name="harness_exit_confirm_ok">Return to app</string>
     <string name="harness_open_management">Open app settings</string>
@@ -36,30 +36,30 @@
     <string name="harness_session_failed">Unable to establish a local Harness session</string>
     <string name="harness_page_failed">Unable to open Harness. Please retry in Settings.</string>
     <string name="shizuku_missing">Install and start Shizuku first</string>
-    <string name="accessibility_service_label">Harness accessibility automation</string>
+    <string name="accessibility_service_label">Whale Assistant accessibility</string>
     <string name="accessibility_service_description">Reads the current window of apps you explicitly allow and performs limited click, text, and scroll actions requested by you. Passwords, verification codes, payments, permissions, and lock screens are refused.</string>
     <!-- Background keep-alive foreground service notification: static text with no URL, credential, terminal output, or user data. -->
     <string name="keep_alive_channel_name">Background run</string>
     <string name="keep_alive_channel_description">Keeps the local Harness runtime running in the background</string>
-    <string name="keep_alive_notification_title">Harness is running in the background</string>
+    <string name="keep_alive_notification_title">Whale Assistant is running in the background</string>
     <string name="keep_alive_notification_text">Tap to return to the app and manage the runtime</string>
     <!-- Diagnostic log export: static share sheet text with no file path or log content. -->
     <string name="diagnostic_share_title">Export diagnostic log</string>
-    <string name="diagnostic_share_subject">DeepSeek Harness diagnostic log</string>
+    <string name="diagnostic_share_subject">Whale Assistant diagnostic log</string>
     <!-- Floating ball. Fixed copy: no URL, port, credential, or session content. -->
     <!-- Screen-reader name for the ball itself: a noun phrase, not the status-sentence notification title below. -->
     <string name="overlay_ball_content_description">Whale pet. Tap to chat or hold for quick actions.</string>
-    <string name="overlay_conversation_title">Harness AI chat</string>
+    <string name="overlay_conversation_title">Whale Assistant</string>
     <string name="overlay_conversation_expand">Full screen</string>
     <string name="overlay_conversation_close">Close</string>
-    <string name="overlay_conversation_unavailable">Chat is not running. Tap to open Harness in the app.</string>
+    <string name="overlay_conversation_unavailable">Chat is not running. Tap to return to the app.</string>
     <string name="overlay_ball_channel_name">Floating ball</string>
     <string name="overlay_ball_channel_description">Shows the assistant above other apps; tap for chat or long-press for shortcuts</string>
     <string name="overlay_ball_notification_title">Floating ball is on</string>
     <string name="overlay_ball_notification_text">Tap for chat; long-press for shortcuts</string>
     <string name="overlay_ball_menu_return">Return to app</string>
     <string name="overlay_ball_menu_hide">Hide floating ball</string>
-    <string name="overlay_ball_secondary_conversation_description">Open the small Harness AI chat window</string>
+    <string name="overlay_ball_secondary_conversation_description">Open the small chat window</string>
     <string name="overlay_ball_secondary_virtual_screen_description">Open the target-app virtual screen overlay</string>
     <string name="overlay_ball_secondary_virtual_screen_unavailable_toast">The virtual screen is not running yet. Open “Target-app virtual screen” in Harness first.</string>
     <string name="overlay_ball_secondary_return">Return to app</string>

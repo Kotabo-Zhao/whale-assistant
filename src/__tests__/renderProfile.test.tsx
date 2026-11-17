@@ -238,7 +238,7 @@ describe('§5.6-B 渲染测量', () => {
       expandSettingsGroup('运行与数据')
       profile.reset()
 
-      fireEvent.click(screen.getByRole('button', { name: '打开 Harness' }))
+      fireEvent.click(screen.getByRole('button', { name: '打开对话' }))
       await tick(2_000)
 
       report('主 CTA：点击「打开 Harness」', profile.sinceReset())

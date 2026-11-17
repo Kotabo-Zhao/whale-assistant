@@ -3742,20 +3742,14 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
 .conversation-stage { display: flex; flex-direction: column; min-height: 100%; }
 .conversation-thread { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; }
 .conversation-native-slot { flex: 1; min-height: 240px; }
-.conversation-log { flex: 1; margin: 0; color: var(--text); }
+.conversation-log { flex: 1; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-card); }
 .conversation-preview-note { color: var(--muted); }
 .conversation-composer { display: flex; gap: 8px; align-items: flex-end; }
-.conversation-composer textarea { flex: 1; min-height: 48px; resize: vertical; }
+.conversation-composer textarea { flex: 1; min-height: 48px; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--ink); font: inherit; padding: 10px 12px; }
+.conversation-composer .button-primary { min-height: 48px; }
 .conversation-gate .launch-panel { border-radius: var(--radius-card); padding: 22px; box-shadow: 0 12px 30px var(--shadow-color); }
 .conversation-gate .launch-icon { border-radius: var(--radius-inner); background: linear-gradient(135deg, var(--assistant-brand-13), var(--assistant-brand-14)); }
 .conversation-gate .launch-actions .button-primary { min-height: 48px; padding-inline: 24px; }
-.conversation-stage { display: flex; flex-direction: column; min-height: 100%; }
-.conversation-thread { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; }
-.conversation-native-slot { flex: 1; min-height: 240px; }
-.conversation-log { flex: 1; margin: 0; color: var(--text); }
-.conversation-preview-note { color: var(--muted); }
-.conversation-composer { display: flex; gap: 8px; align-items: flex-end; }
-.conversation-composer textarea { flex: 1; min-height: 48px; resize: vertical; }
 @media (max-width: 360px) { .home-welcome { padding: 20px; } .home-welcome-mark { width: 58px; height: 58px; border-radius: var(--radius-inner); } .home-welcome-mark img { width: 40px; height: 40px; } }
 
 /* 手机优先保留信息宽度；长标题和状态允许换行。 */

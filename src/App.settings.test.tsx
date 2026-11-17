@@ -482,7 +482,7 @@ describe('设置草稿与未保存的输入', () => {
     bridge.getSettings.mockResolvedValue({ ...settings, deepSeekAccountConfigured: !signedIn })
     fireEvent.focus(window)
 
-    await screen.findByRole('button', { name: signedIn ? '登录 DeepSeek 账号' : '打开 Harness 管理账号' })
+    await screen.findByRole('button', { name: signedIn ? '登录 DeepSeek 账号' : '在对话里管理账号' })
     expect(screen.getByLabelText(/DeepSeek API Key/)).toHaveValue('unit-test-unsaved-key')
   })
 

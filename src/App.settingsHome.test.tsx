@@ -59,8 +59,10 @@ describe('设置首页：分组与分类筛选', () => {
     expect(screen.getByRole('button', { name: /模型与密钥/ })).toBeVisible()
     expect(screen.queryByRole('button', { name: /设备 Shell 设置/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Ubuntu 运行时/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /查看和切换已保存的对话/ })).toBeNull()
     expandSettingsGroup('运行与数据')
     expect(screen.getByRole('button', { name: /Ubuntu 运行时/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /查看和切换已保存的对话/ })).toBeVisible()
     expect(screen.queryByRole('button', { name: /模型与密钥/ })).toBeNull()
     expandSettingsGroup('设备控制')
     expect(screen.getByRole('button', { name: /设备 Shell 设置/ })).toBeVisible()
@@ -235,7 +237,7 @@ describe('设置首页：分组与分类筛选', () => {
     bridge.openHarness.mockClear()
 
     expandSettingsGroup('运行与数据')
-    const launchButton = screen.getByRole('button', { name: /打开 Harness/ })
+    const launchButton = screen.getByRole('button', { name: '打开对话' })
     // 忙锁没释放时按钮禁用，点了也只会在 JS 里早退，测不到这条路径。
     await waitFor(() => expect(launchButton).toBeEnabled())
 

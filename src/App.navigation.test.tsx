@@ -308,7 +308,7 @@ describe('返回键与视图历史', () => {
     // 设置页的「打开 Harness」在启动成功后还会再切到 settings（同一视图）：
     // 这属于同视图重复导航，不应再压一条历史记录。
     expandSettingsGroup('运行与数据')
-    fireEvent.click(screen.getByRole('button', { name: '打开 Harness' }))
+    fireEvent.click(screen.getByRole('button', { name: '打开对话' }))
     await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
 
     expect(pushState).not.toHaveBeenCalled()

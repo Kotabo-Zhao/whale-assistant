@@ -35,7 +35,7 @@ class WhaleAuthoredDeviceTest {
     private fun waitFor(why: String, action: () -> Boolean) {
         val end = SystemClock.elapsedRealtime() + 15_000
         while (SystemClock.elapsedRealtime() < end) { if (action()) return; Thread.sleep(60) }
-        val names = listOf("工作台", "工具", "我的工具", "去对话创作", title, "更新运行环境")
+        val names = listOf("鲸鱼助手", "工具", "我的工具", "去对话创作", title, "更新运行环境")
         val focus = shell("dumpsys window").lineSequence().firstOrNull { it.contains("mCurrentFocus=") }
         // Only include known navigation labels and counts in diagnostics.
         val catalog = io.deepseekharness.mobile.features.WhaleFeatureStore(app).activeTools().size

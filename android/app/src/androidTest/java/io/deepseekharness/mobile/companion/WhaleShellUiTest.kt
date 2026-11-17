@@ -233,7 +233,7 @@ class WhaleShellUiTest {
                 webTap(sharedNav("任务"))
                 until("对话未直达事项") { js("location.hash==='#assistant-tasks'")=="true" && native("harness_web_view")==null }
                 webTap(nav("对话")); until("返回工作台前没有恢复对话") { native("harness_web_view")===chat }
-                webTap(sharedNav("工作台"))
+                webTap(sharedNav("鲸鱼助手"))
                 until("工作台启动区未出现") { js("!!document.querySelector('.conversation-gate .launch-panel')")=="true" && native("harness_web_view")==null }
                 js("document.querySelector('.app-main').scrollTop=0;window.scrollTo(0,0);void 0")
                 val homeEnd = js("Math.min(document.querySelector('.desk-shortcuts').getBoundingClientRect().bottom,innerHeight)/innerHeight").toDouble()

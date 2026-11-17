@@ -322,6 +322,15 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
     target: { kind: 'view', view: 'files' },
     icon: <FolderInput size={20} />,
   },
+  {
+    id: 'sessions',
+    group: 'workspace',
+    title: '会话',
+    hint: '查看和切换已保存的对话',
+    keywords: ['会话', '历史', 'session', 'sessions'],
+    target: { kind: 'view', view: 'sessions' },
+    icon: <MessageSquare size={20} />,
+  },
 
   // —— 版本管理：磁盘上有哪几份运行时、现在用哪一份。
   {
@@ -1456,7 +1465,7 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
           {group.id === 'workspace' && !searching && (
             <button className="button button-secondary compact-button directory-runtime-action" type="button" onClick={onLaunch} disabled={busy !== null || !runtimeInstalled(runtime)}>
           {busy === 'launch' ? <Loader2 className="spin" size={18} /> : runtime.updateAvailable ? <RefreshCw size={18} /> : <Bot size={18} />}
-          {runtime.updateAvailable ? t("更新运行环境") : t("打开 Harness")}
+          {runtime.updateAvailable ? t("更新运行环境") : t("打开对话")}
         </button>
           )}
           </div>}
@@ -2415,10 +2424,10 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             </div>
             <button className="button button-secondary compact-button" type="button" disabled={!canOpenHarness} onClick={onLaunchConfirmed}>
               {settings.deepSeekAccountConfigured === true ? <Rocket size={16} /> : <LogIn size={16} />}
-              {settings.deepSeekAccountConfigured === true ? t("打开 Harness 管理账号") : t("登录 DeepSeek 账号")}
+              {settings.deepSeekAccountConfigured === true ? t("在对话里管理账号") : t("登录 DeepSeek 账号")}
             </button>
           </div>
-          <p className="field-help">{t("打开 Harness 后，在侧栏「更多」菜单选择登录；登录完成后返回此页可刷新账号状态。")}</p>
+          <p className="field-help">{t("进入对话后，在侧栏「更多」菜单选择登录；登录完成后返回此页可刷新账号状态。")}</p>
           {!hasConfiguredModelCredential(settings) && !credentialPendingInDraft && (
             /*
              * 应用只读取 Harness 凭据文件中的白名单配置状态，不读取密钥内容，也无法识别
@@ -2663,7 +2672,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             />
           </label>
           <label className="toggle-row">
-            <span><strong>{t("保持屏幕常亮")}</strong><small>{t("应用管理与 Harness 对话界面均保持常亮")}</small></span>
+            <span><strong>{t("保持屏幕常亮")}</strong><small>{t("应用和对话界面都保持常亮")}</small></span>
             <input
               type="checkbox"
               role="switch"
@@ -3344,7 +3353,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
           </p>
           <div className="settings-inline-actions">
             <button className="button button-secondary" type="button" onClick={onOpenExternalHarness} disabled={busy !== null || runtime.phase !== 'running'}>
-              <ExternalLink size={18} />{t("用外部浏览器打开 Harness")}
+              <ExternalLink size={18} />{t("用外部浏览器打开对话")}
             </button>
           </div>
           {externalBrowsers !== null && externalBrowsers.browsers.length > 0 && (
@@ -4087,7 +4096,7 @@ export function App() {
     if (phase !== 'ready') return
     setLastStop(userRequested ? 'user' : 'self')
     if (userRequested) return
-    notify(t("运行环境已自行停止（可能是空闲自动停止）；点「打开 Harness」会重新启动，旧会话需要重新连接。"), 'info')
+    notify(t("运行环境已自行停止（可能是空闲自动停止）；回到对话会重新启动，旧会话需要重新连接。"), 'info')
   }, [notify])
 
   /** 快照读取（挂载、启动、停止后的 getState）同样要维护「上一次是否在运行」，但它不触发提示。 */
@@ -4655,7 +4664,7 @@ export function App() {
      * App 加密存储与 Harness 凭据文件，因此仍为其它凭据来源保留用户显式放行通道。
      */
     if (!skipCredentialGate && settings !== null && !hasConfiguredModelCredential(settings)) {
-      notify(t("未检测到模型凭据：请先在「模型与密钥」登录 DeepSeek 账号或保存一次 API Key 再打开 Harness"), 'error')
+      notify(t("未检测到模型凭据：请先在「模型与密钥」登录 DeepSeek 账号或保存一次 API Key 再进入对话"), 'error')
       setActiveView(SETTINGS_PAGE_META.models.view)
       return
     }
@@ -5558,10 +5567,9 @@ export function App() {
       <AppSidebar activeView={activeView} onNavigate={setActiveView} />
       <div className="app-frame">
         <header className="mobile-header">
-          <button className="header-brand-group brand-home" type="button" aria-label={t('工作台')} onClick={() => setActiveView(canEnterConversation(runtime, settings) && !conversationEntrySuppressed.current ? 'harness' : 'conversation')}><Brand /></button>
+          <button className="header-brand-group brand-home" type="button" aria-label={t('鲸鱼助手')} onClick={() => setActiveView(canEnterConversation(runtime, settings) && !conversationEntrySuppressed.current ? 'harness' : 'conversation')}><Brand /></button>
           <div className="header-actions">
             <PhaseBadge phase={runtime.phase} />
-            <button type="button" className="icon-button mobile-session-entry" title={t('会话管理')} aria-label={t('会话管理')} onClick={() => setActiveView('sessions')}><MessageSquare size={18} /></button>
             {(activeView === 'conversation' || activeView === 'harness') && (
               <button className="icon-button header-settings" type="button" aria-label={t("打开应用设置")} title={t("应用设置")} onClick={() => setActiveView('settings')}>
                 <Settings2 size={19} />

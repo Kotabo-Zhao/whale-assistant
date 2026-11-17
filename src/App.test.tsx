@@ -159,10 +159,10 @@ describe('App conversation gate', () => {
 
     // 首次配置未完成：点「打开 Harness」既不启动也不开门，而是送到密钥设置页并说明原因。
     expandSettingsGroup('运行与数据')
-    fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
+    fireEvent.click(screen.getByRole('button', { name: /打开对话/ }))
 
     expect(await screen.findByRole('heading', { name: '模型与密钥' })).toBeInTheDocument()
-    expect(await screen.findByText('未检测到模型凭据：请先在「模型与密钥」登录 DeepSeek 账号或保存一次 API Key 再打开 Harness')).toBeInTheDocument()
+    expect(await screen.findByText('未检测到模型凭据：请先在「模型与密钥」登录 DeepSeek 账号或保存一次 API Key 再进入对话')).toBeInTheDocument()
     expect(bridge.startHarness).not.toHaveBeenCalled()
     expect(bridge.openHarness).not.toHaveBeenCalled()
   })
@@ -175,7 +175,7 @@ describe('App conversation gate', () => {
 
     // 门禁先把用户送到「模型与密钥」；只有那里的放行按钮能跳过凭据检查。
     expandSettingsGroup('运行与数据')
-    fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
+    fireEvent.click(screen.getByRole('button', { name: /打开对话/ }))
     await screen.findByRole('heading', { name: '模型与密钥' })
     expect(bridge.openHarness).not.toHaveBeenCalled()
 
@@ -191,7 +191,7 @@ describe('App conversation gate', () => {
     await arriveAtSettingsHome()
 
     expandSettingsGroup('运行与数据')
-    fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
+    fireEvent.click(screen.getByRole('button', { name: /打开对话/ }))
 
     await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
@@ -215,7 +215,7 @@ describe('App conversation gate', () => {
     await arriveAtSettingsHome()
 
     expandSettingsGroup('运行与数据')
-    fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
+    fireEvent.click(screen.getByRole('button', { name: /打开对话/ }))
 
     await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
@@ -230,7 +230,7 @@ describe('App conversation gate', () => {
     await arriveAtSettingsHome()
 
     expandSettingsGroup('运行与数据')
-    fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
+    fireEvent.click(screen.getByRole('button', { name: /打开对话/ }))
 
     await waitFor(() => expect(bridge.openHarness).toHaveBeenCalledTimes(1))
     expect(bridge.startHarness).not.toHaveBeenCalled()
@@ -417,7 +417,7 @@ describe('App conversation gate', () => {
     await arriveAtSettingsHome()
 
     expandSettingsGroup('运行与数据')
-    fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
+    fireEvent.click(screen.getByRole('button', { name: /打开对话/ }))
 
     await waitFor(() => expect(bridge.startHarness).toHaveBeenCalledTimes(1))
     expect(screen.queryByText('Shizuku unavailable')).not.toBeInTheDocument()
@@ -596,7 +596,7 @@ describe('App conversation gate', () => {
 
     // 错误只在用户点了「打开 Harness」之后才会出现。
     expandSettingsGroup('运行与数据')
-    fireEvent.click(screen.getByRole('button', { name: /打开 Harness/ }))
+    fireEvent.click(screen.getByRole('button', { name: /打开对话/ }))
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(unsafePrefix)

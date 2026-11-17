@@ -58,7 +58,7 @@
 .tools-plugin-link strong, .tools-plugin-link small { display:block; }
 .tools-plugin-link small { color:var(--muted); margin-top:3px; }
 .desk-shortcuts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:12px 0; }
-.desk-shortcuts button { display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:48px; padding:8px 12px; background:var(--surface); border:1px solid var(--line); color:var(--ink); border-radius: var(--radius-inner); font-weight:600; cursor:pointer; }
+.desk-shortcuts button { display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:48px; padding:8px 12px; background:var(--surface); border:1px solid var(--line); color:var(--ink); border-radius: var(--radius-control); box-shadow: var(--shadow-card); font-weight:600; cursor:pointer; }
 .desk-shortcuts svg { color:var(--blue); }
 .desk-shortcuts button:hover, .tools-plugin-link:hover { border-color:var(--blue); }
 .management-shell .memory-workspace, .management-shell .assistant-tasks { display:block; margin:0 auto; padding:0; max-width:1080px; color:var(--ink); border:0; border-radius:0; background:transparent; box-shadow:none; }

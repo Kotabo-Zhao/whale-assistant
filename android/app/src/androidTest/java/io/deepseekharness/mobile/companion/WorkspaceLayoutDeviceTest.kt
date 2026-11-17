@@ -87,7 +87,7 @@ class WorkspaceLayoutDeviceTest {
         fun settingsEntry(query: String, selector: String) {
             assertTrue(nav("我的"))
             val group = when (query) {
-                "后台", "文件管理", "版本管理", "Ubuntu 运行时", "诊断" -> "workspace"
+                "后台", "文件管理", "版本管理", "Ubuntu 运行时", "诊断", "会话" -> "workspace"
                 "设备 Shell 设置", "自动化设置" -> "device"
                 "鲸鱼娘人格" -> "assistant"
                 "主题" -> "appearance"
@@ -175,7 +175,7 @@ class WorkspaceLayoutDeviceTest {
                     assertTrue(tap(".persona-tabs button:nth-child(3)")); page(".persona-transfer")
                 }
             }
-            assertTrue(tap("button[aria-label='会话管理']")); page(".session-screen")
+            settingsEntry("会话", ".session-screen")
             report("webPageVisits", count)
         } finally { inst.runOnMainSync { main.finish() } }
     }

@@ -218,7 +218,7 @@ export function Onboarding({
                     </>
                   )}
                   <p className="onboarding-status">{t("内置工具已含 Node.js、Python 3、busybox、jq 与 unzip；不含 C 编译器，需要时自行安装。")}</p>
-                  <p className="onboarding-status">{t("装好运行环境后打开 Harness 就能直接对话。")}</p>
+                  <p className="onboarding-status">{t("装好运行环境后就可以直接对话。")}</p>
                 </div>
               )}
               <div className="dialog-actions onboarding-nav">

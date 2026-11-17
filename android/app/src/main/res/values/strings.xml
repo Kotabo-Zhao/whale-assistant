@@ -12,15 +12,15 @@
     <string name="harness_tab_settings">设置</string>
 
     <string name="harness_return_home">‹ 返回</string>
-    <string name="harness_page_title">DeepSeek 对话</string>
-    <string name="app_name">DeepSeek Harness</string>
-    <string name="harness_title">Harness 对话</string>
+    <string name="harness_page_title">鲸鱼助手</string>
+    <string name="app_name">鲸鱼助手</string>
+    <string name="harness_title">对话</string>
     <string name="harness_back_to_app">返回应用</string>
     <string name="harness_companion">鲸鱼娘</string>
     <string name="harness_manage_return_hint">系统返回键可回到当前对话。</string>
     <string name="harness_manage">管理与设置</string>
-    <string name="harness_exit_confirm_title">退出 DSH</string>
-    <string name="harness_exit_confirm_message">确定返回应用吗？当前 DSH 页面会保留在后台。</string>
+    <string name="harness_exit_confirm_title">返回应用</string>
+    <string name="harness_exit_confirm_message">确定返回应用吗？当前对话会留在后台。</string>
     <string name="harness_exit_confirm_cancel">继续使用</string>
     <string name="harness_exit_confirm_ok">返回应用</string>
     <string name="harness_open_management">打开管理设置</string>
@@ -37,23 +37,23 @@
     <string name="harness_session_failed">无法建立本机 Harness 会话</string>
     <string name="harness_page_failed">Harness 页面暂时无法打开，请在设置中重试</string>
     <string name="shizuku_missing">请先安装并启动 Shizuku</string>
-    <string name="accessibility_service_label">Harness 无障碍自动化</string>
+    <string name="accessibility_service_label">鲸鱼助手无障碍自动化</string>
     <string name="accessibility_service_description">读取已授权应用的当前界面节点，并按用户发起的请求执行受限点击、输入和滚动；不会处理密码、验证码、支付、权限或锁屏页面。</string>
     <!-- 后台保持前台服务通知：文案固定，不含 URL、凭据、终端内容或任何用户数据。 -->
     <string name="keep_alive_channel_name">后台运行</string>
     <string name="keep_alive_channel_description">保持本机 Harness 运行时在后台继续运行</string>
-    <string name="keep_alive_notification_title">Harness 正在后台运行</string>
+    <string name="keep_alive_notification_title">鲸鱼助手正在后台运行</string>
     <string name="keep_alive_notification_text">点按返回应用管理本机运行时</string>
     <!-- 诊断日志导出：分享面板文案固定，不含文件路径或日志内容。 -->
     <string name="diagnostic_share_title">导出诊断日志</string>
-    <string name="diagnostic_share_subject">DeepSeek Harness 诊断日志</string>
+    <string name="diagnostic_share_subject">鲸鱼助手诊断日志</string>
     <!-- 悬浮球。文案固定，不含 URL、端口、凭据或会话内容。 -->
     <!-- 球本身的读屏名称：名词性短语，不复用下面那句状态语形式的通知标题。 -->
     <string name="overlay_ball_content_description">鲸鱼桌宠，点按对话，长按打开快捷菜单</string>
-    <string name="overlay_conversation_title">Harness AI 对话</string>
+    <string name="overlay_conversation_title">鲸鱼助手</string>
     <string name="overlay_conversation_expand">全屏</string>
     <string name="overlay_conversation_close">关闭</string>
-    <string name="overlay_conversation_unavailable">对话尚未启动，点按返回应用开启 Harness</string>
+    <string name="overlay_conversation_unavailable">对话尚未启动，点按返回应用</string>
     <string name="overlay_ball_channel_name">悬浮球</string>
     <string name="overlay_ball_channel_description">在其他应用上层显示鲸鱼娘，点按对话，长按打开快捷菜单</string>
     <string name="overlay_ball_notification_title">悬浮球已开启</string>
@@ -65,7 +65,7 @@
       与可见文字分开写，是为了让 TalkBack 在按钮上没有文字时（或文字被截断时）仍然说明这个
       按钮会做什么。
     -->
-    <string name="overlay_ball_secondary_conversation_description">打开 Harness AI 对话小窗</string>
+    <string name="overlay_ball_secondary_conversation_description">打开对话小窗</string>
     <string name="overlay_ball_secondary_virtual_screen_description">打开目标应用副屏悬浮窗</string>
     <string name="overlay_ball_secondary_virtual_screen_unavailable_toast">副屏尚未运行，请先在 Harness 里打开「目标应用副屏」</string>
     <string name="overlay_ball_secondary_return">回到应用</string>

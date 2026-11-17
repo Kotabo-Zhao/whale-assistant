@@ -27,8 +27,8 @@ function DestinationButtons({ activeView, onNavigate, mobile }: AppSidebarProps 
 export function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
   useLanguage()
   return <aside className="app-sidebar" aria-label={t('应用导航')}>
-    <button className="sidebar-mark" type="button" aria-label={t('工作台')} title={t('工作台')} onClick={() => onNavigate('conversation')}>
-      <img className="app-mark" src={appMark} alt="" width={26} height={26}/><span>{t('工作台')}</span></button>
+    <button className="sidebar-mark" type="button" aria-label={t('鲸鱼助手')} title={t('鲸鱼助手')} onClick={() => onNavigate('conversation')}>
+      <img className="app-mark" src={appMark} alt="" width={26} height={26}/><span>{t('鲸鱼助手')}</span></button>
     <nav className="sidebar-nav"><DestinationButtons activeView={activeView} onNavigate={onNavigate}/></nav>
     <div className="sidebar-bottom"><button className={'sidebar-item' + (activeView === 'sessions' ? ' is-active' : '')}
       aria-label={t('会话管理')} title={t('会话管理')} type="button" onClick={() => onNavigate('sessions')}>
