@@ -82,9 +82,10 @@ describe('后台状态轮询（5.6-C）', () => {
       expect(bridge.getShizukuState).not.toHaveBeenCalled()
       expect(bridge.getOverlayBallState).not.toHaveBeenCalled()
 
-      // 回到前台必须重新武装，否则轮询会永久停摆（这比不停表更糟）。
+      // 内嵌会话仍在前台时不恢复 5 秒轮询。回到应用会立刻读一次，定时器等离开会话再武装。
       setVisibility('visible')
-      expect(armed()).toBe(2)
+      expect(await screen.findByRole('region', { name: '当前对话' })).toBeVisible()
+      expect(armed()).toBe(1)
     } finally {
       setSpy.mockRestore()
       clearSpy.mockRestore()
@@ -106,7 +107,12 @@ describe('后台状态轮询（5.6-C）', () => {
       // 回到前台必须**立刻**读一次，而不是等下一个 5 秒：用户可能刚在系统设置里改过权限。
       await waitFor(() => expect(bridge.getKeepAliveState).toHaveBeenCalledTimes(1))
       await vi.advanceTimersByTimeAsync(5_000)
-      await waitFor(() => expect(bridge.getKeepAliveState.mock.calls.length).toBeGreaterThanOrEqual(2))
+      expect(bridge.getKeepAliveState.mock.calls.length).toBe(1)
+      fireEvent.click(within(screen.getByRole('navigation', { name: '底部导航' })).getByRole('button', { name: '我的' }))
+      await screen.findByRole('heading', { name: '设置' })
+      bridge.getKeepAliveState.mockClear()
+      await vi.advanceTimersByTimeAsync(5_000)
+      await waitFor(() => expect(bridge.getKeepAliveState).toHaveBeenCalled())
     } finally {
       vi.useRealTimers()
       setVisibility('visible')
@@ -118,6 +124,9 @@ describe('后台状态轮询（5.6-C）', () => {
     try {
       stayOnMainView()
       render(<App />)
+      const nav = await screen.findByRole('navigation', { name: '底部导航' })
+      fireEvent.click(within(nav).getByRole('button', { name: '我的' }))
+      await screen.findByRole('heading', { name: '设置' })
       await waitFor(() => expect(bridge.getKeepAliveState).toHaveBeenCalled())
       // 让这一轮永远悬着：单飞保护生效时，后续 tick 应当整体跳过（三路都不再发）。
       let releasePending: (value: typeof keepAlive) => void = () => undefined
@@ -152,11 +161,14 @@ describe('后台状态轮询（5.6-C）', () => {
       // 必须在 render 之前把可见性定死：挂载那一刻的判定就是这条用例的全部内容。
       Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
       render(<App />)
-      await waitFor(() => expect(bridge.getState).toHaveBeenCalled())
+      await screen.findByRole('region', { name: '当前对话' })
       expect(armed()).toBe(0)
 
-      // 回到前台：必须补装，否则轮询永久不工作（比空转更糟）。
+      // 回到前台：内嵌会话不恢复 5 秒轮询。离开会话后才武装。
       setVisibility('visible')
+      expect(armed()).toBe(0)
+      fireEvent.click(within(screen.getByRole('navigation', { name: '底部导航' })).getByRole('button', { name: '我的' }))
+      await screen.findByRole('heading', { name: '设置' })
       expect(armed()).toBe(1)
     } finally {
       setSpy.mockRestore()

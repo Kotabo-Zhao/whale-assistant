@@ -352,10 +352,9 @@ describe('§5.6-B 渲染测量', () => {
     })
   })
 
-  it('稳态轮询（主视图）：3 个空转 tick 的提交与耗时', async () => {
+  it('稳态轮询（内嵌会话）：3 个 tick 不再打桥，也不提交', async () => {
     await withFakeTimers(async () => {
       freshButEqualSnapshots()
-      // 关掉自动启动，外壳才会停在主视图（否则启动链会把视图推到设置首页）。
       bridge.getSettings.mockResolvedValue({ ...settings})
       const { profile } = mountProfiledApp()
 
@@ -370,8 +369,8 @@ describe('§5.6-B 渲染测量', () => {
 
       const rows = profile.sinceReset()
       const ticks = bridge.getKeepAliveState.mock.calls.length - callsBefore
-      report(`主视图：3 个空转 tick（实际触发 ${ticks} 轮）`, rows)
-      expect(ticks).toBe(3)
+      report(`内嵌会话：3 个 tick 不再轮询（实际触发 ${ticks} 轮）`, rows)
+      expect(ticks).toBe(0)
       expect(rows).toHaveLength(0)
     })
   })

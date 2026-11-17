@@ -3524,6 +3524,12 @@ export function App() {
    */
   const backgroundRefreshInFlight = useRef(false)
   const backgroundRefreshStartedAt = useRef(0)
+  /** 内嵌会话由原生页面盖住外壳。这时不再每 5 秒读 Shizuku、无障碍、保活和悬浮球。 */
+  const shellPollPaused = useRef(false)
+  shellPollPaused.current = activeView === 'harness'
+  const stopShellPoll = useRef<() => void>(() => {})
+  const startShellPoll = useRef<() => void>(() => {})
+  const shellPollWasPaused = useRef(false)
   /**
    * 在途轮次的编号。
    *
@@ -4424,6 +4430,10 @@ export function App() {
      * 减少 WebView ↔ 原生 的往返次数。当前只是把它们并发发出并统一收口。
      */
     const refreshBackgroundState = (): void => {
+      if (shellPollPaused.current) {
+        stopPolling()
+        return
+      }
       if (document.visibilityState === 'hidden') return
       const now = Date.now()
       const stale = now - backgroundRefreshStartedAt.current > BACKGROUND_REFRESH_STALE_MS
@@ -4441,7 +4451,8 @@ export function App() {
     const startPolling = (): void => {
       // 只有可见时才装表。首帧就处于后台（后台唤起、切前台的一瞬）时不必留下一个
       // 每 5 秒唤醒一次 JS 却每轮都早退的空转定时器；可见性变化或 focus 会把它重新武装。
-      if (document.visibilityState === 'hidden') return
+      // 内嵌会话页同样不装表：四路状态不驱动对话，离开会话或回到其它页时再武装。
+      if (document.visibilityState === 'hidden' || shellPollPaused.current) return
       if (backgroundPollTimer.current !== null) return
       backgroundPollTimer.current = window.setInterval(refreshBackgroundState, BACKGROUND_POLL_INTERVAL_MS)
     }
@@ -4482,6 +4493,8 @@ export function App() {
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
     startPolling()
+    stopShellPoll.current = stopPolling
+    startShellPoll.current = startPolling
     return () => {
       cancelled = true
       stopPolling()
@@ -4489,6 +4502,13 @@ export function App() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [applyRefreshedSettings, notify, readMailbox, readOverlayBall, setActiveView])
+
+  useEffect(() => {
+    const paused = activeView === 'harness'
+    if (paused) stopShellPoll.current()
+    else if (shellPollWasPaused.current && document.visibilityState === 'visible') startShellPoll.current()
+    shellPollWasPaused.current = paused
+  }, [activeView])
 
   /**
    * 执行一个用户动作：互斥、提示、以及**卡死自救**。
