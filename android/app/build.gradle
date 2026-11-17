@@ -178,8 +178,8 @@ android {
         minSdk 26
         targetSdk 35
         buildConfigField 'boolean', 'SEPARATE_RUNTIME', separateRuntime.toString()
-        versionCode 143
-        versionName '0.3.8-preview.98'
+        versionCode 144
+        versionName '0.3.8-preview.99'
 
         buildConfigField 'String', 'DEFAULT_MANIFEST_URL', envBuildValue('DSH_RUNTIME_MANIFEST_URL')
         buildConfigField 'String', 'DEFAULT_MANIFEST_SHA256', envBuildValue('DSH_RUNTIME_MANIFEST_SHA256')
@@ -278,6 +278,17 @@ tasks.named('preBuild').configure {
     dependsOn(generateLegalAssets)
     dependsOn(downloadBgeBaseAssets)
     dependsOn(generateRichChatAssets)
+}
+
+def verifyShellAssets = tasks.register('verifyShellAssets', Exec) {
+    // 缺 assets/public/index.html 时 Capacitor 仍加载 https://localhost/，
+    // 本地拦截返回 null，WebView 显示 ERR_CONNECTION_REFUSED。
+    commandLine 'python3', rootProject.file('../scripts/verify-shell-assets.py').absolutePath,
+        '--assets', file('src/main/assets').absolutePath
+}
+
+tasks.matching { it.name == 'packageDebug' || it.name == 'packageRelease' }.configureEach {
+    dependsOn(verifyShellAssets)
 }
 
 tasks.configureEach { task ->
