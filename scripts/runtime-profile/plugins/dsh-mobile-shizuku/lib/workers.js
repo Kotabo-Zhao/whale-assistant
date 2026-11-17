@@ -6,7 +6,7 @@ import { freezeMessage } from '@deepseek-ai/dsh-llm'
 import { installSuperagent } from './superagent-runtime.js'
 import { delegationApi, delegatedWriteAllowed, prepareDelegatedWorker } from './worker-delegation.js'
 import { loadJSON, persistJSON, storedJSONFiles } from './worker-storage.js'
-import { beginWorkerHealth, recordWorkerHealth, acceptsWatchdogHold } from './worker-health.js'
+import { beginWorkerHealth, recordWorkerHealth, acceptsWatchdogHold, takeStallHold } from './worker-health.js'
 import { WorkerGoals, TASK_BUDGET, GOAL_BUDGET, budget, chargeElapsed } from './worker-goals.js'
 import { WorkerCoordinator } from './worker-coordinator.js'
 import { foregroundWaitDenial } from './foreground-policy.js'
@@ -523,6 +523,8 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       }
     }
     recordWorkerHealth(row,event)
+    const stall = takeStallHold(row)
+    if (stall) blockWorker(row, '任务监督已暂停此工单：' + stall.explanation + '。请核对任务后继续。')
     const trace = traces.get(session.id)
     if (trace && event.type === 'llm/retry') {
       trace.modelUsage.retries++

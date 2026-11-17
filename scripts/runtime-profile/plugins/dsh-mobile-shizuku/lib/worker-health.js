@@ -53,6 +53,38 @@ export function recordWorkerHealth(row, event, now = Date.now()) {
   health.heartbeatAt = now
 }
 
+export const STALL_REPEATS = 3
+export const STALL_QUIET_MS = 90_000
+
+/**
+ * 只根据已经记下的健康证据判断是否停滞。
+ * 相同结果要先安静一段时间，进行中的工具、模型重试、未读追问和新进展都不算停滞。
+ * 不在这里启动计时器，也不重新执行任务。
+ */
+export function assessWorkerStall(row, now = Date.now()) {
+  if (row.state !== 'running' || row.reportState || row.authorizationRevoked) return null
+  if (row.inputs?.some(input => input.kind === 'update' && !input.readAt)) return null
+  const health = row.health
+  if (!health) return null
+  if (Number.isFinite(health.retryUntil) && now < health.retryUntil) return null
+  if (health.pending && Object.keys(health.pending).length > 0) return null
+  if ((health.repeated ?? 0) < STALL_REPEATS) return null
+  if (!Number.isFinite(health.lastProgressAt) || now - health.lastProgressAt < STALL_QUIET_MS) return null
+  return {
+    revision: row.revision, runId: health.runId, sequence: health.sequence, heartbeatAt: health.heartbeatAt,
+    reason: 'stalled', explanation: '连续得到相同结果，并且之后没有新进展。',
+  }
+}
+
+/** 同一轮证据只发出一次暂停。新进展让 acceptsWatchdogHold 失败，因此不会重复暂停。 */
+export function takeStallHold(row, now = Date.now()) {
+  const stall = assessWorkerStall(row, now)
+  if (!stall || !acceptsWatchdogHold(row, stall)) return null
+  if (row.watchdog?.runId === stall.runId && row.watchdog.sequence === stall.sequence) return null
+  row.watchdog = { commandId: `stall:${stall.runId}:${stall.sequence}`, ...stall, at: now }
+  return stall
+}
+
 /** Reject assessments for a previous run or evidence superseded while the model was thinking. */
 export function acceptsWatchdogHold(row, command) {
   return row.state === 'running' && !row.reportState && !row.authorizationRevoked &&

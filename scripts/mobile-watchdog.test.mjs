@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { beginWorkerHealth, recordWorkerHealth, acceptsWatchdogHold } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/worker-health.js'
+import { beginWorkerHealth, recordWorkerHealth, acceptsWatchdogHold, assessWorkerStall, takeStallHold, STALL_QUIET_MS } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/worker-health.js'
 
 test('identical results accumulate evidence, changed results clear repetition, and raw content is discarded',()=>{
   const row={state:'running',revision:1,input:'Verify the total'}
@@ -47,6 +47,42 @@ test('evidence and pending calls stay bounded and provider backoff is visible to
   assert.equal(row.health.recent.length,8)
   recordWorkerHealth(row,{type:'llm/retry',data:{delayMs:30000}},200)
   assert.equal(row.health.retryUntil,30200)
+})
+
+function repeatSameResult(row, count, at) {
+  for (let i = 0; i < count; i++) {
+    recordWorkerHealth(row, { type: 'tool/call', data: { callId: `c${i}`, name: 'read', args: { path: 'note' } } }, at)
+    recordWorkerHealth(row, { type: 'tool/result', data: { message: { toolCallId: `c${i}`, content: 'same' } } }, at + 1)
+  }
+}
+
+test('identical results are not a stall until they stay quiet, and a hold is issued once', () => {
+  const row = { state: 'running', revision: 1 }
+  beginWorkerHealth(row, 0)
+  repeatSameResult(row, 3, 10)
+  assert.equal(assessWorkerStall(row, 10 + STALL_QUIET_MS - 1), null)
+  const due = 11 + STALL_QUIET_MS
+  const stall = assessWorkerStall(row, due)
+  assert.equal(stall.reason, 'stalled')
+  assert.equal(takeStallHold(row, due)?.runId, row.health.runId)
+  assert.equal(takeStallHold(row, due), null)
+})
+
+test('in-flight work, provider retry, and a new result are not stalls', () => {
+  const row = { state: 'running', revision: 1 }
+  beginWorkerHealth(row, 0)
+  repeatSameResult(row, 3, 10)
+  const due = 11 + STALL_QUIET_MS
+  row.health.pending.busy = { name: 'read' }
+  assert.equal(assessWorkerStall(row, due), null)
+  delete row.health.pending.busy
+  row.health.retryUntil = due + 1000
+  assert.equal(assessWorkerStall(row, due), null)
+  row.health.retryUntil = due - 1
+  recordWorkerHealth(row, { type: 'tool/call', data: { callId: 'fresh', name: 'read', args: { path: 'other' } } }, due)
+  recordWorkerHealth(row, { type: 'tool/result', data: { message: { toolCallId: 'fresh', content: 'different' } } }, due)
+  assert.equal(row.health.repeated, 1)
+  assert.equal(assessWorkerStall(row, due), null)
 })
 
 test('new user information invalidates an outstanding assessment before and after it reaches the worker',()=>{
