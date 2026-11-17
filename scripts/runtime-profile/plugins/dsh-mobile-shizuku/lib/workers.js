@@ -7,6 +7,7 @@ import { installSuperagent } from './superagent-runtime.js'
 import { delegationApi, delegatedWriteAllowed, prepareDelegatedWorker } from './worker-delegation.js'
 import { loadJSON, persistJSON, storedJSONFiles } from './worker-storage.js'
 import { beginWorkerHealth, recordWorkerHealth, acceptsWatchdogHold, takeStallHold } from './worker-health.js'
+import { reconcileDeliveries } from './delivery-receipt.js'
 import { WorkerGoals, TASK_BUDGET, GOAL_BUDGET, budget, chargeElapsed } from './worker-goals.js'
 import { WorkerCoordinator } from './worker-coordinator.js'
 import { foregroundWaitDenial } from './foreground-policy.js'
@@ -875,28 +876,19 @@ export function installWorkers(ctx, { defineTool, bridge, delegation, directory 
       const row = [...queue.rows.values()].find(item => item.domainTicketId === ticket.id)
       if (!row) throw new Error('工单 Worker 不存在')
       if (row.recoveryRequired) throw new Error('工单记录待核对，输入保持未投递')
-      let allDelivered = true
-      for (const id of ids) {
+      return reconcileDeliveries(ledger(row).inputs, ids, async id => {
         const source = ticket.inputs.find(item => item.id === id)
-        if (!source || source.kind === 'resumed' || source.kind === 'reopen') continue
+        if (!source || source.kind === 'resumed' || source.kind === 'reopen') return 'skip'
         const trigger = source.kind === 'trigger' ? domain.repo.triggers.get(source.triggerId) : null
-        // An interrupted device operation must not restart merely because an external event arrived.
-        if (row.state === 'interrupted' && row.mode !== 'read' && !(trigger?.source === 'phone' && trigger.meta?.userAction === 'resume')) {
-          allDelivered = false; continue
-        }
+        // 设备任务中断后，外部事件不能把可能已经发生的操作再执行一次。
+        if (row.state === 'interrupted' && row.mode !== 'read' && !(trigger?.source === 'phone' && trigger.meta?.userAction === 'resume')) return 'uncertain'
         const text = source.kind === 'trigger' ? trigger?.text
           : source.kind === 'policy-changed' ? `授权策略发生变化：${JSON.stringify(source.effect ?? {})}。不要扩大原授权范围。` : source.text
-        if (!text) continue
+        if (!text) return 'skip'
         const commandId = `domain:${id}`
-        let input = row.inputs.find(item => item.commandId === commandId)
-        if (!input) {
-          const action = row.state === 'waiting' ? 'reply' : ['blocked', 'interrupted', 'failed'].includes(row.state) ? 'resume' : 'add'
-          await control(row, { action, task: text, commandId })
-          input = row.inputs.find(item => item.commandId === commandId)
-        }
-        if (!input || input.delivery !== 'delivered') allDelivered = false
-      }
-      return allDelivered
+        const action = row.state === 'waiting' ? 'reply' : ['blocked', 'interrupted', 'failed'].includes(row.state) ? 'resume' : 'add'
+        await control(row, { action, task: text, commandId })
+      })
     },
     stop: async (ticketId, assignmentId) => {
       const row = [...queue.rows.values()].find(item => item.domainTicketId === ticketId)

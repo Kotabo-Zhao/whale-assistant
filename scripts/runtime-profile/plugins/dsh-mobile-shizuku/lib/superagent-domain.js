@@ -202,6 +202,15 @@ export class SuperagentDomain {
     this.configure(policy)
   }
   pendingEffects() { return structuredClone([...this.effects.values()]) }
+  /** 保留无法判断是否已经生效的派工，不再按失败重试。用户明确继续时会生成新的输入，而不是重放这一条。 */
+  holdEffect(id, generation) {
+    this.repo.atomic(() => {
+      const effect = this.effects.get(id)
+      if (!effect || (effect.generation ?? 0) !== generation || effect.held === 'uncertain') return
+      effect.held = 'uncertain'
+      delete effect.nextAttemptAt
+    })
+  }
   acknowledgeEffect(id, generation) {
     const effect = this.effects.get(id)
     if (!effect || (generation !== undefined && (effect.generation ?? 0) !== generation)) return

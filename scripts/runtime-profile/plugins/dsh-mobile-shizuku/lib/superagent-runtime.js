@@ -254,7 +254,7 @@ export function installSuperagent(ctx, { directory, bridge, defineTool, output, 
     if (action === 'priority') return false
     const ticket = domain.repo.tickets.get(row.domainTicketId)
     const origin = ticket && domain.repo.triggers.get(ticket.origin.triggerId)
-    if (ticket && action === 'cancel') { domain.revokeTicket(ticket.id); await stop(ticket.id); void coordinator.pump(); return true }
+    if (ticket && action === 'cancel') { domain.revokeTicket(ticket.id); await stop(ticket.id); await coordinator.pump(); return true }
     if (!origin) return false
     if (ticket.ended?.by === 'human') throw new Error('该任务授权已撤回，请按需要新建任务')
     if (!['add', 'reply', 'resume'].includes(action) || !text?.trim() || text.length > 16000) throw new Error('请提供继续说明')

@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { WorkerQueue, installWorkers, heartbeatTier, activeRowCount, readLaunchBudget, workerToolAllowed, HEARTBEAT_ACTIVE_MS, HEARTBEAT_CHANNEL_MS, HEARTBEAT_IDLE_MS } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/workers.js'
+import { reconcileDeliveries } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/delivery-receipt.js'
 
 function fixture(t) {
   const dir = mkdtempSync(join(tmpdir(), 'mobile-workers-'))
@@ -233,16 +234,24 @@ test('restart preserves queued and waiting tasks but never replays running side 
   assert.throws(() => restored.owned('waiting', 'other'), /不属于/)
 })
 
-test('restart resumes read tasks with a new receipt, but does not replay phone actions', t => {
+test('restart resumes read tasks with a new receipt, but does not replay phone actions', async t => {
   const { queue, dir } = fixture(t)
   for (const mode of ['read', 'device']) queue.save({ id: mode, mode, state: 'running', owner: 'parent', sessionId: mode,
-    revision: 1, input: '检查资料', createdAt: Date.now(), inputs: [{ id: `mobile-worker:${mode}:input:1`, revision: 1, kind: 'request', text: '检查资料', delivery: 'sending' }] })
+    revision: 1, input: '检查资料', createdAt: Date.now(), inputs: [{ id: `mobile-worker:${mode}:input:1`, revision: 1, kind: 'request', text: '检查资料', delivery: 'sending', commandId: 'domain:in1' }] })
   const restored = new WorkerQueue(dir)
   const read = restored.rows.get('read'), device = restored.rows.get('device')
   assert.equal(read.state, 'queued'); assert.equal(read.revision, 2)
   assert.equal(read.inputs[0].delivery, 'unknown'); assert.equal(read.inputs[1].kind, 'recovery')
   assert.equal(read.inputs[1].recoveryOf, 1)
   assert.equal(device.state, 'interrupted'); assert.equal(device.inputs.length, 1)
+  let sends = 0
+  const outcome = await reconcileDeliveries(device.inputs, ['in1'], async () => { sends++ })
+  assert.equal(sends, 0)
+  assert.equal(device.inputs[0].delivery, 'unknown')
+  assert.deepEqual(outcome.uncertain, ['in1'])
+  const readOutcome = await reconcileDeliveries(read.inputs, ['in1'], async () => { sends++ })
+  assert.equal(sends, 0)
+  assert.deepEqual(readOutcome.uncertain, ['in1'])
 })
 
 test('worker question releases its slot and reply returns to that same worker and parent', async t => {

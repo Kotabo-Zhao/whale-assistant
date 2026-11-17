@@ -11,7 +11,7 @@ export class SuperagentCoordinator {
       this.domain.engine.evaluateDue()
       const visited = new Set()
       for (;;) {
-        const effect = this.domain.pendingEffects().find(item => !visited.has(item.id) && (item.nextAttemptAt ?? 0) <= Date.now())
+        const effect = this.domain.pendingEffects().find(item => !visited.has(item.id) && item.held !== 'uncertain' && (item.nextAttemptAt ?? 0) <= Date.now())
         if (!effect) break
         visited.add(effect.id)
         try {
@@ -32,8 +32,19 @@ export class SuperagentCoordinator {
             const { ticket, assignment } = effect.payload
             const ids = ticket.undelivered
             const delivered = await this.deliver(ticket, assignment, ids)
-            if (!delivered) continue
-            finish = () => this.domain.engine.inputsDelivered(ticket.id, assignment.id, ids)
+            if (delivered && typeof delivered === 'object') {
+              const done = delivered.deliveredIds ?? []
+              if (done.length) this.domain.engine.inputsDelivered(ticket.id, assignment.id, done)
+              if (delivered.uncertain?.length) {
+                this.domain.holdEffect(effect.id, effect.generation ?? 0)
+                continue
+              }
+              if (delivered.pending?.length || !done.length) continue
+              finish = () => {}
+            } else {
+              if (!delivered) continue
+              finish = () => this.domain.engine.inputsDelivered(ticket.id, assignment.id, ids)
+            }
           } else if (effect.kind === 'stop') {
             await this.stop(effect.payload)
           } else throw new Error('未知派工效果')
