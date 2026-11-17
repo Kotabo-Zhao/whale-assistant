@@ -411,8 +411,11 @@ jobs:
           set -euo pipefail
           python3 scripts/stage-build-tools.py \
             /tmp/build-tools /tmp/ubuntu.tar.gz /tmp/build-tools-packages.txt
-          cc --version | head -n1
-          make --version | head -n1
+          # head 提前关闭管道时，pipefail 会把仍在写版本信息的进程当成失败。
+          cc --version > /tmp/cc-version.txt
+          head -n1 /tmp/cc-version.txt
+          make --version > /tmp/make-version.txt
+          head -n1 /tmp/make-version.txt
           cat > /tmp/build-tools-smoke.c <<'EOF'
           #include <stdio.h>
           int main(void) { puts("dsh-build-tools-ok"); return 0; }
