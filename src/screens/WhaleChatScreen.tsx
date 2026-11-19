@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, BookOpen, CheckCircle2, Hammer, ListTodo, Settings2, Sparkles, Wrench } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import MarkdownIt from 'markdown-it'
+import { ArrowUp, BookOpen, Check, CheckCircle2, Copy, Hammer, ListTodo, RotateCcw, Settings2, Sparkles, Wrench } from 'lucide-react'
 import appMark from '../assets/app-mark.png'
 import { t } from '../i18n'
 import type { RuntimeBridge, WhaleNativeChatStep } from '../platform/types'
@@ -20,7 +21,7 @@ const STARTER_PROMPTS = [
   { label: '整理今日待办', text: '帮我梳理一下今天最重要的三件事，按优先级排个顺序。' },
   { label: '查我的长期记忆', text: '查一下我之前让你记住的偏好和重要信息。' },
   { label: '做个离线小工具', text: '帮我在功能工坊创建一个极简「每日习惯打卡」离线小工具，支持数据持久化。' },
-  { label: '查看后台状态', text: '帮我看看现在有没有后台任务在运行。' },
+  { label: '查看后台状态', text: '帮我看看手机电量和当前有没有后台任务在运行。' },
 ] as const
 
 const STORAGE_KEY = 'whale.nativeChatHistory.v1'
@@ -46,7 +47,9 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [messages, setMessages] = useState<WhaleChatMessage[]>(loadHistory)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const md = useMemo(() => new MarkdownIt({ html: false, linkify: true, breaks: true }), [])
 
   useEffect(() => {
     try {
@@ -104,6 +107,13 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     }
   }
 
+  const copyReply = (id: string, text: string): void => {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopiedId(id)
+      window.setTimeout(() => setCopiedId(current => (current === id ? null : current)), 1500)
+    }).catch(() => {})
+  }
+
   return (
     <section className="whale-chat-screen" aria-label={t('鲸鱼助手对话')}>
       <header className="whale-chat-header">
@@ -118,6 +128,18 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           </div>
         </div>
         <div className="whale-chat-shortcuts" aria-label={t('常用功能入口')}>
+          {messages.length > 0 && (
+            <button
+              type="button"
+              className="whale-icon-chip"
+              title={t('新对话')}
+              aria-label={t('新对话')}
+              disabled={sending}
+              onClick={() => setMessages([])}
+            >
+              <RotateCcw size={16} />
+            </button>
+          )}
           <button type="button" className="whale-icon-chip" title={t('记忆与资料')} aria-label={t('记忆与资料')} onClick={() => onNavigate('assistant-memory')}>
             <BookOpen size={17} />
           </button>
@@ -174,11 +196,28 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                   </ul>
                 </details>
               )}
-              <div className="whale-msg-bubble">{msg.text}</div>
-              {msg.role === 'assistant' && !msg.error && msg.model && (
+              {msg.role === 'assistant' && !msg.error ? (
+                <div
+                  className="whale-msg-bubble whale-markdown"
+                  dangerouslySetInnerHTML={{ __html: md.render(msg.text) }}
+                />
+              ) : (
+                <div className="whale-msg-bubble">{msg.text}</div>
+              )}
+              {msg.role === 'assistant' && !msg.error && (
                 <footer className="whale-msg-meta">
-                  {msg.model}
-                  {msg.elapsedMs ? ` · ${(msg.elapsedMs / 1000).toFixed(1)}s` : ''}
+                  <span>
+                    {msg.model ?? 'whale'}
+                    {msg.elapsedMs ? ` · ${(msg.elapsedMs / 1000).toFixed(1)}s` : ''}
+                  </span>
+                  <button
+                    type="button"
+                    className="whale-copy-btn"
+                    aria-label={t('复制回复')}
+                    onClick={() => copyReply(msg.id, msg.text)}
+                  >
+                    {copiedId === msg.id ? <Check size={13} /> : <Copy size={13} />}
+                  </button>
                 </footer>
               )}
             </article>

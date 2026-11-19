@@ -310,3 +310,45 @@
     max-width: 92%;
   }
 }
+
+.whale-markdown p { margin: 0 0 8px; }
+.whale-markdown p:last-child { margin-bottom: 0; }
+.whale-markdown ul, .whale-markdown ol { margin: 4px 0 8px; padding-left: 20px; }
+.whale-markdown pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  overflow-x: auto;
+  font-size: 0.84rem;
+}
+.whale-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  background: var(--surface-muted);
+  padding: 1px 5px;
+  border-radius: 6px;
+}
+.whale-markdown pre code { background: transparent; padding: 0; }
+
+.whale-msg-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.whale-copy-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.whale-copy-btn:hover {
+  color: var(--blue);
+  background: var(--blue-soft);
+}

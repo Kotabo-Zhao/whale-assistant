@@ -160,6 +160,13 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             val model = settings.defaultModels[ModelProvider.OPENAI]?.takeIf(String::isNotBlank) ?: "gpt-4o-mini"
             return Endpoint("https://api.openai.com/v1/chat/completions", openAiKey, model)
         }
+        for (custom in settings.customProviders) {
+            val key = store.readModelCredential(custom.id)?.takeIf(String::isNotBlank) ?: continue
+            val model = custom.models.firstOrNull()?.id?.takeIf(String::isNotBlank) ?: continue
+            val base = custom.baseUrl.trimEnd('/')
+            val url = if (base.endsWith("/chat/completions")) base else "$base/chat/completions"
+            return Endpoint(url, key, model)
+        }
         throw IllegalStateException("请先在「我的 → 模型与密钥」中配置 API Key")
     }
 

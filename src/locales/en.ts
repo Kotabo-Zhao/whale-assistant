@@ -2222,4 +2222,7 @@ export const english: Readonly<Record<string, string>> = {
   "只读查询自动放行；写入本地资料或工作区文件时按任务确认一次。": "Read-only queries run automatically; local writes ask once per task.",
   "除基础对话外，涉及文件写入或设备操作的工具调用均需逐项确认。": "File writes and device actions require per-step confirmation.",
   "功能工坊": "Workshop",
+
+  "新对话": "New chat",
+  "复制回复": "Copy reply",
 }
