@@ -52,6 +52,12 @@ internal class PetDirectChat(private val context: android.content.Context) {
             check(CompanionRecall(context).isCurrent(recall)) { "资料或权限已变化，请重新提问。" }
             return answer
         }
+        val route = DirectChatEscalationPolicy.decide(query)
+        if (route == DirectChatEscalationPolicy.Route.ESCALATE_PROOT_WORKER &&
+            (intent == PetIntentRouter.Intent.BACKGROUND_READ || intent == PetIntentRouter.Intent.BACKGROUND_CREATE)) {
+            onPartial("正在提交后台任务…")
+            return trace.measure(PetReplyTrace.Stage.SUBMIT) { background(decision) }
+        }
         if (intent == PetIntentRouter.Intent.BACKGROUND_READ || intent == PetIntentRouter.Intent.BACKGROUND_CREATE) {
             onPartial("正在提交后台任务…")
             return trace.measure(PetReplyTrace.Stage.SUBMIT) { background(decision) }

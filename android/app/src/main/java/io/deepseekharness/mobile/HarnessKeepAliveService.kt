@@ -63,6 +63,18 @@ class HarnessKeepAliveService : Service() {
     override fun onCreate() {
         super.onCreate()
         runCatching { ensureNotificationChannel() }
+        idleWatchExecutor.execute {
+            runCatching {
+                val reconciled = io.deepseekharness.mobile.companion.UnifiedExecutionLedger(applicationContext).markInFlightAsUnknown()
+                if (reconciled > 0) {
+                    diagnostics.record(
+                        DiagnosticLevel.INFO,
+                        DiagnosticEvent.KEEP_ALIVE,
+                        mapOf("reason" to "ledger_inflight_marked_unknown", "count" to reconciled.toString()),
+                    )
+                }
+            }
+        }
         scheduleIdleHibernationCheck()
     }
 

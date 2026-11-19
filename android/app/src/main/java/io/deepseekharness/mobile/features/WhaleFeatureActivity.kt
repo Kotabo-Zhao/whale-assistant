@@ -228,6 +228,8 @@ open class WhaleFeatureActivity : Activity() {
                     manage.addView(button("启用此版本") { read({ store.activate(id, latest, active) }) { library() } })
                 }
                 if (previous.isNotEmpty() && active != previous) manage.addView(button("恢复上一版") { read({ store.activate(id, previous, active) }) { library() } })
+                val pinned = item.optBoolean("pinned", false)
+                if (active.isNotEmpty()) manage.addView(button(if (pinned) "取消置顶" else "置顶到桌宠") { read({ store.setPinned(id, !pinned) }) { library() } })
                 if (active.isNotEmpty()) manage.addView(button("停用") { read({ store.activate(id, "", active) }) { library() } })
             }
             body.addView(WorkspaceCardGrid(this, cards), LinearLayout.LayoutParams(-1, -2))
