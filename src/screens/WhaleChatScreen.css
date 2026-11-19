@@ -511,3 +511,175 @@
   color: var(--blue);
   animation: whale-pulse-soft 0.9s ease-in-out infinite;
 }
+
+/* Ambient Context Bar (only visible when actionable) */
+.whale-ambient-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--blue-soft);
+  border-bottom: 1px solid var(--blue-line);
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+.whale-ambient-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--blue);
+  font-weight: var(--weight-medium);
+}
+
+.whale-ambient-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.whale-ambient-btn {
+  border: 0;
+  background: var(--blue);
+  color: var(--on-accent);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.74rem;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.whale-ambient-link {
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font-size: 0.74rem;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.whale-ambient-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 2px;
+}
+
+/* Inline Action Receipt Cards */
+.whale-receipt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.whale-receipt-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-inner);
+  border: 1px solid var(--blue-line);
+  background: var(--blue-soft);
+  font-size: 0.8rem;
+}
+
+.whale-receipt-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-weight: var(--weight-medium);
+}
+
+.whale-receipt-title svg {
+  color: var(--blue);
+  flex-shrink: 0;
+}
+
+.whale-receipt-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.whale-receipt-btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.whale-receipt-btn.is-primary {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: var(--on-accent);
+  font-weight: var(--weight-semibold);
+}
+
+/* Composer Assist Strip (Drop-Anything Archive & Slash Pills) */
+.whale-composer-assist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px 2px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.whale-assist-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--ink);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.whale-assist-pill.is-accent {
+  border-color: var(--blue-line);
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: var(--weight-semibold);
+}
+
+.whale-slash-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.whale-slash-btn.is-active,
+.whale-slash-btn:hover {
+  border-color: var(--blue-line);
+  background: var(--blue-soft);
+  color: var(--blue);
+}

@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import MarkdownIt from 'markdown-it'
 import {
   ArrowUp,
+  BellRing,
+  BookmarkCheck,
   BookOpen,
+  Brain,
   Check,
   CheckCircle2,
   Copy,
@@ -12,9 +15,11 @@ import {
   MessagesSquare,
   Pencil,
   Settings2,
+  Slash,
   Sparkles,
   Trash2,
   Wrench,
+  X,
 } from 'lucide-react'
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
@@ -42,6 +47,25 @@ export interface WhaleChatSession {
   messages: WhaleChatMessage[]
 }
 
+interface AmbientNotice {
+  id: string
+  kind: 'briefing' | 'capture'
+  text: string
+  actionLabel: string
+  prompt: string
+  targetView: AppView
+}
+
+interface ActionReceipt {
+  key: string
+  kind: 'secretary' | 'knowledge' | 'memory' | 'workshop'
+  title: string
+  view: AppView
+  actionLabel: string
+  followUpPrompt?: string
+  followUpLabel?: string
+}
+
 const STARTER_PROMPTS = [
   { label: '整理今日待办', text: '帮我梳理一下今天最重要的三件事，按优先级排个顺序。' },
   { label: '查我的长期记忆', text: '查一下我之前让你记住的偏好和重要信息。' },
@@ -49,11 +73,82 @@ const STARTER_PROMPTS = [
   { label: '查看后台状态', text: '帮我看看手机电量和当前有没有后台任务在运行。' },
 ] as const
 
+const QUICK_SLASH_ACTIONS = [
+  { id: 'remind', label: '设提醒', prefix: '提醒我 ', sendNow: false },
+  { id: 'save-doc', label: '存资料', prefix: '帮我把下面内容存入本地资料库并提炼要点：\n', sendNow: false },
+  { id: 'recall', label: '查记忆', prefix: '查一下我之前让你记住的偏好和近期重要事项。', sendNow: true },
+  { id: 'workshop', label: '造小工具', prefix: '帮我在功能工坊创作并立即启用一个离线小工具：', sendNow: false },
+] as const
+
 const LEGACY_STORAGE_KEY = 'whale.nativeChatHistory.v1'
 const SESSIONS_STORAGE_KEY = 'whale.nativeChatSessions.v2'
 const ACTIVE_SESSION_KEY = 'whale.nativeChatActiveSession.v2'
 const MAX_SESSIONS = 24
 const MAX_MESSAGES_PER_SESSION = 40
+
+function extractActionReceipts(steps?: WhaleNativeChatStep[]): ActionReceipt[] {
+  if (!steps || steps.length === 0) return []
+  const receipts: ActionReceipt[] = []
+  const seen = new Set<string>()
+  for (const step of steps) {
+    if (!step.ok) continue
+    if (step.tool === 'whale_secretary_add' && !seen.has('sec-add')) {
+      seen.add('sec-add')
+      receipts.push({
+        key: 'sec-add',
+        kind: 'secretary',
+        title: step.label || '已记录新的待办事项',
+        view: 'assistant-tasks',
+        actionLabel: '查看事项',
+        followUpLabel: '查看全部待办',
+        followUpPrompt: '列出我当前所有未完成的事项。',
+      })
+    } else if (step.tool === 'whale_secretary_complete' && !seen.has('sec-done')) {
+      seen.add('sec-done')
+      receipts.push({
+        key: 'sec-done',
+        kind: 'secretary',
+        title: '事项已标记完成',
+        view: 'assistant-tasks',
+        actionLabel: '查看事项',
+      })
+    } else if (step.tool === 'whale_knowledge_save' && !seen.has('know-save')) {
+      seen.add('know-save')
+      receipts.push({
+        key: 'know-save',
+        kind: 'knowledge',
+        title: '已自动存入本地资料库',
+        view: 'assistant-memory',
+        actionLabel: '打开资料库',
+      })
+    } else if (step.tool === 'whale_memory_save' && !seen.has('mem-save')) {
+      seen.add('mem-save')
+      receipts.push({
+        key: 'mem-save',
+        kind: 'memory',
+        title: '已记入长期记忆',
+        view: 'assistant-memory',
+        actionLabel: '查看记忆',
+      })
+    } else if ((step.tool === 'whale_workshop_draft' || step.tool === 'whale_workshop_activate') && !seen.has('ws')) {
+      seen.add('ws')
+      receipts.push({
+        key: 'ws',
+        kind: 'workshop',
+        title: '离线小工具已就绪',
+        view: 'tools',
+        actionLabel: '打开工坊',
+      })
+    }
+  }
+  return receipts
+}
+
+function looksLikeArchivableContent(text: string): boolean {
+  const trimmed = text.trim()
+  if (trimmed.length >= 160) return true
+  return /https?:\/\/\S+/i.test(trimmed)
+}
 
 function createSession(title = '新对话', messages: WhaleChatMessage[] = []): WhaleChatSession {
   return {
@@ -110,6 +205,8 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [sessions, setSessions] = useState<WhaleChatSession[]>(loadSessions)
   const [activeId, setActiveId] = useState<string>(() => loadActiveSessionId(loadSessions()))
   const [sessionsOpen, setSessionsOpen] = useState(false)
+  const [slashOpen, setSlashOpen] = useState(false)
+  const [ambient, setAmbient] = useState<AmbientNotice | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [input, setInput] = useState('')
@@ -120,6 +217,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const activeRequestRef = useRef<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const md = useMemo(() => new MarkdownIt({ html: false, linkify: true, breaks: true }), [])
 
   const currentSession = useMemo(
@@ -127,6 +225,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     [sessions, activeId],
   )
   const messages = currentSession.messages
+  const showArchiveHint = !sending && looksLikeArchivableContent(input) && !input.startsWith('帮我把下面内容存入')
 
   useEffect(() => {
     try {
@@ -141,6 +240,61 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, streamingText, streamingSteps])
+
+  // 按需情境轻条：静默感知新分享入库的资料与待处理简报/提醒，平时隐藏不打扰。
+  useEffect(() => {
+    let disposed = false
+    const cleanups: Array<() => Promise<void>> = []
+
+    const refreshAmbient = async (preferCapture = false) => {
+      if (!bridge.companionDashboard) return
+      try {
+        if (preferCapture) {
+          const cap = await bridge.companionDashboard({ operation: 'knowledgeRecentCaptures' }) as { items?: Array<{ title?: string }> }
+          if (!disposed && Array.isArray(cap?.items) && cap.items.length > 0) {
+            setAmbient({
+              id: `cap-${cap.items.length}`,
+              kind: 'capture',
+              text: t('已静默收入 {0} 条新资料，可随时总结', cap.items.length),
+              actionLabel: t('一键总结'),
+              prompt: '帮我检索并总结我刚刚存入本地资料库的最新内容。',
+              targetView: 'assistant-memory',
+            })
+            return
+          }
+        }
+        const brief = await bridge.companionDashboard({ operation: 'assistantBriefings' }) as { items?: Array<{ title?: string }> }
+        if (!disposed && Array.isArray(brief?.items) && brief.items.length > 0) {
+          setAmbient({
+            id: `brief-${brief.items.length}`,
+            kind: 'briefing',
+            text: t('有 {0} 条待关注事项与简报', brief.items.length),
+            actionLabel: t('让鲸鱼梳理'),
+            prompt: '帮我梳理我当前未完成的待办事项和最新简报重点。',
+            targetView: 'assistant-tasks',
+          })
+        }
+      } catch {
+        // Ignore when running outside native container.
+      }
+    }
+
+    void refreshAmbient(false)
+    if (bridge.addKnowledgeCapturesListener) {
+      void bridge.addKnowledgeCapturesListener(() => { void refreshAmbient(true) })
+        .then(h => { if (disposed) void h.remove(); else cleanups.push(() => h.remove()) })
+        .catch(() => {})
+    }
+    if (bridge.addAssistantBriefingsListener) {
+      void bridge.addAssistantBriefingsListener(() => { void refreshAmbient(false) })
+        .then(h => { if (disposed) void h.remove(); else cleanups.push(() => h.remove()) })
+        .catch(() => {})
+    }
+    return () => {
+      disposed = true
+      cleanups.forEach(fn => { void fn() })
+    }
+  }, [bridge])
 
   useEffect(() => {
     if (!bridge.addWhaleChatListener) return
@@ -223,6 +377,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     const nextHistory = [...messages, userMsg]
     updateSessionMessages(targetSessionId, prev => [...prev, userMsg], text)
     setInput('')
+    setSlashOpen(false)
     setSending(true)
     setStreamingText('')
     setStreamingSteps([])
@@ -280,6 +435,13 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       ? t('正在整理回答…')
       : t('正在思考…')
 
+  const renderReceiptIcon = (kind: ActionReceipt['kind']) => {
+    if (kind === 'secretary') return <BellRing size={14} aria-hidden="true" />
+    if (kind === 'knowledge') return <BookmarkCheck size={14} aria-hidden="true" />
+    if (kind === 'memory') return <Brain size={14} aria-hidden="true" />
+    return <Hammer size={14} aria-hidden="true" />
+  }
+
   return (
     <section className="whale-chat-screen" aria-label={t('鲸鱼助手对话')}>
       <header className="whale-chat-header">
@@ -328,6 +490,44 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           </button>
         </div>
       </header>
+
+      {ambient && (
+        <div className="whale-ambient-bar" role="region" aria-label={t('情境提示')}>
+          <span className="whale-ambient-text">
+            {ambient.kind === 'briefing' ? <BellRing size={14} aria-hidden="true" /> : <BookmarkCheck size={14} aria-hidden="true" />}
+            {ambient.text}
+          </span>
+          <div className="whale-ambient-actions">
+            <button
+              type="button"
+              className="whale-ambient-btn"
+              disabled={sending}
+              onClick={() => {
+                const prompt = ambient.prompt
+                setAmbient(null)
+                void sendText(prompt)
+              }}
+            >
+              {ambient.actionLabel}
+            </button>
+            <button
+              type="button"
+              className="whale-ambient-link"
+              onClick={() => onNavigate(ambient.targetView)}
+            >
+              {t('查看')}
+            </button>
+            <button
+              type="button"
+              className="whale-ambient-close"
+              aria-label={t('关闭提示')}
+              onClick={() => setAmbient(null)}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {sessionsOpen && (
         <aside className="whale-sessions-drawer" aria-label={t('本地会话管理')}>
@@ -433,51 +633,85 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             </div>
           </div>
         ) : (
-          messages.map(msg => (
-            <article key={msg.id} className={`whale-msg whale-msg-${msg.role}${msg.error ? ' is-error' : ''}`}>
-              {msg.steps && msg.steps.length > 0 && (
-                <details className="whale-msg-steps">
-                  <summary>
-                    <Wrench size={13} aria-hidden="true" />
-                    {t('已调用 {0} 项原生能力', msg.steps.length)}
-                  </summary>
-                  <ul>
-                    {msg.steps.map((step, i) => (
-                      <li key={`${step.tool}-${i}`}>
-                        <CheckCircle2 size={13} aria-hidden="true" />
-                        <span>{step.label}</span>
-                        <small>{step.durationMs}ms</small>
-                      </li>
+          messages.map(msg => {
+            const receipts = msg.role === 'assistant' && !msg.error ? extractActionReceipts(msg.steps) : []
+            return (
+              <article key={msg.id} className={`whale-msg whale-msg-${msg.role}${msg.error ? ' is-error' : ''}`}>
+                {msg.steps && msg.steps.length > 0 && (
+                  <details className="whale-msg-steps">
+                    <summary>
+                      <Wrench size={13} aria-hidden="true" />
+                      {t('已调用 {0} 项原生能力', msg.steps.length)}
+                    </summary>
+                    <ul>
+                      {msg.steps.map((step, i) => (
+                        <li key={`${step.tool}-${i}`}>
+                          <CheckCircle2 size={13} aria-hidden="true" />
+                          <span>{step.label}</span>
+                          <small>{step.durationMs}ms</small>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {msg.role === 'assistant' && !msg.error ? (
+                  <div
+                    className="whale-msg-bubble whale-markdown"
+                    dangerouslySetInnerHTML={{ __html: md.render(msg.text) }}
+                  />
+                ) : (
+                  <div className="whale-msg-bubble">{msg.text}</div>
+                )}
+                {receipts.length > 0 && (
+                  <div className="whale-receipt-list" aria-label={t('操作回执')}>
+                    {receipts.map(receipt => (
+                      <div key={receipt.key} className="whale-receipt-card">
+                        <span className="whale-receipt-title">
+                          {renderReceiptIcon(receipt.kind)}
+                          {t(receipt.title)}
+                        </span>
+                        <div className="whale-receipt-btns">
+                          {receipt.followUpPrompt && receipt.followUpLabel && (
+                            <button
+                              type="button"
+                              className="whale-receipt-btn"
+                              disabled={sending}
+                              onClick={() => { void sendText(receipt.followUpPrompt!) }}
+                            >
+                              {t(receipt.followUpLabel)}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="whale-receipt-btn is-primary"
+                            onClick={() => onNavigate(receipt.view)}
+                          >
+                            {t(receipt.actionLabel)}
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </ul>
-                </details>
-              )}
-              {msg.role === 'assistant' && !msg.error ? (
-                <div
-                  className="whale-msg-bubble whale-markdown"
-                  dangerouslySetInnerHTML={{ __html: md.render(msg.text) }}
-                />
-              ) : (
-                <div className="whale-msg-bubble">{msg.text}</div>
-              )}
-              {msg.role === 'assistant' && !msg.error && (
-                <footer className="whale-msg-meta">
-                  <span>
-                    {msg.model ?? 'whale'}
-                    {msg.elapsedMs ? ` · ${(msg.elapsedMs / 1000).toFixed(1)}s` : ''}
-                  </span>
-                  <button
-                    type="button"
-                    className="whale-copy-btn"
-                    aria-label={t('复制回复')}
-                    onClick={() => copyReply(msg.id, msg.text)}
-                  >
-                    {copiedId === msg.id ? <Check size={13} /> : <Copy size={13} />}
-                  </button>
-                </footer>
-              )}
-            </article>
-          ))
+                  </div>
+                )}
+                {msg.role === 'assistant' && !msg.error && (
+                  <footer className="whale-msg-meta">
+                    <span>
+                      {msg.model ?? 'whale'}
+                      {msg.elapsedMs ? ` · ${(msg.elapsedMs / 1000).toFixed(1)}s` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      className="whale-copy-btn"
+                      aria-label={t('复制回复')}
+                      onClick={() => copyReply(msg.id, msg.text)}
+                    >
+                      {copiedId === msg.id ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                  </footer>
+                )}
+              </article>
+            )
+          })
         )}
         {sending && (
           <div className="whale-msg whale-msg-assistant" role="status">
@@ -506,6 +740,42 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         )}
       </div>
 
+      {(showArchiveHint || slashOpen) && (
+        <div className="whale-composer-assist" aria-label={t('快捷指令与归档建议')}>
+          {showArchiveHint && (
+            <button
+              type="button"
+              className="whale-assist-pill is-accent"
+              onClick={() => {
+                void sendText(`帮我把下面内容存入本地资料库并提炼核心要点：\n\n${input.trim()}`)
+              }}
+            >
+              <BookmarkCheck size={13} aria-hidden="true" />
+              {t('顺手存入资料库并总结')}
+            </button>
+          )}
+          {slashOpen && QUICK_SLASH_ACTIONS.map(act => (
+            <button
+              key={act.id}
+              type="button"
+              className="whale-assist-pill"
+              disabled={sending}
+              onClick={() => {
+                if (act.sendNow) {
+                  void sendText(act.prefix)
+                } else {
+                  setInput(act.prefix)
+                  setSlashOpen(false)
+                  inputRef.current?.focus()
+                }
+              }}
+            >
+              {t(act.label)}
+            </button>
+          ))}
+        </div>
+      )}
+
       <form
         className="whale-chat-composer"
         onSubmit={event => {
@@ -513,13 +783,30 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           void sendText(input)
         }}
       >
+        <button
+          type="button"
+          className={`whale-slash-btn${slashOpen ? ' is-active' : ''}`}
+          aria-label={t('快捷指令')}
+          title={t('快捷指令')}
+          aria-expanded={slashOpen}
+          disabled={sending}
+          onClick={() => setSlashOpen(open => !open)}
+        >
+          <Slash size={15} />
+        </button>
         <input
+          ref={inputRef}
           type="text"
           value={input}
           disabled={sending}
-          placeholder={t('发消息给鲸鱼助手…')}
+          placeholder={t('发消息、粘贴链接或输入 / 快捷记录…')}
           aria-label={t('输入消息')}
-          onChange={event => setInput(event.target.value)}
+          onChange={event => {
+            const val = event.target.value
+            setInput(val)
+            if (val === '/') setSlashOpen(true)
+            else if (val === '') setSlashOpen(false)
+          }}
         />
         <button
           type="submit"
