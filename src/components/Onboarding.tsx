@@ -191,9 +191,9 @@ export function Onboarding({
                       : t('未配置')}</p>
                   {saveFailed && <p role="alert">{t('未能保存配置，输入已保留，请重试。')}</p>}
                   {/* 窗口里只做两件事：配 API Key、装运行环境。其余设置留给 Harness 与设置页。 */}
-                  <p className="onboarding-status">{t("这一页只配置 API Key，其它设置装好后按需调整。")}</p>
+                  <p className="onboarding-status">{t("填好 API Key 即可立即开始纯原生对话，其它设置随时可在「我的」里调整。")}</p>
                   {/* 用第三方接口的人不该在这一步卡住：告诉他们去哪儿配。 */}
-                  <p className="onboarding-status">{t("用第三方接口？这步可以跳过，装好环境后在「设置 → 模型供应商 → 自定义供应商」里填 Base URL 与密钥。")}</p>
+                  <p className="onboarding-status">{t("用第三方或兼容接口？可先点完成，再到「我的 → 模型与密钥 → 自定义供应商」里填 Base URL 与密钥。")}</p>
                   </fieldset>
                 </form>
               )}

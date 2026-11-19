@@ -123,10 +123,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
 
             for (i in 0 until toolCalls.length()) {
                 val call = toolCalls.optJSONObject(i) ?: continue
-                val callId = call.optString("id", UUID.randomUUID().toString())
+                val callId = call.optNonNullString("id", UUID.randomUUID().toString())
                 val fn = call.optJSONObject("function") ?: continue
-                val fnName = fn.optString("name", "")
-                val fnArgs = fn.optString("arguments", "{}")
+                val fnName = fn.optNonNullString("name", "")
+                val fnArgs = fn.optNonNullString("arguments", "{}")
                 val opId = "native-${sessionId.take(16)}-$round-$callId"
                 val mutating = tools.isMutating(fnName)
                 listener?.onPhase("tool:$fnName")
@@ -173,15 +173,18 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         store: RuntimeStore,
         settings: io.deepseekharness.mobile.runtime.RuntimeSettings,
     ): Endpoint {
-        val deepSeekKey = store.readModelCredential("deepseek")?.takeIf(String::isNotBlank)
-        if (deepSeekKey != null) {
-            val model = settings.defaultModels[ModelProvider.DEEPSEEK]?.takeIf(String::isNotBlank) ?: "deepseek-chat"
-            return Endpoint("https://api.deepseek.com/v1/chat/completions", deepSeekKey, model)
-        }
-        val openAiKey = store.readModelCredential("openai")?.takeIf(String::isNotBlank)
-        if (openAiKey != null) {
-            val model = settings.defaultModels[ModelProvider.OPENAI]?.takeIf(String::isNotBlank) ?: "gpt-4o-mini"
-            return Endpoint("https://api.openai.com/v1/chat/completions", openAiKey, model)
+        val builtin = listOf(
+            Triple(ModelProvider.DEEPSEEK, "https://api.deepseek.com/v1/chat/completions", "deepseek-chat"),
+            Triple(ModelProvider.OPENAI, "https://api.openai.com/v1/chat/completions", "gpt-4o-mini"),
+            Triple(ModelProvider.OPENROUTER, "https://openrouter.ai/api/v1/chat/completions", "deepseek/deepseek-chat"),
+            Triple(ModelProvider.XAI, "https://api.x.ai/v1/chat/completions", "grok-2-latest"),
+            Triple(ModelProvider.GROQ, "https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile"),
+            Triple(ModelProvider.MISTRAL, "https://api.mistral.ai/v1/chat/completions", "mistral-small-latest"),
+        )
+        for ((provider, url, fallbackModel) in builtin) {
+            val key = store.readModelCredential(provider.wireValue)?.takeIf(String::isNotBlank) ?: continue
+            val model = settings.defaultModels[provider]?.takeIf(String::isNotBlank) ?: fallbackModel
+            return Endpoint(url, key, model)
         }
         for (custom in settings.customModelProviders) {
             val key = store.readModelCredential(custom.id)?.takeIf(String::isNotBlank) ?: continue
@@ -273,7 +276,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 ?: throw IllegalStateException("模型服务未返回有效内容")
             val message = choice.optJSONObject("message")
                 ?: throw IllegalStateException("模型响应缺少 message 字段")
-            val content = message.optString("content", "")
+            val content = message.optNonNullString("content", "")
             if (content.isNotEmpty() && listener != null) {
                 listener.onDelta(content)
             }
@@ -296,7 +299,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val chunk = runCatching { JSONObject(payload) }.getOrNull() ?: continue
                 val delta = chunk.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: continue
 
-                val deltaText = delta.optString("content", "")
+                val deltaText = delta.optNonNullString("content", "")
                 if (deltaText.isNotEmpty()) {
                     contentBuilder.append(deltaText)
                     listener?.onDelta(deltaText)
@@ -308,13 +311,13 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         val tc = deltaCalls.optJSONObject(i) ?: continue
                         val idx = tc.optInt("index", i)
                         val acc = toolAccumulators.getOrPut(idx) { MutableToolCall() }
-                        val id = tc.optString("id", "")
+                        val id = tc.optNonNullString("id", "")
                         if (id.isNotEmpty()) acc.id = id
                         val fn = tc.optJSONObject("function")
                         if (fn != null) {
-                            val namePart = fn.optString("name", "")
+                            val namePart = fn.optNonNullString("name", "")
                             if (namePart.isNotEmpty()) acc.name.append(namePart)
-                            val argsPart = fn.optString("arguments", "")
+                            val argsPart = fn.optNonNullString("arguments", "")
                             if (argsPart.isNotEmpty()) acc.arguments.append(argsPart)
                         }
                     }
@@ -349,6 +352,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val name = StringBuilder()
         val arguments = StringBuilder()
     }
+
+    private fun JSONObject.optNonNullString(key: String, fallback: String = ""): String =
+        if (!has(key) || isNull(key)) fallback else optString(key, fallback)
 
     companion object {
         private const val MAX_TOOL_ROUNDS = 6

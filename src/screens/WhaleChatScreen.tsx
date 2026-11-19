@@ -668,7 +668,20 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                     </div>
                   </div>
                 ) : (
-                  <div className="whale-msg-bubble">{msg.text}</div>
+                  <div className="whale-msg-bubble">
+                    {msg.text}
+                    {msg.error && (msg.text.includes('API Key') || msg.text.includes('模型与密钥')) && (
+                      <div style={{ marginTop: 8 }}>
+                        <button
+                          type="button"
+                          className="whale-receipt-btn is-primary"
+                          onClick={() => onNavigate('settings-models')}
+                        >
+                          {t('前往配置模型与密钥')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
                 {receipts.length > 0 && (
                   <div className="whale-receipt-list" aria-label={t('操作回执')}>
