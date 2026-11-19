@@ -113,8 +113,6 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         if (includePet) {
             array.put(schema(
                 "whale_pet_control",
-        "whale_worker_submit",
-        "whale_worker_cancel",
                 "控制全屏悬浮桌宠：启动、隐藏关闭、调整尺寸或重置屏幕位置。",
                 mapOf(
                     "action" to "start / stop / resize / reset_position / state",
@@ -223,6 +221,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
     }
 
     fun isMutating(name: String): Boolean = name in setOf(
+        "whale_worker_submit",
+        "whale_worker_cancel",
         "whale_app_navigate",
         "whale_app_appearance",
         "whale_app_language",
