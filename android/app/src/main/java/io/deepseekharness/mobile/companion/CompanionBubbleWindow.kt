@@ -704,10 +704,18 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
             background = null; setPadding(dp(10), dp(8), dp(2), dp(8)); minHeight = dp(44); textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
             setText(draft); setSelection(text.length)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            var lastLines = 1
             addTextChangedListener(object : android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { draft = s?.toString().orEmpty(); panel.post { positionUpdater?.invoke() } }
-                override fun afterTextChanged(s: android.text.Editable?) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { draft = s?.toString().orEmpty() }
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    val lines = lineCount.coerceAtLeast(1)
+                    if (lines != lastLines) {
+                        lastLines = lines
+                        panel.post { positionUpdater?.invoke() }
+                    }
+                }
             })
         }
         val send = ui.text(ui.string(R.string.pet_ui_send), 14f, ui.onPrimary, true).apply {
@@ -1224,7 +1232,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL, PixelFormat.TRANSLUCENT).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            x = 0
+            y = dp(8)
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
         val updatePosition = {
@@ -1253,7 +1263,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
             val bars = if (android.os.Build.VERSION.SDK_INT >= 30) inset?.getInsets(android.view.WindowInsets.Type.systemBars())?.bottom ?: 0 else 0
-            val usable = stableBounds.height() - maxOf(keyboard, bars)
+            val imeFromFrame = if (frame.bottom in 200 until stableBounds.height()) stableBounds.height() - frame.bottom else 0
+            val effectiveKeyboard = maxOf(keyboard, imeFromFrame)
+            val usable = stableBounds.height() - maxOf(effectiveKeyboard, bars)
             val originTop=frame.top.coerceAtLeast(0)
             val available=(usable-originTop-dp(8)).coerceAtLeast(1)
             val anchorY=currentPet[1]-originTop
@@ -1277,7 +1289,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val chrome=mandatory+if(controlsScroll.visibility==android.view.View.GONE) 0 else controlsScroll.measuredHeight
             val natural = if (toolView.visibility == android.view.View.VISIBLE) dp(390) else content.measuredHeight.takeIf { it > 0 } ?: dp(64)
             val targetHeight=PetChatHeight.total(available,availableHeight,chrome,natural,heightMode,
-                stableBounds.height()>stableBounds.width(),keyboard>0,toolView.visibility==android.view.View.VISIBLE,density)
+                stableBounds.height()>stableBounds.width(),effectiveKeyboard>0,toolView.visibility==android.view.View.VISIBLE,density)
             val desiredScroll = (targetHeight - chrome).coerceIn(minOf(dp(44), (available - chrome).coerceAtLeast(1)), (available - chrome).coerceAtLeast(1))
             val scrollParams = bodyHost.layoutParams as LinearLayout.LayoutParams
             val heightChanged = scrollParams.height != desiredScroll
@@ -1285,9 +1297,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             panel.measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
                 android.view.View.MeasureSpec.makeMeasureSpec(available, android.view.View.MeasureSpec.AT_MOST))
             val actualHeight = panel.measuredHeight.coerceIn(1, available)
-            val sheetX = ((screenWidth - width) / 2).coerceAtLeast(dp(4))
-            val sheetY = (available - actualHeight).coerceAtLeast(dp(4))
-            val point = android.graphics.Point(sheetX, sheetY)
+            val point = android.graphics.Point(0, dp(8))
             val placedAbove = false
             val right = currentPet[0] + currentPet[2] / 2 >= metrics.widthPixels / 2
             if (placedAbove != showAbove || right != petOnRight) {
@@ -1306,7 +1316,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
             val moved = params.x != point.x || params.y != point.y
             params.x = point.x; params.y = point.y
-            if (root === panel && (moved || resized || heightChanged)) runCatching { wm.updateViewLayout(panel, params) }
+            if (root === panel && (moved || resized)) runCatching { wm.updateViewLayout(panel, params) }
             Unit
         }
         if (android.os.Build.VERSION.SDK_INT >= 30) {
