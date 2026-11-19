@@ -18,6 +18,7 @@
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings 0",
     "android:sync": "pnpm run build && cap sync android",
+    "android:build:lite": "pnpm run build && cap sync android && node scripts/run-gradle.mjs -PwhaleSeparateRuntime=true assembleDebug",
     "android:open": "cap open android",
     "android:check": "pnpm run build && cap sync android && node scripts/run-gradle.mjs lint testDebugUnitTest",
     "prepare:runner": "node scripts/prepare-runner.mjs",

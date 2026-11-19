@@ -20,6 +20,7 @@ import { keepAliveGuideResolved, overlayFailureGuide, overlayGuideResolved, type
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { WhaleAutonomyCard } from './components/WhaleAutonomyCard'
 
+const WhaleChatScreen = lazy(() => import('./screens/WhaleChatScreen').then(m => ({ default: m.WhaleChatScreen })))
 const TerminalScreen = lazy(() => import('./screens/TerminalScreen').then(m => ({ default: m.TerminalScreen })))
 const ToolsWorkspace = lazy(() => import('./components/ToolsWorkspace').then(m => ({ default: m.ToolsWorkspace })))
 const AssistantTasks = lazy(() => import('./components/AssistantTasks').then(m => ({ default: m.AssistantTasks })))
@@ -5432,6 +5433,8 @@ export function App() {
         return <ConversationScreen mode={canEnterConversation(runtime, settings) ? 'session' : 'gate'} busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; setActiveView('harness') }} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
       case 'conversation':
         return <ConversationScreen mode="gate" busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; if (canEnterConversation(runtime, settings) && !keepAlive.reconnectRequired) setActiveView('harness'); else launchHarness() }} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
+      case 'whale-chat':
+        return <Suspense fallback={null}><WhaleChatScreen bridge={runtimeBridge} onNavigate={view => setActiveView(view)} /></Suspense>
       case 'sessions':
         return <Suspense fallback={null}><SessionManager onBack={() => backToView('conversation')} onOpenHarness={launchHarness} /></Suspense>
       case 'assistant-memory':

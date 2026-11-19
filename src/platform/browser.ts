@@ -849,5 +849,12 @@ export function createBrowserBridge(): RuntimeBridge {
         ],
       })
     },
+    whaleNativeChat: request => Promise.resolve({
+      reply: `（浏览器预览模式）已收到：${request.message}`,
+      steps: [],
+      model: 'whale-native-preview',
+      elapsedMs: 12,
+      mode: 'native_direct',
+    }),
   }
 }

@@ -1650,6 +1650,7 @@ export interface CompanionQuickSettings {
 }
 
 export interface RuntimeBridge {
+  whaleNativeChat: (request: WhaleNativeChatRequest) => Promise<WhaleNativeChatResult>
   setHarnessViewport?(viewport: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
   listHarnessReleases: () => Promise<HarnessReleaseList>
   manageHarnessVersions: (operation: HarnessVersionOperation, version?: string) => Promise<HarnessVersionsState>
@@ -2365,4 +2366,25 @@ export interface PluginRequest {
   childId?: string
   /** 仅 `import` 使用：来源地址或包名；地址形态可用 `id` 提示期望的包名（可选）。 */
   source?: string
+}
+
+export interface WhaleNativeChatStep {
+  tool: string
+  label: string
+  ok: boolean
+  durationMs: number
+}
+
+export interface WhaleNativeChatRequest {
+  message: string
+  history?: Array<{ role: 'user' | 'assistant'; text: string }>
+  sessionId?: string
+}
+
+export interface WhaleNativeChatResult {
+  reply: string
+  steps: WhaleNativeChatStep[]
+  model: string
+  elapsedMs: number
+  mode: string
 }

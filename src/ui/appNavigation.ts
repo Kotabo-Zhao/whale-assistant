@@ -1,5 +1,6 @@
 export type AppView =
   | 'conversation'
+  | 'whale-chat'
   | 'harness'
   | 'assistant-memory'
   | 'assistant-tasks'
@@ -35,7 +36,7 @@ export type PrimaryDestination = 'conversation' | 'harness' | 'assistant-memory'
 
 /** 所有设置子页及工具页在两种导航中使用同一个归属。 */
 export function primaryDestination(view: AppView): PrimaryDestination {
-  if (view === 'conversation' || view === 'sessions') return 'conversation'
+  if (view === 'conversation' || view === 'whale-chat' || view === 'sessions') return 'conversation'
   if (view === 'assistant-memory' || view === 'assistant-tasks') return view
   if (view === 'harness') return view
   if (view === 'tools' || view === 'plugins') return 'tools'

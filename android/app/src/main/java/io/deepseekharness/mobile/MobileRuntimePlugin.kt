@@ -4787,6 +4787,36 @@ class MobileRuntimePlugin : Plugin() {
      * Shizuku 应用的版本名（如 13.6.0）；两者都要给前端，界面必须分开显示，
      * 否则用户更新 Shizuku 后会以为「版本识别错了」。
      */
+    /** 彻底脱离 DeepSeek Harness / PRoot 的原生直连对话入口。 */
+    @PluginMethod
+    fun whaleNativeChat(call: PluginCall) {
+        val message = call.getString("message")?.trim().orEmpty()
+        if (message.isEmpty()) {
+            call.reject("请输入内容后再发送")
+            return
+        }
+        val sessionId = call.getString("sessionId")?.takeIf(String::isNotBlank) ?: "whale-main"
+        val rawHistory = call.getArray("history")
+        val history = ArrayList<Pair<String, String>>()
+        if (rawHistory != null) {
+            for (i in 0 until rawHistory.length()) {
+                val item = rawHistory.optJSONObject(i) ?: continue
+                val role = item.optString("role", "")
+                val text = item.optString("text", "")
+                if (role.isNotEmpty() && text.isNotEmpty()) history += role to text
+            }
+        }
+        java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+            try {
+                val engine = io.deepseekharness.mobile.companion.WhaleNativeAgentEngine(context)
+                val result = engine.send(message, history, sessionId)
+                call.resolve(JSObject.fromJSONObject(result.json()))
+            } catch (error: Throwable) {
+                call.reject(error.message ?: "原生对话执行失败", error as? Exception)
+            }
+        }
+    }
+
     private fun ShizukuState.toJs(): JSObject = JSObject()
         .put("installed", installed)
         .put("running", running)
