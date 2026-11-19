@@ -1,5 +1,4 @@
 import './components/WorkspaceShell.css'
-import { ToolsWorkspace } from './components/ToolsWorkspace'
 import type { AppView } from './ui/appNavigation'
 import { AppSidebar, BottomNavigation } from './components/AppNavigation'
 import { useHarnessViewport } from './useHarnessViewport'
@@ -8,22 +7,25 @@ import appMark from './assets/app-mark.png'
 import whaleWave from './assets/whale-wave.svg'
 import { t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
-import { AssistantTasks } from './components/AssistantTasks'
-import { CompanionPersona } from './components/CompanionPersona'
 import { CompanionSettingsButton } from './components/CompanionSettingsButton'
-import { CompanionWorkspace } from './components/CompanionWorkspace'
-import { SuperagentSettings } from './components/SuperagentSettings'
 import type { AutomationRuleDefaults } from './components/AutomationRuleForm'
 import { AutomationDisclaimer } from './components/AutomationDisclaimer'
 import { AutomationTaskCard } from './components/AutomationTaskCard'
 import { AppBackground } from './components/AppBackground'
 import { LanguageSettings } from './components/LanguageSettings'
-import { SessionManager } from './components/SessionManager'
 import { DiagnosticLogPanel, HarnessLogPanel } from './ui/logs'
 import type { FilesRoot } from './screens/FilesScreen'
 import { PermissionGuideDialog, ResetDialog, UpdateDialog } from './screens/Dialogs'
 import { keepAliveGuideResolved, overlayFailureGuide, overlayGuideResolved, type PermissionGuide } from './ui/permissionGuide'
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { AUTONOMY_PRESETS, DEFAULT_AUTONOMY_PRESET, resolveAutonomyPreset, type AutonomyPresetId } from './ui/whaleUiPreferences'
+
+const ToolsWorkspace = lazy(() => import('./components/ToolsWorkspace').then(m => ({ default: m.ToolsWorkspace })))
+const AssistantTasks = lazy(() => import('./components/AssistantTasks').then(m => ({ default: m.AssistantTasks })))
+const CompanionPersona = lazy(() => import('./components/CompanionPersona').then(m => ({ default: m.CompanionPersona })))
+const CompanionWorkspace = lazy(() => import('./components/CompanionWorkspace').then(m => ({ default: m.CompanionWorkspace })))
+const SuperagentSettings = lazy(() => import('./components/SuperagentSettings').then(m => ({ default: m.SuperagentSettings })))
+const SessionManager = lazy(() => import('./components/SessionManager').then(m => ({ default: m.SessionManager })))
 import { triggerHaptic } from './platform/haptics'
 import { errorMessage, runtimeErrorMessage, type NoticeTone } from './ui/messages'
 import { formatRecordedAt } from './ui/formatTime'
@@ -1332,6 +1334,14 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
   }
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [advanced, setAdvanced] = useState(() => expanded === 'device' || expanded === 'workspace')
+  const [autonomyId, setAutonomyId] = useState<AutonomyPresetId>(() => {
+    try { return resolveAutonomyPreset(window.localStorage.getItem('whale.autonomyPreset')).id } catch { return DEFAULT_AUTONOMY_PRESET }
+  })
+  const activeAutonomy = resolveAutonomyPreset(autonomyId)
+  const selectAutonomy = (id: AutonomyPresetId): void => {
+    setAutonomyId(id)
+    try { window.localStorage.setItem('whale.autonomyPreset', id) } catch { /* ignore storage errors */ }
+  }
   /** 每个分组只留命中的入口；整组都没命中就连标题一起不渲染，避免空标题刷屏。 */
   const groups = SETTINGS_HOME_GROUPS
     .map(group => ({ group, entries: SETTINGS_HOME_ENTRIES.filter(entry => entry.group === group.id && matchesSettingsHomeQuery(entry, appliedQuery)) }))
@@ -1433,6 +1443,30 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
             ? t("没有匹配的入口：试试「导入」「日志」「保活」这类功能词")
             : t("找到 {0} 个匹配的入口", matched)}
         </p>
+      )}
+
+      {!searching && (
+        <section className="whale-autonomy-card" aria-label={t('执行与权限模式')}>
+          <div className="whale-autonomy-head">
+            <strong>{t('执行与权限')}</strong>
+            <span>{t(activeAutonomy.label)}</span>
+          </div>
+          <div className="whale-autonomy-pills" role="radiogroup" aria-label={t('自治模式')}>
+            {AUTONOMY_PRESETS.map(preset => (
+              <button
+                key={preset.id}
+                type="button"
+                role="radio"
+                aria-checked={autonomyId === preset.id}
+                className={'whale-autonomy-pill' + (autonomyId === preset.id ? ' is-active' : '')}
+                onClick={() => selectAutonomy(preset.id)}
+              >
+                {t(preset.label)}
+              </button>
+            ))}
+          </div>
+          <p className="whale-autonomy-desc">{t(activeAutonomy.description)}</p>
+        </section>
       )}
 
       {!searching && <nav id="account-categories" className="account-sections" data-advanced={advanced} aria-label={t('设置分类')}>
@@ -3388,7 +3422,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             <SettingsPageRow icon={<MessageSquare size={20} />} page="diagnostics-feedback" onOpen={onOpenSubpage} />
           </div>
         </div>
-        <SuperagentSettings />
+        <Suspense fallback={null}><SuperagentSettings /></Suspense>
         </>
         )}
         {page === 'diagnostics-log' && (
@@ -5509,17 +5543,17 @@ export function App() {
       case 'conversation':
         return <ConversationScreen mode="gate" busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; if (canEnterConversation(runtime, settings) && !keepAlive.reconnectRequired) setActiveView('harness'); else launchHarness() }} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
       case 'sessions':
-        return <SessionManager onBack={() => backToView('conversation')} onOpenHarness={launchHarness} />
+        return <Suspense fallback={null}><SessionManager onBack={() => backToView('conversation')} onOpenHarness={launchHarness} /></Suspense>
       case 'assistant-memory':
-        return <CompanionWorkspace initialPanel="knowledge" library firstNote={firstNote} />
+        return <Suspense fallback={null}><CompanionWorkspace initialPanel="knowledge" library firstNote={firstNote} /></Suspense>
       case 'assistant-tasks':
-        return <AssistantTasks onOpenSession={launchHarness} />
+        return <Suspense fallback={null}><AssistantTasks onOpenSession={launchHarness} /></Suspense>
       case 'assistant-persona':
-        return <CompanionPersona onBack={() => backToView('settings')} />
+        return <Suspense fallback={null}><CompanionPersona onBack={() => backToView('settings')} /></Suspense>
       case 'terminal':
         return <TerminalScreen bridge={runtimeBridge} fontSize={settings?.terminalFontSize ?? 14} onAuthorize={requestShizukuPermission} onBack={() => backToView('settings')} onConnect={connectShizuku} onError={terminalError} onOpenEnvironment={() => setActiveView('environment')} onOpenShizuku={openShizuku} runtime={runtime} shizuku={shizuku} />
       case 'tools':
-        return <ToolsWorkspace plugins={() => setActiveView('plugins')} />
+        return <Suspense fallback={null}><ToolsWorkspace plugins={() => setActiveView('plugins')} /></Suspense>
       case 'plugins': {
         const entry: unknown = window.history.state
         const fromTools = !!entry && typeof entry === 'object' && 'toolsParent' in entry && entry.toolsParent === true

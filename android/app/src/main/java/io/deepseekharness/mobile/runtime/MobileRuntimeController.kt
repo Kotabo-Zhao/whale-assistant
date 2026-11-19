@@ -782,6 +782,62 @@ class MobileRuntimeController(
         false
     }
 
+    /**
+     * 评估当前 PRoot/Node 运行时是否满足空闲休眠条件，并在满足时安全释放常驻容器以降低待机功耗。
+     */
+    fun evaluateIdleSleep(
+        activeWorkerCount: Int,
+        terminalOpen: Boolean,
+        virtualScreenActive: Boolean,
+        appInForeground: Boolean,
+        idleDurationMs: Long,
+        batterySaverEnabled: Boolean = false,
+        customIdleThresholdMs: Long? = null,
+    ): RuntimeIdleSleepPolicy.Decision = lifecycleLock.withLock {
+        val running = !closed.get() && status.snapshot().phase == RuntimePhase.RUNNING
+        RuntimeIdleSleepPolicy.evaluate(
+            RuntimeIdleSleepPolicy.Snapshot(
+                runtimeRunning = running,
+                activeWorkerCount = activeWorkerCount,
+                terminalOpen = terminalOpen,
+                virtualScreenActive = virtualScreenActive,
+                appInForeground = appInForeground,
+                idleDurationMs = idleDurationMs,
+                batterySaverEnabled = batterySaverEnabled,
+                customIdleThresholdMs = customIdleThresholdMs,
+            ),
+        )
+    }
+
+    /** 若满足空闲休眠策略，立即停止空闲 PRoot 容器并返回 true；否则保持运行返回 false。 */
+    fun hibernateIfIdle(
+        activeWorkerCount: Int,
+        terminalOpen: Boolean,
+        virtualScreenActive: Boolean,
+        appInForeground: Boolean,
+        idleDurationMs: Long,
+        batterySaverEnabled: Boolean = false,
+        customIdleThresholdMs: Long? = null,
+    ): Boolean = lifecycleLock.withLock {
+        if (closed.get()) return@withLock false
+        val running = status.snapshot().phase == RuntimePhase.RUNNING
+        val decision = RuntimeIdleSleepPolicy.evaluate(
+            RuntimeIdleSleepPolicy.Snapshot(
+                runtimeRunning = running,
+                activeWorkerCount = activeWorkerCount,
+                terminalOpen = terminalOpen,
+                virtualScreenActive = virtualScreenActive,
+                appInForeground = appInForeground,
+                idleDurationMs = idleDurationMs,
+                batterySaverEnabled = batterySaverEnabled,
+                customIdleThresholdMs = customIdleThresholdMs,
+            ),
+        )
+        if (decision != RuntimeIdleSleepPolicy.Decision.HIBERNATE_PROOT) return@withLock false
+        supervisor.stop()
+        true
+    }
+
     fun shutdown() {
         if (!closed.compareAndSet(false, true)) return
         installer.cancelInstall()

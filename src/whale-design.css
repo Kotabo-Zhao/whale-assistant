@@ -331,3 +331,70 @@ textarea {
   color: var(--ink);
   margin-bottom: 12px;
 }
+
+/* Autonomy Quick-Switch Card */
+.whale-autonomy-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.whale-autonomy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.whale-autonomy-head strong {
+  font-size: 0.95rem;
+  font-weight: var(--weight-semibold);
+}
+
+.whale-autonomy-head span {
+  font-size: 0.82rem;
+  color: var(--blue);
+  background: var(--blue-soft);
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: var(--weight-medium);
+}
+
+.whale-autonomy-pills {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.whale-autonomy-pill {
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--muted);
+  border-radius: var(--radius-control);
+  min-height: 38px;
+  padding: 6px 10px;
+  font-size: 0.84rem;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.whale-autonomy-pill.is-active {
+  background: var(--blue-soft);
+  color: var(--blue);
+  border-color: var(--blue-line);
+  font-weight: var(--weight-semibold);
+}
+
+.whale-autonomy-desc {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--muted);
+}

@@ -2,6 +2,7 @@ import { compactScreenResult, screenSequenceRequest, screenOperation } from './s
 import { randomUUID } from 'node:crypto'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { installWorkers, workerOwner } from './workers.js'
+import { routeTurnTools } from './superagent-tool-router.js'
 import { installScreenWatch } from './screen-watch.js'
 import { installTurnSignal } from './turn-signal.js'
 import { installOwnerContext, requireOwnerTurn } from './owner-context.js'
@@ -22,10 +23,10 @@ const MAX_WAIT_MILLIS = 10_000
 const MAX_RESULT_CHARS = 200_000
 const MAX_SCREENSHOT_BASE64_CHARS = 8 * 1024 * 1024
 const MAX_HTTP_RESPONSE_BYTES = 12 * 1024 * 1024
-const MAX_FILE_BYTES = 128 * 1024
+const MAX_FILE_BYTES = 2 * 1024 * 1024
 const MAX_FILE_BASE64_CHARS = 4 * Math.ceil(MAX_FILE_BYTES / 3) + 4
 const MAX_FILE_PATH_CHARS = 240
-const MAX_FILE_PARAM_CHARS = 180_000
+const MAX_FILE_PARAM_CHARS = 2_900_000
 const REQUEST_TIMEOUT_MS = 75_000
 const VIRTUAL_SESSION_PATTERN = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/u
 // 副屏手势与跳转的参数边界，与设备端 VirtualScreenPolicy 的常量保持一致。
@@ -47,7 +48,7 @@ const COMPONENT_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+[/]
 const LAUNCH_URI_PATTERN = /^(?:https?|market):/iu
 // 空白、控制字符与 shell 元字符：链接始终作为 am start -d 的单个参数传入，这里先把危险字符挡在外面。
 const LAUNCH_URI_FORBIDDEN_PATTERN = /[\u0000-\u0020"'`;|$\\<>]/u
-const FILE_ROOTS = new Set(['inbox', 'outbox'])
+const FILE_ROOTS = new Set(['inbox', 'outbox', 'workspace'])
 const FILE_FORBIDDEN_CHARS = /[\u0000-\u001f\u007f'"`\\;|&$<>*?(){}[\]!~]/u
 // 只提供固定恢复建议，不能把设备异常里的文本变成模型指令或自动重放输入。
 const VIRTUAL_ERROR_HINTS = {
@@ -359,7 +360,7 @@ const FILE_READ_OUTPUT = {
     additionalProperties: false,
     properties: {
       ok: { type: 'boolean', required: true },
-      root: { type: 'string', required: true, enum: ['inbox', 'outbox'] },
+      root: { type: 'string', required: true, enum: ['inbox', 'outbox', 'workspace'] },
       path: { type: 'string', required: true },
       bytes: { type: 'integer', required: true },
       contentBase64: { type: 'string', required: true },
@@ -378,7 +379,7 @@ const FILE_WRITE_OUTPUT = {
     additionalProperties: false,
     properties: {
       ok: { type: 'boolean', required: true },
-      root: { type: 'string', required: true, enum: ['inbox', 'outbox'] },
+      root: { type: 'string', required: true, enum: ['inbox', 'outbox', 'workspace'] },
       path: { type: 'string', required: true },
       bytes: { type: 'integer', required: true },
       overwritten: { type: 'boolean', required: true },
@@ -1800,7 +1801,7 @@ export function apply(ctx) {
     name: 'mobile_device_file_list',
     description: '列出 Android DSH 投递区 inbox 或 outbox 下一级目录条目；只返回受控相对路径，不提供任意 Shell。',
     parameters: {
-      root: { type: 'string', required: true, enum: ['inbox', 'outbox'] },
+      root: { type: 'string', required: true, enum: ['inbox', 'outbox', 'workspace'] },
       path: { type: 'string', description: '相对于投递区根目录的目录路径，可为空。' },
     },
     output: output(),
@@ -1815,7 +1816,7 @@ export function apply(ctx) {
     name: 'mobile_device_file_read',
     description: '读取 Android DSH 投递区中的小文件并返回 Base64；只能访问 inbox/outbox 下的普通文件。',
     parameters: {
-      root: { type: 'string', required: true, enum: ['inbox', 'outbox'] },
+      root: { type: 'string', required: true, enum: ['inbox', 'outbox', 'workspace'] },
       path: { type: 'string', required: true, description: '相对于投递区根目录的文件路径。' },
     },
     output: FILE_READ_OUTPUT,
@@ -1827,7 +1828,7 @@ export function apply(ctx) {
     name: 'mobile_device_file_download',
     description: '从 Android DSH 投递区下载一个不超过 128 KiB 的普通文件，结果为 Base64。',
     parameters: {
-      root: { type: 'string', required: true, enum: ['inbox', 'outbox'] },
+      root: { type: 'string', required: true, enum: ['inbox', 'outbox', 'workspace'] },
       path: { type: 'string', required: true, description: '相对于投递区根目录的文件路径。' },
     },
     output: FILE_READ_OUTPUT,
@@ -1839,9 +1840,9 @@ export function apply(ctx) {
     name: 'mobile_device_file_write',
     description: '把 Base64 小文件写入 Android DSH 投递区；默认拒绝覆盖已有文件，需要用户确认。',
     parameters: {
-      root: { type: 'string', required: true, enum: ['inbox', 'outbox'] },
+      root: { type: 'string', required: true, enum: ['inbox', 'outbox', 'workspace'] },
       path: { type: 'string', required: true, description: '相对于投递区根目录的文件路径。' },
-      contentBase64: { type: 'string', required: true, description: '不超过 128 KiB 解码大小的 Base64 内容。' },
+      contentBase64: { type: 'string', required: true, description: '不超过 2 MiB 解码大小的 Base64 内容。' },
       overwrite: { type: 'boolean', description: '是否覆盖同名普通文件；默认 false。' },
     },
     output: FILE_WRITE_OUTPUT,
@@ -1853,9 +1854,9 @@ export function apply(ctx) {
     name: 'mobile_device_file_upload',
     description: '上传 Base64 小文件到 Android DSH 投递区；这是受控 file_write 别名，不提供任意 Shell。',
     parameters: {
-      root: { type: 'string', required: true, enum: ['inbox', 'outbox'] },
+      root: { type: 'string', required: true, enum: ['inbox', 'outbox', 'workspace'] },
       path: { type: 'string', required: true, description: '相对于投递区根目录的文件路径。' },
-      contentBase64: { type: 'string', required: true, description: '不超过 128 KiB 解码大小的 Base64 内容。' },
+      contentBase64: { type: 'string', required: true, description: '不超过 2 MiB 解码大小的 Base64 内容。' },
       overwrite: { type: 'boolean', description: '是否覆盖同名普通文件；默认 false。' },
     },
     output: FILE_WRITE_OUTPUT,
@@ -1867,7 +1868,7 @@ export function apply(ctx) {
     name: 'mobile_device_file_mkdir',
     description: '在 Android DSH 投递区创建相对目录，用于分类管理投递文件。',
     parameters: {
-      root: { type: 'string', required: true, enum: ['inbox', 'outbox'] },
+      root: { type: 'string', required: true, enum: ['inbox', 'outbox', 'workspace'] },
       path: { type: 'string', required: true, description: '相对于投递区根目录的新目录路径。' },
     },
     output: FILE_WRITE_OUTPUT,
@@ -1900,4 +1901,22 @@ export function apply(ctx) {
     },
     presentCall: () => present('创作鲸鱼助手功能', undefined),
   }))
+
+  ctx.tools.register(defineTool({
+    name: 'mobile_route_turn_tools',
+    description: '按当前用户意图为 Whale Super Agent Router 裁剪最小工具集并返回交互时延预算，减少主会话无关工具开销。',
+    parameters: {
+      inputText: { type: 'string', required: true, description: '本轮用户输入或任务意图摘要。' },
+      forceFull: { type: 'boolean', description: '多域复杂任务需要全量工具时设为 true。' },
+    },
+    output: output(),
+    execute: (args) => {
+      const registered = typeof ctx.tools?.list === 'function' ? ctx.tools.list() : []
+      const routed = routeTurnTools(args.inputText, registered, { forceFull: Boolean(args.forceFull) })
+      return { text: JSON.stringify(routed) }
+    },
+    presentCall: () => present('规划本轮最小工具集', undefined),
+  }))
 }
+
+export { routeTurnTools }
