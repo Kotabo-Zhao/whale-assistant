@@ -104,13 +104,6 @@ jobs:
           echo "sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "apk=${APK_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: whale-assistant-lite-${{ steps.meta.outputs.date }}-${{ steps.meta.outputs.sha }}
-          path: release-out/*
-          retention-days: 14
-
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
