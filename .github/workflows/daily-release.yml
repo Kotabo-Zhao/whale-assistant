@@ -90,7 +90,7 @@ jobs:
 
       - name: Run Android unit tests & build Lite APK
         working-directory: android
-        run: ./gradlew testDebugUnitTest -PwhaleSeparateRuntime=true assembleDebug --no-daemon
+        run: ./gradlew testDebugUnitTest -PwhaleSeparateRuntime=true -PwhaleVersionCode=$((146 + GITHUB_RUN_NUMBER)) assembleDebug --no-daemon
 
       - name: Prepare release artifacts
         id: meta

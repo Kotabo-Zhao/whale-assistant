@@ -173,6 +173,15 @@ android {
                 keyPassword teamSigning.keyPassword
             }
         }
+        def nightlyDebugKs = file('whale-nightly-debug.keystore')
+        if (nightlyDebugKs.exists()) {
+            whaleNightly {
+                storeFile nightlyDebugKs
+                storePassword 'whale-assistant-debug'
+                keyAlias 'whale-debug'
+                keyPassword 'whale-assistant-debug'
+            }
+        }
     }
 
     defaultConfig {
@@ -180,7 +189,7 @@ android {
         minSdk 26
         targetSdk 35
         buildConfigField 'boolean', 'SEPARATE_RUNTIME', separateRuntime.toString()
-        versionCode 145
+        versionCode ((project.findProperty('whaleVersionCode')?.toString()?.toInteger()) ?: 146)
         versionName '0.4.0-whale.1'
 
         buildConfigField 'String', 'DEFAULT_MANIFEST_URL', envBuildValue('DSH_RUNTIME_MANIFEST_URL')
@@ -225,6 +234,8 @@ android {
         debug {
             if (teamSigning != null) {
                 signingConfig signingConfigs.team
+            } else if (signingConfigs.findByName('whaleNightly') != null) {
+                signingConfig signingConfigs.whaleNightly
             }
         }
         release {

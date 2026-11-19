@@ -109,6 +109,49 @@ class OverlayBallService : Service() {
     private val controlListener: (DeviceControlState.Snapshot) -> Unit = {
         hintHandler.post { if (!avatarDestroyed) refreshControlPose() }
     }
+    private val tokenListener: (io.deepseekharness.mobile.companion.WhaleTokenMeter.Snapshot) -> Unit = { snap ->
+        hintHandler.post { if (!avatarDestroyed) updateTokenBar(snap) }
+    }
+    private fun updateTokenBar(snap: io.deepseekharness.mobile.companion.WhaleTokenMeter.Snapshot) {
+        val root = ballView ?: return
+        val pill = root.findViewById<android.view.View>(R.id.companion_token_pill) ?: return
+        val label = root.findViewById<TextView>(R.id.companion_token_label) ?: return
+        val track = root.findViewById<android.view.View>(R.id.companion_token_track) ?: return
+        val fill = root.findViewById<android.view.View>(R.id.companion_token_fill) ?: return
+        val dp = resources.displayMetrics.density
+        pill.background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 999f
+            setColor(android.graphics.Color.argb(232, 255, 252, 246))
+            setStroke((1.2f * dp).toInt().coerceAtLeast(1), android.graphics.Color.rgb(165, 222, 238))
+        }
+        track.background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 999f
+            setColor(android.graphics.Color.argb(46, 56, 132, 168))
+        }
+        val fillColor = when {
+            snap.progress >= 0.85f -> android.graphics.Color.rgb(255, 118, 148)
+            snap.progress >= 0.60f -> android.graphics.Color.rgb(255, 184, 102)
+            else -> android.graphics.Color.rgb(86, 214, 186)
+        }
+        fill.background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 999f
+            setColor(fillColor)
+        }
+        label.text = snap.compactLabel()
+        track.post {
+            val totalW = track.width.takeIf { it > 0 } ?: (48 * dp).toInt()
+            val minW = (6 * dp).toInt()
+            val targetW = (totalW * snap.progress).toInt().coerceIn(minW, totalW)
+            val lp = fill.layoutParams
+            if (lp.width != targetW) {
+                lp.width = targetW
+                fill.layoutParams = lp
+            }
+        }
+    }
     private var companionTimersStarted = false
     private fun refreshControlPose() {
         val state=DeviceControlState.current
@@ -116,6 +159,21 @@ class OverlayBallService : Service() {
         ballView?.contentDescription = if(state.phase=="idle") overlayString(R.string.overlay_ball_content_description)
             else io.deepseekharness.mobile.companion.PetControlLabels.description(overlayPalette(),state.phase)
         actionMenu?.refreshControl()
+        ballView?.findViewById<TextView>(R.id.companion_control_pill)?.let { pill ->
+            if (state.phase == "idle") {
+                pill.visibility = View.GONE
+            } else {
+                val dp = resources.displayMetrics.density
+                pill.visibility = View.VISIBLE
+                pill.text = if (state.action.isNotBlank()) "🐳 ${state.action}" else "🐳 操控中…"
+                pill.background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                    cornerRadius = 999f
+                    setColor(android.graphics.Color.argb(232, 30, 98, 148))
+                    setStroke((1f * dp).toInt().coerceAtLeast(1), android.graphics.Color.argb(180, 165, 228, 255))
+                }
+            }
+        }
         setHostAppForeground(AppForeground.isForeground())
         updateVisibleStaticPet()
         wakePetMotion()
@@ -280,6 +338,7 @@ class OverlayBallService : Service() {
         activeService = this
         WorkerDashboardStore.subscribeAccepted(taskAccepted)
         DeviceControlState.subscribe(controlListener)
+        io.deepseekharness.mobile.companion.WhaleTokenMeter.subscribe(tokenListener)
         runCatching { ensureNotificationChannel() }
         windowManager = getSystemService(WindowManager::class.java)
         // 亮屏 / 息屏 / 解锁都会改变「球是否可见」：收到后只重算动画门控，不重载头像、不动窗口。
@@ -422,6 +481,7 @@ class OverlayBallService : Service() {
     override fun onDestroy() {
         WorkerDashboardStore.unsubscribeAccepted(taskAccepted)
         DeviceControlState.unsubscribe(controlListener)
+        io.deepseekharness.mobile.companion.WhaleTokenMeter.unsubscribe(tokenListener)
         calendarServiceDestroyed = true
         reminderHints.clear()
         avatarDestroyed = true
@@ -988,6 +1048,7 @@ class OverlayBallService : Service() {
             return false
         }
         ballView = view
+        updateTokenBar(io.deepseekharness.mobile.companion.WhaleTokenMeter.snapshot(this))
         layoutParams = params
         bubbleChat.refreshWorkerStatus()
         // 乐观置位：addView 返回时窗口已登记，首次遍历（附着回调）还没跑完，
