@@ -37,10 +37,18 @@ internal fun WebView.loadWhaleTool(id: String, html: String, preview: Boolean = 
         override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean { gone(); return true }
     }
     val design = io.deepseekharness.mobile.WhaleDesign.of(context)
-    val themed = "<style>:root{" + design.variables() + "color-scheme:" + (if(design.dark) "dark" else "light") +
-        ";}html body{background:var(--whale-background);color:var(--whale-text);font-family:system-ui,sans-serif;}"+
-        "body input,body select,body textarea{background:var(--whale-surface);color:var(--whale-text);border:1px solid var(--whale-border);border-radius:var(--whale-radius);padding:10px;font:inherit;}"+
-        "body button{background:var(--whale-accent);color:var(--whale-on-accent);border-radius:var(--whale-radius);border:0;padding:10px 14px;font:inherit;}"+
+    val storageBridge = "<script>(function(){const p='whale_tool_${id}_';const MAX=262144;window.whaleStorage={" +
+        "get(k,f){try{const v=localStorage.getItem(p+String(k));return v===null?f:JSON.parse(v);}catch{return f;}}," +
+        "set(k,v){const s=JSON.stringify(v);if(s.length>MAX)throw new Error('storage quota exceeded');localStorage.setItem(p+String(k),s);return true;}," +
+        "remove(k){localStorage.removeItem(p+String(k));}," +
+        "keys(){const out=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(p))out.push(k.slice(p.length));}return out;}" +
+        "};})();</script>"
+    val themed = storageBridge + "<style>:root{" + design.variables() + "color-scheme:" + (if(design.dark) "dark" else "light") +
+        ";}*{box-sizing:border-box;}html body{background:var(--whale-background);color:var(--whale-text);font-family:system-ui,-apple-system,sans-serif;margin:0;padding:16px;line-height:1.55;-webkit-font-smoothing:antialiased;}"+
+        "body input,body select,body textarea{background:var(--whale-surface);color:var(--whale-text);border:1px solid var(--whale-border);border-radius:var(--whale-radius);padding:10px 12px;font:inherit;outline:none;transition:border-color 140ms ease;}"+
+        "body input:focus,body select:focus,body textarea:focus{border-color:var(--whale-accent);}"+
+        "body button{background:var(--whale-accent);color:var(--whale-on-accent);border-radius:var(--whale-radius);border:0;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;transition:opacity 120ms ease,transform 100ms ease;}"+
+        "body button:active{transform:scale(.97);}"+
         "body output{color:var(--whale-accent);}</style>"
     val policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-src 'none'"
     val origin = if (!preview) "https://$id.features.whale.invalid/" else "https://$id.preview.whale.invalid/"

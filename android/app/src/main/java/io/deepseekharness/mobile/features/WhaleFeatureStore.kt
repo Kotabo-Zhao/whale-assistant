@@ -24,8 +24,8 @@ internal class WhaleFeatureStore(context: Context) {
         root.listFiles().orEmpty().filter { it.name.endsWith(".json") || it.name.endsWith(".json.bak") }
             .map { it.name.substringBefore('.') }.distinct().sorted().mapNotNull { read(it)?.let(::summary) }
     }
-    data class Tool(val id: String, val title: String, val revision: String, val activatedAt: Long) {
-        fun json() = JSONObject().put("id", id).put("title", title).put("revision", revision)
+    data class Tool(val id: String, val title: String, val revision: String, val activatedAt: Long, val pinned: Boolean = false) {
+        fun json() = JSONObject().put("id", id).put("title", title).put("revision", revision).put("pinned", pinned)
     }
 
     /** Cache only launch metadata. Listing tools never inflates a WebView or retains authored HTML. */
@@ -33,9 +33,26 @@ internal class WhaleFeatureStore(context: Context) {
         if (cachedRoot == root && cachedTools != null) return@synchronized checkNotNull(cachedTools)
         list().mapNotNull { row ->
             val revision = row.getString("active").ifEmpty { return@mapNotNull null }
-            Tool(row.getString("id"), row.getString("activeTitle"), revision, row.optLong("activatedAt"))
-        }.sortedWith(compareByDescending<Tool> { it.activatedAt }.thenBy { it.title }.thenBy { it.id })
+            Tool(row.getString("id"), row.getString("activeTitle"), revision, row.optLong("activatedAt"), row.optBoolean("pinned", false))
+        }.sortedWith(compareByDescending<Tool> { it.pinned }.thenByDescending { it.activatedAt }.thenBy { it.title }.thenBy { it.id })
             .also { cachedRoot = root; cachedTools = it }
+    }
+
+    /** 置顶或取消置顶已启用工具，置顶项在功能工坊与桌宠菜单中优先展示。 */
+    fun setPinned(id: String, pinned: Boolean): JSONObject = synchronized(lock) {
+        val row = requireNotNull(read(id)) { "找不到该功能" }
+        row.put("pinned", pinned)
+        val target = file(id)
+        val out = target.startWrite()
+        try {
+            out.write(row.toString().toByteArray(Charsets.UTF_8))
+            target.finishWrite(out)
+        } catch (error: Throwable) {
+            target.failWrite(out)
+            throw error
+        }
+        cachedTools = null
+        summary(row)
     }
 
     fun <T> withActive(id: String, revision: String, action: (JSONObject) -> T): T = synchronized(lock) {
@@ -49,7 +66,7 @@ internal class WhaleFeatureStore(context: Context) {
         val latest = row.getString("latest")
         return JSONObject().put("id", row.getString("id")).put("title", versions.getJSONObject(latest).getString("title"))
             .put("activeTitle", versions.optJSONObject(row.optString("active"))?.getString("title").orEmpty())
-            .put("activatedAt", row.optLong("activatedAt"))
+            .put("activatedAt", row.optLong("activatedAt")).put("pinned", row.optBoolean("pinned", false))
             .put("latest", latest).put("active", row.optString("active")).put("previous", row.optString("previous"))
     }
     fun draft(input: JSONObject, assignedId: String? = null): JSONObject = synchronized(lock) {
