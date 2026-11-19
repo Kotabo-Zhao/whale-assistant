@@ -85,10 +85,10 @@ class GitHubReleasesTest {
     @Test
     fun dropsAssetsWhoseDownloadUrlIsOutsideThisRepository() {
         for (bad in listOf(
-            "https://example.com/dphmoblie/deepseek-harness-android/releases/download/v0.2.1/app-release.apk",
-            "http://github.com/dphmoblie/deepseek-harness-android/releases/download/v0.2.1/app-release.apk",
+            "https://example.com/Kotabo-Zhao/deepseek-phone-agent/releases/download/v0.2.1/app-release.apk",
+            "http://github.com/Kotabo-Zhao/deepseek-phone-agent/releases/download/v0.2.1/app-release.apk",
             "https://github.com/other/repo/releases/download/v0.2.1/app-release.apk",
-            "https://github.com/dphmoblie/deepseek-harness-android/releases/latest",
+            "https://github.com/Kotabo-Zhao/deepseek-phone-agent/releases/latest",
         )) {
             val parsed = GitHubReleases.parse(bytes(release("v0.2.1", "", asset("app-release.apk", url = bad))))
             assertNull("url=$bad 不该被采信", GitHubReleases.asset(parsed[0], "app-release.apk"))

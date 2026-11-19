@@ -1,11 +1,11 @@
 {
-  "name": "deepseek-harness-mobile",
-  "version": "0.3.8-preview.99",
+  "name": "whale-assistant",
+  "version": "0.4.0-whale.1",
   "license": "MIT",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.19.0",
-  "description": "面向 Android 的本地 AI 工作台：集成 DeepSeek Harness、Ubuntu 运行环境、插件与文件管理，以及用户授权的 Shizuku 和无障碍自动化。",
+  "description": "Whale Assistant（鲸鱼助手）：基于 Super Agent 架构的 Android 个人智能助手，集成对话优先工作台、本地运行环境与用户授权的设备自动化。",
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
   },
@@ -76,7 +76,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dphmoblie/deepseek-harness-android.git"
+    "url": "git+https://github.com/Kotabo-Zhao/deepseek-phone-agent.git"
   },
-  "homepage": "https://github.com/dphmoblie/deepseek-harness-android"
+  "homepage": "https://github.com/Kotabo-Zhao/deepseek-phone-agent"
 }

@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
   appId: 'io.deepseekharness.mobile',
-  appName: 'DeepSeek Harness',
+  appName: 'Whale Assistant',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

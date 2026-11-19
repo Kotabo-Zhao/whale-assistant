@@ -241,7 +241,7 @@ class AppReleaseCatalogTest {
     fun dropsApkAssetsWhoseDownloadUrlIsNotThisRepository() {
         val foreign = catalog(release("v0.2.1", url = "https://example.com/app-release.apk"))
         assertNull(foreign.availableRelease(installed, AppUpdateChannel.STABLE))
-        val plainHttp = catalog(release("v0.2.1", url = "http://github.com/dphmoblie/deepseek-harness-android/releases/download/v0.2.1/app-release.apk"))
+        val plainHttp = catalog(release("v0.2.1", url = "http://github.com/Kotabo-Zhao/deepseek-phone-agent/releases/download/v0.2.1/app-release.apk"))
         assertNull(plainHttp.availableRelease(installed, AppUpdateChannel.STABLE))
     }
 

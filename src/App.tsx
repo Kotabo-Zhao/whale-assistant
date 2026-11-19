@@ -3466,7 +3466,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
           <h2 id="feedback-title">{t('问题反馈')}</h2>
           <p>{t('反馈时请附上应用版本、屏幕方向和复现步骤。分享日志前请检查是否包含个人信息。')}</p>
           <p>QQ {t('交流群')}：1108895375</p>
-          <a className="button button-secondary" href="https://github.com/dphmoblie/deepseek-harness-android/issues" target="_blank" rel="noopener noreferrer">
+          <a className="button button-secondary" href="https://github.com/Kotabo-Zhao/deepseek-phone-agent/issues" target="_blank" rel="noopener noreferrer">
             <ExternalLink size={18} />{t('在 GitHub 反馈问题')}
           </a>
         </section>

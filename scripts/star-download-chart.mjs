@@ -19,7 +19,7 @@ const arg = (name, fallback) => {
   return index >= 0 && argv[index + 1] ? argv[index + 1] : fallback
 }
 
-const repo = arg('repo', 'dphmoblie/deepseek-harness-android')
+const repo = arg('repo', 'Kotabo-Zhao/deepseek-phone-agent')
 const out = resolve(arg('out', 'docs/images/star-download-history.svg'))
 const DAY_MS = 86_400_000
 

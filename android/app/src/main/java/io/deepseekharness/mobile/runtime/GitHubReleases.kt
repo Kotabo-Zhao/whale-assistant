@@ -17,13 +17,13 @@ internal object GitHubReleases {
      * 必须与 [RuntimeHttp.catalogBytes] 的白名单**逐字一致**：目录来源只有这一处，
      * 前端不能左右它，实测地址也不进审计或诊断日志。
      */
-    const val URL = "https://api.github.com/repos/dphmoblie/deepseek-harness-android/releases?per_page=30"
+    const val URL = "https://api.github.com/repos/Kotabo-Zhao/deepseek-phone-agent/releases?per_page=30"
 
     /** 一次目录请求最多解析的发布数：目录只会越来越长，处理量必须有界。 */
     const val MAX_RELEASES = 20
 
     /** 资产下载地址必须落在本仓库的 releases/download 下；GitHub 自己给的直链不会更长。 */
-    const val DOWNLOAD_URL_PREFIX = "https://github.com/dphmoblie/deepseek-harness-android/releases/download/"
+    const val DOWNLOAD_URL_PREFIX = "https://github.com/Kotabo-Zhao/deepseek-phone-agent/releases/download/"
 
     /** 资产地址长度上限，与前端 `MAX_RELEASE_MANIFEST_URL_LENGTH` 同源，改一处要改两处。 */
     const val MAX_URL_CHARS = 1024
