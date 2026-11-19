@@ -50,10 +50,16 @@ const deviceAction = new Set(['mobile_screen_recover', 'mobile_screen_sequence',
 const screenTools = new Set(['mobile_worker_report', 'mobile_device_capabilities', 'mobile_device_current_app',
   'mobile_device_list_packages', 'mobile_device_app_launch', 'mobile_screen_observe', 'mobile_screen_act',
   'mobile_screen_sequence', 'mobile_screen_recover', 'mobile_device_wait'])
+/** 助手自身记忆、本地资料写入与秘书事项工具：日常整理与沉淀无需切入重型设备独占模式。 */
+const assistantWrite = new Set([
+  'mobile_memory_save', 'mobile_memory_update',
+  'mobile_knowledge_save', 'mobile_knowledge_update',
+  'mobile_secretary', 'mobile_owner_profile',
+])
 export function workerToolAllowed(mode, name, profile = 'full') {
   if (mode === 'create') return name === 'mobile_whale_feature' || name === 'mobile_worker_report'
   if (mode === 'device' && profile === 'screen') return screenTools.has(name)
-  if (name === 'mobile_worker_report' || reading.has(name) || deviceRead.has(name)) return true
+  if (name === 'mobile_worker_report' || reading.has(name) || deviceRead.has(name) || assistantWrite.has(name)) return true
   return mode === 'device' && deviceAction.has(name)
 }
 const terminal = new Set(['completed', 'failed', 'cancelled'])

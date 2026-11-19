@@ -12,7 +12,7 @@ import org.json.JSONObject
 internal object CompanionAccessDefaults {
     const val BUBBLE_MEMORY = true
     const val KNOWLEDGE_READ = true
-    const val KNOWLEDGE_WRITE = false
+    const val KNOWLEDGE_WRITE = true
     const val NOTIFICATION_MODEL = false
     const val CALENDAR_MODEL = false
 }

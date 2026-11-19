@@ -14,7 +14,7 @@ internal object DeviceFilePolicy {
     const val MAX_PATH_CHARS = 240
     const val MAX_PATH_DEPTH = 32
     const val MAX_COMPONENT_CHARS = 128
-    const val MAX_FILE_BYTES = 128 * 1024
+    const val MAX_FILE_BYTES = 2 * 1024 * 1024
     const val MAX_BASE64_CHARS = 4 * ((MAX_FILE_BYTES + 2) / 3) + 4
     const val MAX_PARAM_CHARS = MAX_BASE64_CHARS + MAX_PATH_CHARS + 256
     const val MAX_LIST_ENTRIES = 256
@@ -29,6 +29,7 @@ internal object DeviceFilePolicy {
     enum class Root(val wireValue: String, val absolutePath: String) {
         INBOX("inbox", "/storage/emulated/0/Documents/DSH/inbox"),
         OUTBOX("outbox", "/storage/emulated/0/Documents/DSH/outbox"),
+        WORKSPACE("workspace", "/storage/emulated/0/Documents/WhaleAssistant"),
         ;
 
         companion object {

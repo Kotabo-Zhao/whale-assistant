@@ -16,10 +16,16 @@ export function delegationApi() {
 export function delegatedWriteAllowed(ctx, parent, captured) {
   const service = parent.ctx.get?.('permissionPresets') ?? ctx.permissionPresets
   let mode = captured.sandboxMode
+  let resolved
   if (mode === undefined) {
-    try { mode = service.resolve(service.current(parent.session)).sandbox } catch { return false }
+    try {
+      const currentName = service.current(parent.session)
+      resolved = service.resolve(currentName)
+      mode = resolved?.sandbox
+    } catch { return false }
   }
-  return mode === 'workspace-write' || mode === 'danger-full-access'
+  if (resolved?.writable === true) return true
+  return mode === 'workspace-write' || mode === 'danger-full-access' || mode === 'auto'
 }
 
 export function permissionFailure(message) {

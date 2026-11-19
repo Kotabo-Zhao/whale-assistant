@@ -196,11 +196,14 @@ test('worker tool policy: read mode can query device status but never touch the 
   for (const name of ['mobile_device_tap', 'mobile_device_app_launch', 'mobile_device_screenshot',
     'mobile_device_ui_dump', 'mobile_device_shell', 'mobile_device_file_write', 'mobile_device_battery'])
     assert.equal(workerToolAllowed('device', name), true, name)
-  // 未知工具默认拒绝，报告工具始终允许。
-  for (const mode of ['read', 'device', 'create']) {
-    for (const tool of ['mobile_knowledge_save', 'mobile_knowledge_update']) {
-      assert.equal(workerToolAllowed(mode, tool), false)
+  // 日常资料/记忆写入在 read 与 device 模式下放行，create 模式保持隔离；未知工具仍拒绝。
+  for (const mode of ['read', 'device']) {
+    for (const tool of ['mobile_knowledge_save', 'mobile_knowledge_update', 'mobile_memory_save', 'mobile_secretary']) {
+      assert.equal(workerToolAllowed(mode, tool), true, `${mode}:${tool}`)
     }
+  }
+  for (const tool of ['mobile_knowledge_save', 'mobile_knowledge_update']) {
+    assert.equal(workerToolAllowed('create', tool), false, `create:${tool}`)
   }
   assert.equal(workerToolAllowed('device', 'bash'), false)
   assert.equal(workerToolAllowed('read', 'mobile_worker_report'), true)
