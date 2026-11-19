@@ -20,6 +20,7 @@ import { keepAliveGuideResolved, overlayFailureGuide, overlayGuideResolved, type
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { WhaleAutonomyCard } from './components/WhaleAutonomyCard'
 
+const TerminalScreen = lazy(() => import('./screens/TerminalScreen').then(m => ({ default: m.TerminalScreen })))
 const ToolsWorkspace = lazy(() => import('./components/ToolsWorkspace').then(m => ({ default: m.ToolsWorkspace })))
 const AssistantTasks = lazy(() => import('./components/AssistantTasks').then(m => ({ default: m.AssistantTasks })))
 const CompanionPersona = lazy(() => import('./components/CompanionPersona').then(m => ({ default: m.CompanionPersona })))
@@ -145,7 +146,6 @@ import type {
   StorageAccessState,
   StorageDirectoryState,
   StorageDirsState,
-  TerminalKind,
 } from './platform/types'
 
 import {
@@ -163,7 +163,6 @@ const RuntimeSelfCheckPanel = lazy(() => import('./screens/RuntimeSelfCheckPanel
 const CustomProviders = lazy(() => import('./components/CustomProviders').then(module => ({ default: module.CustomProviders })))
 const DeviceCapabilityCard = lazy(() => import('./components/DeviceCapabilityCard').then(module => ({ default: module.DeviceCapabilityCard })))
 const RootEngineCard = lazy(() => import('./components/RootEngineCard').then(module => ({ default: module.RootEngineCard })))
-const TerminalPanel = lazy(() => import('./components/TerminalPanel').then(module => ({ default: module.TerminalPanel })))
 const PluginSettings = lazy(() => import('./components/PluginSettings').then(module => ({ default: module.PluginSettings })))
 const FilesScreen = lazy(() => import('./screens/FilesScreen').then(module => ({ default: module.FilesScreen })))
 const RuntimeVersionsScreen = lazy(() => import('./screens/RuntimeVersionsScreen').then(module => ({ default: module.RuntimeVersionsScreen })))
@@ -1207,85 +1206,6 @@ function EnvironmentScreen({ busy, bundledSource, runtime, onBack, onInstall, on
           <div className="detail-row"><span><LockKeyhole size={18} />{t("网络访问")}</span><strong>{t("仅本应用内")}</strong></div>
         </div>
       </section>
-    </div>
-  )
-}
-
-interface TerminalScreenProps {
-  bridge: typeof runtimeBridge
-  fontSize: number
-  onAuthorize: () => void
-  onBack: () => void
-  onConnect: () => void
-  onError: (message: string) => void
-  onOpenEnvironment: () => void
-  onOpenShizuku: () => void
-  runtime: RuntimeState
-  shizuku: ShizukuState
-}
-
-function TerminalScreen({ bridge, fontSize, onAuthorize, onBack, onConnect, onError, onOpenEnvironment, onOpenShizuku, runtime, shizuku }: TerminalScreenProps) {
-  const [kind, setKind] = useState<TerminalKind>('ubuntu')
-  const [epoch, setEpoch] = useState(0)
-  // Ubuntu 终端只依赖 rootfs 已安装（bash 由 PRoot 直接启动，不经过 dsh web）：
-  // dsh web 启动失败（phase=error）时也必须能进终端手动排查，而不是被闸在门外。
-  const ubuntuReady = runtimeInstalled(runtime) && !runtimeTransitioning(runtime)
-  const deviceReady = shizuku.installed && shizuku.running && shizuku.permission === 'granted' && shizuku.connected
-  const ready = kind === 'ubuntu' ? ubuntuReady : deviceReady
-
-  return (
-    <div className="screen terminal-screen">
-      <div className="screen-heading terminal-heading">
-        <div>
-          <h1>{t("终端")}</h1>
-        </div>
-        <div className="heading-actions">
-          <button className="icon-button" type="button" title={t("重新连接")} aria-label={t("重新连接终端")} onClick={() => setEpoch(value => value + 1)} disabled={!ready}>
-            <RefreshCw size={19} />
-          </button>
-          <button className="icon-button" type="button" title={t("返回设置")} aria-label={t("返回设置")} onClick={onBack}>
-            <ArrowLeft size={19} />
-          </button>
-        </div>
-      </div>
-
-      <div className="segmented" role="tablist" aria-label={t("终端类型")}>
-        <button type="button" role="tab" aria-selected={kind === 'ubuntu'} className={kind === 'ubuntu' ? 'active' : ''} onClick={() => setKind('ubuntu')}>
-          <SquareTerminal size={17} />Ubuntu
-        </button>
-        <button type="button" role="tab" aria-selected={kind === 'device'} className={kind === 'device' ? 'active' : ''} onClick={() => setKind('device')}>
-          <Smartphone size={17} />{t("设备 Shell")}</button>
-      </div>
-
-      {ready ? (
-        <Suspense fallback={<div className="terminal-loading"><Loader2 className="spin" size={22} /></div>}>
-          <TerminalPanel key={`${kind}-${epoch}`} bridge={bridge} fontSize={fontSize} kind={kind} onError={onError} />
-        </Suspense>
-      ) : kind === 'ubuntu' ? (
-        <div className="empty-terminal">
-          <span><HardDrive size={27} /></span>
-          <h2>{t("Ubuntu 尚未就绪")}</h2>
-          <button className="button button-primary" type="button" onClick={onOpenEnvironment}>
-            {t("前往运行环境")}</button>
-        </div>
-      ) : (
-        <div className="empty-terminal">
-          <span><KeyRound size={27} /></span>
-          <h2>{!shizuku.installed ? t("未安装 Shizuku") : !shizuku.running ? t("Shizuku 未运行{0}", shizuku.appVersion ? '（' + shizuku.appVersion + '）' : '') : shizuku.permission !== 'granted' ? t("需要 Shizuku 授权") : t("Shizuku 连接未就绪")}</h2>
-          {shizuku.installed && !shizuku.running && (
-            <p className="shizuku-hint">{t("Shizuku 服务不会自动启动：请在 Shizuku App 内通过无线调试或 adb 启动服务（设备重启后需重新启动）。")}</p>
-          )}
-          {shizuku.installed ? (
-            <button className="button button-primary" type="button" onClick={!shizuku.running ? onOpenShizuku : shizuku.permission === 'granted' ? onConnect : onAuthorize}>
-              {shizuku.permission === 'granted' && shizuku.running ? <RefreshCw size={18} /> : <ShieldCheck size={18} />}
-              {!shizuku.running ? t("打开 Shizuku") : shizuku.permission === 'granted' ? t("连接 Shizuku") : t("请求授权")}
-            </button>
-          ) : (
-            <button className="button button-secondary" type="button" onClick={onOpenShizuku}>
-              <ExternalLink size={18} />{t("打开 Shizuku")}</button>
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -5521,7 +5441,7 @@ export function App() {
       case 'assistant-persona':
         return <Suspense fallback={null}><CompanionPersona onBack={() => backToView('settings')} /></Suspense>
       case 'terminal':
-        return <TerminalScreen bridge={runtimeBridge} fontSize={settings?.terminalFontSize ?? 14} onAuthorize={requestShizukuPermission} onBack={() => backToView('settings')} onConnect={connectShizuku} onError={terminalError} onOpenEnvironment={() => setActiveView('environment')} onOpenShizuku={openShizuku} runtime={runtime} shizuku={shizuku} />
+        return <Suspense fallback={null}><TerminalScreen bridge={runtimeBridge} fontSize={settings?.terminalFontSize ?? 14} onAuthorize={requestShizukuPermission} onBack={() => backToView('settings')} onConnect={connectShizuku} onError={terminalError} onOpenEnvironment={() => setActiveView('environment')} onOpenShizuku={openShizuku} runtime={runtime} shizuku={shizuku} /></Suspense>
       case 'tools':
         return <Suspense fallback={null}><ToolsWorkspace plugins={() => setActiveView('plugins')} /></Suspense>
       case 'plugins': {

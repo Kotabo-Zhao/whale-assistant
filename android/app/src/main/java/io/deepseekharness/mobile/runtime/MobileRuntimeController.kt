@@ -785,6 +785,11 @@ class MobileRuntimeController(
     /**
      * 评估当前 PRoot/Node 运行时是否满足空闲休眠条件，并在满足时安全释放常驻容器以降低待机功耗。
      */
+    /** 返回当前是否存在活跃的 Ubuntu 或 Shizuku 终端会话，供空闲休眠巡检避免误杀终端。 */
+    fun hasOpenTerminals(): Boolean = lifecycleLock.withLock {
+        !closed.get() && terminals.hasAnySessions()
+    }
+
     fun evaluateIdleSleep(
         activeWorkerCount: Int,
         terminalOpen: Boolean,

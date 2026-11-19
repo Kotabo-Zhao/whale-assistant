@@ -97,7 +97,7 @@ class HarnessKeepAliveService : Service() {
                 val deviceControlBusy = DeviceControlState.current.phase != "idle"
                 val hibernated = controller.hibernateIfIdle(
                     activeWorkerCount = activeWorkers,
-                    terminalOpen = false,
+                    terminalOpen = controller.hasOpenTerminals(),
                     virtualScreenActive = deviceControlBusy,
                     appInForeground = false,
                     idleDurationMs = idleMs,
