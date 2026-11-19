@@ -161,12 +161,27 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         if (includePhone) {
             array.put(schema("whale_phone_apps", "按名称或拼音检索手机已安装应用及包名。", mapOf("query" to "应用名或关键词"), listOf("query")))
             array.put(schema("whale_phone_launch", "在手机上启动指定包名的目标应用。", mapOf("packageName" to "目标应用完整包名"), listOf("packageName")))
-            array.put(schema("whale_phone_ui_tree", "通过原生无障碍服务读取当前屏幕控件树（自动避开密码/支付/系统敏感界面）。", emptyMap(), emptyList()))
+            array.put(schema("whale_phone_ui_tree", "极速读取当前屏幕精简控件树（自动剪枝布局噪声、分配 #ref 编号与中心坐标，自动屏蔽密码/支付/系统敏感界面）。", emptyMap(), emptyList()))
             array.put(schema(
                 "whale_phone_action",
-                "通过原生无障碍服务在当前屏幕执行受控点击、输入或滚动。",
-                mapOf("packageName" to "目标应用包名", "action" to "click / input / scroll_forward / scroll_backward", "viewId" to "控件 viewId（可选）", "text" to "输入文本或目标文字（可选）"),
-                listOf("packageName", "action"),
+        "whale_phone_batch",
+                "通过高性能屏控引擎执行点击、长按、输入、滑动、返回、桌面或最近任务；支持 #ref、viewId、可见文本或坐标，自动手势回退兼容 Flutter/Compose/WebView。",
+                mapOf(
+                    "action" to "click / long_click / input / swipe / back / home / recents / wait",
+                    "ref" to "可选：控件树返回的整数 r 编号（最快 O(1) 命中）",
+                    "text" to "可选：目标按钮文字或要输入的文本",
+                    "viewId" to "可选：控件 viewId 或短后缀",
+                    "direction" to "可选（swipe 时）：up / down / left / right",
+                    "x" to "可选：像素 X 坐标",
+                    "y" to "可选：像素 Y 坐标",
+                ),
+                listOf("action"),
+            ))
+            array.put(schema(
+                "whale_phone_batch",
+                "单轮原子执行最多 8 步连贯手机操作并在结束后自动回传最新精简控件树，大幅降低多步屏控延迟。",
+                mapOf("steps" to "JSON 数组字符串，例如 [{"action":"click","text":"搜索"},{"action":"input","text":"鲸鱼"},{"action":"click","text":"确定"}]"),
+                listOf("steps"),
             ))
             array.put(schema("whale_phone_back", "在手机当前界面执行一次原生返回操作。", emptyMap(), emptyList()))
             array.put(schema(
@@ -563,19 +578,34 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_phone_ui_tree" -> {
                     val service = DeepSeekAccessibilityService.current()
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
-                    val res = service.execute("accessibilityTree", "")
-                    ToolOutcome(name, "读取当前屏幕控件树", res.ok, res.text)
+                    val res = service.fastControl("fastTree", "")
+                    ToolOutcome(name, "极速读取精简控件树", res.ok, res.text)
                 }
                 "whale_phone_action" -> {
                     val service = DeepSeekAccessibilityService.current()
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
-                    val res = service.execute("accessibilityAction", args.toString())
-                    ToolOutcome(name, "执行原生屏控操作", res.ok, res.text, mutating = true)
+                    val res = service.fastControl("fastAct", args.toString())
+                    ToolOutcome(name, "极速执行原生屏控", res.ok, res.text, mutating = true)
+                }
+                "whale_phone_batch" -> {
+                    val service = DeepSeekAccessibilityService.current()
+                        ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
+                    val rawSteps = args.opt("steps")
+                    val batchPayload = when (rawSteps) {
+                        is JSONArray -> JSONObject().put("steps", rawSteps).toString()
+                        is String -> {
+                            val trimmed = rawSteps.trim()
+                            if (trimmed.startsWith("[")) JSONObject().put("steps", JSONArray(trimmed)).toString() else trimmed
+                        }
+                        else -> args.toString()
+                    }
+                    val res = service.fastControl("fastBatch", batchPayload)
+                    ToolOutcome(name, "批量连贯操控手机", res.ok, res.text, mutating = true)
                 }
                 "whale_phone_back" -> {
                     val service = DeepSeekAccessibilityService.current()
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
-                    val res = service.execute("accessibilityBack", "")
+                    val res = service.fastControl("fastAct", JSONObject().put("action", "back").toString())
                     ToolOutcome(name, "执行返回键", res.ok, res.text, mutating = true)
                 }
                 "whale_phone_global" -> {

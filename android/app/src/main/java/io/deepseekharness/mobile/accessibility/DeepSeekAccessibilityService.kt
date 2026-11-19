@@ -62,6 +62,22 @@ class DeepSeekAccessibilityService : AccessibilityService() {
      */
     private val automationTaskLedger = AutomationTaskLedger()
     private val automationRuleGesture = AutomationRuleGestureTracker()
+    private val fastController by lazy { WhaleFastPhoneController(this) }
+
+    internal fun fastControl(command: String, param: String): DeviceCommandResult {
+        val observed = command == "fastTree"
+        val result = io.deepseekharness.mobile.DeviceControlState.execute(
+            this,
+            observed,
+            if (observed) "极速读取界面" else "极速操控",
+        ) {
+            fastController.execute(command, param)
+        }
+        val event = if (observed) AuditEvent.ACCESSIBILITY_READ else AuditEvent.ACCESSIBILITY_ACTION
+        val auditResult = if (result.ok) AuditResult.SUCCEEDED else AuditResult.DENIED
+        PrivateAuditLog(this).record(event, auditResult, result.errorCode)
+        return result
+    }
 
     /**
      * 事件驱动自动化的闸门状态（四层节流 + 配额 + 节点指纹 + 连续失败计数）。
@@ -542,13 +558,13 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         return matches.singleOrNull()
     }
 
-    private fun safeText(value: CharSequence?): String {
+    internal fun safeText(value: CharSequence?): String {
         val text = value?.toString().orEmpty()
         if (text.length > MAX_TEXT_CHARS) return text.take(MAX_TEXT_CHARS)
         return text
     }
 
-    private fun containsSensitiveWindow(root: AccessibilityNodeInfo): Boolean {
+    internal fun containsSensitiveWindow(root: AccessibilityNodeInfo): Boolean {
         var found = false
         var scanned = 0
         fun visit(node: AccessibilityNodeInfo?, depth: Int) {
@@ -576,7 +592,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         return found
     }
 
-    private fun isLockedOrScreenOff(): Boolean {
+    internal fun isLockedOrScreenOff(): Boolean {
         val keyguard = getSystemService(KeyguardManager::class.java)
         val power = getSystemService(PowerManager::class.java)
         return keyguard?.isKeyguardLocked == true || power?.isInteractive == false
