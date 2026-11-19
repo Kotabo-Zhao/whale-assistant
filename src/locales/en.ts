@@ -2255,4 +2255,9 @@ export const english: Readonly<Record<string, string>> = {
   "造小工具": "Build mini-app",
   "快捷指令": "Quick commands",
   "发消息、粘贴链接或输入 / 快捷记录…": "Message, paste a link, or type / for quick actions…",
+  "一站式权限与自治": "Unified Permissions & Autonomy",
+  "系统权限快捷授权": "System permissions quick access",
+  "悬浮桌宠权限": "Floating Pet",
+  "无障碍屏控": "Accessibility Control",
+  "通知与提醒": "Notifications & Reminders",
 }

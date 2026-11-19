@@ -1183,8 +1183,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                             if (samePanel) { input.setText(message); input.setSelection(input.length()) }
                         }
                         if (samePanel) content.removeView(streamingBubble)
-                        status.text = error.message?.takeIf { it.startsWith("本机") || it.startsWith("对话") || it.startsWith("回复") || it.startsWith("模型") }
-                            ?: "发送失败，请检查本机服务和网络；输入已保留。"
+                        status.text = error.message?.takeIf { it.startsWith("请先") || it.startsWith("本机") || it.startsWith("对话") || it.startsWith("回复") || it.startsWith("模型") }
+                            ?: "发送失败，请检查模型密钥和网络连接；输入已保留。"
                         status.append(" · 点此重试")
                         lastError = status.text.toString()
                         status.visibility = android.view.View.VISIBLE

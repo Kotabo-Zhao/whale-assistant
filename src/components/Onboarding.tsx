@@ -32,7 +32,6 @@ interface OnboardingProps {
  */
 const STEPS = [
   { id: 'model', title: '配置模型', icon: KeyRound },
-  { id: 'runtime', title: '安装运行环境', icon: Blocks },
 ] as const
 
 /**

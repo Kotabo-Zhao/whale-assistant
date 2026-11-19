@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Bell, Accessibility, Sparkles } from 'lucide-react'
 import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
 import type { CompanionQuickSettings } from '../platform/types'
@@ -9,33 +10,60 @@ import {
   type AutonomyPresetId,
 } from '../ui/whaleUiPreferences'
 
-const STORAGE_KEY = 'whale.autonomyPreset'
+const STORAGE_KEY = 'whale.autonomyPreset.v1'
 
 const PRESET_NATIVE_FLAGS: Record<AutonomyPresetId, Array<[keyof CompanionQuickSettings, boolean]>> = {
   fluent: [
     ['memoryEnabled', true],
     ['bubbleMemoryAccess', true],
+    ['notificationCapture', true],
     ['knowledgeModelAccess', true],
     ['knowledgeModelWrite', true],
     ['automaticAssistantMemory', true],
+    ['automaticNotificationMemory', true],
+    ['automaticUsageMemory', true],
+    ['notificationBubbles', true],
+    ['candidateNotifications', true],
     ['contextFollowup', true],
+    ['reminders', true],
   ],
   balanced: [
     ['memoryEnabled', true],
     ['bubbleMemoryAccess', true],
+    ['notificationCapture', true],
     ['knowledgeModelAccess', true],
     ['knowledgeModelWrite', false],
     ['automaticAssistantMemory', false],
+    ['automaticNotificationMemory', false],
+    ['automaticUsageMemory', false],
+    ['notificationBubbles', true],
+    ['candidateNotifications', false],
     ['contextFollowup', true],
+    ['reminders', true],
   ],
   strict: [
+    ['notificationCapture', false],
     ['knowledgeModelWrite', false],
     ['automaticAssistantMemory', false],
+    ['automaticNotificationMemory', false],
+    ['automaticUsageMemory', false],
+    ['notificationBubbles', false],
+    ['candidateNotifications', false],
     ['contextFollowup', false],
   ],
 }
 
-export function WhaleAutonomyCard() {
+export interface WhaleAutonomyCardProps {
+  onOpenOverlay?: () => void
+  onOpenAccessibility?: () => void
+  onOpenNotifications?: () => void
+}
+
+export function WhaleAutonomyCard({
+  onOpenOverlay,
+  onOpenAccessibility,
+  onOpenNotifications,
+}: WhaleAutonomyCardProps) {
   const [autonomyId, setAutonomyId] = useState<AutonomyPresetId>(() => {
     try {
       return resolveAutonomyPreset(window.localStorage.getItem(STORAGE_KEY)).id
@@ -62,7 +90,6 @@ export function WhaleAutonomyCard() {
       }
       setSyncState('saved')
     } catch {
-      // Non-Android / preview environments may not expose native bridge; keep local preset cleanly.
       setSyncState('error')
     }
   }
@@ -70,7 +97,7 @@ export function WhaleAutonomyCard() {
   return (
     <section className="whale-autonomy-card" aria-label={t('执行与权限模式')}>
       <div className="whale-autonomy-head">
-        <strong>{t('执行与权限')}</strong>
+        <strong>{t('一站式权限与自治')}</strong>
         <span>
           {syncState === 'saving'
             ? t('同步中…')
@@ -95,6 +122,28 @@ export function WhaleAutonomyCard() {
         ))}
       </div>
       <p className="whale-autonomy-desc">{t(activeAutonomy.description)}</p>
+      {(onOpenOverlay || onOpenAccessibility || onOpenNotifications) && (
+        <div className="whale-perm-shortcuts" aria-label={t('系统权限快捷授权')}>
+          {onOpenOverlay && (
+            <button type="button" className="whale-perm-chip" onClick={onOpenOverlay}>
+              <Sparkles size={13} aria-hidden="true" />
+              {t('悬浮桌宠权限')}
+            </button>
+          )}
+          {onOpenAccessibility && (
+            <button type="button" className="whale-perm-chip" onClick={onOpenAccessibility}>
+              <Accessibility size={13} aria-hidden="true" />
+              {t('无障碍屏控')}
+            </button>
+          )}
+          {onOpenNotifications && (
+            <button type="button" className="whale-perm-chip" onClick={onOpenNotifications}>
+              <Bell size={13} aria-hidden="true" />
+              {t('通知与提醒')}
+            </button>
+          )}
+        </div>
+      )}
     </section>
   )
 }

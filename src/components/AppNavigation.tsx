@@ -12,14 +12,14 @@ interface AppSidebarProps {
 
 /** 主路径只留对话和设置。资料、任务、工具从对话快捷入口和「我的 → 日常」进入。 */
 const destinations = [
-  { view: 'harness', label: '对话', Icon: MessageSquare },
+  { view: 'whale-chat', label: '对话', Icon: MessageSquare },
   { view: 'settings', label: '我的', Icon: Settings2 },
 ] as const
 
 function DestinationButtons({ activeView, onNavigate, mobile }: AppSidebarProps & { mobile?: boolean }) {
   const parent = primaryDestination(activeView)
   return <>{destinations.map(({ view, label, Icon }) => {
-    const active = parent === view || (view === 'harness' && parent === 'conversation')
+    const active = parent === view || (view === 'whale-chat' && (parent === 'conversation' || parent === 'harness'))
     return <button key={view} type="button" className={[(mobile ? 'bottom-navigation-item' : 'sidebar-item'), active ? 'is-active' : ''].join(' ')}
       aria-label={t(label)} aria-current={active ? 'page' : undefined} title={t(label)} onClick={() => onNavigate(view)}>
       <Icon size={20} aria-hidden="true" /><span>{t(label)}</span></button>
@@ -31,7 +31,7 @@ export function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
   const style = useInterfaceStyle()
   const brandMark = style === 'simple' ? grokMark : whaleChanBadge
   return <aside className="app-sidebar" aria-label={t('应用导航')}>
-    <button className="sidebar-mark" type="button" aria-label={t('鲸鱼助手')} title={t('鲸鱼助手')} onClick={() => onNavigate('conversation')}>
+    <button className="sidebar-mark" type="button" aria-label={t('鲸鱼助手')} title={t('鲸鱼助手')} onClick={() => onNavigate('whale-chat')}>
       <img className="app-mark" src={brandMark} alt="" width={28} height={28}/><span>{t('鲸鱼助手')}</span></button>
     <nav className="sidebar-nav"><DestinationButtons activeView={activeView} onNavigate={onNavigate}/></nav>
     <div className="sidebar-bottom"><button className={'sidebar-item' + (activeView === 'sessions' ? ' is-active' : '')}

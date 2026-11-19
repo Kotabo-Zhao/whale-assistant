@@ -438,7 +438,7 @@ const APP_VIEWS: AppView[] = [
  * 回到主视图之后再按返回键，WebView 已经没有可回退的历史（canGoBack() 为 false），
  * 原生侧据此把任务退到后台，而不是结束应用；从设置二级页到主视图的每一级都能原路退回。
  */
-const ROOT_VIEW: AppView = 'conversation'
+const ROOT_VIEW: AppView = 'whale-chat'
 
 /** 写进 history.state 的视图字段名。 */
 const VIEW_STATE_KEY = 'dshView'
@@ -1359,7 +1359,7 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
         </p>
       )}
 
-      {!searching && <WhaleAutonomyCard />}
+      {!searching && <WhaleAutonomyCard onOpenOverlay={() => onOpenPage('runtime')} onOpenAccessibility={() => onOpenPage('automation-accessibility')} onOpenNotifications={() => { void runtimeBridge.openCompanionSettings() }} />}
 
       {!searching && <nav id="account-categories" className="account-sections" data-advanced={advanced} aria-label={t('设置分类')}>
         {SETTINGS_HOME_GROUPS.filter(group => advanced || !['device', 'workspace'].includes(group.id)).map(group => <button key={group.id} type="button" className="account-group-toggle"
@@ -5468,11 +5468,11 @@ export function App() {
       case 'whale-chat':
         return <Suspense fallback={null}><WhaleChatScreen bridge={runtimeBridge} onNavigate={view => setActiveView(view)} /></Suspense>
       case 'sessions':
-        return <Suspense fallback={null}><SessionManager onBack={() => backToView('conversation')} onOpenHarness={launchHarness} /></Suspense>
+        return <Suspense fallback={null}><SessionManager onBack={() => backToView('whale-chat')} onOpenHarness={() => setActiveView('whale-chat')} /></Suspense>
       case 'assistant-memory':
         return <Suspense fallback={null}><CompanionWorkspace initialPanel="knowledge" library firstNote={firstNote} /></Suspense>
       case 'assistant-tasks':
-        return <Suspense fallback={null}><AssistantTasks onOpenSession={launchHarness} /></Suspense>
+        return <Suspense fallback={null}><AssistantTasks onOpenSession={() => setActiveView('whale-chat')} /></Suspense>
       case 'assistant-persona':
         return <Suspense fallback={null}><CompanionPersona onBack={() => backToView('settings')} /></Suspense>
       case 'terminal':

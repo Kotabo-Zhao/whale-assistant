@@ -300,19 +300,8 @@ internal class CompanionBubbleChat(
         PetReplyOperation.checkpoint()
         if (pending?.optString("kind") == "worker") return sendPendingWorker(history, memoryAllowed, knowledgeAllowed)
         fun harness(): Reply {
-            val sink = object : io.deepseekharness.mobile.runtime.RuntimeEventSink {
-                override fun onProgress(snapshot: io.deepseekharness.mobile.runtime.RuntimeStateSnapshot) = Unit
-                override fun onTerminalOutput(sessionId: String, dataBase64: String, suppressPublicOutput: Boolean) = Unit
-                override fun onTerminalExit(sessionId: String, exitCode: Int) = Unit
-            }
-            val controller = RuntimeHost.acquire(context, sink)
-            try {
-                if (runCatching { controller.openHarnessAccess() }.isFailure) {
-                    RuntimeHost.ensureDeviceBridge(controller)
-                    RuntimeHost.startHarness(controller)
-                }
-                return reply(history, scope, memoryAllowed, knowledgeAllowed, onPartial)
-            } finally { RuntimeHost.detachPluginSink(sink) }
+            // 100% 纯原生 Lite 优先：仅当旧 Harness 已在运行时才走 Harness，否则直接进入 reply() 里的 WhaleNativeAgentEngine 原生直连！
+            return reply(history, scope, memoryAllowed, knowledgeAllowed, onPartial)
         }
         // Once tools enter the conversation, keep the role and subsequent answers in that same Session.
         if (handoffSessionId() != null || io.deepseekharness.mobile.runtime.RuntimeStore(context).readModelCredential("deepseek").isNullOrBlank()) return harness()
@@ -343,7 +332,31 @@ internal class CompanionBubbleChat(
     fun reply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit = {}): Reply {
         require(history.isNotEmpty() && history.size <= 20 && history.last().role == "user")
         val access = runCatching { RuntimeHost.controllerOrNull()?.openHarnessAccess() }.getOrNull()
-            ?: error("本机对话服务未运行，请先在应用中启动对话")
+        if (access == null) {
+            val engine = WhaleNativeAgentEngine(context)
+            val priorPairs = history.dropLast(1).map { it.role to it.text }
+            val userText = history.last().text
+            val streamed = StringBuilder()
+            val nativeSession = sessionId?.takeIf(String::isNotBlank) ?: "whale-pet"
+            val result = engine.send(
+                userMessage = userText,
+                history = priorPairs,
+                sessionId = nativeSession,
+                listener = object : WhaleNativeAgentEngine.StreamListener {
+                    override fun onDelta(chunk: String) {
+                        streamed.append(chunk)
+                        onPartial(streamed.toString())
+                    }
+                },
+            )
+            val reply = Reply(
+                text = result.reply,
+                images = emptyList(),
+                citations = emptyList(),
+                tools = result.steps.map { it.tool }.toSet(),
+            )
+            return finishReply(history, reply)
+        }
         val client = clientFor(access)
         // An explicitly handed-off session has no pet-local scope yet.  Reuse it once, then
         // bind it to the current capability scope; a later capability change creates a new
