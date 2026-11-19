@@ -1,118 +1,139 @@
-/* Whale Assistant Unified Dual-Style Design System
- * Style 1 (data-style='simple'): Grok-inspired monochrome minimalism (crisp hairlines, true OLED dark).
- * Style 2 (data-style='cute'):   Whale-Chan ocean-sky kawaii style (soft cloud surfaces, pastel ocean blue).
- */
+/* ============================================================================
+ * Whale Assistant Flagship Dual-Architecture Design System
+ *
+ * 1. data-style='simple' — Grok Bot Minimalist Architecture
+ *    True OLED pitch-black (#000000) / crisp editorial white (#FFFFFF),
+ *    borderless editorial AI canvas, floating monochrome pill composer,
+ *    zero decorative shadows, 1px architectural hairlines.
+ *
+ * 2. data-style='cute'   — iOS Cozy Kawaii Architecture (Finch / Waterllama)
+ *    Warm milk-cream (#FBF8F3) / starlight indigo (#131626), plush 2px pastel
+ *    borders, tactile 3D bottom-lip buttons, floating iOS capsule bottom dock,
+ *    pastel sky/butter/mint/strawberry accents, Whale-Chan character stage.
+ * ============================================================================ */
 
-/* ==========================================================================
- * STYLE 1: Grok-Inspired Minimalism (simple)
- * ========================================================================== */
+/* --------------------------------------------------------------------------
+ * STYLE 1: Grok Bot Minimalism (simple)
+ * -------------------------------------------------------------------------- */
 :root[data-style='simple'] {
-  --bg: #fafafa;
+  --bg: #ffffff;
   --surface: #ffffff;
   --surface-muted: #f4f4f5;
   --surface-hover: #e4e4e7;
   --ink: #09090b;
-  --muted: #52525b;
+  --muted: #64646f;
   --field-label: #27272a;
   --icon-muted: #71717a;
   --line: rgba(9, 9, 11, 0.09);
   --line-alt: rgba(9, 9, 11, 0.09);
-  --line-strong: rgba(9, 9, 11, 0.18);
+  --line-strong: rgba(9, 9, 11, 0.16);
   --line-faint: rgba(9, 9, 11, 0.05);
-  --blue: #18181b;
+  --blue: #09090b;
   --blue-hover: #27272a;
   --blue-soft: rgba(9, 9, 11, 0.06);
-  --blue-line: rgba(9, 9, 11, 0.2);
+  --blue-line: rgba(9, 9, 11, 0.22);
   --on-accent: #ffffff;
-  --brand-bg: #18181b;
+  --brand-bg: #09090b;
   --radius-control: 10px;
   --radius-inner: 12px;
   --radius-card: 14px;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03);
-  --shadow-elevated: 0 6px 20px rgba(0, 0, 0, 0.07);
-  --ring: 2px solid rgba(9, 9, 11, 0.18);
+  --shadow-card: none;
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --ring: 2px solid rgba(9, 9, 11, 0.16);
+  --tactile-lip: none;
 }
 
 :root[data-style='simple'][data-theme='dark'] {
   --bg: #000000;
-  --surface: #0d0d0f;
+  --surface: #0b0b0d;
   --surface-muted: #16161a;
-  --surface-hover: #1f1f24;
+  --surface-hover: #222228;
   --ink: #fafafa;
-  --muted: #a1a1aa;
+  --muted: #9898a3;
   --field-label: #d4d4d8;
-  --icon-muted: #a1a1aa;
+  --icon-muted: #8e8e98;
   --line: rgba(255, 255, 255, 0.1);
   --line-alt: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.22);
+  --line-strong: rgba(255, 255, 255, 0.2);
   --line-faint: rgba(255, 255, 255, 0.06);
-  --blue: #f4f4f5;
-  --blue-hover: #ffffff;
-  --blue-soft: rgba(255, 255, 255, 0.09);
-  --blue-line: rgba(255, 255, 255, 0.24);
-  --on-accent: #09090b;
-  --brand-bg: #f4f4f5;
+  --blue: #ffffff;
+  --blue-hover: #e4e4e7;
+  --blue-soft: rgba(255, 255, 255, 0.1);
+  --blue-line: rgba(255, 255, 255, 0.26);
+  --on-accent: #000000;
+  --brand-bg: #ffffff;
   --shadow-card: none;
-  --shadow-elevated: 0 10px 28px rgba(0, 0, 0, 0.65);
-  --ring: 2px solid rgba(255, 255, 255, 0.26);
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.72);
+  --ring: 2px solid rgba(255, 255, 255, 0.28);
+  --tactile-lip: none;
 }
 
-/* ==========================================================================
- * STYLE 2: Whale-Chan Kawaii Ocean-Sky (cute)
- * ========================================================================== */
+/* --------------------------------------------------------------------------
+ * STYLE 2: iOS Cozy Kawaii — Finch / Waterllama Inspired (cute)
+ * -------------------------------------------------------------------------- */
 :root[data-style='cute'] {
-  --bg: #f6f9ff;
+  --bg: #fbf8f3;
   --surface: #ffffff;
-  --surface-muted: #edf4ff;
-  --surface-hover: #e1eeff;
-  --ink: #1f2d47;
-  --muted: #5b6f91;
-  --field-label: #3a4f75;
-  --icon-muted: #6e84ab;
-  --line: rgba(79, 134, 235, 0.14);
-  --line-alt: rgba(79, 134, 235, 0.14);
-  --line-strong: rgba(79, 134, 235, 0.26);
-  --line-faint: rgba(79, 134, 235, 0.07);
-  --blue: #4f86eb;
-  --blue-hover: #3b72db;
-  --blue-soft: #e8f1ff;
-  --blue-line: #b9d4ff;
+  --surface-muted: #f2f6ff;
+  --surface-hover: #e6f0ff;
+  --ink: #24304a;
+  --muted: #697896;
+  --field-label: #415275;
+  --icon-muted: #7889ab;
+  --line: #dfe8f7;
+  --line-alt: #dfe8f7;
+  --line-strong: #c5d8fa;
+  --line-faint: #eef3fc;
+  --blue: #4b89f7;
+  --blue-hover: #3776eb;
+  --blue-soft: #eaf2ff;
+  --blue-line: #b5d0ff;
   --on-accent: #ffffff;
-  --brand-bg: #4f86eb;
+  --brand-bg: #4b89f7;
+  --pastel-sky: #e7f1ff;
+  --pastel-butter: #fff5d6;
+  --pastel-mint: #e3f7ee;
+  --pastel-berry: #ffebf0;
   --radius-control: 16px;
   --radius-inner: 20px;
-  --radius-card: 24px;
-  --shadow-card: 0 3px 14px rgba(79, 134, 235, 0.07), 0 1px 3px rgba(31, 45, 71, 0.04);
-  --shadow-elevated: 0 12px 30px rgba(79, 134, 235, 0.14);
-  --ring: 3px solid rgba(79, 134, 235, 0.24);
+  --radius-card: 26px;
+  --shadow-card: 0 3px 0 #dfe8f7, 0 8px 20px rgba(75, 137, 247, 0.06);
+  --shadow-elevated: 0 4px 0 #cdddf9, 0 14px 30px rgba(75, 137, 247, 0.14);
+  --ring: 3px solid rgba(75, 137, 247, 0.25);
+  --tactile-lip: 0 3px 0 #2e67d1;
 }
 
 :root[data-style='cute'][data-theme='dark'] {
-  --bg: #121626;
-  --surface: #1b2136;
-  --surface-muted: #232b45;
-  --surface-hover: #2c3657;
-  --ink: #f0f5ff;
-  --muted: #a9b8d9;
-  --field-label: #ccd8f0;
-  --icon-muted: #98abd4;
-  --line: rgba(142, 197, 255, 0.16);
-  --line-alt: rgba(142, 197, 255, 0.16);
-  --line-strong: rgba(142, 197, 255, 0.28);
-  --line-faint: rgba(142, 197, 255, 0.08);
-  --blue: #8ec5ff;
-  --blue-hover: #add6ff;
-  --blue-soft: rgba(142, 197, 255, 0.16);
-  --blue-line: rgba(142, 197, 255, 0.36);
-  --on-accent: #0f1d38;
-  --brand-bg: #8ec5ff;
-  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.34);
-  --shadow-elevated: 0 14px 34px rgba(0, 0, 0, 0.5);
-  --ring: 3px solid rgba(142, 197, 255, 0.3);
+  --bg: #131626;
+  --surface: #1d2238;
+  --surface-muted: #262d49;
+  --surface-hover: #30395b;
+  --ink: #f3f6ff;
+  --muted: #a6b4d4;
+  --field-label: #ccd7f0;
+  --icon-muted: #95a7cf;
+  --line: #2d3657;
+  --line-alt: #2d3657;
+  --line-strong: #3e4b75;
+  --line-faint: #242b47;
+  --blue: #8cc2ff;
+  --blue-hover: #a8d2ff;
+  --blue-soft: rgba(140, 194, 255, 0.16);
+  --blue-line: rgba(140, 194, 255, 0.36);
+  --on-accent: #10203d;
+  --brand-bg: #8cc2ff;
+  --pastel-sky: rgba(140, 194, 255, 0.15);
+  --pastel-butter: rgba(255, 224, 138, 0.14);
+  --pastel-mint: rgba(126, 232, 188, 0.14);
+  --pastel-berry: rgba(255, 166, 193, 0.15);
+  --shadow-card: 0 3px 0 #0b0e1a, 0 8px 20px rgba(0, 0, 0, 0.32);
+  --shadow-elevated: 0 4px 0 #090b15, 0 14px 32px rgba(0, 0, 0, 0.5);
+  --ring: 3px solid rgba(140, 194, 255, 0.32);
+  --tactile-lip: 0 3px 0 #5b96db;
 }
 
 :root {
-  --weight-bold: 650;
+  --weight-bold: 700;
   --weight-semibold: 600;
   --weight-medium: 520;
 }
@@ -124,10 +145,17 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Navigation: unified surface across both styles */
+/* --------------------------------------------------------------------------
+ * Navigation Shell — Grok Minimal Rail vs. iOS Kawaii Floating Capsule Dock
+ * -------------------------------------------------------------------------- */
 .app-sidebar {
-  background: var(--surface);
+  background: var(--bg);
   border-right: 1px solid var(--line);
+}
+
+:root[data-style='cute'] .app-sidebar {
+  background: var(--surface);
+  border-right: 2px solid var(--line);
 }
 
 .bottom-navigation {
@@ -135,10 +163,32 @@ body {
   border-top: 1px solid var(--line);
 }
 
+/* iOS Cozy Floating Capsule Dock on Mobile in Cute Mode */
+@media (max-width: 899px) {
+  :root[data-style='cute'] .bottom-navigation {
+    margin: 4px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+    padding: 5px 8px;
+    border-radius: 999px;
+    border: 2px solid var(--line);
+    box-shadow: var(--shadow-card);
+    background: var(--surface);
+  }
+
+  :root[data-style='simple'] .bottom-navigation {
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+    padding-block: 4px;
+  }
+}
+
 .sidebar-item,
 .bottom-navigation-item {
   border-radius: var(--radius-control);
-  transition: background-color 140ms ease, color 140ms ease, transform 120ms ease;
+}
+
+:root[data-style='cute'] .bottom-navigation-item,
+:root[data-style='cute'] .sidebar-item {
+  border-radius: 999px;
 }
 
 .sidebar-item.is-active,
@@ -155,10 +205,12 @@ body {
 
 :root[data-style='cute'] .sidebar-mark img.app-mark {
   border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(79, 134, 235, 0.25);
+  border: 2px solid var(--blue-line);
 }
 
-/* Typography & Section Rhythm */
+/* --------------------------------------------------------------------------
+ * Typography, Cards & Lists — Sharp Editorial vs. Tactile iOS Plush
+ * -------------------------------------------------------------------------- */
 .screen-heading h1,
 .screen-heading h2 {
   letter-spacing: -0.025em;
@@ -175,7 +227,15 @@ body {
   box-shadow: var(--shadow-card);
 }
 
-/* Management list & rows */
+:root[data-style='cute'] .settings-section,
+:root[data-style='cute'] .runtime-card,
+:root[data-style='cute'] .memory-card,
+:root[data-style='cute'] .knowledge-card,
+:root[data-style='cute'] .management-list,
+:root[data-style='cute'] .whale-autonomy-card {
+  border-width: 2px;
+}
+
 .management-list {
   border-radius: var(--radius-card);
   overflow: hidden;
@@ -184,11 +244,17 @@ body {
   box-shadow: var(--shadow-card);
 }
 
+:root[data-style='simple'] .management-list {
+  border-radius: 12px;
+  background: var(--bg);
+}
+
 .management-row {
-  min-height: 62px;
-  padding: 15px 18px;
+  min-height: 60px;
+  padding: 14px 18px;
   border-radius: var(--radius-inner);
-  transition: background-color 130ms ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
 }
 
 .management-row:hover {
@@ -201,6 +267,10 @@ body {
   border-radius: var(--radius-control);
 }
 
+:root[data-style='cute'] .management-icon {
+  border-radius: 16px;
+}
+
 .management-copy strong {
   font-weight: var(--weight-semibold);
   letter-spacing: -0.01em;
@@ -211,14 +281,13 @@ body {
   color: var(--muted);
 }
 
-/* Controls & Search */
+/* Buttons & Inputs */
 .button,
 .icon-button,
 input,
 select,
 textarea {
   border-radius: var(--radius-control);
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .button-primary {
@@ -226,6 +295,7 @@ textarea {
   background: var(--blue);
   border-color: var(--blue);
   font-weight: var(--weight-semibold);
+  box-shadow: var(--tactile-lip);
 }
 
 .button-primary:hover:not(:disabled) {
@@ -233,11 +303,20 @@ textarea {
   border-color: var(--blue-hover);
 }
 
+:root[data-style='cute'] .button-primary:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
 .settings-search {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-inner);
+  border-radius: 999px;
   box-shadow: var(--shadow-card);
+}
+
+:root[data-style='cute'] .settings-search {
+  border-width: 2px;
 }
 
 .settings-search:focus-within {
@@ -249,23 +328,22 @@ textarea {
 .whale-style-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .whale-style-card {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 14px;
   text-align: left;
   border-radius: var(--radius-card);
-  border: 1.5px solid var(--line);
+  border: 2px solid var(--line);
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
   box-shadow: var(--shadow-card);
-  transition: border-color 150ms ease, background-color 150ms ease, transform 130ms ease;
 }
 
 .whale-style-card:hover {
@@ -278,16 +356,17 @@ textarea {
 }
 
 .whale-style-thumb {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
   object-fit: cover;
   flex-shrink: 0;
-  border: 1px solid var(--line);
+  border: 1.5px solid var(--line);
 }
 
 .whale-style-card[data-preview='cute'] .whale-style-thumb {
   border-radius: 999px;
+  border-color: var(--blue-line);
 }
 
 .whale-style-copy {
@@ -298,15 +377,15 @@ textarea {
 }
 
 .whale-style-copy strong {
-  font-size: 0.92rem;
-  font-weight: var(--weight-semibold);
+  font-size: 0.94rem;
+  font-weight: var(--weight-bold);
   color: var(--ink);
 }
 
 .whale-style-copy small {
   font-size: 0.76rem;
   color: var(--muted);
-  line-height: 1.35;
+  line-height: 1.38;
 }
 
 /* Grouped Settings Cards */
@@ -322,7 +401,11 @@ textarea {
   background: var(--surface);
   min-height: 58px;
   box-shadow: var(--shadow-card);
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+:root[data-style='cute'] .account-group-toggle {
+  border-width: 2px;
+  border-radius: 20px;
 }
 
 .account-group-toggle[aria-expanded='true'] {
@@ -332,16 +415,9 @@ textarea {
   box-shadow: none;
 }
 
-:root[data-style='cute'] .screen-heading {
-  padding-block: 12px;
-}
-
-:root[data-style='cute'] .management-list {
-  border-radius: 24px;
-}
-
 :root[data-style='simple'] .management-row {
   border-bottom: 1px solid var(--line-faint);
+  border-radius: 0;
 }
 
 :root[data-style='simple'] .management-row:last-child {
@@ -358,6 +434,112 @@ textarea {
   padding-block: 10px;
 }
 
+/* Unified Autonomy & Permissions Card */
+.whale-autonomy-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 15px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.whale-autonomy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.whale-autonomy-head strong {
+  font-size: 0.95rem;
+  font-weight: var(--weight-bold);
+}
+
+.whale-autonomy-head span {
+  font-size: 0.78rem;
+  color: var(--blue);
+  background: var(--blue-soft);
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: var(--weight-semibold);
+}
+
+.whale-autonomy-pills {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.whale-autonomy-pill {
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--muted);
+  border-radius: var(--radius-control);
+  min-height: 38px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+:root[data-style='cute'] .whale-autonomy-pill {
+  border-radius: 999px;
+  border-width: 2px;
+}
+
+.whale-autonomy-pill.is-active {
+  background: var(--blue);
+  color: var(--on-accent);
+  border-color: var(--blue);
+  font-weight: var(--weight-semibold);
+  box-shadow: var(--tactile-lip);
+}
+
+.whale-autonomy-desc {
+  margin: 0;
+  font-size: 0.81rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.whale-perm-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-faint);
+}
+
+.whale-perm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+:root[data-style='cute'] .whale-perm-chip {
+  border-width: 1.5px;
+  background: var(--pastel-sky);
+  border-color: var(--blue-line);
+}
+
+.whale-perm-chip:hover {
+  border-color: var(--blue-line);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
 @media (max-width: 640px) {
   .account-sections {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -366,19 +548,7 @@ textarea {
     grid-template-columns: minmax(0, 1fr);
   }
   .management-row {
-    padding: 14px 15px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-item,
-  .bottom-navigation-item,
-  .management-row,
-  .button,
-  .icon-button,
-  .account-group-toggle,
-  .whale-style-card {
-    transition: none;
+    padding: 13px 15px;
   }
 }
 
@@ -418,105 +588,8 @@ textarea {
   margin-bottom: 12px;
 }
 
-/* Autonomy Quick-Switch Card */
-.whale-autonomy-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-  padding: 14px 16px;
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.whale-autonomy-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.whale-autonomy-head strong {
-  font-size: 0.95rem;
-  font-weight: var(--weight-semibold);
-}
-
-.whale-autonomy-head span {
-  font-size: 0.82rem;
-  color: var(--blue);
-  background: var(--blue-soft);
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-weight: var(--weight-medium);
-}
-
-.whale-autonomy-pills {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.whale-autonomy-pill {
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
-  color: var(--muted);
-  border-radius: var(--radius-control);
-  min-height: 38px;
-  padding: 6px 10px;
-  font-size: 0.84rem;
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
-}
-
-.whale-autonomy-pill.is-active {
-  background: var(--blue-soft);
-  color: var(--blue);
-  border-color: var(--blue-line);
-  font-weight: var(--weight-semibold);
-}
-
-.whale-autonomy-desc {
-  margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-/* Rendering & Battery Optimization: skip off-screen layout/paint on long lists */
-.management-row,
 .memory-card,
 .knowledge-card {
   content-visibility: auto;
   contain-intrinsic-size: auto 68px;
-}
-
-.whale-perm-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--line-faint);
-}
-
-.whale-perm-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 11px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
-  color: var(--ink);
-  font-size: 0.78rem;
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-
-.whale-perm-chip:hover {
-  border-color: var(--blue-line);
-  background: var(--blue-soft);
-  color: var(--blue);
 }

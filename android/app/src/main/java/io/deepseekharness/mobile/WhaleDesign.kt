@@ -9,14 +9,14 @@ import org.json.JSONObject
 
 /**
  * Shared semantic palette for every native host, generated tools, floating pet, and WebView.
- * - simple (`sea = true`):  Grok-inspired monochrome minimalism (crisp light / true OLED dark)
- * - cute   (`sea = false`): Whale-Chan ocean-sky kawaii style (soft cloud light / twilight ocean dark)
+ * - simple (`sea = true`):  Grok Bot monochrome minimalism (crisp #FFFFFF light / pitch OLED #000000 dark)
+ * - cute   (`sea = false`): iOS Cozy Kawaii (Finch / Waterllama warm milk-cream #FBF8F3 light / starlight #131626 dark)
  */
 internal data class WhaleDesign(
     val sea: Boolean, val dark: Boolean, val canvas: Int, val surface: Int, val raised: Int,
     val ink: Int, val muted: Int, val line: Int, val accent: Int, val onAccent: Int, val soft: Int,
 ) {
-    val radius get() = if (sea) 12 else 24
+    val radius get() = if (sea) 12 else 26
     val nativeStyle get() = when {
         sea && dark -> R.style.WhaleFamilySeaDark
         sea -> R.style.WhaleFamilySeaLight
@@ -46,8 +46,8 @@ internal data class WhaleDesign(
         "soft", "overlay_secondary_background", "overlay_secondary_background_disabled", "overlay_ball_pressed" -> soft
         "overlay_ball_background" -> surface
         "alert" -> Color.parseColor(if (dark) "#ffb4b4" else "#a33742")
-        "rose" -> Color.parseColor(if (dark) "#45333f" else "#f5e5ed")
-        "honey" -> Color.parseColor(if (dark) "#463e2b" else "#fff0d6")
+        "rose" -> Color.parseColor(if (dark) "#45333f" else "#ffebf0")
+        "honey" -> Color.parseColor(if (dark) "#463e2b" else "#fff5d6")
         else -> null
     }
 
@@ -56,12 +56,12 @@ internal data class WhaleDesign(
             val sea = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") == "simple"
             val dark = AppThemePreference.isDark(AppThemePreference.current(context), AppThemePreference.systemNight(context))
             val values = when {
-                // Grok-inspired OLED dark & crisp monochrome light
-                sea && dark -> listOf("#000000", "#0d0d0f", "#16161a", "#fafafa", "#a1a1aa", "#26262c", "#f4f4f5", "#09090b", "#1f1f24")
-                sea -> listOf("#fafafa", "#ffffff", "#f4f4f5", "#09090b", "#52525b", "#e4e4e7", "#18181b", "#ffffff", "#efefef")
-                // Whale-Chan twilight ocean dark & cloud ocean-sky light
-                dark -> listOf("#121626", "#1b2136", "#232b45", "#f0f5ff", "#a9b8d9", "#323d5e", "#8ec5ff", "#0f1d38", "#263654")
-                else -> listOf("#f6f9ff", "#ffffff", "#edf4ff", "#1f2d47", "#5b6f91", "#d4e4ff", "#4f86eb", "#ffffff", "#e8f1ff")
+                // Grok Bot OLED dark & pure white light
+                sea && dark -> listOf("#000000", "#0b0b0d", "#16161a", "#fafafa", "#9898a3", "#26262c", "#ffffff", "#000000", "#1f1f24")
+                sea -> listOf("#ffffff", "#ffffff", "#f4f4f5", "#09090b", "#64646f", "#e4e4e7", "#09090b", "#ffffff", "#f4f4f5")
+                // iOS Cozy Kawaii (Finch / Waterllama) starlight dark & warm milk-cream light
+                dark -> listOf("#131626", "#1d2238", "#262d49", "#f3f6ff", "#a6b4d4", "#2d3657", "#8cc2ff", "#10203d", "#263654")
+                else -> listOf("#fbf8f3", "#ffffff", "#f2f6ff", "#24304a", "#697896", "#dfe8f7", "#4b89f7", "#ffffff", "#eaf2ff")
             }.map(Color::parseColor)
             return WhaleDesign(sea, dark, values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8])
         }

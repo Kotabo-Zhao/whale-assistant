@@ -2260,4 +2260,5 @@ export const english: Readonly<Record<string, string>> = {
   "悬浮桌宠权限": "Floating Pet",
   "无障碍屏控": "Accessibility Control",
   "通知与提醒": "Notifications & Reminders",
+  "主人，小鲸鱼一直都在哦～": "Whale-Chan is right here for you~",
 }

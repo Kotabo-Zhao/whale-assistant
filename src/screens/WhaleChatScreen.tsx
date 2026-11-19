@@ -608,13 +608,16 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       <div className="whale-chat-stream" ref={listRef}>
         {messages.length === 0 ? (
           <div className="whale-chat-empty">
-            <img
-              src={heroMark}
-              alt=""
-              width={style === 'cute' ? 76 : 60}
-              height={style === 'cute' ? 76 : 60}
-              className="whale-chat-hero-mark"
-            />
+            <div className="whale-hero-stage">
+              <img
+                src={heroMark}
+                alt=""
+                width={style === 'cute' ? 88 : 56}
+                height={style === 'cute' ? 88 : 56}
+                className="whale-chat-hero-mark"
+              />
+            </div>
+            <span className="whale-cute-greeting">{t('主人，小鲸鱼一直都在哦～')}</span>
             <h2>{t('今天想一起做点什么？')}</h2>
             <p>{t('已脱离 DeepSeek Harness 独立运行，随时可以聊天、查记忆、管事项或一句话造个小工具。')}</p>
             <div className="whale-starter-grid">
@@ -655,10 +658,15 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                   </details>
                 )}
                 {msg.role === 'assistant' && !msg.error ? (
-                  <div
-                    className="whale-msg-bubble whale-markdown"
-                    dangerouslySetInnerHTML={{ __html: md.render(msg.text) }}
-                  />
+                  <div className="whale-msg-row">
+                    <img src={whaleChanAvatar} alt="" width={30} height={30} className="whale-msg-inline-avatar" />
+                    <div className="whale-msg-col">
+                      <div
+                        className="whale-msg-bubble whale-markdown"
+                        dangerouslySetInnerHTML={{ __html: md.render(msg.text) }}
+                      />
+                    </div>
+                  </div>
                 ) : (
                   <div className="whale-msg-bubble">{msg.text}</div>
                 )}
@@ -776,7 +784,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         </div>
       )}
 
-      <form
+      <div className="whale-chat-composer-wrap"><form
         className="whale-chat-composer"
         onSubmit={event => {
           event.preventDefault()
@@ -816,7 +824,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         >
           <ArrowUp size={18} />
         </button>
-      </form>
+      </form></div>
     </section>
   )
 }
