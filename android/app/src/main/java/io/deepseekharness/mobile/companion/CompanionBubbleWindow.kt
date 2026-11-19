@@ -304,11 +304,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         var widthMode = sizeStore.chatWidthMode
         var heightMode = sizeStore.chatHeightMode
         fun windowWidth(screen: Int): Int {
-            val available = (screen - dp(16)).coerceAtLeast(1)
+            val available = (screen - dp(12)).coerceAtLeast(1)
             return when (widthMode) {
-                "small" -> minOf(dp(340), (available * .82f).toInt())
+                "small" -> minOf(dp(380), (available * .86f).toInt())
                 "large" -> available
-                else -> minOf(dp(620), (available * .94f).toInt())
+                else -> minOf(dp(680), (available * .96f).toInt())
             }.coerceAtLeast(1)
         }
         var width = windowWidth(metrics.widthPixels)
@@ -358,7 +358,32 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             setPadding(dp(9), 0, dp(9), 0); contentDescription = "和小鲸聊聊近况"
             background = ui.action(ui.soft, 12); setOnClickListener { openTaskInbox() }
         }
-        val headingEnd = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL; addView(workerBadge); addView(ui.close(::hide)) }
+        val expandButton = ui.text(if (heightMode == "large") "收拢" else "大窗", 12f, foreground, true).apply {
+            gravity = Gravity.CENTER; minHeight = dp(40)
+            setPadding(dp(10), 0, dp(10), 0)
+            contentDescription = "切换桌宠大窗模式"
+            background = ui.action(ui.surface, 12)
+            setOnClickListener {
+                heightMode = if (heightMode == "large") "auto" else "large"
+                sizeStore.chatHeightMode = heightMode
+                text = if (heightMode == "large") "收拢" else "大窗"
+                positionUpdater?.invoke()
+            }
+        }
+        val headingEnd = LinearLayout(context).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(workerBadge)
+            addView(expandButton, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6) })
+            addView(ui.close(::hide))
+        }
+        val grabber = android.view.View(context).apply {
+            background = ui.shape(ui.line, 99)
+        }
+        panel.addView(grabber, LinearLayout.LayoutParams(dp(38), dp(4)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            topMargin = dp(7)
+            bottomMargin = dp(2)
+        })
         val subtitle = ui.string(R.string.pet_ui_chat_title).takeIf { fontScale < 1.4f }
         panel.addView(ui.header(ui.string(R.string.pet_ui_name), subtitle, headingEnd))
         val shortcuts = LinearLayout(context).apply {
@@ -435,7 +460,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(6))
+            setPadding(dp(14), dp(12), dp(14), dp(10))
             gravity = if (showAbove) Gravity.BOTTOM else Gravity.TOP
         }
         val scroll = ScrollView(context).apply { addView(content); isVerticalScrollBarEnabled = false; setBackgroundColor(ui.canvas) }
@@ -1260,9 +1285,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             panel.measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
                 android.view.View.MeasureSpec.makeMeasureSpec(available, android.view.View.MeasureSpec.AT_MOST))
             val actualHeight = panel.measuredHeight.coerceIn(1, available)
-            val point = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(screenWidth, available,
-                currentPet[0], anchorY, currentPet[2], currentPet[3], width, actualHeight, dp(2), gap)
-            val placedAbove = point.y + actualHeight <= anchorY
+            val sheetX = ((screenWidth - width) / 2).coerceAtLeast(dp(4))
+            val sheetY = (available - actualHeight).coerceAtLeast(dp(4))
+            val point = android.graphics.Point(sheetX, sheetY)
+            val placedAbove = false
             val right = currentPet[0] + currentPet[2] / 2 >= metrics.widthPixels / 2
             if (placedAbove != showAbove || right != petOnRight) {
                 val changeOrder = placedAbove != showAbove
