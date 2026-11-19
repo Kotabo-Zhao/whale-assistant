@@ -135,15 +135,21 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         return try {
             when (name) {
                 "whale_memory_search" -> {
-                    val req = JSONObject()
-                        .put("action", "search")
-                        .put("query", args.optString("query", "").trim())
-                    val result = CompanionMemoryStore(app).execute(req.toString(), fromPetTurn = true)
-                    ToolOutcome(name, "检索本地记忆", true, result)
+                    val query = args.optString("query", "").trim()
+                    val hybrid = if (query.isNotEmpty()) {
+                        runCatching {
+                            SemanticMemorySearch.execute(app, JSONObject().put("query", query).put("limit", 6).toString())
+                        }.getOrNull()
+                    } else null
+                    val result = hybrid ?: CompanionMemoryStore(app).execute(
+                        JSONObject().put("op", "search").put("query", query).toString(),
+                        fromPetTurn = true,
+                    )
+                    ToolOutcome(name, if (hybrid != null) "混合语义检索记忆" else "检索本地记忆", true, result)
                 }
                 "whale_memory_save" -> {
                     val req = JSONObject()
-                        .put("action", "save")
+                        .put("op", "save")
                         .put("text", args.optString("text", "").trim())
                     val result = CompanionMemoryStore(app).execute(req.toString(), fromPetTurn = true)
                     ToolOutcome(name, "保存长期记忆", true, result, mutating = true)
@@ -154,9 +160,18 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 }
                 "whale_knowledge_search" -> {
                     val query = args.optString("query", "").trim()
-                    val store = CompanionKnowledgeStore(app)
-                    val rows = if (query.isEmpty()) store.recent(0, 10) else store.search(query)
-                    ToolOutcome(name, "检索本地资料库", true, rows.toString())
+                    val hybrid = if (query.isNotEmpty()) {
+                        runCatching {
+                            SemanticKnowledgeSearch.execute(app, JSONObject().put("query", query).put("limit", 5).toString())
+                        }.getOrNull()
+                    } else null
+                    if (hybrid != null) {
+                        ToolOutcome(name, "混合语义检索资料库", true, hybrid)
+                    } else {
+                        val store = CompanionKnowledgeStore(app)
+                        val rows = if (query.isEmpty()) store.recent(0, 12) else store.searchPage(query, 0, 12).first
+                        ToolOutcome(name, "检索本地资料库", true, rows.toString())
+                    }
                 }
                 "whale_knowledge_save" -> {
                     val text = args.optString("text", "").trim()

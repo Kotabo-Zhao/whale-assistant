@@ -29,8 +29,8 @@ internal object SemanticKnowledgeSearch {
         val request = try { JSONObject(param) } catch (_: Exception) { throw invalid() }
         val query = (request.opt("query") as? String)?.trim()?.takeIf { it.isNotEmpty() && it.length <= 100 && it.none { c -> c.code < 32 || c.code == 127 } } ?: throw invalid()
         val offset = if (request.has("offset")) request.opt("offset") as? Int ?: throw invalid() else 0
-        val limit = if (request.has("limit")) request.opt("limit") as? Int ?: throw invalid() else 3
-        if (offset !in 0..99 || limit !in 1..3) throw invalid()
+        val limit = if (request.has("limit")) request.opt("limit") as? Int ?: throw invalid() else 5
+        if (offset !in 0..99 || limit !in 1..8) throw invalid()
         val control = SemanticControl(context)
         if (!control.enabled || !CompanionStore(context).knowledgeModelAccess) throw RuntimeFailure("SEMANTIC_DISABLED", "语义检索未启用或资料访问已关闭")
         val generation = control.generation()
