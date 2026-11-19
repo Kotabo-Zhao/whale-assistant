@@ -595,11 +595,21 @@ textarea {
 }
 
 /* Zero-Overlap Full-Height Chat Frame */
+.app-frame.is-chat-frame {
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
 .app-main.is-chat-main {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 0;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 /* Unified 3-master-switch permission rows inside WhaleAutonomyCard */

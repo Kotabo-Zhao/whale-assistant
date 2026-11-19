@@ -63,6 +63,12 @@ internal object DeviceControlState {
         if(halted || ticket!=null && ticket!=generation)
             throw RuntimeFailure("DEVICE_CONTROL_PAUSED","手机操作已暂停，未开始后续步骤")
     }
+    fun notifyNativeStep(phase: String, action: String) {
+        synchronized(this) {
+            if (halted && phase != "idle") return
+            publish(phase, action)
+        }
+    }
     private fun publish(phase: String, action: String = current.action) {
         current = Snapshot(phase, action, SystemClock.elapsedRealtime())
         listeners.forEach { it(current) }

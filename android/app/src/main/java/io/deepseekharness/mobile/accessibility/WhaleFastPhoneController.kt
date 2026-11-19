@@ -47,9 +47,34 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
         }
     }
 
+    private fun findTargetAppRoot(): AccessibilityNodeInfo? {
+        val ownPkg = service.packageName
+        for (attempt in 0 until 3) {
+            val active = service.rootInActiveWindow
+            val activePkg = active?.packageName?.toString().orEmpty()
+            if (active != null && activePkg.isNotEmpty() && activePkg != ownPkg && AccessibilityAutomationPolicy.validPackage(activePkg)) {
+                return active
+            }
+            val windows = runCatching { service.windows }.getOrNull().orEmpty()
+            val candidate = windows
+                .asSequence()
+                .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+                .sortedWith(compareByDescending<android.view.accessibility.AccessibilityWindowInfo> { it.isActive }.thenByDescending { it.layer })
+                .mapNotNull { runCatching { it.root }.getOrNull() }
+                .firstOrNull { node ->
+                    val pkg = node.packageName?.toString().orEmpty()
+                    pkg.isNotEmpty() && pkg != ownPkg
+                }
+            if (candidate != null) return candidate
+            if (active != null && activePkg != ownPkg) return active
+            if (attempt < 2) SystemClock.sleep(160L)
+        }
+        return service.rootInActiveWindow
+    }
+
     private fun requireSafeRoot(): Pair<AccessibilityNodeInfo, String>? {
         if (service.isLockedOrScreenOff()) return null
-        val root = service.rootInActiveWindow ?: return null
+        val root = findTargetAppRoot() ?: return null
         val pkg = root.packageName?.toString().orEmpty()
         if (!AccessibilityAutomationPolicy.validPackage(pkg)) return null
         if (service.containsSensitiveWindow(root)) return null
@@ -60,7 +85,7 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
         if (service.isLockedOrScreenOff()) {
             return DeviceCommandResult(false, 1, "设备已锁定或屏幕未交互", false, "ACCESSIBILITY_DEVICE_LOCKED")
         }
-        val root = service.rootInActiveWindow
+        val root = findTargetAppRoot()
             ?: return DeviceCommandResult(false, 1, "当前没有可读取的应用窗口", false, "ACCESSIBILITY_WINDOW_UNAVAILABLE")
         val pkg = root.packageName?.toString().orEmpty()
         if (!AccessibilityAutomationPolicy.validPackage(pkg)) {

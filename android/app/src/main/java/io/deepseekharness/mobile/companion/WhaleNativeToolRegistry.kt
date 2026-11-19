@@ -609,13 +609,16 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_phone_ui_tree" -> {
                     val service = DeepSeekAccessibilityService.current()
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
-                    val res = service.fastControl("fastTree", "")
+                    val res = withPhoneControlNotice("正在读取屏幕…") { service.fastControl("fastTree", "") }
                     ToolOutcome(name, "极速读取精简控件树", res.ok, res.text)
                 }
                 "whale_phone_action" -> {
                     val service = DeepSeekAccessibilityService.current()
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
-                    val res = service.fastControl("fastAct", args.toString())
+                    val action = args.str("action", "操作").trim()
+                    val target = args.str("text").ifBlank { args.str("ref") }.take(12)
+                    val label = if (target.isNotEmpty()) "操控：$action「$target」" else "操控：$action"
+                    val res = withPhoneControlNotice(label) { service.fastControl("fastAct", args.toString()) }
                     ToolOutcome(name, "极速执行原生屏控", res.ok, res.text, mutating = true)
                 }
                 "whale_phone_batch" -> {
@@ -630,7 +633,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         }
                         else -> args.toString()
                     }
-                    val res = service.fastControl("fastBatch", batchPayload)
+                    val res = withPhoneControlNotice("执行连续操控…") { service.fastControl("fastBatch", batchPayload) }
                     ToolOutcome(name, "批量连贯操控手机", res.ok, res.text, mutating = true)
                 }
                 "whale_phone_back" -> {
@@ -699,6 +702,19 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 JSONObject().put("error", error.message ?: error.javaClass.simpleName).toString(),
                 mutating = isMutating(name),
             )
+        }
+    }
+
+    private fun <T> withPhoneControlNotice(label: String, block: () -> T): T {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            runCatching { io.deepseekharness.mobile.OverlayBallService.closeConversation() }
+        }
+        io.deepseekharness.mobile.DeviceControlState.notifyNativeStep("operating", label)
+        android.os.SystemClock.sleep(110L)
+        return try {
+            block()
+        } finally {
+            io.deepseekharness.mobile.DeviceControlState.notifyNativeStep("idle", "")
         }
     }
 

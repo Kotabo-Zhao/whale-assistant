@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 透明鲸鱼娘保留原有触摸及无障碍操作。 -->
+<!-- 透明鲸鱼娘保留原有触摸及无障碍操作；头顶附带可爱 Token 计费进度胶囊，底部附带实时屏控状态提示。 -->
 <io.deepseekharness.mobile.overlay.PetOverlayView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:contentDescription="@string/overlay_ball_content_description"
     android:focusable="true"
     android:clickable="true"
@@ -13,21 +15,79 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="center"
-        android:padding="0dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="4dp"
         android:importantForAccessibility="no"
         android:scaleType="fitCenter"
         android:src="@drawable/ic_overlay_ball" />
+
+    <!-- 头顶可爱 Token 计费进度条胶囊 -->
+    <LinearLayout
+        android:id="@+id/companion_token_pill"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginHorizontal="2dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingHorizontal="5dp"
+        android:paddingVertical="2dp"
+        android:importantForAccessibility="noHideDescendants">
+
+        <TextView
+            android:id="@+id/companion_token_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="✨ 0"
+            android:textColor="#1F2937"
+            android:textSize="8.5sp"
+            android:textStyle="bold" />
+
+        <FrameLayout
+            android:id="@+id/companion_token_track"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="1dp">
+
+            <View
+                android:id="@+id/companion_token_fill"
+                android:layout_width="4dp"
+                android:layout_height="match_parent" />
+        </FrameLayout>
+    </LinearLayout>
+
     <TextView
         android:id="@+id/companion_worker_badge"
         android:layout_width="20dp"
         android:layout_height="20dp"
         android:layout_gravity="top|end"
+        android:layout_marginTop="14dp"
         android:gravity="center"
         android:textColor="#FFFFFF"
         android:textSize="11sp"
         android:textStyle="bold"
         android:visibility="gone"
         android:importantForAccessibility="no" />
+
+    <!-- 桌宠实时屏控状态提示胶囊 -->
+    <TextView
+        android:id="@+id/companion_control_pill"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingHorizontal="5dp"
+        android:paddingVertical="2dp"
+        android:textColor="#FFFFFF"
+        android:textSize="9.5sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:importantForAccessibility="no" />
+
     <TextView
         android:id="@+id/companion_drop_hint"
         android:layout_width="match_parent"
