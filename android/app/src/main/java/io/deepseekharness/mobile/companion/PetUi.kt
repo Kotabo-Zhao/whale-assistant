@@ -39,7 +39,7 @@ internal class PetUi(private val context: Context) {
     fun dp(n: Int) = (n * context.resources.displayMetrics.density).roundToInt()
     fun string(id: Int): String = palette.getString(id)
     fun shape(fill: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply {
-        setColor(fill); cornerRadius = dp(if (simple) minOf(12, radius) else maxOf(12, radius)).toFloat()
+        setColor(fill); cornerRadius = dp(if (simple) minOf(16, radius) else maxOf(14, radius)).toFloat()
         if (stroke != null) setStroke(dp(1), stroke)
     }
     fun action(fill: Int, radius: Int, stroke: Int? = null) =
@@ -61,7 +61,7 @@ internal class PetUi(private val context: Context) {
         }
         val tint = when (icon) { R.drawable.ic_whale_nav_memory -> rose; R.drawable.ic_pet_assign -> honey; else -> soft }
         row.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(if (simple) surface else tint, surface, surface)).apply {
-            val r = dp(if (simple) 7 else 20).toFloat()
+            val r = dp(if (simple) 16 else 22).toFloat()
             cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f)
         }
         if (simple) {
@@ -83,14 +83,14 @@ internal class PetUi(private val context: Context) {
     fun close(onClick: () -> Unit) = text("×", 22f, muted).apply {
         contentDescription = string(R.string.pet_menu_close); gravity = Gravity.CENTER
         minWidth = dp(48); minHeight = dp(48); background = action(surface, 18)
-        isFocusable = true; setOnClickListener { onClick() }
+        isFocusable = true; setOnClickListener { io.deepseekharness.mobile.WhaleMotion.feedback(this); onClick() }
     }
 
     fun editor(field: EditText) = field.apply {
         setTextColor(ink); setHintTextColor(muted); textSize = 15f
         gravity = Gravity.TOP or Gravity.START
         imeOptions = imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
-        setPadding(dp(12), dp(10), dp(12), dp(10)); background = shape(canvas, 12, line)
+        setPadding(dp(14), dp(12), dp(14), dp(12)); background = shape(canvas, 14, line)
     }
 
     fun dialogBuilder(title: String, subtitle: String?, icon: Int, end: View? = null): AlertDialog.Builder {

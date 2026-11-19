@@ -79,10 +79,14 @@ class HarnessKeepAliveService : Service() {
                 val idleMs = (System.currentTimeMillis() - lastActivityAtMs).coerceAtLeast(0L)
                 val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
                 val batterySaver = powerManager?.isPowerSaveMode == true
+                val activeWorkers = runCatching {
+                    io.deepseekharness.mobile.companion.WorkerDashboardStore(applicationContext).activeCount()
+                }.getOrDefault(0)
+                val deviceControlBusy = DeviceControlState.current.phase != "idle"
                 val hibernated = controller.hibernateIfIdle(
-                    activeWorkerCount = 0,
+                    activeWorkerCount = activeWorkers,
                     terminalOpen = false,
-                    virtualScreenActive = false,
+                    virtualScreenActive = deviceControlBusy,
                     appInForeground = false,
                     idleDurationMs = idleMs,
                     batterySaverEnabled = batterySaver,

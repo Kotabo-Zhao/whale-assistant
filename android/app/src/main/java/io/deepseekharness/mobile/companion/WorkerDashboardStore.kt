@@ -12,6 +12,17 @@ internal class WorkerDashboardStore(private val context: Context, private val co
     private val notifications = WorkerReportInbox(context)
     private val dir = File(context.noBackupFilesDir, "worker-dashboard").apply { mkdirs() }
     private val guestDir = File(context.noBackupFilesDir.canonicalFile, "dsh-runtime/current/root/.dsh/mobile-workers")
+    /** 返回当前仍处于活跃执行/排队状态的后台 Worker 数量，供空闲休眠巡检避免误杀在途任务。 */
+    fun activeCount(): Int = synchronized(lock) {
+        val files = dir.listFiles { file -> file.isFile && file.name.endsWith(".json") } ?: return@synchronized 0
+        var count = 0
+        for (file in files) {
+            val row = runCatching { WorkerCardCatalog.full(file) }.getOrNull() ?: continue
+            if (row.optString("state") in ACTIVE_STATES) count += 1
+        }
+        count
+    }
+
     fun put(row: JSONObject) = synchronized(lock) {
         val id = row.getString("id"); require(UUID.fromString(id).toString() == id)
         val target = File(dir, "$id.json")

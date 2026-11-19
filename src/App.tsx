@@ -18,7 +18,7 @@ import type { FilesRoot } from './screens/FilesScreen'
 import { PermissionGuideDialog, ResetDialog, UpdateDialog } from './screens/Dialogs'
 import { keepAliveGuideResolved, overlayFailureGuide, overlayGuideResolved, type PermissionGuide } from './ui/permissionGuide'
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import { AUTONOMY_PRESETS, DEFAULT_AUTONOMY_PRESET, resolveAutonomyPreset, type AutonomyPresetId } from './ui/whaleUiPreferences'
+import { WhaleAutonomyCard } from './components/WhaleAutonomyCard'
 
 const ToolsWorkspace = lazy(() => import('./components/ToolsWorkspace').then(m => ({ default: m.ToolsWorkspace })))
 const AssistantTasks = lazy(() => import('./components/AssistantTasks').then(m => ({ default: m.AssistantTasks })))
@@ -1334,14 +1334,6 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
   }
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [advanced, setAdvanced] = useState(() => expanded === 'device' || expanded === 'workspace')
-  const [autonomyId, setAutonomyId] = useState<AutonomyPresetId>(() => {
-    try { return resolveAutonomyPreset(window.localStorage.getItem('whale.autonomyPreset')).id } catch { return DEFAULT_AUTONOMY_PRESET }
-  })
-  const activeAutonomy = resolveAutonomyPreset(autonomyId)
-  const selectAutonomy = (id: AutonomyPresetId): void => {
-    setAutonomyId(id)
-    try { window.localStorage.setItem('whale.autonomyPreset', id) } catch { /* ignore storage errors */ }
-  }
   /** 每个分组只留命中的入口；整组都没命中就连标题一起不渲染，避免空标题刷屏。 */
   const groups = SETTINGS_HOME_GROUPS
     .map(group => ({ group, entries: SETTINGS_HOME_ENTRIES.filter(entry => entry.group === group.id && matchesSettingsHomeQuery(entry, appliedQuery)) }))
@@ -1445,29 +1437,7 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
         </p>
       )}
 
-      {!searching && (
-        <section className="whale-autonomy-card" aria-label={t('执行与权限模式')}>
-          <div className="whale-autonomy-head">
-            <strong>{t('执行与权限')}</strong>
-            <span>{t(activeAutonomy.label)}</span>
-          </div>
-          <div className="whale-autonomy-pills" role="radiogroup" aria-label={t('自治模式')}>
-            {AUTONOMY_PRESETS.map(preset => (
-              <button
-                key={preset.id}
-                type="button"
-                role="radio"
-                aria-checked={autonomyId === preset.id}
-                className={'whale-autonomy-pill' + (autonomyId === preset.id ? ' is-active' : '')}
-                onClick={() => selectAutonomy(preset.id)}
-              >
-                {t(preset.label)}
-              </button>
-            ))}
-          </div>
-          <p className="whale-autonomy-desc">{t(activeAutonomy.description)}</p>
-        </section>
-      )}
+      {!searching && <WhaleAutonomyCard />}
 
       {!searching && <nav id="account-categories" className="account-sections" data-advanced={advanced} aria-label={t('设置分类')}>
         {SETTINGS_HOME_GROUPS.filter(group => advanced || !['device', 'workspace'].includes(group.id)).map(group => <button key={group.id} type="button" className="account-group-toggle"
