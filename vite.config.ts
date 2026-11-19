@@ -26,6 +26,8 @@ import react from '@vitejs/plugin-react'
  */
 const XPACKAGE = /[\\/]@xterm[\\/]/
 const RUNTIME_PACKAGE = /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/
+const MARKDOWN_PACKAGE = /[\\/]node_modules[\\/](markdown-it|markdown-it-texmath|katex)[\\/]/
+const ICON_PACKAGE = /[\\/]node_modules[\\/]lucide-react[\\/]/
 
 function manualChunks(id: string): string | undefined {
   // CSS 不参与手工分块：样式跟着引入它的块走，避免「样式依赖」把 JS 块拖进首屏。
@@ -33,6 +35,8 @@ function manualChunks(id: string): string | undefined {
   if (file.endsWith('.css')) return undefined
   if (XPACKAGE.test(id)) return 'xterm'
   if (RUNTIME_PACKAGE.test(id)) return 'react'
+  if (MARKDOWN_PACKAGE.test(id)) return 'markdown'
+  if (ICON_PACKAGE.test(id)) return 'icons'
   return undefined
 }
 
