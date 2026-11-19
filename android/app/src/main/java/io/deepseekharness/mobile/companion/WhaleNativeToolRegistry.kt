@@ -194,6 +194,20 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_device_battery", "读取当前手机电池电量百分比与充电状态。", emptyMap(), emptyList()))
             array.put(schema("whale_worker_status", "查询当前活跃后台 Worker 任务数量与设备控制状态。", emptyMap(), emptyList()))
         }
+        if (array.length() == 0) {
+            // 保底核心工具集：避免任意自然口语问句被关键词漏判导致“无工具可用”
+            array.put(schema("whale_memory_search", "按关键词混合语义检索用户本地长期记忆。", mapOf("query" to "检索关键词"), listOf("query")))
+            array.put(schema("whale_memory_save", "将用户明确表达的偏好或长期事实保存到本地长期记忆。", mapOf("text" to "简明完整的记忆内容"), listOf("text")))
+            array.put(schema("whale_knowledge_search", "混合语义检索用户保存在本地资料库中的文档和笔记。", mapOf("query" to "检索关键词"), listOf("query")))
+            array.put(schema("whale_secretary_list", "查询用户的未完成秘书事项与待办列表。", mapOf("query" to "可选筛选关键词"), emptyList()))
+            array.put(schema("whale_secretary_add", "为用户新增一条秘书事项/待办记录。", mapOf("title" to "事项标题", "note" to "可选补充说明"), listOf("title")))
+            array.put(schema("whale_app_navigate", "将鲸鱼助手界面跳转到指定页面。", mapOf("view" to "目标页面：whale-chat / assistant-memory / assistant-tasks / tools / settings"), listOf("view")))
+            array.put(schema("whale_app_appearance", "实时修改整个软件的视觉风格、明暗主题或强调色。", mapOf("style" to "simple 或 cute", "theme" to "system / light / dark"), emptyList()))
+            array.put(schema("whale_phone_apps", "按名称或拼音检索手机已安装应用及包名。", mapOf("query" to "应用名或关键词"), listOf("query")))
+            array.put(schema("whale_phone_launch", "在手机上启动指定包名的目标应用。", mapOf("packageName" to "目标应用完整包名"), listOf("packageName")))
+            array.put(schema("whale_phone_ui_tree", "极速读取当前屏幕精简控件树。", emptyMap(), emptyList()))
+            array.put(schema("whale_phone_action", "执行点击、输入、滑动、返回等原生屏控操作。", mapOf("action" to "click / input / swipe / back / home", "ref" to "可选 r 编号", "text" to "可选目标文字"), listOf("action")))
+        }
         return array
     }
 

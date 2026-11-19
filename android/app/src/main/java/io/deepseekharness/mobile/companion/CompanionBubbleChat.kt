@@ -299,8 +299,11 @@ internal class CompanionBubbleChat(
     fun fusedReply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit): Reply {
         PetReplyOperation.checkpoint()
         if (pending?.optString("kind") == "worker") return sendPendingWorker(history, memoryAllowed, knowledgeAllowed)
+        // 纯原生 Lite 模式（无旧 Harness 运行）：直接走 WhaleNativeAgentEngine，赋予桌宠全部 38 项原生工具 + 自动 RAG + SSE 流式！
+        if (runCatching { RuntimeHost.controllerOrNull()?.openHarnessAccess() }.isFailure) {
+            return reply(history, scope, memoryAllowed, knowledgeAllowed, onPartial)
+        }
         fun harness(): Reply {
-            // 100% 纯原生 Lite 优先：仅当旧 Harness 已在运行时才走 Harness，否则直接进入 reply() 里的 WhaleNativeAgentEngine 原生直连！
             return reply(history, scope, memoryAllowed, knowledgeAllowed, onPartial)
         }
         // Once tools enter the conversation, keep the role and subsequent answers in that same Session.
