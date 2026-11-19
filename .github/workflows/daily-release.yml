@@ -10,6 +10,11 @@ on:
         description: '可选自定义标签后缀（留空则按日期生成 nightly-YYYYMMDD）'
         required: false
         default: ''
+      skip_emulator:
+        description: '跳过云端模拟器冒烟测试（默认 false，自动实机冒烟测试）'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -23,6 +28,11 @@ jobs:
     name: Build Lite APK & Publish Daily Release
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      apk: ${{ steps.meta.outputs.apk }}
+      sha: ${{ steps.meta.outputs.sha }}
+      date: ${{ steps.meta.outputs.date }}
 
     steps:
       - name: Checkout repository
@@ -130,4 +140,66 @@ jobs:
               --title "$TITLE" \
               --notes "$NOTES" \
               --prerelease
+          fi
+
+  emulator-smoke-test:
+    name: Cloud Android Emulator Smoke Test
+    needs: build-and-release
+    if: ${{ !inputs.skip_emulator }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Enable KVM group permissions
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+          fi
+
+      - name: Download newly released Lite APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p smoke-out
+          gh release download "${{ needs.build-and-release.outputs.tag }}" \
+            -p "${{ needs.build-and-release.outputs.apk }}" \
+            -D smoke-out
+
+      - name: Run Android 14 Emulator Smoke Test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 3072M
+          disk-size: 4096M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash scripts/ci-emulator-smoke.sh "smoke-out/${{ needs.build-and-release.outputs.apk }}" smoke-out
+
+      - name: Publish smoke test report & screenshots to Release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f smoke-out/smoke-test-report.txt ]; then
+            {
+              echo "### Cloud Android Emulator Smoke Test (${{ needs.build-and-release.outputs.sha }})"
+              echo '```text'
+              cat smoke-out/smoke-test-report.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          UPLOAD_FILES=()
+          for f in smoke-out/smoke-test-report.txt smoke-out/smoke-home.png smoke-out/smoke-after-tap.png; do
+            if [ -f "$f" ]; then UPLOAD_FILES+=("$f"); fi
+          done
+          if [ "${#UPLOAD_FILES[@]}" -gt 0 ]; then
+            gh release upload "${{ needs.build-and-release.outputs.tag }}" "${UPLOAD_FILES[@]}" --clobber || true
           fi
