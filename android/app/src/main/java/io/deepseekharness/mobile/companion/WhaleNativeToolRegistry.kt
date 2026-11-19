@@ -228,7 +228,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         return try {
             when (name) {
                 "whale_app_navigate" -> {
-                    val view = args.optString("view", "").trim()
+                    val view = args.str("view", "").trim()
                     val allowed = setOf(
                         "whale-chat",
                         "conversation",
@@ -245,10 +245,10 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, "切换软件页面至 $view", true, JSONObject().put("ok", true).put("view", view).toString(), mutating = true)
                 }
                 "whale_app_appearance" -> {
-                    val style = args.optString("style", "").trim().lowercase()
-                    val theme = args.optString("theme", "").trim().lowercase()
-                    val accent = args.optString("accent", "").trim().lowercase()
-                    val reduceMotionRaw = args.optString("reduceMotion", "").trim().lowercase()
+                    val style = args.str("style", "").trim().lowercase()
+                    val theme = args.str("theme", "").trim().lowercase()
+                    val accent = args.str("accent", "").trim().lowercase()
+                    val reduceMotionRaw = args.str("reduceMotion", "").trim().lowercase()
                     val payload = JSONObject().put("action", "appearance")
                     if (style in setOf("simple", "cute")) {
                         app.getSharedPreferences("whale-interface", Context.MODE_PRIVATE).edit().putString("style", style).apply()
@@ -270,7 +270,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, "调整软件视觉外观", true, payload.toString(), mutating = true)
                 }
                 "whale_app_language" -> {
-                    val lang = args.optString("language", "").trim()
+                    val lang = args.str("language", "").trim()
                     require(lang in setOf("zh-CN", "en")) { "仅支持 zh-CN 或 en" }
                     AppLanguage.save(app, lang)
                     WhaleAppControlBus.emit(JSONObject().put("action", "language").put("language", lang))
@@ -304,7 +304,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 }
                 "whale_app_settings_set" -> {
                     val store = CompanionStore(app)
-                    val preset = args.optString("autonomyPreset", "").trim().lowercase()
+                    val preset = args.str("autonomyPreset", "").trim().lowercase()
                     val applied = JSONObject().put("ok", true)
                     if (preset in setOf("fluent", "balanced", "strict")) {
                         when (preset) {
@@ -324,8 +324,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         applied.put("autonomyPreset", preset)
                         WhaleAppControlBus.emit(JSONObject().put("action", "autonomy").put("preset", preset))
                     }
-                    val key = args.optString("key", "").trim()
-                    val rawVal = args.optString("value", "").trim()
+                    val key = args.str("key", "").trim()
+                    val rawVal = args.str("value", "").trim()
                     if (key.isNotEmpty()) {
                         val boolVal = rawVal.equals("true", ignoreCase = true)
                         when (key) {
@@ -356,24 +356,24 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 }
                 "whale_persona_manage" -> {
                     val store = CompanionPersonaStore(app)
-                    when (val action = args.optString("action", "").trim().lowercase()) {
+                    when (val action = args.str("action", "").trim().lowercase()) {
                         "save" -> {
-                            val card = JSONObject().put("name", args.optString("name", "").trim())
-                            val id = args.optString("id", "").trim()
+                            val card = JSONObject().put("name", args.str("name", "").trim())
+                            val id = args.str("id", "").trim()
                             if (id.isNotEmpty()) card.put("id", id)
-                            val prompt = args.optString("prompt", "").trim()
+                            val prompt = args.str("prompt", "").trim()
                             if (prompt.isNotEmpty()) card.put("prompt", prompt)
                             val saved = store.save(card)
                             ToolOutcome(name, "保存角色人设", true, saved.toString(), mutating = true)
                         }
                         "activate" -> {
-                            val id = args.optString("id", "").trim()
+                            val id = args.str("id", "").trim()
                             require(id.isNotEmpty()) { "请提供要激活的人设 id" }
                             store.activate(id)
                             ToolOutcome(name, "切换助手人设", true, JSONObject().put("ok", true).put("activeId", id).toString(), mutating = true)
                         }
                         "delete" -> {
-                            val id = args.optString("id", "").trim()
+                            val id = args.str("id", "").trim()
                             require(id.isNotEmpty()) { "请提供要删除的人设 id" }
                             store.delete(id)
                             ToolOutcome(name, "删除助手人设", true, JSONObject().put("ok", true).put("deletedId", id).toString(), mutating = true)
@@ -382,7 +382,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     }
                 }
                 "whale_pet_control" -> {
-                    val action = args.optString("action", "").trim().lowercase()
+                    val action = args.str("action", "").trim().lowercase()
                     when (action) {
                         "start" -> {
                             val intent = Intent(app, OverlayBallService::class.java)
@@ -394,7 +394,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             ToolOutcome(name, "隐藏悬浮桌宠", true, JSONObject().put("ok", true).put("action", "stop").toString(), mutating = true)
                         }
                         "resize" -> {
-                            val size = args.optString("sizeDp", "56").toIntOrNull() ?: 56
+                            val size = args.str("sizeDp", "56").toIntOrNull() ?: 56
                             OverlayBallPreferences.from(app).writeSizeDp(size)
                             ToolOutcome(name, "调整桌宠尺寸为 ${size}dp", true, JSONObject().put("ok", true).put("sizeDp", size).toString(), mutating = true)
                         }
@@ -406,7 +406,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     }
                 }
                 "whale_memory_search" -> {
-                    val query = args.optString("query", "").trim()
+                    val query = args.str("query", "").trim()
                     val hybrid = if (query.isNotEmpty()) {
                         runCatching {
                             SemanticMemorySearch.execute(app, JSONObject().put("query", query).put("limit", 6).toString())
@@ -419,7 +419,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, if (hybrid != null) "混合语义检索记忆" else "检索本地记忆", true, result)
                 }
                 "whale_memory_save" -> {
-                    val req = JSONObject().put("op", "save").put("text", args.optString("text", "").trim())
+                    val req = JSONObject().put("op", "save").put("text", args.str("text", "").trim())
                     val result = CompanionMemoryStore(app).execute(req.toString(), fromPetTurn = true)
                     ToolOutcome(name, "保存长期记忆", true, result, mutating = true)
                 }
@@ -428,7 +428,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, "读取主人档案", true, OwnerContext.prompt(profile))
                 }
                 "whale_knowledge_search" -> {
-                    val query = args.optString("query", "").trim()
+                    val query = args.str("query", "").trim()
                     val hybrid = if (query.isNotEmpty()) {
                         runCatching {
                             SemanticKnowledgeSearch.execute(app, JSONObject().put("query", query).put("limit", 5).toString())
@@ -443,12 +443,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     }
                 }
                 "whale_knowledge_save" -> {
-                    val text = args.optString("text", "").trim()
+                    val text = args.str("text", "").trim()
                     val saved = CompanionKnowledgeStore(app).add(text, source = "whale_native_chat")
                     ToolOutcome(name, "保存到本地资料库", saved, JSONObject().put("saved", saved).toString(), mutating = true)
                 }
                 "whale_secretary_list" -> {
-                    val query = args.optString("query", "").trim()
+                    val query = args.str("query", "").trim()
                     val result = UnifiedUnderstandingStore.open(app).use { it.queue.secretary.list(query = query, activeOnly = true, limit = 20) }
                     ToolOutcome(name, "查询秘书事项", true, result.toString())
                 }
@@ -456,14 +456,14 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val req = JSONObject()
                         .put("action", "create")
                         .put("operationId", UUID.randomUUID().toString())
-                        .put("title", args.optString("title", "").trim())
-                    val note = args.optString("note", "").trim()
+                        .put("title", args.str("title", "").trim())
+                    val note = args.str("note", "").trim()
                     if (note.isNotEmpty()) req.put("note", note)
                     val result = UnifiedUnderstandingStore.open(app).use { it.queue.secretary.execute(req, owner = "whale-main") }
                     ToolOutcome(name, "记录秘书事项", true, result.toString(), mutating = true)
                 }
                 "whale_secretary_complete" -> {
-                    val id = args.optString("id", "").trim()
+                    val id = args.str("id", "").trim()
                     val result = UnifiedUnderstandingStore.open(app).use { store ->
                         val revision = store.queue.secretary.public(id).optString("revision", "")
                         require(revision.isNotEmpty()) { "未找到指定事项或版本信息缺失：$id" }
@@ -478,7 +478,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, "完成秘书事项", true, result.toString(), mutating = true)
                 }
                 "whale_secretary_delete" -> {
-                    val id = args.optString("id", "").trim()
+                    val id = args.str("id", "").trim()
                     val result = UnifiedUnderstandingStore.open(app).use { store ->
                         val revision = store.queue.secretary.public(id).optString("revision", "")
                         require(revision.isNotEmpty()) { "未找到指定事项或版本信息缺失：$id" }
@@ -498,19 +498,25 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, "读取功能工坊列表", true, arr.toString())
                 }
                 "whale_workshop_draft" -> {
-                    val result = WhaleFeatureStore(app).draft(args)
+                    val store = WhaleFeatureStore(app)
+                    val id = args.str("id", "").trim()
+                    if (id.isNotEmpty() && args.str("baseRevision", "").isEmpty()) {
+                        val latest = store.read(id)?.let { if (it.isNull("latest")) "" else it.optString("latest", "") }.orEmpty()
+                        if (latest.isNotEmpty()) args.put("baseRevision", latest)
+                    }
+                    val result = store.draft(args)
                     ToolOutcome(name, "保存工坊软件草稿", true, result.toString(), mutating = true)
                 }
                 "whale_workshop_activate" -> {
-                    val id = args.optString("id", "").trim()
-                    val revision = args.optString("revision", "").trim()
+                    val id = args.str("id", "").trim()
+                    val revision = args.str("revision", "").trim()
                     val store = WhaleFeatureStore(app)
-                    val expectedActive = store.read(id)?.optString("activeRevision", "").orEmpty()
+                    val expectedActive = store.read(id)?.let { if (it.isNull("active")) "" else it.optString("active", "") }.orEmpty()
                     val result = store.activate(id, revision, expectedActive)
                     ToolOutcome(name, "发布启用工坊工具", true, result.toString(), mutating = true)
                 }
                 "whale_workshop_open" -> {
-                    val id = args.optString("id", "").trim()
+                    val id = args.str("id", "").trim()
                     if (id.isEmpty()) {
                         WhaleFeatureActivity.openLibrary(app)
                         ToolOutcome(name, "打开功能工坊总览", true, JSONObject().put("opened", "library").toString(), mutating = true)
@@ -522,8 +528,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     }
                 }
                 "whale_workshop_pin" -> {
-                    val id = args.optString("id", "").trim()
-                    val pinned = args.optString("pinned", "true").equals("true", ignoreCase = true)
+                    val id = args.str("id", "").trim()
+                    val pinned = args.str("pinned", "true").equals("true", ignoreCase = true)
                     val result = WhaleFeatureStore(app).setPinned(id, pinned)
                     ToolOutcome(name, if (pinned) "置顶工坊工具" else "取消置顶工具", true, result.toString(), mutating = true)
                 }
@@ -532,42 +538,42 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, "列出本地代码项目", true, res.toString())
                 }
                 "whale_code_list" -> {
-                    val res = codeWorkspace.listFiles(args.optString("project", ""), args.optString("path", ""))
+                    val res = codeWorkspace.listFiles(args.str("project", ""), args.str("path", ""))
                     ToolOutcome(name, "浏览本地代码目录", true, res.toString())
                 }
                 "whale_code_read" -> {
-                    val startLine = args.optString("startLine", "1").toIntOrNull() ?: 1
-                    val endLine = args.optString("endLine", "200").toIntOrNull() ?: 200
-                    val res = codeWorkspace.readFile(args.optString("project", ""), args.optString("path", ""), startLine, endLine)
+                    val startLine = args.str("startLine", "1").toIntOrNull() ?: 1
+                    val endLine = args.str("endLine", "200").toIntOrNull() ?: 200
+                    val res = codeWorkspace.readFile(args.str("project", ""), args.str("path", ""), startLine, endLine)
                     ToolOutcome(name, "读取本地源码", true, res.toString())
                 }
                 "whale_code_write" -> {
-                    val res = codeWorkspace.writeFile(args.optString("project", ""), args.optString("path", ""), args.optString("content", ""))
+                    val res = codeWorkspace.writeFile(args.str("project", ""), args.str("path", ""), args.str("content", ""))
                     ToolOutcome(name, "写入本地代码文件", true, res.toString(), mutating = true)
                 }
                 "whale_code_patch" -> {
                     val res = codeWorkspace.patchFile(
-                        args.optString("project", ""),
-                        args.optString("path", ""),
-                        args.optString("oldText", ""),
-                        args.optString("newText", ""),
+                        args.str("project", ""),
+                        args.str("path", ""),
+                        args.str("oldText", ""),
+                        args.str("newText", ""),
                     )
                     ToolOutcome(name, "精准修改本地代码", true, res.toString(), mutating = true)
                 }
                 "whale_code_delete" -> {
-                    val res = codeWorkspace.deleteFile(args.optString("project", ""), args.optString("path", ""))
+                    val res = codeWorkspace.deleteFile(args.str("project", ""), args.str("path", ""))
                     ToolOutcome(name, "删除本地代码文件", true, res.toString(), mutating = true)
                 }
                 "whale_code_search" -> {
-                    val res = codeWorkspace.searchCode(args.optString("project", ""), args.optString("query", ""))
+                    val res = codeWorkspace.searchCode(args.str("project", ""), args.str("query", ""))
                     ToolOutcome(name, "检索本地代码", true, res.toString())
                 }
                 "whale_phone_apps" -> {
-                    val res = InstalledApplications.list(app, args.optString("query", "").trim(), 0)
+                    val res = InstalledApplications.list(app, args.str("query", "").trim(), 0)
                     ToolOutcome(name, "检索已安装应用", true, res.toString())
                 }
                 "whale_phone_launch" -> {
-                    val pkg = args.optString("packageName", "").trim()
+                    val pkg = args.str("packageName", "").trim()
                     require(AccessibilityAutomationPolicy.validPackage(pkg)) { "包名无效或属于受保护系统组件" }
                     val intent = app.packageManager.getLaunchIntentForPackage(pkg)
                         ?: throw IllegalStateException("找不到应用启动入口：$pkg")
@@ -609,7 +615,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, "执行返回键", res.ok, res.text, mutating = true)
                 }
                 "whale_phone_global" -> {
-                    val cmd = args.optString("command", "status").trim()
+                    val cmd = args.str("command", "status").trim()
                     if (cmd == "status") {
                         val ready = DeepSeekAccessibilityService.current() != null
                         ToolOutcome(name, "检查无障碍屏控状态", true, JSONObject().put("accessibilityConnected", ready).toString())
@@ -617,7 +623,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         require(cmd in setOf("tap", "inputText")) { "不支持的全局屏控命令：$cmd" }
                         val service = DeepSeekAccessibilityService.current()
                             ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
-                        val res = service.execute(cmd, args.optString("param", ""))
+                        val res = service.execute(cmd, args.str("param", ""))
                         ToolOutcome(name, "执行屏控指令：$cmd", res.ok, res.text, mutating = true)
                     }
                 }
@@ -649,6 +655,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             )
         }
     }
+
+    private fun JSONObject.str(key: String, fallback: String = ""): String =
+        if (!has(key) || isNull(key)) fallback else optString(key, fallback)
 
     private fun schema(
         name: String,

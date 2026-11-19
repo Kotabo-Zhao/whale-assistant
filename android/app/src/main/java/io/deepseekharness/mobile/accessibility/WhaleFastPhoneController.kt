@@ -134,7 +134,7 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
     }
 
     private fun executeSingleAction(args: JSONObject): DeviceCommandResult {
-        val action = args.optString("action", "").trim().lowercase()
+        val action = args.str("action", "").trim().lowercase()
         if (action == "wait") {
             val ms = args.optLong("ms", 300L).coerceIn(50L, 2000L)
             SystemClock.sleep(ms)
@@ -170,8 +170,8 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
         longClick: Boolean,
     ): DeviceCommandResult {
         val ref = args.optInt("ref", -1)
-        val viewId = args.optString("viewId", "").trim()
-        val text = args.optString("text", "").trim()
+        val viewId = args.str("viewId", "").trim()
+        val text = args.str("text", "").trim()
         val hasCoords = args.has("x") && args.has("y")
 
         // Strategy 1: O(1) lookup from latest compact snapshot by #ref
@@ -246,7 +246,7 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
     }
 
     private fun performInput(root: AccessibilityNodeInfo, pkg: String, args: JSONObject): DeviceCommandResult {
-        val inputText = args.optString("text", "")
+        val inputText = args.str("text", "")
         if (inputText.isEmpty() || inputText.length > 512) {
             return DeviceCommandResult(false, 1, "输入文本为空或超过 512 字符", false, "ACCESSIBILITY_ACTION_INVALID")
         }
@@ -255,7 +255,7 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
         }
 
         val ref = args.optInt("ref", -1)
-        val viewId = args.optString("viewId", "").trim()
+        val viewId = args.str("viewId", "").trim()
         var target: AccessibilityNodeInfo? = when {
             viewId.isNotEmpty() -> findNodeByViewId(root, viewId)
             ref > 0 -> {
@@ -295,7 +295,7 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
         val metrics = service.resources.displayMetrics
         val w = metrics.widthPixels.toFloat().coerceAtLeast(320f)
         val h = metrics.heightPixels.toFloat().coerceAtLeast(480f)
-        val dir = args.optString("direction", "").trim().lowercase().ifEmpty {
+        val dir = args.str("direction", "").trim().lowercase().ifEmpty {
             if (action == "scroll_backward") "down" else "up"
         }
         val (x1, y1, x2, y2) = when (dir) {
@@ -451,6 +451,9 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
         }
         return null
     }
+
+    private fun JSONObject.str(key: String, fallback: String = ""): String =
+        if (!has(key) || isNull(key)) fallback else optString(key, fallback)
 
     companion object {
         private const val MAX_WALK_DEPTH = 24
