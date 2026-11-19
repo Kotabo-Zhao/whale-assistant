@@ -1,30 +1,59 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RuntimeBridge, WhaleNativeChatStreamEvent } from '../platform/types'
 import { WhaleChatScreen } from './WhaleChatScreen'
-import type { RuntimeBridge } from '../platform/types'
 
-describe('WhaleChatScreen（无 Harness 原生直连对话主界面）', () => {
-  it('展示零 Harness 入口的欢迎态，并支持点击灵感卡片直接调用原生 Agent', async () => {
+describe('WhaleChatScreen', () => {
+  beforeEach(() => {
     window.localStorage.clear()
-    const whaleNativeChat = vi.fn().mockResolvedValue({
-      reply: '已帮你梳理好今天的三项重点。',
-      steps: [{ tool: 'whale_memory_search', label: '检索本地记忆', ok: true, durationMs: 14 }],
-      model: 'deepseek-chat',
-      elapsedMs: 620,
-      mode: 'native_direct',
+  })
+
+  it('sends a message via whaleNativeChat, renders streamed deltas, and manages multiple sessions', async () => {
+    let emit: ((event: WhaleNativeChatStreamEvent) => void) | undefined
+    const whaleNativeChat = vi.fn().mockImplementation((req: { requestId?: string; sessionId?: string }) => {
+      emit?.({
+        requestId: req.requestId ?? '',
+        sessionId: req.sessionId ?? 'whale-main',
+        type: 'step',
+        step: { tool: 'whale_memory_search', label: '已检索记忆（2 条）', ok: true, durationMs: 18 },
+      })
+      emit?.({
+        requestId: req.requestId ?? '',
+        sessionId: req.sessionId ?? 'whale-main',
+        type: 'delta',
+        text: '你好，流式',
+      })
+      return Promise.resolve({
+        reply: '你好，流式回复已完成。',
+        steps: [{ tool: 'whale_memory_search', label: '已检索记忆（2 条）', ok: true, durationMs: 18 }],
+        model: 'deepseek-chat',
+        elapsedMs: 420,
+        mode: 'native_direct_sse',
+      })
     })
+    const addWhaleChatListener = vi.fn().mockImplementation((listener: (event: WhaleNativeChatStreamEvent) => void) => {
+      emit = listener
+      return Promise.resolve({ remove: vi.fn().mockResolvedValue(undefined) })
+    })
+    const bridge = { whaleNativeChat, addWhaleChatListener } as unknown as RuntimeBridge
     const onNavigate = vi.fn()
-    const bridge = { whaleNativeChat } as unknown as RuntimeBridge
 
     render(<WhaleChatScreen bridge={bridge} onNavigate={onNavigate} />)
+    fireEvent.change(screen.getByLabelText('输入消息'), { target: { value: '帮我查一下记忆' } })
+    fireEvent.click(screen.getByLabelText('发送'))
 
-    expect(screen.getByText('今天想一起做点什么？')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('整理今日待办'))
-
-    await waitFor(() => {
-      expect(screen.getByText('已帮你梳理好今天的三项重点。')).toBeInTheDocument()
-    })
-    expect(whaleNativeChat).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.getByText('你好，流式回复已完成。')).toBeInTheDocument())
     expect(screen.getByText('已调用 1 项原生能力')).toBeInTheDocument()
+
+    // Open sessions drawer and create a new session
+    fireEvent.click(screen.getByLabelText('会话列表'))
+    expect(screen.getByText(/对话会话/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText('新建会话'))
+    expect(screen.getByText('今天想一起做点什么？')).toBeInTheDocument()
+
+    // Switch back to the first session and verify history persisted
+    fireEvent.click(screen.getByLabelText('会话列表'))
+    fireEvent.click(screen.getByText('帮我查一下记忆'))
+    expect(screen.getByText('你好，流式回复已完成。')).toBeInTheDocument()
   })
 })

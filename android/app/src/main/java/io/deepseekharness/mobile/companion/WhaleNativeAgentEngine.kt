@@ -15,11 +15,18 @@ import java.util.UUID
  * Whale 原生 Super Agent 引擎（彻底脱离 DeepSeek Harness / PRoot / Node）。
  *
  * 直接在 Android 原生层执行 OpenAI 兼容多轮 Function Calling 循环：
- * - 秒级启动、零容器开销；
- * - 按意图动态裁剪工具 Schema；
+ * - 原生 SSE（Server-Sent Events）逐字流式输出，降低首字延迟；
+ * - 完整支持流式 tool_calls 增量拼接与非流式 JSON 自动回退；
+ * - 429 / 5xx 瞬时故障自动退避重试一次；
  * - 写入/创作类工具调用写入 [UnifiedExecutionLedger]（SQLite WAL）追踪状态。
  */
 internal class WhaleNativeAgentEngine(private val context: Context) {
+    interface StreamListener {
+        fun onDelta(chunk: String) {}
+        fun onStep(step: StepRecord) {}
+        fun onPhase(phase: String) {}
+    }
+
     data class StepRecord(
         val tool: String,
         val label: String,
@@ -38,7 +45,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val steps: List<StepRecord>,
         val model: String,
         val elapsedMs: Long,
-        val mode: String = "native_direct",
+        val mode: String = "native_direct_sse",
     ) {
         fun json(): JSONObject {
             val stepsArr = JSONArray()
@@ -52,6 +59,11 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
     }
 
+    private data class AssistantTurn(
+        val content: String,
+        val toolCalls: JSONArray?,
+    )
+
     private val app = context.applicationContext
     private val tools = WhaleNativeToolRegistry(app)
     private val ledger = UnifiedExecutionLedger(app)
@@ -60,6 +72,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         userMessage: String,
         history: List<Pair<String, String>> = emptyList(),
         sessionId: String = "whale-main",
+        listener: StreamListener? = null,
     ): ChatResult {
         val startedAt = System.currentTimeMillis()
         val trimmed = userMessage.trim()
@@ -76,7 +89,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 .put("role", "system")
                 .put("content", buildSystemPrompt()),
         )
-        history.takeLast(12).forEach { (role, text) ->
+        history.takeLast(14).forEach { (role, text) ->
             if (role in setOf("user", "assistant") && text.isNotBlank()) {
                 messages.put(JSONObject().put("role", role).put("content", text.take(6000)))
             }
@@ -87,20 +100,27 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         var finalReply = ""
 
         for (round in 0 until MAX_TOOL_ROUNDS) {
-            val response = callChatCompletions(endpoint, messages, if (toolSchemas.length() > 0) toolSchemas else null)
-            val choice = response.optJSONArray("choices")?.optJSONObject(0)
-                ?: throw IllegalStateException("模型服务未返回有效内容")
-            val message = choice.optJSONObject("message")
-                ?: throw IllegalStateException("模型响应缺少 message 字段")
-            val content = message.optString("content", "").trim()
-            val toolCalls = message.optJSONArray("tool_calls")
+            listener?.onPhase(if (round == 0) "thinking" else "synthesizing")
+            val turn = callChatCompletionsWithRetry(
+                endpoint = endpoint,
+                messages = messages,
+                toolsArray = if (toolSchemas.length() > 0) toolSchemas else null,
+                listener = listener,
+            )
+            val content = turn.content.trim()
+            val toolCalls = turn.toolCalls
 
             if (toolCalls == null || toolCalls.length() == 0) {
                 finalReply = content.ifBlank { "已完成处理。" }
                 break
             }
 
-            messages.put(message)
+            val assistantMsg = JSONObject()
+                .put("role", "assistant")
+                .put("content", if (content.isEmpty()) JSONObject.NULL else content)
+                .put("tool_calls", toolCalls)
+            messages.put(assistantMsg)
+
             for (i in 0 until toolCalls.length()) {
                 val call = toolCalls.optJSONObject(i) ?: continue
                 val callId = call.optString("id", UUID.randomUUID().toString())
@@ -109,6 +129,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val fnArgs = fn.optString("arguments", "{}")
                 val opId = "native-${sessionId.take(16)}-$round-$callId"
                 val mutating = tools.isMutating(fnName)
+                listener?.onPhase("tool:$fnName")
                 if (mutating) {
                     ledger.recordIntent(opId, sessionId, "native-router", round.toLong(), fnName)
                     ledger.transition(opId, UnifiedExecutionLedger.State.DISPATCHING)
@@ -123,7 +144,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         outcome.label,
                     )
                 }
-                steps += StepRecord(fnName, outcome.label, outcome.ok, dt)
+                val step = StepRecord(fnName, outcome.label, outcome.ok, dt)
+                steps += step
+                listener?.onStep(step)
                 messages.put(
                     JSONObject()
                         .put("role", "tool")
@@ -171,9 +194,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
     }
 
     private fun buildSystemPrompt(): String = buildString {
-        append("你是 Whale Assistant（鲸鱼助手），运行在用户手机上的个人 Super Agent。\n")
+        append("你是 Whale Assistant（鲸鱼助手），运行在用户手机上的 100% 原生个人 Super Agent。\n")
         append("风格要求：简洁、自然、直接、有温度，像一个靠谱的私人助理，不堆砌机械术语或多余确认。\n")
-        append("当需要查询记忆、主人档案、后台任务或创作工坊离线小工具时，直接调用已提供的工具并基于真实结果作答。\n")
+        append("当需要查询记忆、资料库、主人档案、待办秘书、本地代码项目、创作工坊小工具或操作手机时，直接调用已提供的原生工具并基于真实结果作答。\n")
         runCatching {
             val owner = OwnerContext(app).read()
             val prompt = OwnerContext.prompt(owner)
@@ -181,11 +204,41 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
     }
 
-    private fun callChatCompletions(endpoint: Endpoint, messages: JSONArray, toolsArray: JSONArray?): JSONObject {
+    private fun callChatCompletionsWithRetry(
+        endpoint: Endpoint,
+        messages: JSONArray,
+        toolsArray: JSONArray?,
+        listener: StreamListener?,
+    ): AssistantTurn {
+        var lastError: Throwable? = null
+        for (attempt in 0..1) {
+            try {
+                return callChatCompletions(endpoint, messages, toolsArray, listener)
+            } catch (error: TransientHttpException) {
+                lastError = error
+                if (attempt == 0) {
+                    runCatching { Thread.sleep(800L) }
+                    continue
+                }
+                throw error
+            }
+        }
+        throw lastError ?: IllegalStateException("模型请求失败")
+    }
+
+    private class TransientHttpException(message: String) : IllegalStateException(message)
+
+    private fun callChatCompletions(
+        endpoint: Endpoint,
+        messages: JSONArray,
+        toolsArray: JSONArray?,
+        listener: StreamListener?,
+    ): AssistantTurn {
+        val wantStream = listener != null
         val body = JSONObject()
             .put("model", endpoint.model)
             .put("messages", messages)
-            .put("stream", false)
+            .put("stream", wantStream)
         if (toolsArray != null && toolsArray.length() > 0) {
             body.put("tools", toolsArray)
             body.put("tool_choice", "auto")
@@ -194,26 +247,110 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val conn = (URL(endpoint.url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 20_000
-            readTimeout = 60_000
+            readTimeout = 90_000
             doOutput = true
             setRequestProperty("Authorization", "Bearer ${endpoint.apiKey}")
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            if (wantStream) setRequestProperty("Accept", "text/event-stream, application/json")
         }
         try {
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val text = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
             if (code !in 200..299) {
-                throw IllegalStateException("模型接口返回 HTTP $code：${text.take(240)}")
+                val errText = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
+                val msg = "模型接口返回 HTTP $code：${errText.take(240)}"
+                if (code == 429 || code in 502..504) throw TransientHttpException(msg)
+                throw IllegalStateException(msg)
             }
-            return JSONObject(text)
+            val contentType = conn.contentType.orEmpty().lowercase()
+            if (wantStream && contentType.contains("text/event-stream")) {
+                return parseSseResponse(BufferedReader(InputStreamReader(stream, Charsets.UTF_8)), listener)
+            }
+            val text = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
+            val response = JSONObject(text)
+            val choice = response.optJSONArray("choices")?.optJSONObject(0)
+                ?: throw IllegalStateException("模型服务未返回有效内容")
+            val message = choice.optJSONObject("message")
+                ?: throw IllegalStateException("模型响应缺少 message 字段")
+            val content = message.optString("content", "")
+            if (content.isNotEmpty() && listener != null) {
+                listener.onDelta(content)
+            }
+            return AssistantTurn(content, message.optJSONArray("tool_calls"))
         } finally {
             conn.disconnect()
         }
     }
 
+    private fun parseSseResponse(reader: BufferedReader, listener: StreamListener?): AssistantTurn {
+        val contentBuilder = StringBuilder()
+        val toolAccumulators = linkedMapOf<Int, MutableToolCall>()
+
+        reader.useLines { lines ->
+            for (rawLine in lines) {
+                val line = rawLine.trim()
+                if (line.isEmpty() || !line.startsWith("data:")) continue
+                val payload = line.removePrefix("data:").trim()
+                if (payload == "[DONE]") break
+                val chunk = runCatching { JSONObject(payload) }.getOrNull() ?: continue
+                val delta = chunk.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: continue
+
+                val deltaText = delta.optString("content", "")
+                if (deltaText.isNotEmpty()) {
+                    contentBuilder.append(deltaText)
+                    listener?.onDelta(deltaText)
+                }
+
+                val deltaCalls = delta.optJSONArray("tool_calls")
+                if (deltaCalls != null) {
+                    for (i in 0 until deltaCalls.length()) {
+                        val tc = deltaCalls.optJSONObject(i) ?: continue
+                        val idx = tc.optInt("index", i)
+                        val acc = toolAccumulators.getOrPut(idx) { MutableToolCall() }
+                        val id = tc.optString("id", "")
+                        if (id.isNotEmpty()) acc.id = id
+                        val fn = tc.optJSONObject("function")
+                        if (fn != null) {
+                            val namePart = fn.optString("name", "")
+                            if (namePart.isNotEmpty()) acc.name.append(namePart)
+                            val argsPart = fn.optString("arguments", "")
+                            if (argsPart.isNotEmpty()) acc.arguments.append(argsPart)
+                        }
+                    }
+                }
+            }
+        }
+
+        val toolCalls = if (toolAccumulators.isEmpty()) {
+            null
+        } else {
+            JSONArray().apply {
+                toolAccumulators.values.forEach { acc ->
+                    put(
+                        JSONObject()
+                            .put("id", acc.id.ifBlank { UUID.randomUUID().toString() })
+                            .put("type", "function")
+                            .put(
+                                "function",
+                                JSONObject()
+                                    .put("name", acc.name.toString())
+                                    .put("arguments", acc.arguments.toString().ifBlank { "{}" }),
+                            ),
+                    )
+                }
+            }
+        }
+        return AssistantTurn(contentBuilder.toString(), toolCalls)
+    }
+
+    private class MutableToolCall {
+        var id: String = ""
+        val name = StringBuilder()
+        val arguments = StringBuilder()
+    }
+
     companion object {
-        private const val MAX_TOOL_ROUNDS = 5
+        private const val MAX_TOOL_ROUNDS = 6
     }
 }

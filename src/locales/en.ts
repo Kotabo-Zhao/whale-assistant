@@ -2227,4 +2227,12 @@ export const english: Readonly<Record<string, string>> = {
 
   "新对话": "New chat",
   "复制回复": "Copy reply",
+  "原生直连 · 流式加速": "Native direct · Streaming",
+  "本地会话管理": "Local sessions",
+  "对话会话": "Conversations",
+  "输入会话名称": "Session name",
+  "条": "msgs",
+  "重命名会话": "Rename session",
+  "正在调用原生能力…": "Running native tool…",
+  "正在整理回答…": "Synthesizing reply…",
 }

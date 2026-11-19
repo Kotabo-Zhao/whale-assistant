@@ -124,7 +124,7 @@ import {
 } from './validation'
 
 interface NativeRuntimePlugin {
-  whaleNativeChat(request: { message: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; sessionId?: string }): Promise<{ reply: string; steps: Array<{ tool: string; label: string; ok: boolean; durationMs: number }>; model: string; elapsedMs: number; mode: string }>
+  whaleNativeChat(request: { message: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; sessionId?: string; requestId?: string }): Promise<{ reply: string; steps: Array<{ tool: string; label: string; ok: boolean; durationMs: number }>; model: string; elapsedMs: number; mode: string }>
   setHarnessViewport(options: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
   listHarnessReleases(): Promise<unknown>
   manageHarnessVersions(options: { operation: HarnessVersionOperation; version?: string }): Promise<unknown>
@@ -310,6 +310,7 @@ interface NativeRuntimePlugin {
   addListener(eventName: 'terminalOutput', listener: (event: TerminalChunk) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'terminalExit', listener: (event: TerminalExit) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'harnessProgress', listener: (event: HarnessProgress) => void): Promise<PluginListenerHandle>
+  addListener(eventName: 'whaleNativeChatEvent', listener: (event: { requestId: string; sessionId: string; type: 'delta' | 'step' | 'phase'; text?: string; step?: { tool: string; label: string; ok: boolean; durationMs: number }; phase?: string }) => void): Promise<PluginListenerHandle>
 }
 
 const MAX_TERMINAL_INPUT_BYTES = 256 * 1024
@@ -758,6 +759,7 @@ function createNativeBridge(): RuntimeBridge {
     testModelConnectivity: options => NativeRuntime.testModelConnectivity(options).then(validateModelConnectivityResult),
     listModelCatalog: options => NativeRuntime.listModelCatalog(options).then(validateModelCatalogResult),
     whaleNativeChat: request => NativeRuntime.whaleNativeChat(request),
+    addWhaleChatListener: listener => NativeRuntime.addListener('whaleNativeChatEvent', listener),
   }
 }
 

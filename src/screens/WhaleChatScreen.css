@@ -382,3 +382,132 @@
 :root[data-style='cute'] .whale-msg-bubble {
   border-radius: 22px;
 }
+
+.whale-icon-chip.is-active {
+  background: var(--blue-soft);
+  color: var(--blue);
+  border-color: var(--blue-line);
+}
+
+.whale-sessions-drawer {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.whale-sessions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.whale-session-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--blue-line);
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 0.78rem;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.whale-sessions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.whale-sessions-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+}
+
+.whale-sessions-list li.is-active {
+  background: var(--blue-soft);
+  border-color: var(--blue-line);
+}
+
+.whale-session-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.86rem;
+  text-align: left;
+  padding: 5px 6px;
+  cursor: pointer;
+}
+
+.whale-session-select span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whale-session-select small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  flex-shrink: 0;
+}
+
+.whale-session-action {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.whale-session-action:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.whale-session-rename {
+  flex: 1 1 auto;
+}
+
+.whale-session-rename input {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 0.86rem;
+  border: 1px solid var(--blue-line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.whale-streaming::after {
+  content: '▍';
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--blue);
+  animation: whale-pulse-soft 0.9s ease-in-out infinite;
+}

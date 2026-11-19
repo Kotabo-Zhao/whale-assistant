@@ -4796,6 +4796,7 @@ class MobileRuntimePlugin : Plugin() {
             return
         }
         val sessionId = call.getString("sessionId")?.takeIf(String::isNotBlank) ?: "whale-main"
+        val requestId = call.getString("requestId")?.takeIf(String::isNotBlank) ?: java.util.UUID.randomUUID().toString()
         val rawHistory = call.getArray("history")
         val history = ArrayList<Pair<String, String>>()
         if (rawHistory != null) {
@@ -4809,7 +4810,39 @@ class MobileRuntimePlugin : Plugin() {
         java.util.concurrent.Executors.newSingleThreadExecutor().execute {
             try {
                 val engine = io.deepseekharness.mobile.companion.WhaleNativeAgentEngine(context)
-                val result = engine.send(message, history, sessionId)
+                val listener = object : io.deepseekharness.mobile.companion.WhaleNativeAgentEngine.StreamListener {
+                    override fun onDelta(chunk: String) {
+                        notifyListeners(
+                            "whaleNativeChatEvent",
+                            JSObject()
+                                .put("requestId", requestId)
+                                .put("sessionId", sessionId)
+                                .put("type", "delta")
+                                .put("text", chunk),
+                        )
+                    }
+                    override fun onStep(step: io.deepseekharness.mobile.companion.WhaleNativeAgentEngine.StepRecord) {
+                        notifyListeners(
+                            "whaleNativeChatEvent",
+                            JSObject()
+                                .put("requestId", requestId)
+                                .put("sessionId", sessionId)
+                                .put("type", "step")
+                                .put("step", JSObject.fromJSONObject(step.json())),
+                        )
+                    }
+                    override fun onPhase(phase: String) {
+                        notifyListeners(
+                            "whaleNativeChatEvent",
+                            JSObject()
+                                .put("requestId", requestId)
+                                .put("sessionId", sessionId)
+                                .put("type", "phase")
+                                .put("phase", phase),
+                        )
+                    }
+                }
+                val result = engine.send(message, history, sessionId, listener)
                 call.resolve(JSObject.fromJSONObject(result.json()))
             } catch (error: Throwable) {
                 call.reject(error.message ?: "原生对话执行失败", error as? Exception)
