@@ -5545,7 +5545,7 @@ export function App() {
       <AppBackground />
       <AppSidebar activeView={activeView} onNavigate={setActiveView} />
       <div className="app-frame">
-        <header className="mobile-header">
+        {activeView !== 'whale-chat' && <header className="mobile-header">
           <button className="header-brand-group brand-home" type="button" aria-label={t('鲸鱼助手')} onClick={() => setActiveView(canEnterConversation(runtime, settings) && !conversationEntrySuppressed.current ? 'harness' : 'conversation')}><Brand /></button>
           <div className="header-actions">
             <PhaseBadge phase={runtime.phase} />
@@ -5558,10 +5558,10 @@ export function App() {
               </button>
             )}
           </div>
-        </header>
+        </header>}
 
         {/* 切换页面后从顶部重新渲染，不保留上一页的滚动位置。 */}
-        <main className="app-main" key={activeView}><Suspense fallback={<div className="terminal-loading" role="status">{t("正在加载页面…")}</div>}>{screen}</Suspense></main>
+        <main className={activeView === 'whale-chat' ? 'app-main is-chat-main' : 'app-main'} key={activeView}><Suspense fallback={<div className="terminal-loading" role="status">{t("正在加载页面…")}</div>}>{screen}</Suspense></main>
       </div>
       <BottomNavigation activeView={activeView} onNavigate={setActiveView} />
 

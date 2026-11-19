@@ -14,9 +14,7 @@ import {
   MessageSquarePlus,
   MessagesSquare,
   Pencil,
-  Settings2,
   Slash,
-  Sparkles,
   Trash2,
   Wrench,
   X,
@@ -446,14 +444,8 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     <section className="whale-chat-screen" aria-label={t('鲸鱼助手对话')}>
       <header className="whale-chat-header">
         <div className="whale-chat-brand">
-          <img src={headerMark} alt="" width={30} height={30} className="whale-brand-avatar" />
-          <div>
-            <h1>{currentSession.title === '新对话' ? t('鲸鱼助手') : currentSession.title}</h1>
-            <span className="whale-chat-badge">
-              <Sparkles size={12} aria-hidden="true" />
-              {t('原生直连 · 流式加速')}
-            </span>
-          </div>
+          <img src={headerMark} alt="" width={28} height={28} className="whale-brand-avatar" />
+          <h1>{currentSession.title === '新对话' ? t('鲸鱼助手') : currentSession.title}</h1>
         </div>
         <div className="whale-chat-shortcuts" aria-label={t('常用功能入口')}>
           <button
@@ -464,7 +456,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             aria-expanded={sessionsOpen}
             onClick={() => setSessionsOpen(open => !open)}
           >
-            <MessagesSquare size={16} />
+            <MessagesSquare size={17} />
           </button>
           <button
             type="button"
@@ -474,19 +466,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             disabled={sending}
             onClick={startNewSession}
           >
-            <MessageSquarePlus size={16} />
-          </button>
-          <button type="button" className="whale-icon-chip" title={t('记忆与资料')} aria-label={t('记忆与资料')} onClick={() => onNavigate('assistant-memory')}>
-            <BookOpen size={17} />
-          </button>
-          <button type="button" className="whale-icon-chip" title={t('事项与日程')} aria-label={t('事项与日程')} onClick={() => onNavigate('assistant-tasks')}>
-            <ListTodo size={17} />
-          </button>
-          <button type="button" className="whale-icon-chip" title={t('功能工坊')} aria-label={t('功能工坊')} onClick={() => onNavigate('tools')}>
-            <Hammer size={17} />
-          </button>
-          <button type="button" className="whale-icon-chip" title={t('设置')} aria-label={t('设置')} onClick={() => onNavigate('settings')}>
-            <Settings2 size={17} />
+            <MessageSquarePlus size={17} />
           </button>
         </div>
       </header>
@@ -619,7 +599,20 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             </div>
             <span className="whale-cute-greeting">{t('主人，小鲸鱼一直都在哦～')}</span>
             <h2>{t('今天想一起做点什么？')}</h2>
-            <p>{t('已脱离 DeepSeek Harness 独立运行，随时可以聊天、查记忆、管事项或一句话造个小工具。')}</p>
+            <div className="whale-quick-hub" aria-label={t('快捷空间')}>
+              <button type="button" className="whale-hub-pill" onClick={() => onNavigate('assistant-memory')}>
+                <BookOpen size={14} aria-hidden="true" />
+                {t('记忆与资料')}
+              </button>
+              <button type="button" className="whale-hub-pill" onClick={() => onNavigate('assistant-tasks')}>
+                <ListTodo size={14} aria-hidden="true" />
+                {t('事项与日程')}
+              </button>
+              <button type="button" className="whale-hub-pill" onClick={() => onNavigate('tools')}>
+                <Hammer size={14} aria-hidden="true" />
+                {t('功能工坊')}
+              </button>
+            </div>
             <div className="whale-starter-grid">
               {STARTER_PROMPTS.map(item => (
                 <button

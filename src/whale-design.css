@@ -593,3 +593,11 @@ textarea {
   content-visibility: auto;
   contain-intrinsic-size: auto 68px;
 }
+
+/* Zero-Overlap Full-Height Chat Frame */
+.app-main.is-chat-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
