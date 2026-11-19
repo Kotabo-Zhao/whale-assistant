@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bell, Accessibility, Sparkles } from 'lucide-react'
 import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
@@ -12,45 +12,62 @@ import {
 
 const STORAGE_KEY = 'whale.autonomyPreset.v1'
 
-const PRESET_NATIVE_FLAGS: Record<AutonomyPresetId, Array<[keyof CompanionQuickSettings, boolean]>> = {
-  fluent: [
-    ['memoryEnabled', true],
-    ['bubbleMemoryAccess', true],
-    ['notificationCapture', true],
-    ['knowledgeModelAccess', true],
-    ['knowledgeModelWrite', true],
-    ['automaticAssistantMemory', true],
-    ['automaticNotificationMemory', true],
-    ['automaticUsageMemory', true],
-    ['notificationBubbles', true],
-    ['candidateNotifications', true],
-    ['contextFollowup', true],
-    ['reminders', true],
-  ],
-  balanced: [
-    ['memoryEnabled', true],
-    ['bubbleMemoryAccess', true],
-    ['notificationCapture', true],
-    ['knowledgeModelAccess', true],
-    ['knowledgeModelWrite', false],
-    ['automaticAssistantMemory', false],
-    ['automaticNotificationMemory', false],
-    ['automaticUsageMemory', false],
-    ['notificationBubbles', true],
-    ['candidateNotifications', false],
-    ['contextFollowup', true],
-    ['reminders', true],
-  ],
-  strict: [
-    ['notificationCapture', false],
-    ['knowledgeModelWrite', false],
-    ['automaticAssistantMemory', false],
-    ['automaticNotificationMemory', false],
-    ['automaticUsageMemory', false],
-    ['notificationBubbles', false],
-    ['candidateNotifications', false],
-    ['contextFollowup', false],
-  ],
+type MasterSwitchKey = 'masterPetFullAccess' | 'masterMemoryAndRag' | 'masterProactiveAndNotify'
+
+const MASTER_SWITCHES: Array<{ key: MasterSwitchKey; title: string; hint: string }> = [
+  {
+    key: 'masterPetFullAccess',
+    title: '桌宠与后台 Worker 完全权限',
+    hint: '赋予桌宠与 App 主界面同等完全权限，可直接读写记忆资料、调用工具并派发后台 Worker。',
+  },
+  {
+    key: 'masterMemoryAndRag',
+    title: '记忆、资料库与后台理解全自动',
+    hint: '合并长期记忆、资料库读写、自动提取偏好与后台语义理解，一键全开。',
+  },
+  {
+    key: 'masterProactiveAndNotify',
+    title: '主动陪伴、通知与日程简报',
+    hint: '合并通知摘要、桌面气泡、日历读取、休息提醒与每日简报。',
+  },
+]
+
+const PRESET_MASTER_FLAGS: Record<AutonomyPresetId, Record<MasterSwitchKey, boolean>> = {
+  fluent: {
+    masterPetFullAccess: true,
+    masterMemoryAndRag: true,
+    masterProactiveAndNotify: true,
+  },
+  balanced: {
+    masterPetFullAccess: true,
+    masterMemoryAndRag: true,
+    masterProactiveAndNotify: false,
+  },
+  strict: {
+    masterPetFullAccess: false,
+    masterMemoryAndRag: false,
+    masterProactiveAndNotify: false,
+  },
+}
+
+function readMasterState(snapshot: CompanionQuickSettings | null): Record<MasterSwitchKey, boolean> {
+  if (!snapshot) {
+    return {
+      masterPetFullAccess: true,
+      masterMemoryAndRag: true,
+      masterProactiveAndNotify: false,
+    }
+  }
+  return {
+    masterPetFullAccess:
+      snapshot.masterPetFullAccess ?? (snapshot.bubbleMemoryAccess && snapshot.knowledgeModelAccess),
+    masterMemoryAndRag:
+      snapshot.masterMemoryAndRag ??
+      (snapshot.memoryEnabled && snapshot.knowledgeModelAccess && snapshot.knowledgeModelWrite),
+    masterProactiveAndNotify:
+      snapshot.masterProactiveAndNotify ??
+      (snapshot.notificationCapture && snapshot.notificationBubbles && snapshot.reminders),
+  }
 }
 
 export interface WhaleAutonomyCardProps {
@@ -71,12 +88,32 @@ export function WhaleAutonomyCard({
       return DEFAULT_AUTONOMY_PRESET
     }
   })
+  const [masters, setMasters] = useState<Record<MasterSwitchKey, boolean>>(() =>
+    PRESET_MASTER_FLAGS[resolveAutonomyPreset(autonomyId).id],
+  )
   const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  useEffect(() => {
+    let active = true
+    void Promise.resolve()
+      .then(() => runtimeBridge.getCompanionQuickSettings())
+      .then(snapshot => {
+        if (active && snapshot) setMasters(readMasterState(snapshot))
+      })
+      .catch(() => {
+        // Keep local preset defaults on web preview.
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const activeAutonomy = resolveAutonomyPreset(autonomyId)
 
   const selectAutonomy = async (id: AutonomyPresetId): Promise<void> => {
     setAutonomyId(id)
+    const nextMasters = PRESET_MASTER_FLAGS[id]
+    setMasters(nextMasters)
     setSyncState('saving')
     try {
       window.localStorage.setItem(STORAGE_KEY, id)
@@ -84,10 +121,23 @@ export function WhaleAutonomyCard({
       // Ignore private-mode storage errors.
     }
     try {
-      const updates = PRESET_NATIVE_FLAGS[id]
-      for (const [field, value] of updates) {
-        await runtimeBridge.setCompanionQuickSetting(field, value)
+      let latest: CompanionQuickSettings | null = null
+      for (const key of Object.keys(nextMasters) as MasterSwitchKey[]) {
+        latest = await runtimeBridge.setCompanionQuickSetting(key, nextMasters[key])
       }
+      if (latest) setMasters(readMasterState(latest))
+      setSyncState('saved')
+    } catch {
+      setSyncState('error')
+    }
+  }
+
+  const toggleMaster = async (key: MasterSwitchKey, value: boolean): Promise<void> => {
+    setMasters(prev => ({ ...prev, [key]: value }))
+    setSyncState('saving')
+    try {
+      const latest = await runtimeBridge.setCompanionQuickSetting(key, value)
+      if (latest) setMasters(readMasterState(latest))
       setSyncState('saved')
     } catch {
       setSyncState('error')
@@ -122,6 +172,23 @@ export function WhaleAutonomyCard({
         ))}
       </div>
       <p className="whale-autonomy-desc">{t(activeAutonomy.description)}</p>
+      <div className="whale-master-switches" aria-label={t('核心权限总开关')}>
+        {MASTER_SWITCHES.map(item => (
+          <label key={item.key} className="whale-master-row">
+            <span className="whale-master-copy">
+              <strong>{t(item.title)}</strong>
+              <small>{t(item.hint)}</small>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={masters[item.key]}
+              disabled={syncState === 'saving'}
+              onChange={event => { void toggleMaster(item.key, event.target.checked) }}
+            />
+          </label>
+        ))}
+      </div>
       {(onOpenOverlay || onOpenAccessibility || onOpenNotifications) && (
         <div className="whale-perm-shortcuts" aria-label={t('系统权限快捷授权')}>
           {onOpenOverlay && (

@@ -1647,6 +1647,9 @@ export interface CompanionQuickSettings {
   automaticAssistantMemory: boolean
   reminders: boolean
   quietHoursEnabled: boolean
+  masterMemoryAndRag?: boolean
+  masterPetFullAccess?: boolean
+  masterProactiveAndNotify?: boolean
 }
 
 export interface RuntimeBridge {

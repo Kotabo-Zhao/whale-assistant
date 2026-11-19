@@ -4243,6 +4243,9 @@ class MobileRuntimePlugin : Plugin() {
             .put("automaticAssistantMemory", store.automaticAssistantMemory)
             .put("reminders", store.reminders)
             .put("quietHoursEnabled", store.quietHoursEnabled)
+            .put("masterMemoryAndRag", memory.enabled && store.knowledgeModelAccess && store.knowledgeModelWrite && store.automaticAssistantMemory)
+            .put("masterPetFullAccess", store.bubblePermissionPreset == "danger-full-access" && store.bubbleMemoryAccess && store.knowledgeModelAccess)
+            .put("masterProactiveAndNotify", store.notificationCapture && store.notificationBubbles && store.reminders && store.contextFollowup)
     }
 
     @PluginMethod
@@ -4252,7 +4255,7 @@ class MobileRuntimePlugin : Plugin() {
     fun setCompanionQuickSetting(call: PluginCall) {
         val field = call.getString("field")
         val value = call.getBoolean("value")
-        if (value == null || field !in setOf("memoryEnabled", "bubbleMemoryAccess", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled", "knowledgeModelAccess", "knowledgeModelWrite", "contextFollowup", "notificationMemorySuggestions", "automaticNotificationMemory", "automaticUsageMemory", "automaticAssistantMemory")) {
+        if (value == null || field !in setOf("memoryEnabled", "bubbleMemoryAccess", "notificationBubbles", "candidateNotifications", "notificationCapture", "reminders", "quietHoursEnabled", "knowledgeModelAccess", "knowledgeModelWrite", "contextFollowup", "notificationMemorySuggestions", "automaticNotificationMemory", "automaticUsageMemory", "automaticAssistantMemory", "masterMemoryAndRag", "masterPetFullAccess", "masterProactiveAndNotify")) {
             call.reject("无效的助手设置", "COMPANION_SETTING_INVALID"); return
         }
         execute(call) {
@@ -4275,6 +4278,41 @@ class MobileRuntimePlugin : Plugin() {
                 "automaticAssistantMemory" -> store.automaticAssistantMemory = value
                 "reminders" -> store.reminders = value
                 "quietHoursEnabled" -> store.quietHoursEnabled = value
+                "masterMemoryAndRag" -> {
+                    io.deepseekharness.mobile.companion.CompanionMemoryStore(context).enabled = value
+                    store.bubbleMemoryAccess = value
+                    store.knowledgeModelAccess = value
+                    store.knowledgeModelWrite = value
+                    store.automaticAssistantMemory = value
+                    store.automaticNotificationMemory = value
+                    store.automaticUsageMemory = value
+                    store.backgroundUnderstanding = value
+                    store.backgroundAutoMemory = value
+                    store.notificationMemorySuggestions = value
+                }
+                "masterPetFullAccess" -> {
+                    store.bubblePermissionPreset = if (value) "danger-full-access" else "default"
+                    if (value) {
+                        io.deepseekharness.mobile.companion.CompanionMemoryStore(context).enabled = true
+                        store.bubbleMemoryAccess = true
+                        store.knowledgeModelAccess = true
+                        store.knowledgeModelWrite = true
+                        store.contextFollowup = true
+                    }
+                }
+                "masterProactiveAndNotify" -> {
+                    store.notificationCapture = value
+                    store.notificationBubbles = value
+                    store.candidateNotifications = value
+                    store.notificationModelAccess = value
+                    store.calendarModelAccess = value
+                    store.proactiveMemoryChat = value
+                    store.modelInitiative = value
+                    store.dailyBriefEnabled = value
+                    store.reminders = value
+                    store.contextFollowup = value
+                    if (value) OverlayBallService.checkInitiativeAfterOptIn()
+                }
             }
             companionSettingsSnapshot()
         }

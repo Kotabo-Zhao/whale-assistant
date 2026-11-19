@@ -113,6 +113,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         if (includePet) {
             array.put(schema(
                 "whale_pet_control",
+        "whale_worker_submit",
+        "whale_worker_cancel",
                 "控制全屏悬浮桌宠：启动、隐藏关闭、调整尺寸或重置屏幕位置。",
                 mapOf(
                     "action" to "start / stop / resize / reset_position / state",
@@ -193,6 +195,13 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         if (includeDevice) {
             array.put(schema("whale_device_battery", "读取当前手机电池电量百分比与充电状态。", emptyMap(), emptyList()))
             array.put(schema("whale_worker_status", "查询当前活跃后台 Worker 任务数量与设备控制状态。", emptyMap(), emptyList()))
+            array.put(schema(
+                "whale_worker_submit",
+                "派发一个后台 Worker 异步执行长耗时任务（写代码、整理资料、多步查证或后台手机任务），桌宠与主界面均拥有完全派发权限。",
+                mapOf("task" to "完整清晰的后台任务说明", "title" to "可选简短任务标题", "mode" to "可选模式：create / read / device，默认 create"),
+                listOf("task"),
+            ))
+            array.put(schema("whale_worker_cancel", "取消一个正在运行的原生后台 Worker 任务。", mapOf("id" to "Worker 任务 ID"), listOf("id")))
         }
         if (array.length() == 0) {
             // 保底核心工具集：避免任意自然口语问句被关键词漏判导致“无工具可用”
@@ -207,6 +216,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_phone_launch", "在手机上启动指定包名的目标应用。", mapOf("packageName" to "目标应用完整包名"), listOf("packageName")))
             array.put(schema("whale_phone_ui_tree", "极速读取当前屏幕精简控件树。", emptyMap(), emptyList()))
             array.put(schema("whale_phone_action", "执行点击、输入、滑动、返回等原生屏控操作。", mapOf("action" to "click / input / swipe / back / home", "ref" to "可选 r 编号", "text" to "可选目标文字"), listOf("action")))
+            array.put(schema("whale_worker_submit", "派发后台 Worker 异步执行长耗时任务（桌宠与主界面同等完全权限）。", mapOf("task" to "后台任务说明", "title" to "可选短标题"), listOf("task")))
+            array.put(schema("whale_worker_status", "查询后台 Worker 任务执行状态。", emptyMap(), emptyList()))
         }
         return array
     }
@@ -656,6 +667,27 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .put("deviceControlPhase", phase)
                         .toString()
                     ToolOutcome(name, "检查后台任务状态", true, payload)
+                }
+                "whale_worker_submit" -> {
+                    val task = args.str("task").trim()
+                    require(task.isNotEmpty()) { "缺少后台任务说明 task" }
+                    val title = args.str("title").trim().takeIf { it.isNotEmpty() } ?: task.take(36)
+                    val mode = args.str("mode", "create").trim().takeIf { it in setOf("read", "device", "create") } ?: "create"
+                    val receipt = WorkerRuntimeWake.submit(
+                        context = app,
+                        task = task,
+                        mode = mode,
+                        title = title,
+                        needs = "none",
+                        sourceSession = null,
+                    )
+                    ToolOutcome(name, "已派发后台 Worker：$title", true, receipt.put("title", title).put("mode", mode).toString(), mutating = true)
+                }
+                "whale_worker_cancel" -> {
+                    val id = args.str("id").trim()
+                    require(id.isNotEmpty()) { "缺少 Worker ID" }
+                    val cancelled = WhaleNativeWorkerPool.cancel(id)
+                    ToolOutcome(name, if (cancelled) "已取消后台 Worker" else "未找到运行中的后台 Worker", cancelled, JSONObject().put("id", id).put("cancelled", cancelled).toString(), mutating = true)
                 }
                 else -> ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
             }

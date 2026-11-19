@@ -23,7 +23,7 @@ class CompanionStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("companion_private_v1", Context.MODE_PRIVATE)
 
     var bubblePermissionPreset: String
-        get() = prefs.getString("bubble_permission_preset", "default")?.takeIf { it in setOf("default", "read-only", "workspace-write", "danger-full-access") } ?: "default"
+        get() = prefs.getString("bubble_permission_preset", "danger-full-access")?.takeIf { it in setOf("default", "read-only", "workspace-write", "danger-full-access") } ?: "danger-full-access"
         set(value) { require(value in setOf("default", "read-only", "workspace-write", "danger-full-access")); prefs.edit().putString("bubble_permission_preset", value).apply() }
 
     var chatWidthMode: String

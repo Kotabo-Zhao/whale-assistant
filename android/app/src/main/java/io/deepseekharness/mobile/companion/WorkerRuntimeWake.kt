@@ -74,6 +74,21 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                         history = emptyList(),
                         sessionId = sourceSession?.takeIf(String::isNotBlank) ?: "whale-worker-$commandId",
                     )
+                    val finishedAt = System.currentTimeMillis()
+                    runCatching {
+                        val row = JSONObject()
+                            .put("id", commandId)
+                            .put("title", workerTitle)
+                            .put("input", task.take(2000))
+                            .put("mode", mode)
+                            .put("state", "done")
+                            .put("summary", res.reply.take(2000))
+                            .put("writeSeq", 1L)
+                            .put("createdAt", finishedAt)
+                            .put("updatedAt", finishedAt)
+                            .put("owner", sourceSession ?: "session-whale-task-desk")
+                        store.put(row)
+                    }
                     runCatching {
                         WorkerReportInbox(app).addCoordination(
                             JSONObject()
@@ -81,7 +96,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                                 .put("title", workerTitle)
                                 .put("summary", res.reply.take(800))
                                 .put("status", "completed")
-                                .put("atMs", System.currentTimeMillis()),
+                                .put("atMs", finishedAt),
                         )
                     }
                     res.reply
