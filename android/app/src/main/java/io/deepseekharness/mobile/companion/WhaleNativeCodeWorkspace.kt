@@ -1,0 +1,133 @@
+package io.deepseekharness.mobile.companion
+
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+
+/**
+ * 100% 纯原生 Kotlin 本地代码工程工作区（零 PRoot、零 Bash、零 Node 依赖）。
+ *
+ * 允许 Whale Native Agent 在受控目录（app filesDir/whale-projects）内创建项目、
+ * 读写多文件源码、按行查看与跨文件搜索；严格校验规范路径防止目录穿越。
+ */
+internal class WhaleNativeCodeWorkspace(private val rootDir: File) {
+    init {
+        rootDir.mkdirs()
+    }
+
+    private val canonicalRoot: File by lazy { rootDir.canonicalFile }
+
+    private fun resolveSafe(project: String, relativePath: String = ""): File {
+        val cleanProject = project.trim()
+        require(cleanProject.matches(Regex("[A-Za-z0-9._-]{1,64}"))) { "项目名称仅支持字母、数字、点、横线或下划线" }
+        val projectDir = File(canonicalRoot, cleanProject)
+        val target = if (relativePath.isBlank()) projectDir else File(projectDir, relativePath.trimStart('/'))
+        val canonicalTarget = target.canonicalFile
+        val rootPath = canonicalRoot.path
+        require(canonicalTarget.path == rootPath || canonicalTarget.path.startsWith(rootPath + File.separator)) {
+            "禁止访问代码工作区以外的路径"
+        }
+        return canonicalTarget
+    }
+
+    fun listFiles(project: String, subPath: String = ""): JSONObject {
+        val dir = resolveSafe(project, subPath)
+        val items = JSONArray()
+        if (dir.exists() && dir.isDirectory) {
+            dir.listFiles().orEmpty()
+                .sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name })
+                .take(MAX_LIST_ITEMS)
+                .forEach { file ->
+                    items.put(
+                        JSONObject()
+                            .put("name", file.name)
+                            .put("type", if (file.isDirectory) "dir" else "file")
+                            .put("bytes", if (file.isFile) file.length() else 0L),
+                    )
+                }
+        }
+        return JSONObject()
+            .put("project", project)
+            .put("path", subPath)
+            .put("items", items)
+    }
+
+    fun readFile(project: String, path: String, startLine: Int = 1, endLine: Int = 200): JSONObject {
+        require(path.isNotBlank()) { "请提供文件路径" }
+        val file = resolveSafe(project, path)
+        require(file.isFile) { "文件不存在：$path" }
+        require(file.length() <= MAX_FILE_BYTES) { "文件超过 512 KiB 读取上限" }
+        val lines = file.readLines(Charsets.UTF_8)
+        val from = startLine.coerceAtLeast(1)
+        val to = endLine.coerceIn(from, (from + 300).coerceAtMost(lines.size.coerceAtLeast(from)))
+        val slice = if (lines.isEmpty() || from > lines.size) {
+            ""
+        } else {
+            lines.subList(from - 1, to.coerceAtMost(lines.size))
+                .mapIndexed { idx, line -> "${from + idx}: $line" }
+                .joinToString("\n")
+        }
+        return JSONObject()
+            .put("project", project)
+            .put("path", path)
+            .put("totalLines", lines.size)
+            .put("startLine", from)
+            .put("endLine", to.coerceAtMost(lines.size))
+            .put("content", slice)
+    }
+
+    fun writeFile(project: String, path: String, content: String): JSONObject {
+        require(path.isNotBlank()) { "请提供文件路径" }
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        require(bytes.size <= MAX_FILE_BYTES) { "单文件写入上限为 512 KiB" }
+        val file = resolveSafe(project, path)
+        file.parentFile?.mkdirs()
+        val tmp = File(file.parentFile, ".${file.name}.tmp")
+        tmp.writeBytes(bytes)
+        if (!tmp.renameTo(file)) {
+            file.writeBytes(bytes)
+            tmp.delete()
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("project", project)
+            .put("path", path)
+            .put("bytes", bytes.size)
+    }
+
+    fun searchCode(project: String, query: String, maxMatches: Int = 40): JSONObject {
+        val needle = query.trim()
+        require(needle.isNotEmpty() && needle.length <= 120) { "搜索词长度无效" }
+        val base = resolveSafe(project)
+        val matches = JSONArray()
+        if (base.isDirectory) {
+            val bound = maxMatches.coerceIn(1, 80)
+            for (file in base.walkTopDown().maxDepth(8)) {
+                if (matches.length() >= bound) break
+                if (!file.isFile || file.length() > MAX_FILE_BYTES) continue
+                val rel = file.relativeTo(base).path.replace('\\', '/')
+                val lines = runCatching { file.readLines(Charsets.UTF_8) }.getOrNull() ?: continue
+                for ((idx, line) in lines.withIndex()) {
+                    if (line.contains(needle, ignoreCase = true)) {
+                        matches.put(
+                            JSONObject()
+                                .put("path", rel)
+                                .put("line", idx + 1)
+                                .put("text", line.trim().take(200)),
+                        )
+                        if (matches.length() >= bound) break
+                    }
+                }
+            }
+        }
+        return JSONObject()
+            .put("project", project)
+            .put("query", needle)
+            .put("matches", matches)
+    }
+
+    companion object {
+        const val MAX_FILE_BYTES = 512 * 1024
+        const val MAX_LIST_ITEMS = 200
+    }
+}
