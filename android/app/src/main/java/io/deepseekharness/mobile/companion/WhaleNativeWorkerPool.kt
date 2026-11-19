@@ -10,7 +10,8 @@ import java.util.concurrent.Future
 /**
  * 纯原生 Kotlin 后台 Worker 并发池（零 Node.js 依赖）。
  *
- * 用于在后台并发执行长耗时编码/资料整理/手机任务，支持即时查询状态与用户抢占取消。
+ * 用于在后台并发执行长耗时编码/资料整理/手机任务，支持与看板共享统一 ID、
+ * 即时查询状态、读取完整回传摘要以及用户抢占取消。
  */
 internal object WhaleNativeWorkerPool {
     data class WorkerEntry(
@@ -36,8 +37,7 @@ internal object WhaleNativeWorkerPool {
     }
     private val entries = ConcurrentHashMap<String, WorkerEntry>()
 
-    fun submit(title: String, block: () -> String): String {
-        val id = UUID.randomUUID().toString()
+    fun submit(title: String, id: String = UUID.randomUUID().toString(), block: () -> String): String {
         val entry = WorkerEntry(id = id, title = title.take(120), state = "running")
         entries[id] = entry
         entry.future = executor.submit {
@@ -45,12 +45,12 @@ internal object WhaleNativeWorkerPool {
                 val result = block()
                 if (entry.state == "running") {
                     entry.state = "completed"
-                    entry.summary = result.take(2000)
+                    entry.summary = result.take(4000)
                 }
             } catch (error: Throwable) {
                 if (entry.state != "cancelled") {
                     entry.state = "failed"
-                    entry.summary = (error.message ?: error.javaClass.simpleName).take(500)
+                    entry.summary = (error.message ?: error.javaClass.simpleName).take(800)
                 }
             } finally {
                 entry.finishedAtMs = System.currentTimeMillis()
@@ -58,6 +58,8 @@ internal object WhaleNativeWorkerPool {
         }
         return id
     }
+
+    fun get(id: String): JSONObject? = entries[id]?.json()
 
     fun cancel(id: String): Boolean {
         val entry = entries[id] ?: return false
@@ -74,5 +76,21 @@ internal object WhaleNativeWorkerPool {
         val arr = JSONArray()
         entries.values.sortedByDescending { it.startedAtMs }.take(20).forEach { arr.put(it.json()) }
         return arr
+    }
+
+    fun recentSummaries(limit: Int = 4): String {
+        val recent = entries.values.sortedByDescending { it.finishedAtMs.takeIf { ts -> ts > 0L } ?: it.startedAtMs }.take(limit)
+        if (recent.isEmpty()) return ""
+        return buildString {
+            append("\n以下是当前会话周期内后台 Worker 的最新状态与回传摘要（可直接向用户汇报，无需重复派发）：\n")
+            recent.forEach { e ->
+                append("- [").append(e.state).append("] ").append(e.title)
+                append(" (id=").append(e.id).append(")")
+                if (e.summary.isNotBlank()) {
+                    append("：").append(e.summary.replace("\n", " ").take(420))
+                }
+                append("\n")
+            }
+        }
     }
 }

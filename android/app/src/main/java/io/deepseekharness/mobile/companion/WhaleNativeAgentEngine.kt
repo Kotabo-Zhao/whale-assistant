@@ -211,6 +211,12 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (prompt.isNotBlank()) append("\n").append(prompt)
         }
         runCatching {
+            val inboxPrompt = WorkerReportInbox(app).prompt()
+            if (inboxPrompt.isNotBlank()) append(inboxPrompt.take(2400)).append("\n")
+            val poolPrompt = WhaleNativeWorkerPool.recentSummaries(4)
+            if (poolPrompt.isNotBlank()) append(poolPrompt.take(2000)).append("\n")
+        }
+        runCatching {
             val rag = WhaleNativeRagRetriever.retrieveContext(app, userQuery)
             if (rag.isNotBlank()) append(rag)
         }

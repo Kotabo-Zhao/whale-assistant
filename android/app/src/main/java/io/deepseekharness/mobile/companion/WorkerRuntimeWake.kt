@@ -65,41 +65,58 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                     }.onFailure { store.dispatchUnavailable(receipt.getString("commandId")) }
                 }
             } else {
-                // 100% 纯原生 Lite 模式：直接通过原生 Kotlin Worker 并发池执行，不依赖 PRoot/Harness
+                // 100% 纯原生 Lite 模式：直接通过原生 Kotlin Worker 并发池执行，共享统一 commandId，并在完成/失败时完整回传给 Router 与收件箱
                 val workerTitle = title?.takeIf(String::isNotBlank) ?: task.trim().take(42)
-                WhaleNativeWorkerPool.submit(workerTitle) {
-                    val engine = WhaleNativeAgentEngine(app)
-                    val res = engine.send(
-                        userMessage = task,
-                        history = emptyList(),
-                        sessionId = sourceSession?.takeIf(String::isNotBlank) ?: "whale-worker-$commandId",
-                    )
+                val ownerSession = sourceSession?.takeIf { BubbleSessionRegistry.valid(it) } ?: "session-whale-task-desk"
+                fun sha256Hex(raw: String): String {
+                    val digest = java.security.MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8))
+                    return digest.joinToString("") { "%02x".format(it) }
+                }
+                fun publishCallback(state: String, replyText: String) {
                     val finishedAt = System.currentTimeMillis()
+                    val cleanSummary = replyText.trim().ifBlank { if (state == "done") "任务已执行完成。" else "任务执行失败。" }
                     runCatching {
                         val row = JSONObject()
                             .put("id", commandId)
                             .put("title", workerTitle)
                             .put("input", task.take(2000))
                             .put("mode", mode)
-                            .put("state", "done")
-                            .put("summary", res.reply.take(2000))
+                            .put("state", state)
+                            .put("summary", cleanSummary.take(4000))
                             .put("writeSeq", 1L)
                             .put("createdAt", finishedAt)
                             .put("updatedAt", finishedAt)
-                            .put("owner", sourceSession ?: "session-whale-task-desk")
+                            .put("owner", ownerSession)
                         store.put(row)
                     }
                     runCatching {
+                        val prefix = if (state == "done") "【后台 Worker 已完成】" else "【后台 Worker 执行失败】"
+                        val coordSummary = "$prefix$workerTitle\n\n${cleanSummary.take(4500)}"
+                        val fingerprint = sha256Hex("$commandId:$state:$finishedAt")
                         WorkerReportInbox(app).addCoordination(
                             JSONObject()
-                                .put("id", commandId)
-                                .put("title", workerTitle)
-                                .put("summary", res.reply.take(800))
-                                .put("status", "completed")
-                                .put("atMs", finishedAt),
+                                .put("owner", ownerSession)
+                                .put("fingerprint", fingerprint)
+                                .put("summary", coordSummary)
+                                .put("next", "任务 ID：$commandId"),
                         )
                     }
-                    res.reply
+                }
+                WhaleNativeWorkerPool.submit(workerTitle, id = commandId) {
+                    try {
+                        val engine = WhaleNativeAgentEngine(app)
+                        val res = engine.send(
+                            userMessage = task,
+                            history = emptyList(),
+                            sessionId = "whale-worker-$commandId",
+                        )
+                        publishCallback("done", res.reply)
+                        res.reply
+                    } catch (error: Throwable) {
+                        val msg = error.message ?: error.javaClass.simpleName
+                        publishCallback("failed", msg)
+                        throw error
+                    }
                 }
             }
             return receipt

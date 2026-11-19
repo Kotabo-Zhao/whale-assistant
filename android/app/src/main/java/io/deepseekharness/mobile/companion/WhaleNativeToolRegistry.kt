@@ -192,7 +192,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         }
         if (includeDevice) {
             array.put(schema("whale_device_battery", "读取当前手机电池电量百分比与充电状态。", emptyMap(), emptyList()))
-            array.put(schema("whale_worker_status", "查询当前活跃后台 Worker 任务数量与设备控制状态。", emptyMap(), emptyList()))
+            array.put(schema("whale_worker_status", "查询后台 Worker 任务执行状态、完整回传结果与最近简报。", mapOf("id" to "可选：指定某个 Worker 任务 ID 以读取完整结果"), emptyList()))
             array.put(schema(
                 "whale_worker_submit",
                 "派发一个后台 Worker 异步执行长耗时任务（写代码、整理资料、多步查证或后台手机任务），桌宠与主界面均拥有完全派发权限。",
@@ -662,14 +662,21 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, "读取手机电量", true, JSONObject().put("batteryPercent", level).put("charging", charging).toString())
                 }
                 "whale_worker_status" -> {
+                    val targetId = args.str("id").trim()
                     val active = WorkerDashboardStore(app).activeCount() + WhaleNativeWorkerPool.activeCount()
                     val phase = io.deepseekharness.mobile.DeviceControlState.current.phase
+                    val briefings = JSONArray().apply {
+                        runCatching { WorkerReportInbox(app).briefings().takeLast(6) }.getOrNull().orEmpty().forEach { put(it) }
+                    }
                     val payload = JSONObject()
                         .put("activeWorkers", active)
                         .put("nativeWorkers", WhaleNativeWorkerPool.snapshot())
+                        .put("recentBriefings", briefings)
                         .put("deviceControlPhase", phase)
-                        .toString()
-                    ToolOutcome(name, "检查后台任务状态", true, payload)
+                    if (targetId.isNotEmpty()) {
+                        WhaleNativeWorkerPool.get(targetId)?.let { payload.put("targetWorker", it) }
+                    }
+                    ToolOutcome(name, "检查后台任务与回传结果", true, payload.toString())
                 }
                 "whale_worker_submit" -> {
                     val task = args.str("task").trim()
@@ -684,7 +691,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         needs = "none",
                         sourceSession = null,
                     )
-                    ToolOutcome(name, "已派发后台 Worker：$title", true, receipt.put("title", title).put("mode", mode).toString(), mutating = true)
+                    val workerId = receipt.optString("commandId")
+                    ToolOutcome(name, "已派发后台 Worker：$title", true, receipt.put("id", workerId).put("title", title).put("mode", mode).toString(), mutating = true)
                 }
                 "whale_worker_cancel" -> {
                     val id = args.str("id").trim()

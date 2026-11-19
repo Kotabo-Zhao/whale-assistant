@@ -1,220 +1,138 @@
-# DeepSeek Harness 安卓版
+# Whale Assistant（鲸鱼助手）
 
 [English](README.en.md) · [繁體中文](README.zh-TW.md) · [한국어](README.ko.md) · [日本語](README.ja.md)
 
-[![最新版本](https://img.shields.io/github/v/release/dphmoblie/deepseek-harness-android?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&logo=github)](https://github.com/dphmoblie/deepseek-harness-android/releases)
-[![下载总量](https://img.shields.io/github/downloads/dphmoblie/deepseek-harness-android/total?label=%E4%B8%8B%E8%BD%BD%E6%80%BB%E9%87%8F&logo=github)](https://github.com/dphmoblie/deepseek-harness-android/releases)
-[![许可证](https://img.shields.io/github/license/dphmoblie/deepseek-harness-android?label=%E8%AE%B8%E5%8F%AF%E8%AF%81)](LICENSE)
-[![最近提交](https://img.shields.io/github/last-commit/dphmoblie/deepseek-harness-android?label=%E6%9C%80%E8%BF%91%E6%8F%90%E4%BA%A4)](https://github.com/dphmoblie/deepseek-harness-android/commits)
-[![欢迎 PR](https://img.shields.io/badge/PR-%E6%AC%A2%E8%BF%8E%E8%B4%A1%E7%8C%AE-brightgreen.svg)](https://github.com/dphmoblie/deepseek-harness-android/pulls)
 [![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
 [![arm64-v8a](https://img.shields.io/badge/ABI-arm64--v8a-3DDC84?logo=arm&logoColor=white)](https://developer.android.com/ndk/guides/abis)
-[![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
-[![QQ群](https://img.shields.io/badge/QQ%E7%BE%A4-1108895375-12B7F5?style=for-the-badge)](#qq-group)
+[![Kotlin](https://img.shields.io/badge/Kotlin-100%25%20Native-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Version](https://img.shields.io/badge/Version-0.4.0--whale.1-0ea5e9)](https://github.com/Kotabo-Zhao/whale-assistant/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-<p align="center"><img src="docs/images/app-icon-512.png" width="256" alt="DeepSeek Harness 安卓版应用图标"></p>
+**运行在 Android 设备上的 100% 原生个人 Super Agent。**  
+Whale Assistant 从早期容器方案彻底重构为轻量纯原生 Lite 架构：完全剥离 395 MB PRoot/Ubuntu 外部容器，内置原生 Kotlin 多轮流式引擎、40 项进程内工具、本地 BGE-base-zh-v1.5 混合 RAG、后台 Worker 并发池、无障碍屏控 v2 以及常驻全局总管悬浮桌宠——打开即聊，无需配置复杂运行环境。
 
-**面向 Android 的本地 AI 工作台。** 将 [DeepSeek Harness](https://github.com/deepseek-ai/dsh)、Ubuntu 运行环境、会话、插件与文件管理整合到手机中；开启相应授权后，AI 还可通过 Shizuku 执行设备 Shell（命令行）任务，或通过无障碍服务操作指定应用。
-
-无需 Root（超级用户权限）。Linux 环境通过 [PRoot](https://github.com/proot-me/proot) 在用户空间运行，控制台由内置网页视图展示；模型推理使用你配置的服务。
-
-| | |
-| --- | --- |
+| 项目 | 说明 |
+| :--- | :--- |
+| 应用版本 | `0.4.0-whale.1`（Lite 纯原生版） |
 | 应用包名 | `io.deepseekharness.mobile` |
-| 最低系统 | Android 8.0（API 26）及以上 |
-| 目标应用副屏 | Android 10（API 29）及以上，需 Shizuku 与设备验证 |
-| 支持架构 | 仅 `arm64-v8a`（64 位 ARM） |
-| 内置运行时 | Ubuntu 24.04 ARM64 · Node.js 24.19 · `@deepseek-ai/dsh` 0.2.1-rc.1 |
-| 应用许可证 | MIT（运行时组件沿用各自许可证，见[许可证](#许可证)） |
+| 最低系统 | Android 8.0（API 26）及以上，仅 `arm64-v8a` |
+| 核心引擎 | 纯原生 Kotlin SSE 流式引擎 + 40 项进程内工具 + 3 线程原生 Worker 池 |
+| 本地检索 | 内置 `BGE-base-zh-v1.5` 中文向量模型 + SQLite 词法 RRF 混合 RAG |
+| 覆盖升级 | 固定 Nightly 签名密钥库 + 递增 `versionCode`，支持无缝覆盖安装 |
+| 开源协议 | MIT（详见 [LICENSE](LICENSE)） |
 
-## 目录
+---
 
-- [功能特性](#功能特性)
-- [工作原理](#工作原理)
-- [安装](#安装)
-- [模型供应商](#模型供应商)
-- [可选的 Shizuku 集成](#可选的-shizuku-集成)
-- [目标应用副屏（实验功能）](#目标应用副屏实验功能)
-- [从源码构建](#从源码构建)
-- [安全与隐私](#安全与隐私)
-- [参与贡献](#参与贡献)
-- [项目数据](#项目数据)
-- [许可证](#许可证)
-- [相关文档](#相关文档)
+## 核心特性
 
-## 功能特性
+### 1. 双旗舰视觉风格与全屏移动端体验
+- **极简·类 Grok（`simple`）**：OLED 纯黑 / 纯白高对比、无边框社论式流式回复、极简悬浮胶囊输入框与 1px 细分割线。
+- **鲸鱼娘·可爱（`cute`）**：暖奶白 / 星夜蓝配色、圆润立体触感按钮、浮动底部胶囊导航、鲸鱼娘光环舞台与 4 枚柔彩快捷卡片。
+- **原生级流畅体验**：启动第 0 帧即应用主题无闪烁，首页全屏满视口适配安全区，内置多会话管理抽屉、`/` 快捷指令栏、URL/长文本一键归档与工具执行回执卡片。
 
-- **手机上的完整 Linux 智能体环境。** Ubuntu 24.04 完全在设备本地通过 PRoot 运行，不依赖云服务器或远程桌面；应用不要求注册自己的账号，也可按需在 Harness 内登录 DeepSeek 账号使用账号模型。
-- **适配手机的 Harness 控制台。** 壳内以首页、插件、设置三个底部入口组织功能，并为窄屏、横屏和安全区域提供适配；会话管理整合到首页。第三方网页插件的界面与依赖各不相同，兼容性需按插件和版本验证。
-- **插件导入、更新与回滚。** 支持从 npm 包名、HTTPS 压缩包链接或 `git+https` 仓库地址导入，管理包与子插件的启停；更新时按支持的目录规则保留数据，并可切回上一版。需要安装脚本、原生编译或不同核心 SDK 的包存在限制，详见[插件管理](docs/插件管理.md)。
-- **文件与外观管理。** 投递区支持文件夹分类；壳内可选图片或视频背景，调整卡片颜色、通透度、模糊程度与强调色。
-- **免 Root 运行。** 在普通原厂设备上即可通过 PRoot 实现用户空间容器化。可选的 [Shizuku](https://shizuku.rikka.app/) 集成可在用户主动授权后额外提供 Shell 级别的设备终端（`/system/bin/sh`）。Shizuku 提供的是安卓 Shell 权限，而非 Root 权限。
-- **开箱即用、支持离线安装。** 正式版 APK 内置经过校验的 `rootfs.bundle` 与清单文件，无网络环境也可完成运行时安装；同时也支持经摘要固定（digest-pinned）的远程运行时来源。
-- **防篡改的运行时分发。** 每份清单与根文件系统镜像在使用前均按精确长度与 SHA-256 校验；下载仅接受 HTTPS 目标地址、拒绝指向私有地址的 DNS 解析结果，支持 HTTP 范围请求断点续传，解压时具备路径穿越与设备节点防护。环境就绪后以原子方式切换生效。
-- **内置与自定义模型供应商。** DeepSeek、OpenAI、Anthropic、Google Gemini、OpenRouter、Groq、xAI、Mistral 以及自建 OpenAI 兼容端点均可配置 API Key；DeepSeek 还支持官方账号授权。管理端密钥由 Android Keystore 保护，运行时使用 Harness 私有的 `~/.dsh/.credentials.yaml`（权限 0600）或同等受保护的启动文件，绝不回传至 WebView。
-- **本机控制台访问。** Harness 只绑定 `127.0.0.1`。每次启动都会生成全新的 256 位传输令牌，同时保护 HTTP 与 WebSocket 请求；令牌仅保存在进程内存中，不会持久化，也不会写入 URL。模型调用和用户发起的下载、插件安装等仍可能访问网络。
-- **集成终端。** 可在同一界面中使用 PRoot 环境内的 Ubuntu 终端，以及（可选）由 Shizuku 支持的安卓设备终端。
-- **应用内运行时自检。** 运行环境出问题时不必依赖 bash——自检逐项探测 shell、Node.js、沙箱启动器（含执行位）、Landlock 探测、真实沙箱内执行、PTY 的两组冒烟（裸 PTY 与沙箱内 PTY）、访客数据目录与附件目录的写入、ripgrep 执行位，并报告可用空间。发现执行位缺失或目录缺失时可以就地修复，不修改任何文件内容。
-- **日志按需查看与判读。** 只含内部状态码与计数的诊断日志可直接在应用内阅读（尾部窗口 64 / 256 KB）；运行日志窗口可选 8 / 64 / 256 KB 并支持关键字过滤与级别着色。命中已确诊的错误特征（缺凭据、模块身份分裂、插件加载失败、端口占用等）时，界面给出结论与下一步，而不是丢一段原文让人猜。
-- **后台保持与悬浮球（可选）。** 前台服务可提高运行时进程在后台的存活优先级——但**不能阻止**系统在内存、电量或厂商策略下结束进程；短按悬浮球可展开二级球快捷菜单（对话、目标副屏、回到应用、隐藏球、关闭无障碍），长按直接展开可拖动的 AI 对话小窗，球的位置持久化并在屏幕旋转后回到可视范围。
-- **两步首次配置。** 首次启动走「配模型 → 装运行环境」，顺序刻意把模型凭据放前面：运行时装不上也不影响先存好凭据；窗口只做两件事：配 API Key、装运行环境。首次配置的密钥输入不遮罩（遮罩会让输入法补字、折行、粘贴丢字都看不出来），下方实时显示字符数并提示已自动清理的空白与 `Bearer` 前缀；保存成功才清空，失败原样保留可重试。本机没有检测到模型凭据时不会直接打开 Harness，保存 API Key 就能解除门禁。详见[首次配置](docs/首次配置.md)。
+### 2. 悬浮桌宠：常驻全局的 Super Agent Router
+- **总管所有任务与完全权限**：桌宠不再是受限小弹窗，而是与 App 主界面拥有完全一致的 40 项原生工具权限的全局调度总管——简单问题即时答复或调用工具，复杂长耗时任务直接派发给后台 Worker，手机操作无缝接管原生屏控。
+- **可爱头顶 Token 计费进度条**：`WhaleTokenMeter` 优先解析大模型流式/非流式响应中的真实 `usage`（含 DeepSeek `prompt_cache_hit_tokens` 缓存命中），按主流模型公开单价实时估算当日用量与人民币费用，在桌宠头顶以圆角胶囊进度条动态展示（随当日额度从薄荷绿 → 暖杏橙 → 珊瑚粉渐变）。
+- **自适应底部抽屉对话窗**：基于 `Gravity.BOTTOM` 与 `frame.bottom` 精准避让系统软键盘，消除打字遮挡与退格键失灵问题。
+- **实时屏控提示与防断连**：发起屏控时自动收起对话窗并跳过自身悬浮层锁定前台目标应用，底部同步显示不抢焦点、不挡点击的星蓝状态胶囊（如 `🐳 正在读取屏幕…` / `🐳 操控：click「搜索」`）。
 
-## 工作原理
+### 3. 自动本地混合 RRF RAG 检索
+- 内置离线中文向量模型 `BGE-base-zh-v1.5` 与 SQLite 全文索引。
+- `WhaleNativeRagRetriever` 在每轮对话前自动并行执行向量检索 + 词法检索与 RRF 融合排序（600ms 超时上限，超时或低配机自动无感降级词法检索），自动注入最相关的 `[资料#N]` 与 `[记忆#N]` 片段，无需手动触发。
 
-应用分为三层：
+### 4. 40 项原生工具、后台 Worker 与离线功能工坊
+- **全软件实时操控（`WhaleAppControlBus`）**：对话中一句话即可切换页面、切换极简/可爱双风格与明暗主题、切换语言、管理人设卡片、启停或调整桌宠、修改自治开关。
+- **原生后台 Worker 并发池（`WhaleNativeWorkerPool`）**：支持 `whale_worker_submit` / `whale_worker_status` / `whale_worker_cancel`，3 线程异步跑完长耗时任务后自动回写 `WorkerDashboardStore` 看板与 `WorkerReportInbox`。
+- **本地代码工作区与离线工坊**：支持多文件项目读写/补丁/删除，以及在「功能工坊」中通过自然语言生成离线微应用（支持 `window.whaleStorage` 本地持久化）并立即启用打开。
 
-1. **管理界面（Capacitor + React）。** 原生安卓外壳，负责运行时安装、服务控制、模型供应商设置、终端、运行时来源与环境重置。
-2. **原生运行时层（Kotlin）。** 负责根文件系统的校验与解压、以原生库形式随包提供的 PRoot 运行器与加载器管理、Harness 进程与 PTY 会话监管，以及在用户授权后连接 Shizuku UserService。
-3. **Ubuntu 运行时（PRoot）。** 通过固定的白名单入口在 Ubuntu 24.04 内启动 `dsh web` 并仅监听回环地址。Node.js 预加载模块会在任何请求到达 Harness 之前校验当次启动令牌，内置 WebView 也被限制在同一回环源内。
+### 5. 高性能原生无障碍屏控 v2
+- **语义剪枝控件树（`WhaleUiTreeCompactor`）**：剔除 60%–80% 无效布局噪声并生成短 `#ref` 索引与中心坐标，大幅降低模型 Token 消耗与思考延迟。
+- **多策略定位 + 手势回退（`WhaleFastPhoneController`）**：依次按 `#ref` → `viewId` → 文本与可点击父节点 → 坐标命中；遇到 Flutter / Compose / WebView 控件自动无缝切到 `dispatchGesture` 触控与滑动。
+- **原子批量连贯操控**：`whale_phone_batch` 支持单轮最多 8 步连续操作并回传最新精简控件树。
 
-完整架构与安全边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+### 6. 一站式权限与自治中心 + 智能功耗调度
+- **极简 3 总开关**：告别十几个分散子开关，在设置页提供「一键模式（全权自治 / 均衡 / 保守）」+ **3 个核心总开关**（桌宠与后台 Worker 完全权限、记忆/资料库与后台理解全自动、主动陪伴/通知与日程简报），底部附带悬浮窗、无障碍、通知读取 3 个系统权限快捷入口。
+- **三档功耗治理（`WhalePowerGovernor`）**：自动在性能 / 均衡 / 省电模式间调节动效与后台唤醒频率。
 
-## 安装
+---
 
-1. 从 [Releases](https://github.com/dphmoblie/deepseek-harness-android/releases) 页面下载最新版 APK，并阅读该版本的发布说明。
-2. 安装 APK（按系统提示允许来自可信来源的安装）。
-3. 打开应用，跟着两步引导走完：**配模型 → 装运行环境**。
-   - 配模型：粘贴一份 DeepSeek API Key 点保存。首次配置**不遮罩**密钥，方便确认粘贴完整；这一页只填 Key。
-   - 装运行环境：官方 APK 已内置镜像，点「安装运行时」等进度走完即可，无需联网；自行构建的 APK 通常没有内置镜像，改走「安装失败？去在线下载其它版本」→「版本管理 → 在线可用版本 → 下载到版本库」→「切换至此版本」。
-   - 两步走完窗口就结束；凭据与运行环境都齐了，回主界面点「打开 Harness」开始对话。
-4. 之后想改配置，用**设置 → 模型与密钥**；运行环境与版本在**设置 → Ubuntu 运行时 / 版本管理**。
+## 系统架构
 
-逐步的操作与排错见 [首次配置](docs/首次配置.md)。
+```text
+┌──────────────────────────────────────────────────────────────┐
+│  WebView UI 层（React + TypeScript + Capacitor）              │
+│  · 极简 / 鲸鱼娘双视觉体系 · 多会话流式对话 · 一站式权限中心     │
+│  · 记忆与资料管理 · 事项日程 · 离线功能工坊（whaleStorage）     │
+└──────────────────────────▲───────────────────────────────────┘
+                           │ Capacitor Bridge & WhaleAppControlBus
+┌──────────────────────────▼───────────────────────────────────┐
+│  Android 原生内核层（100% Kotlin，零 PRoot 依赖）              │
+│  · WhaleNativeAgentEngine（SSE 流式 + 多轮工具 + 真实 usage）  │
+│  · WhaleNativeRagRetriever（BGE-base-zh-v1.5 + SQLite RRF）   │
+│  · WhaleNativeToolRegistry（40 项进程内工具）                  │
+│  · WhaleNativeWorkerPool（3 线程后台异步 Worker 池）           │
+│  · OverlayBallService（全局总管桌宠 + Token 进度条 + 屏控提示） │
+│  · WhaleFastPhoneController（无障碍屏控 v2 + 安全策略守卫）     │
+└──────────────────────────────────────────────────────────────┘
+```
 
-### 环境要求
+---
 
-- Android 8.0 及以上、**arm64-v8a**（64 位 ARM）处理器的设备。
-- 数 GB 左右的可用存储空间，用于存放解压后的 Ubuntu 环境。
-- 至少一个受支持模型供应商的 API Key、一个 DeepSeek 账号授权，或一个兼容的自定义端点。
-- 官方 APK 内置运行时镜像，可全程离线安装；自行构建的 APK 若未打包镜像，首次安装需要联网下载一份经摘要校验的运行时。
+## 安装与使用
 
-## 模型供应商
+### 1. 下载安装
+1. 前往本仓库 [Releases](https://github.com/Kotabo-Zhao/whale-assistant/releases) 下载最新的 `whale-assistant-lite-*.apk`（每天北京时间 04:00 自动构建更新）。
+2. 若手机上曾安装过早期未固定签名的版本，请**卸载旧版一次**后安装新包；自固定签名版本起，后续所有每日构建均支持**直接覆盖安装**，完整保留记忆、资料、对话记录与 API Key。
 
-内置供应商：**DeepSeek、OpenAI、Anthropic、Google Gemini、OpenRouter、Groq、xAI、Mistral**。
+### 2. 快速上手
+1. 打开应用后进入「设置 → 模型与密钥」，填入任意受支持供应商的 API Key 即可开聊。
+   - 内置支持：**DeepSeek、OpenAI、Anthropic、Google Gemini、OpenRouter、Groq、xAI、Mistral** 以及任意 **OpenAI 兼容自定义端点**。
+2. 在设置顶部「一站式权限与自治」中按需一键切换自治模式或开启 3 个核心总开关，并按快捷按钮授予悬浮窗 / 无障碍 / 通知权限。
+3. 开启悬浮桌宠后，在任意应用内轻点桌宠即可随时呼出全局总管对话框。
 
-也可以将任意 OpenAI 兼容端点配置为自定义供应商（基础地址、API Key 与模型列表）。管理端 API Key 通过 Android Keystore 保护，并写入 Harness 私有的 `~/.dsh/.credentials.yaml`（0600）；仅本次启动所需的临时令牌才会写入同样受保护的启动文件。保存配置时若 Harness 正在运行会自动重启，确保运行时状态始终与界面显示一致。
-
-### DeepSeek 账号登录
-
-在「设置 → 模型与密钥」点击「登录 DeepSeek 账号」会先打开 Harness；进入后从侧栏「更多」菜单选择官方登录。授权完成后返回设置页，应用会刷新账号授权状态并保留尚未保存的 API Key 草稿。退出账号后再次返回该页也会刷新为未登录状态；账号授权和 API Key 是两条独立的可用路径。
-
-登录回调只精确放行 Harness 的 GET `/oauth/callback`，其余 Harness 页面和 WebSocket 仍需要本次启动的应用认证。Android 只会把 `https://platform.deepseek.com[:443]/dsh/authorize?...` 的用户触发导航交给系统浏览器；其他来源、路径、片段、userinfo 或非 HTTPS 地址均不会打开。应用不会读取或转交账号令牌。
-
-## 可选的 Shizuku 集成
-
-Shizuku 完全可选，且不会随应用捆绑安装：
-
-1. 自行安装并启动 [Shizuku](https://shizuku.rikka.app/)（通过无线调试或 Shizuku 官方指引的方式）。
-2. 在应用内授予权限。Shizuku 已运行且授权仍有效时，启动或返回启动器会自动连接；连接失败可点击**连接 Shizuku**重试。
-3. 在「设置 → Shizuku 与设备自动化」中连接成功后，打开「允许 AI 调用 Shell」。一次开启会持续生效，直到你关闭开关；不需要每条命令逐次确认。
-
-开启后，模型可调用设备 Shell 读取、写入、创建目录、上传、下载文件，也可查询指定应用的进程、服务和 Activity 摘要。Shell 使用 Shizuku 的实际 Android 权限，不等同于 Root；命令正文和输出不会写入诊断日志。请不要让模型读取或回显密钥、短信、通讯录、令牌等隐私数据。
-
-无障碍自动化需要你另外在系统设置中手动开启服务，再在应用内从已安装应用列表选择目标包名并保存白名单。白名单数量不设上限；普通厂商应用可加入，系统设置、权限、支付、验证码和密码页面仍由原生服务拒绝。服务不能绕过锁屏，也不能保证厂商后台策略下的持续运行。
-
-当 Shizuku 不可用、未授权或连接断开时，设备工具会明确报错；Ubuntu 运行时与 Harness 不受影响。
-
-更新 Shizuku 应用之后，手机上可能仍在运行更新前启动的服务端，此时连接用户服务会超时。遇到这种情况请在 Shizuku 里停止服务再重新启动（或重启手机），然后回到本页重试——应用内没有重启 Shizuku 服务端的通路。界面上的「Shizuku 应用 13.6.0」是已安装的 Shizuku 应用版本，「服务端 API 13」是服务端上报的 API 版本，两者不是一回事。
-
-## 目标应用副屏（实验功能）
-
-在 **设置 → AI Shell → 目标应用副屏（实验功能）** 中选择目标应用，可尝试将其运行到独立虚拟显示，并通过原生预览页或可拖动小窗查看和操作。此处展示的是目标应用界面；AI 对话悬浮窗是另一项功能。
-
-入口要求 Android 10 及以上、已授权并连接 Shizuku，且用户已开启 AI Shell。锁屏或熄屏时，该副屏通道暂停读取与输入。AI 工具已覆盖副屏状态与性能读数（目标帧率、画面年龄、输入后首帧间隔估计）、PNG 截图、副屏专用无障碍节点树、点击、滑动、返回、中文文本写入（经无障碍聚焦写入，失败时回退系统剪贴板粘贴）、15/30/60 fps 档位和结束会话；画面仍是逐帧取 PNG，**不是视频编码通道**。
-
-截至 2026-10-02，已在 MuMu Android 15 中以普通 Shell 权限验证测试应用的横竖屏截图、定向点击和会话回收，并检查 `363×800 dp` 与 `800×363 dp` 的原生选择页布局；此后各版本另有 HONOR AAP-AN00 真机回执，逐条列在[目标应用副屏说明](docs/目标应用副屏.md)里，本段不重复。**尚未验证完整 Shizuku 授权与绑定链路、真实第三方应用、小窗互切、长期后台与锁屏恢复**；上述新增能力多数也只有单元测试与编译检查，模拟器探针结果不能视为所有手机或所有应用的兼容保证。
-
-已有运行环境还需要更新或重新打包 `dsh-mobile-shizuku` 插件，才能使用新增 AI 工具；仅安装新 APK 不会改写现有插件数据。机制、工具接口与完整验证范围见[目标应用副屏说明](docs/目标应用副屏.md)。
+---
 
 ## 从源码构建
 
-### 构建依赖
+### 环境要求
+- Node.js `22.x` + `pnpm`
+- JDK `21` + Android SDK（API 35）
 
-- Node.js `^22.19.0` 或 `>=24.0.0`，以及 [pnpm](https://pnpm.io/) 11
-- Android SDK 35、NDK、CMake 3.22.1、JDK 21、Gradle 8.11.1
-- 来自 Operit2 安卓运行时工具链、与发布版本固定对应的 ARM64 PRoot 运行器与加载器（`libdsh_proot.so`、`libdsh_proot_loader.so`）——准确的上游版本号与哈希见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
-- 自包含构建还需从同一源码版本生成的 `runtime-manifest.json` 与 `rootfs.bundle`
-
-### Web 与安卓构建
-
+### 本地编译 Lite 原生 APK
 ```bash
+# 1. 安装前端依赖并编译、同步到 Android 工程
 pnpm install --frozen-lockfile
-pnpm run build          # TypeScript 检查 + Vite 生产构建
-pnpm run android:sync   # 构建并同步到安卓工程
-pnpm run android:open   # 在 Android Studio 中打开，或直接使用 Gradle 构建
+pnpm run build
+pnpm run lint
+pnpm run android:sync
+
+# 2. 运行全量 Android 单元测试并构建 Lite 原生 APK
+cd android
+./gradlew testDebugUnitTest -PwhaleSeparateRuntime=true assembleDebug --no-daemon
 ```
 
-开发版构建可以不内置运行时，改为同时设置 `DSH_RUNTIME_MANIFEST_URL` 与
-`DSH_RUNTIME_MANIFEST_SHA256` 以固定远程清单。完整构建说明与签名策略见
-[android/README.md](android/README.md)。
+构建产物默认输出在：
+`android/build/whale-light-app/outputs/apk/debug/app-debug.apk`
 
-### 检查与测试
+### 每日自动发版 CI
+仓库内置 `.github/workflows/daily-release.yml`：
+- 每天北京时间 `04:00`（UTC `20:00`）自动执行前端构建、ESLint 0 警告检查、Android 全量单测、固定签名 Lite APK 打包并发布到 GitHub Releases。
+- 支持随时通过 GitHub Actions `workflow_dispatch` 手动触发，并在发版后自动运行云端 Android 14 模拟器冒烟测试（`scripts/ci-emulator-smoke.sh`）。
 
-```bash
-pnpm test          # Vitest 单元测试
-pnpm --dir scripts/runtime-profile install --frozen-lockfile --ignore-scripts # 插件测试依赖
-pnpm run test:scripts
-pnpm lint          # ESLint，零警告通过
-```
+---
 
-## 安全与隐私
+## 安全与隐私边界
 
-- **模型数据去向。** 本机控制台不等于离线模型。对话、AI 工具返回的文件内容及截图可能进入当前会话并发送至配置的模型服务；本地副屏预览本身不上传图像。只授权与当前任务相关的应用和数据。
-- **仅监听回环地址。** Harness 不会绑定任何非回环网络接口；内置 WebView 阻止访问回环源之外的导航与 HTTP 资源。
-- **临时传输凭据。** 每次启动 Harness 都会通过 `SecureRandom` 生成全新的 256 位令牌。令牌不会持久化、不会写入日志或 URL，也不会返回给 JavaScript。
-- **凭据存储。** 管理端 API Key 由 Android Keystore 保护，并由 Harness 从私有 `~/.dsh/.credentials.yaml`（0600）读取；账号授权记录也由 Harness 以同样的私有文件权限管理。每次启动生成的临时传输令牌只在受保护的启动文件与进程内存在。
-- **可验证的运行时供应链。** 清单与根文件系统镜像均经过 schema 校验与摘要固定，解压时执行严格的归档边界检查；断点续传遇到非法范围或异常响应时按失败即关闭（fail-closed）处理。
-- **审计记录。** 原生审计日志存放在应用私有的禁备份目录中，文件仅所有者可读写，按 UTC 日期轮转并保留 90 天。记录只包含固定的事件/结果枚举，绝不包含 URL、命令、令牌或终端数据。
-- **无应用账号与追踪。** 应用不设自己的账号系统、不含广告、不采集遥测数据；DeepSeek 官方账号登录仅由 Harness 官方模块处理。
+尽管赋予了主界面与桌宠高度自治能力，以下 6 道系统级安全红线始终在原生层强制生效，不可绕过：
 
-## 参与贡献
+- **`AccessibilityAutomationPolicy`**：锁屏/熄屏自动拒绝；系统设置、权限弹窗、密码框、验证码、支付与银行等敏感窗口一律硬拦截。
+- **`RuntimeCredentialCipher`**：API Key 由 Android Keystore 加密保护，不向前端或日志明文泄露。
+- **`RootCommandGuard` & `RootSecurityWrapper`**：高危系统命令与越权操作硬拦截。
+- **`SafeRootfsExtractor`**：归档解压防路径穿越与特殊设备节点校验。
+- **`PetControlProtection`**：悬浮桌宠操控期间保留用户随时接管与暂停控制权。
 
-欢迎在 <https://github.com/dphmoblie/deepseek-harness-android> 提交 Issue 与 Pull Request。
-
-提交前请保持改动聚焦、为新行为补充测试，并运行 `pnpm lint` 与 `pnpm test`。
-涉及安全的改动必须维护 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 所述边界，
-尤其不得削弱回环访问控制、摘要校验、入口白名单或 Shizuku UserService 契约。
-
-### 贡献者
-
-[![贡献者](https://contrib.rocks/image?repo=dphmoblie/deepseek-harness-android)](https://github.com/dphmoblie/deepseek-harness-android/graphs/contributors)
-
-欢迎更多开发者参与，你的名字也可以出现在这里。
-
-<a id="qq-group"></a><a id="community-qq-group"></a>
-### 交流社区
-
-- **QQ 交流群：1108895375**——欢迎入群提问、反馈建议、获取版本发布通知。
-
-## 项目数据
-
-![星标与下载量累计折线图](docs/images/star-download-history.svg)
-
-黄线是 GitHub 星标累计数（按加星时间计入）；蓝线是各 Release 资产的总下载次数——
-GitHub 只提供当前累计值，所以按发布日计入、逐日累加成阶梯线。图由
-`pnpm run chart:stats` 重新生成，抓取日期会写进图内；仓库里的 `stats-chart` 工作流每天自动跑一次，数据变了就自己提交新图。
+---
 
 ## 许可证
 
-本仓库中的应用代码基于 [MIT 许可证](LICENSE)发布。
-
-正式版 APK 还以各自许可证再分发了第三方运行时组件，包括 PRoot
-（GPL-2.0-or-later）、Operit2 运行时工具链（AGPL-3.0）、Ubuntu 24.04
-软件包、Node.js，以及采用 MIT 许可证的 DeepSeek Harness 运行时与前端。
-组件来源、确切上游版本、制品哈希及相应许可证文本记录于
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，并随 APK 内
-`assets/legal/` 目录一并提供。
-
-## 相关文档
-
-- [首次配置（两步走完并开始对话）](docs/首次配置.md)
-- [目标应用副屏与验证范围](docs/目标应用副屏.md)
-- [应用读取与无障碍自动化](docs/应用自动化能力.md)
-- [插件导入、数据保留与回滚](docs/插件管理.md)
-- [投递区与存储权限](docs/存储权限与导入落点.md)
-- [架构与安全边界](docs/ARCHITECTURE.md)
-- [移动端插件兼容设计](docs/mobile-plugin-compat.md)
-- [项目状态登记册（已完成、未完成与真机读数）](docs/项目状态.md)
-- [发布检查清单](docs/RELEASE_CHECKLIST.md)
-- [安卓平台构建说明](android/README.md)
-- [第三方声明](THIRD_PARTY_NOTICES.md)
+本项目基于 [MIT License](LICENSE) 开源；内置的第三方开源组件及模型权重沿用其各自许可证。
