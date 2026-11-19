@@ -94,7 +94,8 @@ jobs:
             RELEASE_TAG="nightly-${DATE_TAG}"
           fi
           mkdir -p release-out
-          APK_SRC="android/app/build/outputs/apk/debug/app-debug.apk"
+          APK_SRC="android/build/whale-light-app/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$APK_SRC" ]; then APK_SRC="android/app/build/outputs/apk/debug/app-debug.apk"; fi
           APK_NAME="whale-assistant-lite-${DATE_TAG}-${SHORT_SHA}.apk"
           cp "$APK_SRC" "release-out/${APK_NAME}"
           (cd release-out && sha256sum "${APK_NAME}" > SHA256SUMS.txt)
