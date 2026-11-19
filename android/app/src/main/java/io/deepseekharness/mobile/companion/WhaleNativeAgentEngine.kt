@@ -159,9 +159,6 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         if (finalReply.isBlank()) {
             finalReply = "已执行完相关步骤，但模型未生成总结，请再试一次。"
         }
-        val estPrompt = (userMessage.length + history.sumOf { it.content.length } + 600) / 2L
-        val estCompletion = (finalReply.length.coerceAtLeast(16)) / 2L
-        runCatching { WhaleTokenMeter.record(app, estPrompt, estCompletion) }
         return ChatResult(
             reply = finalReply,
             steps = steps,
@@ -254,6 +251,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             .put("model", endpoint.model)
             .put("messages", messages)
             .put("stream", wantStream)
+        if (wantStream) {
+            body.put("stream_options", JSONObject().put("include_usage", true))
+        }
         if (toolsArray != null && toolsArray.length() > 0) {
             body.put("tools", toolsArray)
             body.put("tool_choice", "auto")
@@ -280,10 +280,21 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             val contentType = conn.contentType.orEmpty().lowercase()
             if (wantStream && contentType.contains("text/event-stream")) {
-                return parseSseResponse(BufferedReader(InputStreamReader(stream, Charsets.UTF_8)), listener)
+                return parseSseResponse(BufferedReader(InputStreamReader(stream, Charsets.UTF_8)), listener, endpoint.model, messages.toString().length)
             }
             val text = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
             val response = JSONObject(text)
+            val usageObj = response.optJSONObject("usage")
+            if (usageObj != null) {
+                val pTok = usageObj.optLong("prompt_tokens", 0L)
+                val cTok = usageObj.optLong("completion_tokens", 0L)
+                val cacheHit = usageObj.optLong("prompt_cache_hit_tokens", 0L)
+                if (pTok > 0L || cTok > 0L) {
+                    runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, endpoint.model) }
+                }
+            } else {
+                runCatching { WhaleTokenMeter.record(app, messages.toString().length / 3L, text.length / 4L, 0L, endpoint.model) }
+            }
             val choice = response.optJSONArray("choices")?.optJSONObject(0)
                 ?: throw IllegalStateException("模型服务未返回有效内容")
             val message = choice.optJSONObject("message")
@@ -298,9 +309,15 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
     }
 
-    private fun parseSseResponse(reader: BufferedReader, listener: StreamListener?): AssistantTurn {
+    private fun parseSseResponse(
+        reader: BufferedReader,
+        listener: StreamListener?,
+        model: String,
+        promptCharsHint: Int,
+    ): AssistantTurn {
         val contentBuilder = StringBuilder()
         val toolAccumulators = linkedMapOf<Int, MutableToolCall>()
+        var recordedUsage = false
 
         reader.useLines { lines ->
             for (rawLine in lines) {
@@ -309,6 +326,16 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val payload = line.removePrefix("data:").trim()
                 if (payload == "[DONE]") break
                 val chunk = runCatching { JSONObject(payload) }.getOrNull() ?: continue
+                val usageObj = chunk.optJSONObject("usage")
+                if (usageObj != null) {
+                    val pTok = usageObj.optLong("prompt_tokens", 0L)
+                    val cTok = usageObj.optLong("completion_tokens", 0L)
+                    val cacheHit = usageObj.optLong("prompt_cache_hit_tokens", 0L)
+                    if (pTok > 0L || cTok > 0L) {
+                        recordedUsage = true
+                        runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, model) }
+                    }
+                }
                 val delta = chunk.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: continue
 
                 val deltaText = delta.optNonNullString("content", "")
@@ -355,6 +382,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     )
                 }
             }
+        }
+        if (!recordedUsage) {
+            runCatching { WhaleTokenMeter.record(app, promptCharsHint / 3L, contentBuilder.length.coerceAtLeast(12) / 2L, 0L, model) }
         }
         return AssistantTurn(contentBuilder.toString(), toolCalls)
     }
