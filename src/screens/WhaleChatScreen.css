@@ -683,3 +683,8 @@
   background: var(--blue-soft);
   color: var(--blue);
 }
+
+.whale-msg {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 84px;
+}

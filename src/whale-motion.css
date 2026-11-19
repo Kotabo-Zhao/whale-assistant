@@ -1,29 +1,55 @@
+/* Whale Assistant GPU-Composited Dual-Style Motion System
+ * Strictly animates compositor-only properties (transform, opacity) for locked 60/120fps
+ * and zero layout thrashing; automatically shuts down in Eco power profile or reduced-motion mode.
+ */
 :root {
-  --motion-fast: 110ms;
-  --motion-normal: 180ms;
-  --motion-enter: cubic-bezier(.2, .7, .2, 1);
-  --motion-press: cubic-bezier(.3, 0, .6, 1);
-}
-:root[data-style='simple'] {
-  --motion-fast: 95ms;
-  --motion-normal: 155ms;
-  --motion-enter: cubic-bezier(.22, .68, .24, 1);
-}
-:root[data-style='cute'] {
-  --motion-fast: 140ms;
-  --motion-normal: 260ms;
-  --motion-enter: cubic-bezier(.22, 1.15, .36, 1);
+  --motion-fast: 105ms;
+  --motion-normal: 165ms;
+  --motion-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-press: cubic-bezier(0.3, 0, 0.6, 1);
 }
 
-@keyframes whale-page-enter { from { opacity: 0; translate: 0 7px; } to { opacity: 1; translate: 0 0; } }
-@keyframes whale-panel-enter { from { opacity: 0; scale: .985; translate: 0 6px; } to { opacity: 1; scale: 1; translate: 0 0; } }
-@keyframes whale-fade-enter { from { opacity: 0; } to { opacity: 1; } }
-@keyframes whale-chan-float {
-  0%, 100% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-5px) rotate(-1.2deg); }
+/* Style 1: Grok Minimal — razor-sharp, zero overshoot */
+:root[data-style='simple'] {
+  --motion-fast: 90ms;
+  --motion-normal: 145ms;
+  --motion-enter: cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* Style 2: Whale-Chan Cute — gentle springy warmth */
+:root[data-style='cute'] {
+  --motion-fast: 130ms;
+  --motion-normal: 250ms;
+  --motion-enter: cubic-bezier(0.22, 1.18, 0.36, 1);
+}
+
+@keyframes whale-page-enter {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes whale-panel-enter {
+  from { opacity: 0; transform: translate3d(0, 6px, 0) scale(0.985); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes whale-msg-in {
+  from { opacity: 0; transform: translate3d(0, 5px, 0) scale(0.985); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes whale-fade-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes whale-chan-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, -5px, 0) rotate(-1deg); }
+}
+
 @keyframes whale-pulse-soft {
-  0%, 100% { opacity: 0.6; }
+  0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
 }
 
@@ -33,41 +59,55 @@
   animation: whale-panel-enter var(--motion-normal) var(--motion-enter) backwards;
   transform-origin: 50% 25%;
 }
-.library-editor, .library-intake {
-  animation: whale-page-enter var(--motion-normal) var(--motion-enter) backwards;
-}
+.library-editor, .library-intake { animation: whale-page-enter var(--motion-normal) var(--motion-enter) backwards; }
 .toast { animation: whale-panel-enter var(--motion-normal) var(--motion-enter) backwards; }
-details[open] > :not(summary) { animation: whale-fade-enter var(--motion-normal) ease-out backwards; }
+.whale-msg { animation: whale-msg-in var(--motion-normal) var(--motion-enter) backwards; }
+.whale-receipt-card, .whale-ambient-bar { animation: whale-fade-enter var(--motion-fast) ease-out backwards; }
+details[open] > :not(summary) { animation: whale-fade-enter var(--motion-fast) ease-out backwards; }
 
-/* Cute Whale-Chan gentle floating & breathing accents */
+/* Whale-Chan subtle floating accent in cute style only */
 :root[data-style='cute'] .whale-chat-hero-mark {
-  animation: whale-chan-float 3.4s ease-in-out infinite;
+  animation: whale-chan-float 3.6s ease-in-out infinite;
 }
+
 .whale-thinking {
   animation: whale-pulse-soft 1.4s ease-in-out infinite;
 }
 
 button, summary, .sidebar-item, .bottom-navigation-item, .management-row, input, textarea, select {
   transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out,
-    color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out, opacity var(--motion-fast) ease-out;
+    color var(--motion-fast) ease-out, opacity var(--motion-fast) ease-out, transform var(--motion-fast) ease-out;
 }
-button:not(.bottom-navigation-item):not(.sidebar-item):active { scale: .975; }
-:root[data-style='cute'] button:not(.bottom-navigation-item):not(.sidebar-item):active { scale: .96; }
-button { transition-property: background-color, border-color, color, box-shadow, opacity, scale; }
-.bottom-navigation-item, .sidebar-item { transition-duration: 160ms; }
-.bottom-navigation-item svg, .sidebar-item svg { transition: scale var(--motion-fast) var(--motion-enter); }
-.bottom-navigation-item[aria-current='page'] svg, .sidebar-item[aria-current='page'] svg { scale: 1.06; }
+
+button:not(.bottom-navigation-item):not(.sidebar-item):active { transform: scale(0.975); }
+:root[data-style='cute'] button:not(.bottom-navigation-item):not(.sidebar-item):active { transform: scale(0.96); }
+
+.bottom-navigation-item svg, .sidebar-item svg { transition: transform var(--motion-fast) var(--motion-enter); }
+.bottom-navigation-item[aria-current='page'] svg, .sidebar-item[aria-current='page'] svg { transform: scale(1.06); }
 .toggle-row input[role="switch"]::after { transition: transform var(--motion-normal) var(--motion-enter); }
 
-@media (hover: hover) and (pointer: fine) {
-  button:not(:disabled):hover { transition-duration: 160ms; }
+body, .app-header, .bottom-navigation, .sidebar-nav {
+  transition: background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out;
 }
-body, .app-header, .bottom-navigation, .sidebar-nav { transition: background-color 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out; }
+
+/* Battery & Accessibility Eco Shutdown: zero animation/GPU wakeups */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  button:active { scale: 1 !important; }
+  button:active { transform: none !important; }
 }
-:root[data-motion-reduced='true'] *, :root[data-motion-reduced='true'] *::before, :root[data-motion-reduced='true'] *::after {
-  animation: none !important; transition: none !important; scroll-behavior: auto !important;
+
+:root[data-motion-reduced='true'] *,
+:root[data-motion-reduced='true'] *::before,
+:root[data-motion-reduced='true'] *::after,
+:root[data-power-profile='eco'] *,
+:root[data-power-profile='eco'] *::before,
+:root[data-power-profile='eco'] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
 }
-:root[data-motion-reduced='true'] button:active { scale: 1 !important; }
+
+:root[data-motion-reduced='true'] button:active,
+:root[data-power-profile='eco'] button:active {
+  transform: none !important;
+}

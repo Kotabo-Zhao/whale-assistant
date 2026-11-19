@@ -314,6 +314,7 @@ class MobileRuntimePlugin : Plugin() {
     @Volatile private var initializationFailed = false
     private lateinit var auditLog: PrivateAuditLog
     private val executor: ExecutorService = Executors.newFixedThreadPool(4)
+    private val nativeChatExecutor: ExecutorService = Executors.newFixedThreadPool(2) { r -> Thread(r, "whale-native-chat").apply { isDaemon = true } }
     private val destroying = AtomicBoolean(false)
     private val harnessStartScheduled = AtomicBoolean(false)
     private val harnessStartGeneration = AtomicLong(0)
@@ -763,6 +764,7 @@ class MobileRuntimePlugin : Plugin() {
     override fun handleOnDestroy() {
         whaleAppControlUnsubscribe?.invoke()
         whaleAppControlUnsubscribe = null
+        nativeChatExecutor.shutdownNow()
         io.deepseekharness.mobile.features.WhaleFeatureStore.unsubscribe(onFeatureChange)
         io.deepseekharness.mobile.companion.WorkerReportInbox.unsubscribe(onBriefingChange)
         mainEvents.removeCallbacks(briefingChange)
@@ -4815,7 +4817,7 @@ class MobileRuntimePlugin : Plugin() {
                 if (role.isNotEmpty() && text.isNotEmpty()) history += role to text
             }
         }
-        java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+        nativeChatExecutor.execute {
             try {
                 val engine = io.deepseekharness.mobile.companion.WhaleNativeAgentEngine(context)
                 val listener = object : io.deepseekharness.mobile.companion.WhaleNativeAgentEngine.StreamListener {

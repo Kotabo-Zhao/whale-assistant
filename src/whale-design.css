@@ -133,7 +133,6 @@ body {
 .bottom-navigation {
   background: var(--surface);
   border-top: 1px solid var(--line);
-  backdrop-filter: blur(14px);
 }
 
 .sidebar-item,
@@ -484,4 +483,12 @@ textarea {
   font-size: 0.82rem;
   line-height: 1.5;
   color: var(--muted);
+}
+
+/* Rendering & Battery Optimization: skip off-screen layout/paint on long lists */
+.management-row,
+.memory-card,
+.knowledge-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
 }
