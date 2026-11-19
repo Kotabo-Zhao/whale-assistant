@@ -1889,7 +1889,7 @@ export function apply(ctx) {
   }))
   ctx.tools.register(defineTool({
     name: 'mobile_whale_feature',
-    description: '为鲸鱼助手创造新的应用功能。用户明确要求创造或修改功能时，先 list 查看本机功能库；修改用 read 读取原始内容和 revision。draft 提交完整的单文件 HTML、内联 CSS 和 JavaScript，实际实现交互和计算。不能访问网络、文件、设备桥或外部脚本。新功能用稳定的英文小写 id；修改时传读取到的 baseRevision。草稿在工坊预览，用户启用后可从主应用和桌宠直接打开。用户希望把这个工具的输出存为本地资料时，将最终可读文本写入单个 <output data-whale-result> 元素；宿主提供“收藏结果”按钮，让用户核对、编辑并保存。预览没有保存入口。',
+    description: '为鲸鱼助手创造新的应用功能。用户明确要求创造或修改功能时，先 list 查看本机功能库；修改用 read 读取原始内容和 revision。draft 提交完整的单文件 HTML、内联 CSS 和 JavaScript，实际实现交互和计算。不能访问网络、文件、设备桥或外部脚本；可使用宿主注入的沙箱局部存储 window.whaleStorage.get(key, fallback) / set(key, value) / remove(key) / keys() 持久化保存用户的打卡、记账、待办等本地状态。新功能用稳定的英文小写 id；修改时传读取到的 baseRevision。草稿在工坊预览，用户启用后可从主应用和桌宠直接打开。用户希望把这个工具的输出存为本地资料时，将最终可读文本写入单个 <output data-whale-result> 元素；宿主提供“收藏结果”按钮，让用户核对、编辑并保存。预览没有保存入口。',
     parameters: { action: { type: 'string', required: true, enum: ['list', 'read', 'draft'] },
       id: { type: 'string' }, title: { type: 'string' }, html: { type: 'string' }, baseRevision: { type: 'string' } },
     output: output(),

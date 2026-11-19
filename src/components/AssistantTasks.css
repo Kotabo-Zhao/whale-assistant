@@ -6,10 +6,11 @@
 .assistant-tasks h2 { margin: 3px 0; font-size: 1.35rem; }
 .assistant-tasks header p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.6; }
 .assistant-task-filters, .assistant-task-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.assistant-task-filters button, .assistant-task-actions button { display: inline-flex; align-items: center; min-height: 40px; gap: 5px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius-inner); color: var(--card-ink, var(--ink)); background: var(--surface); cursor: pointer; }
+.assistant-task-filters button, .assistant-task-actions button { display: inline-flex; align-items: center; min-height: 40px; gap: 6px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--card-ink, var(--ink)); background: var(--surface); cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
 .assistant-task-filters button[aria-selected="true"] { color: var(--accent, var(--blue)); border-color: var(--accent, var(--blue)); background: var(--blue-soft); }
 .assistant-task-list { display: grid; gap: 10px; }
-.assistant-task-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px; border: 1px solid var(--line); border-left: 4px solid var(--accent, var(--blue)); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-card); }
+.assistant-task-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 18px; border: 1px solid var(--line); border-left: 4px solid var(--accent, var(--blue)); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-card); transition: transform 130ms ease, box-shadow 150ms ease, border-color 140ms ease; }
+.assistant-task-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-elevated, var(--shadow-card)); }
 .assistant-task-card > div:first-child { display: grid; min-width: 0; gap: 5px; }
 .assistant-task-card strong, .assistant-task-card small { overflow-wrap: anywhere; }
 .assistant-task-card small { color: var(--card-muted, var(--muted)); }
