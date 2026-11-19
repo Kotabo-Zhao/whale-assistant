@@ -164,7 +164,6 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_phone_ui_tree", "极速读取当前屏幕精简控件树（自动剪枝布局噪声、分配 #ref 编号与中心坐标，自动屏蔽密码/支付/系统敏感界面）。", emptyMap(), emptyList()))
             array.put(schema(
                 "whale_phone_action",
-        "whale_phone_batch",
                 "通过高性能屏控引擎执行点击、长按、输入、滑动、返回、桌面或最近任务；支持 #ref、viewId、可见文本或坐标，自动手势回退兼容 Flutter/Compose/WebView。",
                 mapOf(
                     "action" to "click / long_click / input / swipe / back / home / recents / wait",
@@ -180,7 +179,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema(
                 "whale_phone_batch",
                 "单轮原子执行最多 8 步连贯手机操作并在结束后自动回传最新精简控件树，大幅降低多步屏控延迟。",
-                mapOf("steps" to "JSON 数组字符串，例如 [{"action":"click","text":"搜索"},{"action":"input","text":"鲸鱼"},{"action":"click","text":"确定"}]"),
+                mapOf("steps" to "JSON 数组字符串，例如 [{action: click, text: 搜索}, {action: input, text: 鲸鱼}]"),
                 listOf("steps"),
             ))
             array.put(schema("whale_phone_back", "在手机当前界面执行一次原生返回操作。", emptyMap(), emptyList()))
@@ -219,6 +218,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_code_delete",
         "whale_phone_launch",
         "whale_phone_action",
+        "whale_phone_batch",
         "whale_phone_back",
         "whale_phone_global",
     )
