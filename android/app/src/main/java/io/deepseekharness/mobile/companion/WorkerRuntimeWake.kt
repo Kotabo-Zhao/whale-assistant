@@ -83,7 +83,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                             .put("mode", mode)
                             .put("state", state)
                             .put("summary", cleanSummary.take(4000))
-                            .put("writeSeq", 1L)
+                            .put("writeSeq", 2L)
                             .put("createdAt", finishedAt)
                             .put("updatedAt", finishedAt)
                             .put("owner", ownerSession)
@@ -101,6 +101,23 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                                 .put("next", "任务 ID：$commandId"),
                         )
                     }
+                }
+                runCatching { store.acknowledge(commandId) }
+                runCatching {
+                    val now = System.currentTimeMillis()
+                    store.put(
+                        JSONObject()
+                            .put("id", commandId)
+                            .put("title", workerTitle)
+                            .put("input", task.take(2000))
+                            .put("mode", mode)
+                            .put("state", "running")
+                            .put("summary", "原生后台 Worker 正在执行…")
+                            .put("writeSeq", 1L)
+                            .put("createdAt", now)
+                            .put("updatedAt", now)
+                            .put("owner", ownerSession),
+                    )
                 }
                 WhaleNativeWorkerPool.submit(workerTitle, id = commandId) {
                     try {

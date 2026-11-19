@@ -77,7 +77,11 @@ internal object WhaleNativeRagRetriever {
         if (raw != null) {
             return parseSnippets(raw, maxItems = 3, maxChars = 180)
         }
-        return emptyList()
+        // Fallback to fast SQLite lexical memory search when semantic index is disabled/warming.
+        val lexicalRaw = runCatching {
+            CompanionMemoryStore(app).execute(JSONObject().put("op", "search").put("query", query).put("limit", 3).toString())
+        }.getOrNull()
+        return if (lexicalRaw != null) parseSnippets(lexicalRaw, maxItems = 3, maxChars = 180) else emptyList()
     }
 
     private fun parseSnippets(rawJson: String, maxItems: Int, maxChars: Int): List<String> {

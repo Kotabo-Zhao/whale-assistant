@@ -251,13 +251,14 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         messages: JSONArray,
         toolsArray: JSONArray?,
         listener: StreamListener?,
+        includeUsageOption: Boolean = true,
     ): AssistantTurn {
         val wantStream = listener != null
         val body = JSONObject()
             .put("model", endpoint.model)
             .put("messages", messages)
             .put("stream", wantStream)
-        if (wantStream) {
+        if (wantStream && includeUsageOption) {
             body.put("stream_options", JSONObject().put("include_usage", true))
         }
         if (toolsArray != null && toolsArray.length() > 0) {
@@ -280,6 +281,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             if (code !in 200..299) {
                 val errText = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
+                if (code == 400 && wantStream && includeUsageOption && errText.contains("stream_options", ignoreCase = true)) {
+                    return callChatCompletions(endpoint, messages, toolsArray, listener, includeUsageOption = false)
+                }
                 val msg = "模型接口返回 HTTP $code：${errText.take(240)}"
                 if (code == 429 || code in 502..504) throw TransientHttpException(msg)
                 throw IllegalStateException(msg)
