@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, ChevronRight, Plus, Search, Wrench } from 'lucide-react'
+import { ArrowUpRight, ChevronRight, Plus, Search, Sparkles, Wrench } from 'lucide-react'
 import type { RuntimeBridge } from '../platform/types'
 import './AuthoredTools.css'
 
@@ -10,6 +10,29 @@ const isTool = (item: unknown): item is Tool => {
   return typeof value.id === 'string' && /^[a-z][a-z0-9-]{0,47}$/.test(value.id) &&
     typeof value.title === 'string' && typeof value.revision === 'string' && /^[a-f0-9]{64}$/.test(value.revision)
 }
+
+const WORKSHOP_TEMPLATES = [
+  {
+    id: 'habit',
+    label: '习惯打卡',
+    draft: '请为鲸鱼助手创建一个离线「每日习惯打卡」小工具，支持自定义习惯项、一键打卡、连续天数统计和简洁周视图。',
+  },
+  {
+    id: 'pomodoro',
+    label: '番茄专注',
+    draft: '请为鲸鱼助手创建一个离线「番茄专注计时器」，支持 25/5 分钟循环、任务标签、完成统计和极简深浅色界面。',
+  },
+  {
+    id: 'ledger',
+    label: '随手记账',
+    draft: '请为鲸鱼助手创建一个离线「随手记账本」，支持快速记一笔、分类筛选、本月支出汇总和导出摘要。',
+  },
+  {
+    id: 'checklist',
+    label: '灵感清单',
+    draft: '请为鲸鱼助手创建一个离线「极简待办与灵感清单」，支持置顶重要事项、一键归档和快速搜索。',
+  },
+] as const
 
 export function AuthoredTools({ bridge, create = false }: { bridge: RuntimeBridge; create?: boolean }) {
   const [tools, setTools] = useState<Tool[]>([])
@@ -41,23 +64,44 @@ export function AuthoredTools({ bridge, create = false }: { bridge: RuntimeBridg
     void refresh()
     return () => { live = false; document.removeEventListener('visibilitychange', onChange); void listener?.then(handle => handle?.remove()).catch(() => {}) }
   }, [bridge, retry])
-  const open = async (target: Tool | 'create' | 'library') => {
+  const open = async (target: Tool | 'create' | 'library' | { templateId: string; draft: string }) => {
     if (action.current) return
     action.current = true
-    setOpening(typeof target === 'string' ? target : target.id); setMessage('')
+    const key = typeof target === 'string' ? target : 'templateId' in target ? `tpl:${target.templateId}` : target.id
+    setOpening(key); setMessage('')
     try {
       if (target === 'create') await bridge.insertTaskDraft('请为鲸鱼助手创建一个新功能。我希望它能：')
+      else if (typeof target === 'object' && 'draft' in target) await bridge.insertTaskDraft(target.draft)
       else await bridge.companionDashboard(target === 'library' ? { operation: 'featureLibrary' } : { operation: 'featureOpen', id: target.id, revision: target.revision })
-    } catch { if (mounted.current) setMessage(target === 'create' ? '无法进入创作对话，请重试。' : '工具未能打开，请重试。') }
+    } catch { if (mounted.current) setMessage(target === 'create' || (typeof target === 'object' && 'draft' in target) ? '无法进入创作对话，请重试。' : '工具未能打开，请重试。') }
     finally { action.current = false; if (mounted.current) setOpening(null) }
   }
   const matches = tools.filter(tool => tool.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   const visible = create || expanded ? matches : matches.slice(0, 4)
   return <section className={'authored-tools' + (create ? ' authored-tools-full' : '')} aria-label="我的工具">
     {create && <div className="tool-creation-entry">
-      <div><span className="tool-creation-label">创造模式</span><h2>让鲸鱼学会你需要的功能</h2><p>在对话中描述需求，生成后到功能工坊预览、启用，再从 App 或桌宠打开。</p></div>
-      <div className="tool-creation-actions"><button type="button" className="button button-primary" disabled={opening !== null} onClick={() => { void open('create') }}><Plus size={18}/>{opening === 'create' ? '正在打开…' : '去对话创作'}</button>
-        <button type="button" className="button button-secondary" disabled={opening !== null} onClick={() => { void open('library') }}>功能工坊<ChevronRight size={16}/></button></div>
+      <div>
+        <span className="tool-creation-label"><Sparkles size={13} aria-hidden="true" />创造模式</span>
+        <h2>让鲸鱼学会你需要的功能</h2>
+        <p>在对话中描述需求，生成后到功能工坊预览、启用，再从 App 或桌宠一键打开。</p>
+        <div className="tool-template-strip" aria-label="快捷创作灵感">
+          {WORKSHOP_TEMPLATES.map(tpl => (
+            <button
+              key={tpl.id}
+              type="button"
+              className="tool-template-chip"
+              disabled={opening !== null}
+              onClick={() => { void open({ templateId: tpl.id, draft: tpl.draft }) }}
+            >
+              + {tpl.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="tool-creation-actions">
+        <button type="button" className="button button-primary" disabled={opening !== null} onClick={() => { void open('create') }}><Plus size={18}/>{opening === 'create' ? '正在打开…' : '去对话创作'}</button>
+        <button type="button" className="button button-secondary" disabled={opening !== null} onClick={() => { void open('library') }}>功能工坊<ChevronRight size={16}/></button>
+      </div>
     </div>}
     <div className="authored-tools-heading"><h3><Wrench size={17} aria-hidden="true" />我的工具{loadState === 'ready' && <span className="tool-count">{tools.length}</span>}</h3>
       {!create && <button type="button" disabled={opening !== null} onClick={() => { void open('library') }}>功能工坊 <ChevronRight size={15} aria-hidden="true" /></button>}</div>
@@ -70,7 +114,7 @@ export function AuthoredTools({ bridge, create = false }: { bridge: RuntimeBridg
       {!create && tools.length > 4 && <button type="button" className="authored-tool-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
         {expanded ? '收起' : `显示其余 ${tools.length - 4} 项`}</button>}
       {query && matches.length === 0 && <p>没有匹配的工具。</p>}</div> : loadState === 'ready' &&
-      <div className="tool-empty"><Wrench size={25} aria-hidden="true"/><p>还没有启用的工具。<br/>在功能工坊启用后，会出现在这里。</p></div>}
+      <div className="tool-empty"><Wrench size={25} aria-hidden="true"/><p>还没有启用的工具。<br/>点击上方灵感胶囊或进入功能工坊启用后，会出现在这里。</p></div>}
     {message && <p className="tool-action-message" role="status">{message}</p>}
   </section>
 }

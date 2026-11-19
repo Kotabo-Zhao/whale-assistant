@@ -14,9 +14,11 @@ internal object WhaleMotion {
         if(!enabled()) return
         val gentle=view.context.getSharedPreferences("whale-interface",0).getString("style","cute")=="cute"
         view.alpha=0f
-        view.translationY=(if(gentle) 8 else 5)*view.resources.displayMetrics.density
-        view.animate().alpha(1f).translationY(0f).setDuration(if(gentle) 260 else 210)
-            .setInterpolator(PathInterpolator(.2f,.75f,.2f,1f)).withEndAction {view.alpha=1f;view.translationY=0f}.start()
+        view.scaleX=.975f; view.scaleY=.975f
+        view.translationY=(if(gentle) 10 else 6)*view.resources.displayMetrics.density
+        view.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setDuration(if(gentle) 280 else 220)
+            .setInterpolator(PathInterpolator(.22f,1f,.36f,1f))
+            .withEndAction {view.alpha=1f;view.scaleX=1f;view.scaleY=1f;view.translationY=0f}.start()
     }
     fun overlay(params:android.view.WindowManager.LayoutParams, critical:Boolean=false) {
         params.windowAnimations=if(!enabled()) 0 else if(critical) R.style.WhaleControlMotion else R.style.WhaleOverlayMotion
@@ -25,8 +27,8 @@ internal object WhaleMotion {
         view.animate().cancel()
         view.scaleX=1f;view.scaleY=1f
         if(!enabled()) return
-        view.animate().scaleX(.96f).scaleY(.96f).setDuration(60).withEndAction {
-            view.animate().scaleX(1f).scaleY(1f).setDuration(160).start()
+        view.animate().scaleX(.95f).scaleY(.95f).setDuration(55).withEndAction {
+            view.animate().scaleX(1f).scaleY(1f).setDuration(170).setInterpolator(PathInterpolator(.22f,1f,.36f,1f)).start()
         }.start()
     }
     fun webCSS() = """

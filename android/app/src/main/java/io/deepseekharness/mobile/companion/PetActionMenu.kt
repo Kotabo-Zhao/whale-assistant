@@ -46,11 +46,12 @@ internal class PetActionMenu(
         private set
     private val body = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(12), dp(4), dp(12), dp(10))
+        setPadding(dp(14), dp(8), dp(14), dp(12))
     }
     private fun dp(size: Int) = (size * resources.displayMetrics.density).roundToInt()
     init {
-        background = ui.shape(ui.surface, 20, ui.line)
+        background = ui.shape(ui.surface, 22, ui.line)
+        elevation = dp(10).toFloat()
         isVerticalScrollBarEnabled = false
         clipToOutline = true
         addView(body)
@@ -79,7 +80,7 @@ internal class PetActionMenu(
         setTextColor(if (tile) ui.accent else ui.ink)
         background = ui.action(if (tile) ui.soft else ui.surface, 12)
         isFocusable = true
-        setOnClickListener { click() }
+        setOnClickListener { io.deepseekharness.mobile.WhaleMotion.feedback(this); click() }
     }
 
     private fun TextView.icon(resource: Int, trailing: Boolean = false) {

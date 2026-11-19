@@ -1,9 +1,9 @@
 /**
- * Whale Super Agent 意图路由与最小工具集裁剪器。
+ * Whale Super Agent 意图路由、最小工具集裁剪与 Personal Agent 车道规划器。
  *
- * 解决主会话首轮携带全量工具定义导致约 3 万 token 膨胀、响应慢与功耗高的问题：
- * 按用户输入与当前上下文意图，为 Router 选择最小必需工具集与交互时延预算；
- * 遇到多域复合任务或显式兜底时自动升级为 full，避免误裁导致任务卡住。
+ * 解决主会话首轮携带全量工具定义导致约 3 万 token 膨胀、响应慢与功耗高的问题；
+ * 同时实现“前台用户追问优先抢占 + 复杂任务后台 Worker 自动分流 + 主动承接提示”，
+ * 让手机端助手具备连贯、轻快、主动的 Personal Super Agent 体验。
  */
 
 export const INTENT_PROFILES = Object.freeze({
@@ -111,9 +111,23 @@ export const INTENT_PROFILES = Object.freeze({
       'mobile_device_background_tasks',
     ],
   },
+  workshop_create: {
+    id: 'workshop_create',
+    targetFirstTokenMs: 2200,
+    maxModelTurns: 4,
+    tools: [
+      'mobile_whale_feature',
+      'mobile_worker_report',
+      'mobile_knowledge_save',
+    ],
+  },
 })
 
 const SIGNALS = [
+  {
+    profile: 'workshop_create',
+    pattern: /(创建.{0,8}(功能|工具|小应用|插件|打卡|计时器|记账)|做个.{0,8}(工具|小应用|页面|计算器)|功能工坊|whale_feature)/i,
+  },
   {
     profile: 'device_screen',
     pattern: /(打开|启动|点击|滑动|操作|帮我点|截屏|截图|副屏|无障碍|去.{1,8}(app|应用|软件|微信|淘宝|抖音|美团|设置)|screen|tap|swipe|click|launch\s+app)/i,
@@ -136,9 +150,11 @@ const SIGNALS = [
   },
 ]
 
+const PREEMPT_PATTERN = /(暂停|停止|别做了|先停下|取消|改一下|等等|换个方向|stop|pause|cancel|abort)/i
+const HEAVY_WORK_PATTERN = /(批量|整理所有|深入研究|多步|帮我持续|监控|定时|每天|汇总全部|依次打开|自动化)/i
+
 /**
  * 根据用户输入与选项，决定 Router 本轮应加载的意图档位与最小工具集。
- * 若命中 >= 2 个不同工具域，自动合并所需工具集；若显式要求全量或包含脚本/代码执行需求，则回落 full。
  */
 export function routeTurnTools(inputText, availableTools = [], options = {}) {
   const text = String(inputText ?? '').trim()
@@ -184,5 +200,50 @@ export function routeTurnTools(inputText, availableTools = [], options = {}) {
     prunedCount: Math.max(0, allNames.length - allowedTools.length),
     targetFirstTokenMs,
     maxModelTurns,
+  }
+}
+
+/**
+ * 完整的 Personal Super Agent 单轮执行规划：
+ * 结合最小工具集裁剪、用户追问抢占车道、后台 Worker 分流与主动承接提示。
+ */
+export function planSuperagentTurn(inputText, availableTools = [], state = {}) {
+  const text = String(inputText ?? '').trim()
+  const routed = routeTurnTools(text, availableTools, state)
+  const activeWorkers = Math.max(0, Number(state.activeWorkerCount ?? 0))
+  const pendingReceipts = Math.max(0, Number(state.pendingReceiptCount ?? 0))
+
+  let executionLane = 'foreground_direct'
+  let recommendedWorkerMode = null
+
+  if (activeWorkers > 0 && PREEMPT_PATTERN.test(text)) {
+    executionLane = 'user_preempt'
+  } else if (routed.matchedProfiles.includes('workshop_create')) {
+    executionLane = 'background_worker'
+    recommendedWorkerMode = 'create'
+  } else if (routed.matchedProfiles.includes('device_screen')) {
+    executionLane = 'background_worker'
+    recommendedWorkerMode = 'device'
+  } else if (HEAVY_WORK_PATTERN.test(text) || routed.profile === 'full' || routed.matchedProfiles.length >= 2) {
+    executionLane = 'background_worker'
+    recommendedWorkerMode = routed.matchedProfiles.includes('workspace_file') ? 'device' : 'read'
+  }
+
+  const proactiveHints = []
+  if (pendingReceipts > 0) {
+    proactiveHints.push(`有 ${pendingReceipts} 条后台任务新进展待向用户简明汇报`)
+  }
+  if (executionLane === 'user_preempt') {
+    proactiveHints.push('用户发出干预/暂停指令：优先响应前台诉求并同步暂停或调整在途 Worker')
+  } else if (executionLane === 'background_worker') {
+    proactiveHints.push(`建议派发 ${recommendedWorkerMode} 模式后台 Worker 执行，前台立即确认接单不阻塞对话`)
+  }
+
+  return {
+    ...routed,
+    executionLane,
+    recommendedWorkerMode,
+    userPriorityPreempt: executionLane === 'user_preempt',
+    proactiveHints,
   }
 }

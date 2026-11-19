@@ -51,11 +51,55 @@ class HarnessKeepAliveService : Service() {
         }
     }
     @Volatile private var recoverySinkAttached = false
+    private val idleWatchExecutor by lazy {
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor { runnable ->
+            Thread(runnable, "whale-idle-sleep").apply { isDaemon = true }
+        }
+    }
+    @Volatile private var idleWatchTask: java.util.concurrent.ScheduledFuture<*>? = null
+    @Volatile private var lastActivityAtMs: Long = System.currentTimeMillis()
     private val recoveryCancelled = AtomicBoolean(false)
 
     override fun onCreate() {
         super.onCreate()
         runCatching { ensureNotificationChannel() }
+        scheduleIdleHibernationCheck()
+    }
+
+    private fun scheduleIdleHibernationCheck() {
+        idleWatchTask?.cancel(false)
+        idleWatchTask = idleWatchExecutor.scheduleWithFixedDelay({
+            try {
+                val controller = RuntimeHost.controllerOrNull() ?: return@scheduleWithFixedDelay
+                val foreground = AppForeground.isForeground()
+                if (foreground) {
+                    lastActivityAtMs = System.currentTimeMillis()
+                    return@scheduleWithFixedDelay
+                }
+                val idleMs = (System.currentTimeMillis() - lastActivityAtMs).coerceAtLeast(0L)
+                val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                val batterySaver = powerManager?.isPowerSaveMode == true
+                val hibernated = controller.hibernateIfIdle(
+                    activeWorkerCount = 0,
+                    terminalOpen = false,
+                    virtualScreenActive = false,
+                    appInForeground = false,
+                    idleDurationMs = idleMs,
+                    batterySaverEnabled = batterySaver,
+                )
+                if (hibernated) {
+                    diagnostics.record(
+                        DiagnosticLevel.INFO,
+                        DiagnosticEvent.KEEP_ALIVE,
+                        mapOf("reason" to "idle_hibernation", "idleMs" to idleMs.toString()),
+                    )
+                    stopForegroundCompat()
+                    stopSelf()
+                }
+            } catch (_: Throwable) {
+                // Best-effort idle check must never crash the service.
+            }
+        }, 60L, 60L, java.util.concurrent.TimeUnit.SECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -159,6 +203,8 @@ class HarnessKeepAliveService : Service() {
     }
 
     override fun onDestroy() {
+        idleWatchTask?.cancel(false)
+        runCatching { idleWatchExecutor.shutdownNow() }
         recoveryCancelled.set(true)
         // 先取消在途启动，再关闭工作线程：即使 worker 已越过取消检查，
         // RuntimeSupervisor 的启动代次也会拒绝随后拉起子进程。

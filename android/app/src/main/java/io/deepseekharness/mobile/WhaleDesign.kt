@@ -52,10 +52,10 @@ internal data class WhaleDesign(
             val sea = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") == "simple"
             val dark = AppThemePreference.isDark(AppThemePreference.current(context),AppThemePreference.systemNight(context))
             val values = when {
-                sea && dark -> listOf("#101d2b","#172838","#1c3042","#eef5fa","#a1b4c5","#2d4356","#80d3dc","#102c35","#254650")
-                sea -> listOf("#f1f5f8","#ffffff","#f7fafc","#172b40","#5d7080","#dce6ed","#006e80","#ffffff","#e3f1f3")
-                dark -> listOf("#201e2c","#2b2839","#353044","#f4eff8","#c3b7cc","#4d455d","#d5b8e9","#30223e","#41354e")
-                else -> listOf("#f5f0e9","#fffdf9","#f3edf7","#332d3d","#71657a","#e5dce8","#78608e","#ffffff","#ede4f3")
+                sea && dark -> listOf("#0b131c","#121e2b","#182736","#edf4fa","#98aec2","#24384a","#6fd3df","#092128","#1a3842")
+                sea -> listOf("#f5f7fa","#ffffff","#f0f4f8","#12202e","#5a6c7d","#dce4ec","#0a7a8a","#ffffff","#e4f4f6")
+                dark -> listOf("#171522","#211e30","#2a263c","#f4eff9","#beb2c9","#3d3752","#d6b8ec","#251933","#372d47")
+                else -> listOf("#f8f4f0","#fffdfb","#f4eef7","#2c2636","#6d6178","#e5dce8","#74598c","#ffffff","#efe7f5")
             }.map(Color::parseColor)
             return WhaleDesign(sea,dark,values[0],values[1],values[2],values[3],values[4],values[5],values[6],values[7],values[8])
         }

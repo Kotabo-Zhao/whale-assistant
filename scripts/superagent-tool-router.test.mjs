@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { routeTurnTools } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-tool-router.js'
+import { routeTurnTools, planSuperagentTurn } from './runtime-profile/plugins/dsh-mobile-shizuku/lib/superagent-tool-router.js'
 
 const ALL_TOOLS = [
   'read', 'glob', 'grep', 'read_image', 'web_search', 'bash',
@@ -9,7 +9,7 @@ const ALL_TOOLS = [
   'mobile_device_capabilities', 'mobile_device_battery', 'mobile_device_current_app',
   'mobile_screen_observe', 'mobile_screen_act', 'mobile_device_app_launch',
   'mobile_device_file_list', 'mobile_device_file_read', 'mobile_device_file_write',
-  'mobile_superagent_read', 'mobile_worker_report',
+  'mobile_superagent_read', 'mobile_worker_report', 'mobile_whale_feature',
 ]
 
 test('日常闲聊仅挂载极简工具集，大幅裁剪无关工具', () => {
@@ -39,4 +39,23 @@ test('涉及脚本、终端或强制全量时自动回落 full 不阻塞任务',
   assert.equal(result.profile, 'full')
   assert.equal(result.allowedTools.length, ALL_TOOLS.length)
   assert.equal(result.prunedCount, 0)
+})
+
+test('planSuperagentTurn：后台有在途 Worker 时用户发出暂停/纠偏自动触发高优抢占车道', () => {
+  const plan = planSuperagentTurn('先停一下，别点了，换个方向查资料', ALL_TOOLS, { activeWorkerCount: 1, pendingReceiptCount: 2 })
+  assert.equal(plan.executionLane, 'user_preempt')
+  assert.equal(plan.userPriorityPreempt, true)
+  assert.ok(plan.proactiveHints.some(h => h.includes('2 条后台任务')))
+})
+
+test('planSuperagentTurn：工坊创作与屏控自动分流至后台 Worker 车道不阻塞对话', () => {
+  const createPlan = planSuperagentTurn('帮我创建一个每日习惯打卡小应用', ALL_TOOLS)
+  assert.equal(createPlan.profile, 'workshop_create')
+  assert.equal(createPlan.executionLane, 'background_worker')
+  assert.equal(createPlan.recommendedWorkerMode, 'create')
+  assert.ok(createPlan.allowedTools.includes('mobile_whale_feature'))
+
+  const screenPlan = planSuperagentTurn('打开微信帮我看看最新消息', ALL_TOOLS)
+  assert.equal(screenPlan.executionLane, 'background_worker')
+  assert.equal(screenPlan.recommendedWorkerMode, 'device')
 })

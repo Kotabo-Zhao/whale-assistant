@@ -2,7 +2,7 @@ import { compactScreenResult, screenSequenceRequest, screenOperation } from './s
 import { randomUUID } from 'node:crypto'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { installWorkers, workerOwner } from './workers.js'
-import { routeTurnTools } from './superagent-tool-router.js'
+import { routeTurnTools, planSuperagentTurn } from './superagent-tool-router.js'
 import { installScreenWatch } from './screen-watch.js'
 import { installTurnSignal } from './turn-signal.js'
 import { installOwnerContext, requireOwnerTurn } from './owner-context.js'
@@ -1912,11 +1912,15 @@ export function apply(ctx) {
     output: output(),
     execute: (args) => {
       const registered = typeof ctx.tools?.list === 'function' ? ctx.tools.list() : []
-      const routed = routeTurnTools(args.inputText, registered, { forceFull: Boolean(args.forceFull) })
-      return { text: JSON.stringify(routed) }
+      const plan = planSuperagentTurn(args.inputText, registered, {
+        forceFull: Boolean(args.forceFull),
+        activeWorkerCount: Number(args.activeWorkerCount ?? 0),
+        pendingReceiptCount: Number(args.pendingReceiptCount ?? 0),
+      })
+      return { text: JSON.stringify(plan) }
     },
     presentCall: () => present('规划本轮最小工具集', undefined),
   }))
 }
 
-export { routeTurnTools }
+export { routeTurnTools, planSuperagentTurn }
