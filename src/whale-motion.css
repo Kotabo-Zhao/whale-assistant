@@ -1,14 +1,31 @@
 :root {
-  --motion-fast: 130ms;
-  --motion-normal: 220ms;
+  --motion-fast: 110ms;
+  --motion-normal: 180ms;
   --motion-enter: cubic-bezier(.2, .7, .2, 1);
   --motion-press: cubic-bezier(.3, 0, .6, 1);
 }
-:root[data-style='cute'] { --motion-normal: 270ms; --motion-enter: cubic-bezier(.18, .8, .25, 1); }
+:root[data-style='simple'] {
+  --motion-fast: 95ms;
+  --motion-normal: 155ms;
+  --motion-enter: cubic-bezier(.22, .68, .24, 1);
+}
+:root[data-style='cute'] {
+  --motion-fast: 140ms;
+  --motion-normal: 260ms;
+  --motion-enter: cubic-bezier(.22, 1.15, .36, 1);
+}
 
 @keyframes whale-page-enter { from { opacity: 0; translate: 0 7px; } to { opacity: 1; translate: 0 0; } }
 @keyframes whale-panel-enter { from { opacity: 0; scale: .985; translate: 0 6px; } to { opacity: 1; scale: 1; translate: 0 0; } }
 @keyframes whale-fade-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes whale-chan-float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-5px) rotate(-1.2deg); }
+}
+@keyframes whale-pulse-soft {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
 
 .app-main > * { animation: whale-page-enter var(--motion-normal) var(--motion-enter) backwards; }
 .dialog-backdrop, .knowledge-detail-backdrop { animation: whale-fade-enter var(--motion-fast) ease-out backwards; }
@@ -22,11 +39,20 @@
 .toast { animation: whale-panel-enter var(--motion-normal) var(--motion-enter) backwards; }
 details[open] > :not(summary) { animation: whale-fade-enter var(--motion-normal) ease-out backwards; }
 
+/* Cute Whale-Chan gentle floating & breathing accents */
+:root[data-style='cute'] .whale-chat-hero-mark {
+  animation: whale-chan-float 3.4s ease-in-out infinite;
+}
+.whale-thinking {
+  animation: whale-pulse-soft 1.4s ease-in-out infinite;
+}
+
 button, summary, .sidebar-item, .bottom-navigation-item, .management-row, input, textarea, select {
   transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out,
     color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out, opacity var(--motion-fast) ease-out;
 }
 button:not(.bottom-navigation-item):not(.sidebar-item):active { scale: .975; }
+:root[data-style='cute'] button:not(.bottom-navigation-item):not(.sidebar-item):active { scale: .96; }
 button { transition-property: background-color, border-color, color, box-shadow, opacity, scale; }
 .bottom-navigation-item, .sidebar-item { transition-duration: 160ms; }
 .bottom-navigation-item svg, .sidebar-item svg { transition: scale var(--motion-fast) var(--motion-enter); }

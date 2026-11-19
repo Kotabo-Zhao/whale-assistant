@@ -352,3 +352,33 @@
   color: var(--blue);
   background: var(--blue-soft);
 }
+
+.whale-brand-avatar {
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+:root[data-style='cute'] .whale-brand-avatar,
+:root[data-style='cute'] .whale-chat-hero-mark {
+  border-radius: 999px;
+  border: 2px solid var(--blue-line);
+}
+
+:root[data-style='simple'] .whale-chat-hero-mark {
+  border-radius: 16px;
+  border: 1px solid var(--line-strong);
+}
+
+:root[data-style='simple'] .whale-msg-assistant .whale-msg-bubble {
+  box-shadow: none;
+  border-radius: 14px;
+}
+
+:root[data-style='simple'] .whale-msg-user .whale-msg-bubble {
+  border-radius: 14px;
+}
+
+:root[data-style='cute'] .whale-msg-bubble {
+  border-radius: 22px;
+}

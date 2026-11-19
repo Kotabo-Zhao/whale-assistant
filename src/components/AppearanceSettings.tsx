@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { readInterfaceStyle, saveInterfaceStyle } from '../theme'
+import grokMark from '../assets/whale-grok-mark.png'
+import whaleChanAvatar from '../assets/whale-chan-avatar.png'
 import { Moon, Palette, Sun, SunMoon, RotateCcw } from 'lucide-react'
 import { t } from '../i18n'
 import { applyTextColor, applyTheme, clearCustomAccentColor, clearCustomTextColor, effectiveAccentColor, readCustomAccentColor, readCustomTextColor, readThemeMode, saveAccentMode, saveAccentSource, saveCustomAccentColor, saveCustomTextColor, saveThemeMode, useAccentMode, useAccentSource, useResolvedTheme, useThemeMode } from '../theme'
@@ -265,9 +267,27 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
           <Palette size={28} aria-hidden="true" />
           <h2 id="appearance-title">{t('界面主题')}</h2>
           <p>{t('立即生效，下次打开仍使用此主题。')}</p>
-          <div className="appearance-options" role="group" aria-label={t('界面风格')}>
-            {(['simple', 'cute'] as const).map(value => <button type="button" key={value} aria-pressed={style === value}
-              onClick={() => { saveInterfaceStyle(value); setStyle(value) }}>{t(value === 'simple' ? '深海·专注' : '月汐·陪伴')}</button>)}
+          <div className="whale-style-picker" role="group" aria-label={t('界面风格')}>
+            {([
+              { value: 'simple' as const, title: '极简·类 Grok', desc: '黑白极简 · 锐利线条 · 纯黑省电', thumb: grokMark },
+              { value: 'cute' as const, title: '鲸鱼娘·可爱', desc: '晴海暖白 · 鲸鱼娘头像 · 柔和动效', thumb: whaleChanAvatar },
+            ]).map(item => (
+              <button
+                type="button"
+                key={item.value}
+                className="whale-style-card"
+                data-preview={item.value}
+                aria-label={t(item.title)}
+                aria-pressed={style === item.value}
+                onClick={() => { saveInterfaceStyle(item.value); setStyle(item.value) }}
+              >
+                <img className="whale-style-thumb" src={item.thumb} alt="" width={44} height={44} />
+                <span className="whale-style-copy">
+                  <strong>{t(item.title)}</strong>
+                  <small>{t(item.desc)}</small>
+                </span>
+              </button>
+            ))}
           </div>
           <div className="appearance-options" role="radiogroup" aria-labelledby="appearance-title">
             {OPTIONS.map(({ value, label, Icon }) => (

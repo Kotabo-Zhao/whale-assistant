@@ -768,8 +768,8 @@ describe('外观设置接线', () => {
   await arriveAtSettingsHome()
 
     await openSettingsPage('主题')
-    expect(await screen.findByRole('button', { name: '月汐·陪伴' })).toBeVisible()
-    expect(screen.getByRole('button', { name: '深海·专注' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: '鲸鱼娘·可爱' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '极简·类 Grok' })).toBeVisible()
     expect(screen.getByRole('slider', { name: /字号/ })).toBeVisible()
     const advanced=screen.getByText('背景与对话外观',{selector:'summary'}).parentElement as HTMLDetailsElement
     expect(advanced.open).toBe(false)

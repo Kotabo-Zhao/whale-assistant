@@ -7,7 +7,11 @@ import android.content.res.Resources
 import android.graphics.Color
 import org.json.JSONObject
 
-/** Shared semantic palette for every native host, generated tools and the Harness WebView. */
+/**
+ * Shared semantic palette for every native host, generated tools, floating pet, and WebView.
+ * - simple (`sea = true`):  Grok-inspired monochrome minimalism (crisp light / true OLED dark)
+ * - cute   (`sea = false`): Whale-Chan ocean-sky kawaii style (soft cloud light / twilight ocean dark)
+ */
 internal data class WhaleDesign(
     val sea: Boolean, val dark: Boolean, val canvas: Int, val surface: Int, val raised: Int,
     val ink: Int, val muted: Int, val line: Int, val accent: Int, val onAccent: Int, val soft: Int,
@@ -50,14 +54,16 @@ internal data class WhaleDesign(
     companion object {
         fun of(context: Context): WhaleDesign {
             val sea = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") == "simple"
-            val dark = AppThemePreference.isDark(AppThemePreference.current(context),AppThemePreference.systemNight(context))
+            val dark = AppThemePreference.isDark(AppThemePreference.current(context), AppThemePreference.systemNight(context))
             val values = when {
-                sea && dark -> listOf("#0b131c","#121e2b","#182736","#edf4fa","#98aec2","#24384a","#6fd3df","#092128","#1a3842")
-                sea -> listOf("#f5f7fa","#ffffff","#f0f4f8","#12202e","#5a6c7d","#dce4ec","#0a7a8a","#ffffff","#e4f4f6")
-                dark -> listOf("#171522","#211e30","#2a263c","#f4eff9","#beb2c9","#3d3752","#d6b8ec","#251933","#372d47")
-                else -> listOf("#f8f4f0","#fffdfb","#f4eef7","#2c2636","#6d6178","#e5dce8","#74598c","#ffffff","#efe7f5")
+                // Grok-inspired OLED dark & crisp monochrome light
+                sea && dark -> listOf("#000000", "#0d0d0f", "#16161a", "#fafafa", "#a1a1aa", "#26262c", "#f4f4f5", "#09090b", "#1f1f24")
+                sea -> listOf("#fafafa", "#ffffff", "#f4f4f5", "#09090b", "#52525b", "#e4e4e7", "#18181b", "#ffffff", "#efefef")
+                // Whale-Chan twilight ocean dark & cloud ocean-sky light
+                dark -> listOf("#121626", "#1b2136", "#232b45", "#f0f5ff", "#a9b8d9", "#323d5e", "#8ec5ff", "#0f1d38", "#263654")
+                else -> listOf("#f6f9ff", "#ffffff", "#edf4ff", "#1f2d47", "#5b6f91", "#d4e4ff", "#4f86eb", "#ffffff", "#e8f1ff")
             }.map(Color::parseColor)
-            return WhaleDesign(sea,dark,values[0],values[1],values[2],values[3],values[4],values[5],values[6],values[7],values[8])
+            return WhaleDesign(sea, dark, values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8])
         }
 
         /** Context.getColor is final. Resolve the family at the shared resource boundary. */
@@ -76,7 +82,7 @@ internal data class WhaleDesign(
                 private val familyTheme by lazy {
                     resources.newTheme().apply {
                         setTo(base.theme)
-                        applyStyle(design.nativeStyle,true)
+                        applyStyle(design.nativeStyle, true)
                     }
                 }
                 override fun getResources() = resources

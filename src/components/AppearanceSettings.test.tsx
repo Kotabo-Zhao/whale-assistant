@@ -38,12 +38,12 @@ describe('外观设置', () => {
   it('切换界面风格后重新打开设置，保留选择和原有明暗模式', () => {
     const first = render(<AppearanceSettings />)
     const mode = document.documentElement.dataset.theme
-    fireEvent.click(screen.getByRole('button', { name: '深海·专注' }))
+    fireEvent.click(screen.getByRole('button', { name: '极简·类 Grok' }))
     expect(document.documentElement.dataset.style).toBe('simple')
     first.unmount()
     render(<AppearanceSettings />)
-    expect(screen.getByRole('button', { name: '深海·专注' })).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.click(screen.getByRole('button', { name: '月汐·陪伴' }))
+    expect(screen.getByRole('button', { name: '极简·类 Grok' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: '鲸鱼娘·可爱' }))
     expect(document.documentElement.dataset.style).toBe('cute')
     expect(document.documentElement.dataset.theme).toBe(mode)
   })

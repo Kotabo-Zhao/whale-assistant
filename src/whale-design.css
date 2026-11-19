@@ -1,105 +1,114 @@
-/* Whale Assistant Design System — Calm, minimal, high-contrast mobile & desktop surfaces. */
+/* Whale Assistant Unified Dual-Style Design System
+ * Style 1 (data-style='simple'): Grok-inspired monochrome minimalism (crisp hairlines, true OLED dark).
+ * Style 2 (data-style='cute'):   Whale-Chan ocean-sky kawaii style (soft cloud surfaces, pastel ocean blue).
+ */
 
+/* ==========================================================================
+ * STYLE 1: Grok-Inspired Minimalism (simple)
+ * ========================================================================== */
 :root[data-style='simple'] {
-  --bg: #f5f7fa;
+  --bg: #fafafa;
   --surface: #ffffff;
-  --surface-muted: #f0f4f8;
-  --surface-hover: #e7eef4;
-  --ink: #12202e;
-  --muted: #5a6c7d;
-  --field-label: #354b5e;
-  --icon-muted: #5e7488;
-  --line: rgba(18, 32, 46, 0.09);
-  --line-alt: rgba(18, 32, 46, 0.09);
-  --line-strong: rgba(18, 32, 46, 0.18);
-  --line-faint: rgba(18, 32, 46, 0.05);
-  --blue: #0a7a8a;
-  --blue-hover: #086472;
-  --blue-soft: #e4f4f6;
-  --blue-line: #b4dce2;
+  --surface-muted: #f4f4f5;
+  --surface-hover: #e4e4e7;
+  --ink: #09090b;
+  --muted: #52525b;
+  --field-label: #27272a;
+  --icon-muted: #71717a;
+  --line: rgba(9, 9, 11, 0.09);
+  --line-alt: rgba(9, 9, 11, 0.09);
+  --line-strong: rgba(9, 9, 11, 0.18);
+  --line-faint: rgba(9, 9, 11, 0.05);
+  --blue: #18181b;
+  --blue-hover: #27272a;
+  --blue-soft: rgba(9, 9, 11, 0.06);
+  --blue-line: rgba(9, 9, 11, 0.2);
   --on-accent: #ffffff;
-  --brand-bg: #0a7a8a;
-  --radius-control: 12px;
-  --radius-inner: 14px;
-  --radius-card: 18px;
-  --shadow-card: 0 1px 2px rgba(15, 29, 44, 0.04), 0 6px 20px rgba(15, 29, 44, 0.03);
-  --shadow-elevated: 0 8px 28px rgba(15, 29, 44, 0.08);
-  --ring: 3px solid rgba(10, 122, 138, 0.22);
+  --brand-bg: #18181b;
+  --radius-control: 10px;
+  --radius-inner: 12px;
+  --radius-card: 14px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-elevated: 0 6px 20px rgba(0, 0, 0, 0.07);
+  --ring: 2px solid rgba(9, 9, 11, 0.18);
 }
 
 :root[data-style='simple'][data-theme='dark'] {
-  --bg: #0b131c;
-  --surface: #121e2b;
-  --surface-muted: #182736;
-  --surface-hover: #203347;
-  --ink: #edf4fa;
-  --muted: #98aec2;
-  --field-label: #c0d2e0;
-  --icon-muted: #92a9be;
-  --line: rgba(210, 232, 250, 0.1);
-  --line-alt: rgba(210, 232, 250, 0.1);
-  --line-strong: rgba(210, 232, 250, 0.2);
-  --line-faint: rgba(210, 232, 250, 0.05);
-  --blue: #6fd3df;
-  --blue-hover: #94e2eb;
-  --blue-soft: rgba(111, 211, 223, 0.14);
-  --blue-line: rgba(111, 211, 223, 0.32);
-  --on-accent: #092128;
-  --brand-bg: #6fd3df;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.22);
-  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.42);
-  --ring: 3px solid rgba(111, 211, 223, 0.28);
+  --bg: #000000;
+  --surface: #0d0d0f;
+  --surface-muted: #16161a;
+  --surface-hover: #1f1f24;
+  --ink: #fafafa;
+  --muted: #a1a1aa;
+  --field-label: #d4d4d8;
+  --icon-muted: #a1a1aa;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-alt: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.22);
+  --line-faint: rgba(255, 255, 255, 0.06);
+  --blue: #f4f4f5;
+  --blue-hover: #ffffff;
+  --blue-soft: rgba(255, 255, 255, 0.09);
+  --blue-line: rgba(255, 255, 255, 0.24);
+  --on-accent: #09090b;
+  --brand-bg: #f4f4f5;
+  --shadow-card: none;
+  --shadow-elevated: 0 10px 28px rgba(0, 0, 0, 0.65);
+  --ring: 2px solid rgba(255, 255, 255, 0.26);
 }
 
+/* ==========================================================================
+ * STYLE 2: Whale-Chan Kawaii Ocean-Sky (cute)
+ * ========================================================================== */
 :root[data-style='cute'] {
-  --bg: #f8f4f0;
-  --surface: #fffdfb;
-  --surface-muted: #f4eef7;
-  --surface-hover: #ece3f2;
-  --ink: #2c2636;
-  --muted: #6d6178;
-  --field-label: #584766;
-  --icon-muted: #7e6c8c;
-  --line: rgba(65, 45, 86, 0.09);
-  --line-alt: rgba(65, 45, 86, 0.09);
-  --line-strong: rgba(65, 45, 86, 0.18);
-  --line-faint: rgba(65, 45, 86, 0.05);
-  --blue: #74598c;
-  --blue-hover: #604677;
-  --blue-soft: #efe7f5;
-  --blue-line: #d6c3e4;
+  --bg: #f6f9ff;
+  --surface: #ffffff;
+  --surface-muted: #edf4ff;
+  --surface-hover: #e1eeff;
+  --ink: #1f2d47;
+  --muted: #5b6f91;
+  --field-label: #3a4f75;
+  --icon-muted: #6e84ab;
+  --line: rgba(79, 134, 235, 0.14);
+  --line-alt: rgba(79, 134, 235, 0.14);
+  --line-strong: rgba(79, 134, 235, 0.26);
+  --line-faint: rgba(79, 134, 235, 0.07);
+  --blue: #4f86eb;
+  --blue-hover: #3b72db;
+  --blue-soft: #e8f1ff;
+  --blue-line: #b9d4ff;
   --on-accent: #ffffff;
-  --brand-bg: #74598c;
+  --brand-bg: #4f86eb;
   --radius-control: 16px;
-  --radius-inner: 18px;
-  --radius-card: 22px;
-  --shadow-card: 0 2px 10px rgba(72, 48, 94, 0.04), 0 8px 24px rgba(72, 48, 94, 0.03);
-  --shadow-elevated: 0 10px 28px rgba(72, 48, 94, 0.09);
-  --ring: 3px solid rgba(116, 89, 140, 0.22);
+  --radius-inner: 20px;
+  --radius-card: 24px;
+  --shadow-card: 0 3px 14px rgba(79, 134, 235, 0.07), 0 1px 3px rgba(31, 45, 71, 0.04);
+  --shadow-elevated: 0 12px 30px rgba(79, 134, 235, 0.14);
+  --ring: 3px solid rgba(79, 134, 235, 0.24);
 }
 
 :root[data-style='cute'][data-theme='dark'] {
-  --bg: #171522;
-  --surface: #211e30;
-  --surface-muted: #2a263c;
-  --surface-hover: #342f49;
-  --ink: #f4eff9;
-  --muted: #beb2c9;
-  --field-label: #d4c9de;
-  --icon-muted: #baa9c8;
-  --line: rgba(226, 208, 245, 0.11);
-  --line-alt: rgba(226, 208, 245, 0.11);
-  --line-strong: rgba(226, 208, 245, 0.22);
-  --line-faint: rgba(226, 208, 245, 0.06);
-  --blue: #d6b8ec;
-  --blue-hover: #e7cff7;
-  --blue-soft: rgba(214, 184, 236, 0.15);
-  --blue-line: rgba(214, 184, 236, 0.34);
-  --on-accent: #251933;
-  --brand-bg: #d6b8ec;
-  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.22);
-  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.44);
-  --ring: 3px solid rgba(214, 184, 236, 0.28);
+  --bg: #121626;
+  --surface: #1b2136;
+  --surface-muted: #232b45;
+  --surface-hover: #2c3657;
+  --ink: #f0f5ff;
+  --muted: #a9b8d9;
+  --field-label: #ccd8f0;
+  --icon-muted: #98abd4;
+  --line: rgba(142, 197, 255, 0.16);
+  --line-alt: rgba(142, 197, 255, 0.16);
+  --line-strong: rgba(142, 197, 255, 0.28);
+  --line-faint: rgba(142, 197, 255, 0.08);
+  --blue: #8ec5ff;
+  --blue-hover: #add6ff;
+  --blue-soft: rgba(142, 197, 255, 0.16);
+  --blue-line: rgba(142, 197, 255, 0.36);
+  --on-accent: #0f1d38;
+  --brand-bg: #8ec5ff;
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.34);
+  --shadow-elevated: 0 14px 34px rgba(0, 0, 0, 0.5);
+  --ring: 3px solid rgba(142, 197, 255, 0.3);
 }
 
 :root {
@@ -115,7 +124,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Navigation: calm floating pill states */
+/* Navigation: unified surface across both styles */
 .app-sidebar {
   background: var(--surface);
   border-right: 1px solid var(--line);
@@ -140,6 +149,16 @@ body {
   font-weight: var(--weight-semibold);
 }
 
+.sidebar-mark img.app-mark {
+  border-radius: 9px;
+  object-fit: cover;
+}
+
+:root[data-style='cute'] .sidebar-mark img.app-mark {
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(79, 134, 235, 0.25);
+}
+
 /* Typography & Section Rhythm */
 .screen-heading h1,
 .screen-heading h2 {
@@ -157,7 +176,7 @@ body {
   box-shadow: var(--shadow-card);
 }
 
-/* Management list & rows: cleaner touch targets and visual clarity */
+/* Management list & rows */
 .management-list {
   border-radius: var(--radius-card);
   overflow: hidden;
@@ -227,6 +246,70 @@ textarea {
   box-shadow: var(--ring);
 }
 
+/* Dual-Style Visual Picker Cards (AppearanceSettings) */
+.whale-style-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.whale-style-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: var(--radius-card);
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+  transition: border-color 150ms ease, background-color 150ms ease, transform 130ms ease;
+}
+
+.whale-style-card:hover {
+  background: var(--surface-muted);
+}
+
+.whale-style-card[aria-pressed='true'] {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.whale-style-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+}
+
+.whale-style-card[data-preview='cute'] .whale-style-thumb {
+  border-radius: 999px;
+}
+
+.whale-style-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.whale-style-copy strong {
+  font-size: 0.92rem;
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+}
+
+.whale-style-copy small {
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 /* Grouped Settings Cards */
 .account-sections {
   gap: 10px;
@@ -255,7 +338,7 @@ textarea {
 }
 
 :root[data-style='cute'] .management-list {
-  border-radius: 22px;
+  border-radius: 24px;
 }
 
 :root[data-style='simple'] .management-row {
@@ -280,6 +363,9 @@ textarea {
   .account-sections {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .whale-style-picker {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .management-row {
     padding: 14px 15px;
   }
@@ -291,7 +377,8 @@ textarea {
   .management-row,
   .button,
   .icon-button,
-  .account-group-toggle {
+  .account-group-toggle,
+  .whale-style-card {
     transition: none;
   }
 }

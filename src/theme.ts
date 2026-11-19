@@ -238,6 +238,7 @@ export function readInterfaceStyle(): InterfaceStyle {
 export function saveInterfaceStyle(value: InterfaceStyle) {
   localStorage.setItem('whale-interface-style', value)
   applyTheme(readThemeMode())
+  window.dispatchEvent(new Event(THEME_EVENT))
 }
 
 export function applyTheme(mode: ThemeMode): ResolvedTheme {
@@ -323,4 +324,8 @@ export function useAccentSource(): AccentSource {
  */
 export function useResolvedTheme(): ResolvedTheme {
   return useSyncExternalStore(subscribe, () => resolveTheme(readThemeMode(), systemPrefersDark()), () => 'light')
+}
+
+export function useInterfaceStyle(): InterfaceStyle {
+  return useSyncExternalStore(subscribe, readInterfaceStyle, () => 'cute')
 }

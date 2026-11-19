@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MarkdownIt from 'markdown-it'
 import { ArrowUp, BookOpen, Check, CheckCircle2, Copy, Hammer, ListTodo, RotateCcw, Settings2, Sparkles, Wrench } from 'lucide-react'
-import appMark from '../assets/app-mark.png'
+import grokMark from '../assets/whale-grok-mark.png'
+import whaleChanAvatar from '../assets/whale-chan-avatar.png'
+import whaleChanBadge from '../assets/whale-chan-badge.png'
 import { t } from '../i18n'
+import { useInterfaceStyle } from '../theme'
 import type { RuntimeBridge, WhaleNativeChatStep } from '../platform/types'
 import type { AppView } from '../ui/appNavigation'
 import './WhaleChatScreen.css'
@@ -44,6 +47,9 @@ export interface WhaleChatScreenProps {
 }
 
 export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
+  const style = useInterfaceStyle()
+  const headerMark = style === 'simple' ? grokMark : whaleChanBadge
+  const heroMark = style === 'simple' ? grokMark : whaleChanAvatar
   const [messages, setMessages] = useState<WhaleChatMessage[]>(loadHistory)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -118,7 +124,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     <section className="whale-chat-screen" aria-label={t('鲸鱼助手对话')}>
       <header className="whale-chat-header">
         <div className="whale-chat-brand">
-          <img src={appMark} alt="" width={28} height={28} />
+          <img src={headerMark} alt="" width={30} height={30} className="whale-brand-avatar" />
           <div>
             <h1>{t('鲸鱼助手')}</h1>
             <span className="whale-chat-badge">
@@ -158,7 +164,13 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       <div className="whale-chat-stream" ref={listRef}>
         {messages.length === 0 ? (
           <div className="whale-chat-empty">
-            <img src={appMark} alt="" width={54} height={54} className="whale-chat-hero-mark" />
+            <img
+              src={heroMark}
+              alt=""
+              width={style === 'cute' ? 76 : 60}
+              height={style === 'cute' ? 76 : 60}
+              className="whale-chat-hero-mark"
+            />
             <h2>{t('今天想一起做点什么？')}</h2>
             <p>{t('已脱离 DeepSeek Harness 独立运行，随时可以聊天、查记忆、管事项或一句话造个小工具。')}</p>
             <div className="whale-starter-grid">
