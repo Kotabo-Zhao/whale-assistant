@@ -10,14 +10,15 @@ import io.deepseekharness.mobile.features.WhaleFeatureStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.UUID
 
 /**
  * Whale 100% 原生工具注册与直调层（零 PRoot、零 Node、零 DeepSeek Harness 依赖）。
  *
- * 完整覆盖五大核心能力域：
+ * 共注册 25 项进程内原生工具，覆盖五大核心能力域：
  * 1. 长期记忆与主人档案（混合 BGE 语义 + SQLite）
- * 2. 本地资料库与秘书待办
- * 3. 本地多文件代码编写与功能工坊离线软件创作（含 window.whaleStorage 持久化与置顶）
+ * 2. 本地资料库与秘书待办（含创建与完成闭环）
+ * 3. 本地多文件代码编写（含项目列表/读写/精准补丁/删除/搜索）与功能工坊离线软件创作
  * 4. 原生手机操控（应用检索/启动、无障碍界面树、受控点击/输入/返回，保留系统级敏感界面保护）
  * 5. 设备状态与原生后台 Worker 并发池
  */
@@ -39,9 +40,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         val array = JSONArray()
         val includeMemory = Regex("(记住|记忆|偏好|习惯|我喜欢|上次|档案|memory|prefer)", RegexOption.IGNORE_CASE).containsMatchIn(text)
         val includeKnowledge = Regex("(资料|笔记|文档|知识库|总结|保存|记录|note|knowledge|doc)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includeSecretary = Regex("(提醒|事项|待办|日程|安排|计划|今天|明天|todo|task|remind|schedule)", RegexOption.IGNORE_CASE).containsMatchIn(text)
+        val includeSecretary = Regex("(提醒|事项|待办|日程|安排|计划|完成|勾掉|今天|明天|todo|task|remind|schedule)", RegexOption.IGNORE_CASE).containsMatchIn(text)
         val includeWorkshop = Regex("(工坊|小工具|小应用|打卡|计时|记账|置顶|创建.*功能|做个.*软件|workshop|tool)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includeCode = Regex("(写代码|编程|项目|源码|文件|函数|重构|搜索代码|code|project|src|html|js|ts|kotlin|python|json)", RegexOption.IGNORE_CASE).containsMatchIn(text)
+        val includeCode = Regex("(写代码|编程|项目|源码|文件|函数|重构|补丁|修改代码|删除文件|搜索代码|code|project|src|html|js|ts|kotlin|python|json)", RegexOption.IGNORE_CASE).containsMatchIn(text)
         val includePhone = Regex("(打开|启动|点击|输入|滑动|返回|看看屏幕|当前页面|装了哪些|应用|app|微信|设置|操作手机|screen|click|launch)", RegexOption.IGNORE_CASE).containsMatchIn(text)
         val includeDevice = Regex("(电量|电池|手机|充电|后台|任务|进度|状态|battery|worker|工单)", RegexOption.IGNORE_CASE).containsMatchIn(text)
 
@@ -57,6 +58,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         if (includeSecretary) {
             array.put(schema("whale_secretary_list", "查询用户的未完成秘书事项与待办列表。", mapOf("query" to "可选筛选关键词"), emptyList()))
             array.put(schema("whale_secretary_add", "为用户新增一条秘书事项/待办记录。", mapOf("title" to "事项标题", "note" to "可选补充说明"), listOf("title")))
+            array.put(schema("whale_secretary_complete", "将指定编号的秘书事项标记为已完成。", mapOf("id" to "事项 UUID 编号"), listOf("id")))
         }
         if (includeWorkshop) {
             array.put(schema("whale_workshop_list", "列出鲸鱼功能工坊中已启用的本地离线小工具（置顶优先）。", emptyMap(), emptyList()))
@@ -69,9 +71,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_workshop_pin", "置顶或取消置顶工坊中某个已启用小工具。", mapOf("id" to "功能英文 id", "pinned" to "true 或 false"), listOf("id", "pinned")))
         }
         if (includeCode) {
+            array.put(schema("whale_code_projects", "列出本地原生代码工作区中已有的全部项目及其文件数与体积。", emptyMap(), emptyList()))
             array.put(schema("whale_code_list", "列出本地原生代码项目中的目录与文件。", mapOf("project" to "项目名", "path" to "可选子目录路径"), listOf("project")))
             array.put(schema("whale_code_read", "按行读取本地原生代码项目中的源码文件。", mapOf("project" to "项目名", "path" to "文件相对路径", "startLine" to "起始行(默认1)", "endLine" to "结束行(默认200)"), listOf("project", "path")))
-            array.put(schema("whale_code_write", "在本地原生代码项目中创建或修改源码文件。", mapOf("project" to "项目名", "path" to "文件相对路径", "content" to "完整文件源码"), listOf("project", "path", "content")))
+            array.put(schema("whale_code_write", "在本地原生代码项目中创建或覆盖写入源码文件。", mapOf("project" to "项目名", "path" to "文件相对路径", "content" to "完整文件源码"), listOf("project", "path", "content")))
+            array.put(schema("whale_code_patch", "在本地源码文件中精准替换唯一匹配的代码片段（比整文件重写更省 token）。", mapOf("project" to "项目名", "path" to "文件相对路径", "oldText" to "原始唯一代码片段", "newText" to "替换后的代码片段"), listOf("project", "path", "oldText", "newText")))
+            array.put(schema("whale_code_delete", "安全删除本地代码项目中的单个文件。", mapOf("project" to "项目名", "path" to "文件相对路径"), listOf("project", "path")))
             array.put(schema("whale_code_search", "在本地原生代码项目中跨文件检索代码片段。", mapOf("project" to "项目名", "query" to "搜索词"), listOf("project", "query")))
         }
         if (includePhone) {
@@ -97,9 +102,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_memory_save",
         "whale_knowledge_save",
         "whale_secretary_add",
+        "whale_secretary_complete",
         "whale_workshop_draft",
         "whale_workshop_pin",
         "whale_code_write",
+        "whale_code_patch",
+        "whale_code_delete",
         "whale_phone_launch",
         "whale_phone_action",
         "whale_phone_back",
@@ -158,11 +166,28 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 }
                 "whale_secretary_add" -> {
                     val req = JSONObject()
-                        .put("action", "add")
+                        .put("action", "create")
+                        .put("operationId", UUID.randomUUID().toString())
                         .put("title", args.optString("title", "").trim())
-                        .put("note", args.optString("note", "").trim())
+                    val note = args.optString("note", "").trim()
+                    if (note.isNotEmpty()) req.put("note", note)
                     val result = SecretaryLedger(app).execute(req, owner = "whale-main")
                     ToolOutcome(name, "记录秘书事项", true, result.toString(), mutating = true)
+                }
+                "whale_secretary_complete" -> {
+                    val id = args.optString("id", "").trim()
+                    val ledger = SecretaryLedger(app)
+                    val current = ledger.public(id)
+                    val revision = current.optString("revision", "")
+                    require(revision.isNotEmpty()) { "未找到指定事项或版本信息缺失：$id" }
+                    val req = JSONObject()
+                        .put("action", "update")
+                        .put("operationId", UUID.randomUUID().toString())
+                        .put("id", id)
+                        .put("expectedRevision", revision)
+                        .put("state", "done")
+                    val result = ledger.execute(req, owner = "whale-main")
+                    ToolOutcome(name, "完成秘书事项", true, result.toString(), mutating = true)
                 }
                 "whale_workshop_list" -> {
                     val tools = WhaleFeatureStore(app).activeTools()
@@ -180,6 +205,10 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val result = WhaleFeatureStore(app).setPinned(id, pinned)
                     ToolOutcome(name, if (pinned) "置顶工坊工具" else "取消置顶工具", true, result.toString(), mutating = true)
                 }
+                "whale_code_projects" -> {
+                    val res = codeWorkspace.listProjects()
+                    ToolOutcome(name, "列出本地代码项目", true, res.toString())
+                }
                 "whale_code_list" -> {
                     val res = codeWorkspace.listFiles(args.optString("project", ""), args.optString("path", ""))
                     ToolOutcome(name, "浏览本地代码目录", true, res.toString())
@@ -193,6 +222,19 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_code_write" -> {
                     val res = codeWorkspace.writeFile(args.optString("project", ""), args.optString("path", ""), args.optString("content", ""))
                     ToolOutcome(name, "写入本地代码文件", true, res.toString(), mutating = true)
+                }
+                "whale_code_patch" -> {
+                    val res = codeWorkspace.patchFile(
+                        args.optString("project", ""),
+                        args.optString("path", ""),
+                        args.optString("oldText", ""),
+                        args.optString("newText", ""),
+                    )
+                    ToolOutcome(name, "精准修改本地代码", true, res.toString(), mutating = true)
+                }
+                "whale_code_delete" -> {
+                    val res = codeWorkspace.deleteFile(args.optString("project", ""), args.optString("path", ""))
+                    ToolOutcome(name, "删除本地代码文件", true, res.toString(), mutating = true)
                 }
                 "whale_code_search" -> {
                     val res = codeWorkspace.searchCode(args.optString("project", ""), args.optString("query", ""))

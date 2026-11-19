@@ -7,21 +7,32 @@ import java.nio.file.Files
 
 class WhaleNativeCodeWorkspaceTest {
     @Test
-    fun writesReadsListsAndSearchesCodeFilesSafely() {
+    fun writesReadsPatchesListsSearchesAndDeletesCodeFilesSafely() {
         val dir = Files.createTempDirectory("whale-code-ws").toFile()
         try {
             val ws = WhaleNativeCodeWorkspace(dir)
             val written = ws.writeFile("demo-app", "src/main.ts", "export function greet() {\n  return 'hello whale'\n}\n")
             assertTrue(written.getBoolean("ok"))
 
+            val projects = ws.listProjects().getJSONArray("projects")
+            assertEquals(1, projects.length())
+            assertEquals("demo-app", projects.getJSONObject(0).getString("name"))
+
+            val patched = ws.patchFile("demo-app", "src/main.ts", "hello whale", "hello native whale")
+            assertTrue(patched.getBoolean("patched"))
+
             val listed = ws.listFiles("demo-app", "src")
             assertEquals(1, listed.getJSONArray("items").length())
 
             val read = ws.readFile("demo-app", "src/main.ts", 1, 10)
-            assertTrue(read.getString("content").contains("hello whale"))
+            assertTrue(read.getString("content").contains("hello native whale"))
 
             val found = ws.searchCode("demo-app", "greet")
             assertEquals(1, found.getJSONArray("matches").length())
+
+            val deleted = ws.deleteFile("demo-app", "src/main.ts")
+            assertTrue(deleted.getBoolean("ok"))
+            assertEquals(0, ws.listFiles("demo-app", "src").getJSONArray("items").length())
         } finally {
             dir.deleteRecursively()
         }

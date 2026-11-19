@@ -7,8 +7,9 @@ import java.io.File
 /**
  * 100% 纯原生 Kotlin 本地代码工程工作区（零 PRoot、零 Bash、零 Node 依赖）。
  *
- * 允许 Whale Native Agent 在受控目录（app filesDir/whale-projects）内创建项目、
- * 读写多文件源码、按行查看与跨文件搜索；严格校验规范路径防止目录穿越。
+ * 允许 Whale Native Agent 在受控目录（app filesDir/whale-projects）内创建与枚举项目、
+ * 读写多文件源码、精准片段替换（patchFile）、安全删除单文件以及跨文件搜索；
+ * 严格校验规范路径防止目录穿越。
  */
 internal class WhaleNativeCodeWorkspace(private val rootDir: File) {
     init {
@@ -28,6 +29,32 @@ internal class WhaleNativeCodeWorkspace(private val rootDir: File) {
             "禁止访问代码工作区以外的路径"
         }
         return canonicalTarget
+    }
+
+    fun listProjects(): JSONObject {
+        val projects = JSONArray()
+        canonicalRoot.listFiles().orEmpty()
+            .filter { it.isDirectory && !it.name.startsWith(".") }
+            .sortedByDescending { it.lastModified() }
+            .take(MAX_PROJECTS)
+            .forEach { dir ->
+                var fileCount = 0
+                var totalBytes = 0L
+                for (f in dir.walkTopDown().maxDepth(8)) {
+                    if (f.isFile) {
+                        fileCount += 1
+                        totalBytes += f.length()
+                    }
+                }
+                projects.put(
+                    JSONObject()
+                        .put("name", dir.name)
+                        .put("files", fileCount)
+                        .put("bytes", totalBytes)
+                        .put("updatedAt", dir.lastModified()),
+                )
+            }
+        return JSONObject().put("projects", projects)
     }
 
     fun listFiles(project: String, subPath: String = ""): JSONObject {
@@ -95,6 +122,37 @@ internal class WhaleNativeCodeWorkspace(private val rootDir: File) {
             .put("bytes", bytes.size)
     }
 
+    /** 精准替换源码中的唯一匹配片段，避免整文件重写造成截断或高额 token 消耗。 */
+    fun patchFile(project: String, path: String, oldText: String, newText: String): JSONObject {
+        require(path.isNotBlank()) { "请提供文件路径" }
+        require(oldText.isNotEmpty()) { "请提供需要替换的原始代码片段" }
+        val file = resolveSafe(project, path)
+        require(file.isFile) { "文件不存在：$path" }
+        require(file.length() <= MAX_FILE_BYTES) { "文件超过 512 KiB 上限" }
+        val current = file.readText(Charsets.UTF_8)
+        val firstIdx = current.indexOf(oldText)
+        require(firstIdx >= 0) { "未在文件中找到完全匹配的原始代码片段" }
+        val secondIdx = current.indexOf(oldText, firstIdx + oldText.length)
+        require(secondIdx < 0) { "原始代码片段在文件中出现多次，请补充更多上下文确保唯一匹配" }
+        val updated = current.substring(0, firstIdx) + newText + current.substring(firstIdx + oldText.length)
+        return writeFile(project, path, updated).put("patched", true)
+    }
+
+    fun deleteFile(project: String, path: String): JSONObject {
+        require(path.isNotBlank()) { "请提供要删除的文件相对路径" }
+        val projectDir = resolveSafe(project)
+        val target = resolveSafe(project, path)
+        require(target.path != projectDir.path && target.path.startsWith(projectDir.path + File.separator)) {
+            "仅允许删除项目内部文件"
+        }
+        require(target.exists() && target.isFile) { "目标文件不存在或不是普通文件：$path" }
+        val deleted = target.delete()
+        return JSONObject()
+            .put("ok", deleted)
+            .put("project", project)
+            .put("path", path)
+    }
+
     fun searchCode(project: String, query: String, maxMatches: Int = 40): JSONObject {
         val needle = query.trim()
         require(needle.isNotEmpty() && needle.length <= 120) { "搜索词长度无效" }
@@ -129,5 +187,6 @@ internal class WhaleNativeCodeWorkspace(private val rootDir: File) {
     companion object {
         const val MAX_FILE_BYTES = 512 * 1024
         const val MAX_LIST_ITEMS = 200
+        const val MAX_PROJECTS = 64
     }
 }
