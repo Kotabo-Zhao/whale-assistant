@@ -311,6 +311,7 @@ interface NativeRuntimePlugin {
   addListener(eventName: 'terminalExit', listener: (event: TerminalExit) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'harnessProgress', listener: (event: HarnessProgress) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'whaleNativeChatEvent', listener: (event: { requestId: string; sessionId: string; type: 'delta' | 'step' | 'phase'; text?: string; step?: { tool: string; label: string; ok: boolean; durationMs: number }; phase?: string }) => void): Promise<PluginListenerHandle>
+  addListener(eventName: 'whaleAppControl', listener: (event: { action: 'navigate' | 'appearance' | 'language' | 'autonomy'; view?: string; style?: 'simple' | 'cute'; theme?: 'system' | 'light' | 'dark'; accent?: 'ocean' | 'mint' | 'amber' | 'rose'; reduceMotion?: boolean; language?: 'zh-CN' | 'en'; preset?: 'fluent' | 'balanced' | 'strict' }) => void): Promise<PluginListenerHandle>
 }
 
 const MAX_TERMINAL_INPUT_BYTES = 256 * 1024
@@ -760,6 +761,7 @@ function createNativeBridge(): RuntimeBridge {
     listModelCatalog: options => NativeRuntime.listModelCatalog(options).then(validateModelCatalogResult),
     whaleNativeChat: request => NativeRuntime.whaleNativeChat(request),
     addWhaleChatListener: listener => NativeRuntime.addListener('whaleNativeChatEvent', listener),
+    addWhaleAppControlListener: listener => NativeRuntime.addListener('whaleAppControl', listener),
   }
 }
 

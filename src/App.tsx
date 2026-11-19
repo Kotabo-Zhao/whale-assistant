@@ -1,3 +1,4 @@
+import { saveAccentMode, saveInterfaceStyle, saveThemeMode } from './theme'
 import './components/WorkspaceShell.css'
 import type { AppView } from './ui/appNavigation'
 import { AppSidebar, BottomNavigation } from './components/AppNavigation'
@@ -5,7 +6,7 @@ import { useHarnessViewport } from './useHarnessViewport'
 import { Capacitor } from '@capacitor/core'
 import appMark from './assets/app-mark.png'
 import whaleWave from './assets/whale-wave.svg'
-import { t, useLanguage } from './i18n'
+import { saveLanguage, t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
 import { CompanionSettingsButton } from './components/CompanionSettingsButton'
 import type { AutomationRuleDefaults } from './components/AutomationRuleForm'
@@ -3836,6 +3837,37 @@ export function App() {
     }
     window.addEventListener('dsh-native-tab', navigate)
     return () => window.removeEventListener('dsh-native-tab', navigate)
+  }, [setActiveView])
+
+  // 原生 Agent 全软件控制总线：允许 Agent 直接切页、切换双风格/深浅主题/强调色、切语言与切换自治模式。
+  useEffect(() => {
+    if (!runtimeBridge.addWhaleAppControlListener) return
+    let disposed = false
+    let cleanup: (() => Promise<void>) | undefined
+    void runtimeBridge.addWhaleAppControlListener(event => {
+      if (disposed) return
+      if (event.action === 'navigate' && event.view) {
+        setActiveView(event.view as AppView)
+      } else if (event.action === 'appearance') {
+        if (event.style === 'simple' || event.style === 'cute') saveInterfaceStyle(event.style)
+        if (event.theme === 'system' || event.theme === 'light' || event.theme === 'dark') saveThemeMode(event.theme)
+        if (event.accent === 'ocean' || event.accent === 'mint' || event.accent === 'amber' || event.accent === 'rose') saveAccentMode(event.accent)
+        if (typeof event.reduceMotion === 'boolean') {
+          document.documentElement.dataset.motionReduced = event.reduceMotion ? 'true' : 'false'
+        }
+      } else if (event.action === 'language' && (event.language === 'zh-CN' || event.language === 'en')) {
+        saveLanguage(event.language)
+      } else if (event.action === 'autonomy' && event.preset) {
+        try { window.localStorage.setItem('whale.autonomyPreset.v1', event.preset) } catch { /* ignore */ }
+      }
+    }).then(handle => {
+      if (disposed) void handle.remove()
+      else cleanup = () => handle.remove()
+    }).catch(() => undefined)
+    return () => {
+      disposed = true
+      if (cleanup) void cleanup()
+    }
   }, [setActiveView])
 
   /**

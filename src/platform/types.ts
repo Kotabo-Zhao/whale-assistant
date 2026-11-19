@@ -1652,6 +1652,7 @@ export interface CompanionQuickSettings {
 export interface RuntimeBridge {
   whaleNativeChat: (request: WhaleNativeChatRequest) => Promise<WhaleNativeChatResult>
   addWhaleChatListener?: (listener: (event: WhaleNativeChatStreamEvent) => void) => Promise<ListenerHandle>
+  addWhaleAppControlListener?: (listener: (event: WhaleAppControlEvent) => void) => Promise<ListenerHandle>
   setHarnessViewport?(viewport: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
   listHarnessReleases: () => Promise<HarnessReleaseList>
   manageHarnessVersions: (operation: HarnessVersionOperation, version?: string) => Promise<HarnessVersionsState>
@@ -2381,6 +2382,17 @@ export interface WhaleNativeChatRequest {
   history?: Array<{ role: 'user' | 'assistant'; text: string }>
   sessionId?: string
   requestId?: string
+}
+
+export interface WhaleAppControlEvent {
+  action: 'navigate' | 'appearance' | 'language' | 'autonomy'
+  view?: string
+  style?: 'simple' | 'cute'
+  theme?: 'system' | 'light' | 'dark'
+  accent?: 'ocean' | 'mint' | 'amber' | 'rose'
+  reduceMotion?: boolean
+  language?: 'zh-CN' | 'en'
+  preset?: 'fluent' | 'balanced' | 'strict'
 }
 
 export interface WhaleNativeChatStreamEvent {

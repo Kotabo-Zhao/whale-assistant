@@ -639,8 +639,14 @@ class MobileRuntimePlugin : Plugin() {
         call.resolve()
     }
 
+    private var whaleAppControlUnsubscribe: (() -> Unit)? = null
+
     override fun load() {
         auditLog = PrivateAuditLog(context)
+        whaleAppControlUnsubscribe?.invoke()
+        whaleAppControlUnsubscribe = io.deepseekharness.mobile.companion.WhaleAppControlBus.subscribe { payload ->
+            notifyListeners("whaleAppControl", JSObject.fromJSONObject(payload))
+        }
         recordAudit(AuditEvent.PLUGIN_LOAD, AuditResult.STARTED)
         attachWhenAvailable(deferred = false)
     }
@@ -755,6 +761,8 @@ class MobileRuntimePlugin : Plugin() {
      * 两者都不再持有时由 RuntimeHost 释放，语义与旧实现一致。
      */
     override fun handleOnDestroy() {
+        whaleAppControlUnsubscribe?.invoke()
+        whaleAppControlUnsubscribe = null
         io.deepseekharness.mobile.features.WhaleFeatureStore.unsubscribe(onFeatureChange)
         io.deepseekharness.mobile.companion.WorkerReportInbox.unsubscribe(onBriefingChange)
         mainEvents.removeCallbacks(briefingChange)

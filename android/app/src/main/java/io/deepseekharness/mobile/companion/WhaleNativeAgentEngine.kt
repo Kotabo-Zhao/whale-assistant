@@ -196,7 +196,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
     private fun buildSystemPrompt(): String = buildString {
         append("你是 Whale Assistant（鲸鱼助手），运行在用户手机上的 100% 原生个人 Super Agent。\n")
         append("风格要求：简洁、自然、直接、有温度，像一个靠谱的私人助理，不堆砌机械术语或多余确认。\n")
-        append("当需要查询记忆、资料库、主人档案、待办秘书、本地代码项目、创作工坊小工具或操作手机时，直接调用已提供的原生工具并基于真实结果作答。\n")
+        append("你对整个鲸鱼助手软件拥有完全的控制权：可以直接切换页面、调整极简/鲸鱼娘双风格与深浅主题、切换语言、修改任意伴侣与自治设置、管理人设卡片、启停悬浮桌宠、读写记忆/资料/待办、在本地编写多文件代码、在工坊创作并立即启用打开小工具，以及通过无障碍操控手机。收到指令后直接调用原生工具执行，无需让用户手动去设置里找。\n")
         runCatching {
             val owner = OwnerContext(app).read()
             val prompt = OwnerContext.prompt(owner)
