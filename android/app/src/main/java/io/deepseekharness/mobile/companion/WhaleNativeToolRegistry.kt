@@ -434,7 +434,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 }
                 "whale_secretary_list" -> {
                     val query = args.optString("query", "").trim()
-                    val result = SecretaryLedger(app).list(query = query, activeOnly = true, limit = 20)
+                    val result = UnifiedUnderstandingStore.open(app).use { it.queue.secretary.list(query = query, activeOnly = true, limit = 20) }
                     ToolOutcome(name, "查询秘书事项", true, result.toString())
                 }
                 "whale_secretary_add" -> {
@@ -444,34 +444,36 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .put("title", args.optString("title", "").trim())
                     val note = args.optString("note", "").trim()
                     if (note.isNotEmpty()) req.put("note", note)
-                    val result = SecretaryLedger(app).execute(req, owner = "whale-main")
+                    val result = UnifiedUnderstandingStore.open(app).use { it.queue.secretary.execute(req, owner = "whale-main") }
                     ToolOutcome(name, "记录秘书事项", true, result.toString(), mutating = true)
                 }
                 "whale_secretary_complete" -> {
                     val id = args.optString("id", "").trim()
-                    val ledger = SecretaryLedger(app)
-                    val revision = ledger.public(id).optString("revision", "")
-                    require(revision.isNotEmpty()) { "未找到指定事项或版本信息缺失：$id" }
-                    val req = JSONObject()
-                        .put("action", "update")
-                        .put("operationId", UUID.randomUUID().toString())
-                        .put("id", id)
-                        .put("expectedRevision", revision)
-                        .put("state", "done")
-                    val result = ledger.execute(req, owner = "whale-main")
+                    val result = UnifiedUnderstandingStore.open(app).use { store ->
+                        val revision = store.queue.secretary.public(id).optString("revision", "")
+                        require(revision.isNotEmpty()) { "未找到指定事项或版本信息缺失：$id" }
+                        val req = JSONObject()
+                            .put("action", "update")
+                            .put("operationId", UUID.randomUUID().toString())
+                            .put("id", id)
+                            .put("expectedRevision", revision)
+                            .put("state", "done")
+                        store.queue.secretary.execute(req, owner = "whale-main")
+                    }
                     ToolOutcome(name, "完成秘书事项", true, result.toString(), mutating = true)
                 }
                 "whale_secretary_delete" -> {
                     val id = args.optString("id", "").trim()
-                    val ledger = SecretaryLedger(app)
-                    val revision = ledger.public(id).optString("revision", "")
-                    require(revision.isNotEmpty()) { "未找到指定事项或版本信息缺失：$id" }
-                    val req = JSONObject()
-                        .put("action", "delete")
-                        .put("operationId", UUID.randomUUID().toString())
-                        .put("id", id)
-                        .put("expectedRevision", revision)
-                    val result = ledger.execute(req, owner = "whale-main")
+                    val result = UnifiedUnderstandingStore.open(app).use { store ->
+                        val revision = store.queue.secretary.public(id).optString("revision", "")
+                        require(revision.isNotEmpty()) { "未找到指定事项或版本信息缺失：$id" }
+                        val req = JSONObject()
+                            .put("action", "delete")
+                            .put("operationId", UUID.randomUUID().toString())
+                            .put("id", id)
+                            .put("expectedRevision", revision)
+                        store.queue.secretary.execute(req, owner = "whale-main")
+                    }
                     ToolOutcome(name, "删除秘书事项", true, result.toString(), mutating = true)
                 }
                 "whale_workshop_list" -> {
@@ -562,19 +564,19 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val service = DeepSeekAccessibilityService.current()
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
                     val res = service.execute("accessibilityTree", "")
-                    ToolOutcome(name, "读取当前屏幕控件树", res.ok, res.output)
+                    ToolOutcome(name, "读取当前屏幕控件树", res.ok, res.text)
                 }
                 "whale_phone_action" -> {
                     val service = DeepSeekAccessibilityService.current()
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
                     val res = service.execute("accessibilityAction", args.toString())
-                    ToolOutcome(name, "执行原生屏控操作", res.ok, res.output, mutating = true)
+                    ToolOutcome(name, "执行原生屏控操作", res.ok, res.text, mutating = true)
                 }
                 "whale_phone_back" -> {
                     val service = DeepSeekAccessibilityService.current()
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
                     val res = service.execute("accessibilityBack", "")
-                    ToolOutcome(name, "执行返回键", res.ok, res.output, mutating = true)
+                    ToolOutcome(name, "执行返回键", res.ok, res.text, mutating = true)
                 }
                 "whale_phone_global" -> {
                     val cmd = args.optString("command", "status").trim()
@@ -586,7 +588,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         val service = DeepSeekAccessibilityService.current()
                             ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
                         val res = service.execute(cmd, args.optString("param", ""))
-                        ToolOutcome(name, "执行屏控指令：$cmd", res.ok, res.output, mutating = true)
+                        ToolOutcome(name, "执行屏控指令：$cmd", res.ok, res.text, mutating = true)
                     }
                 }
                 "whale_device_battery" -> {

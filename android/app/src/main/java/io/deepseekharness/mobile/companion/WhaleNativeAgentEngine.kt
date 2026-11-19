@@ -183,7 +183,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             val model = settings.defaultModels[ModelProvider.OPENAI]?.takeIf(String::isNotBlank) ?: "gpt-4o-mini"
             return Endpoint("https://api.openai.com/v1/chat/completions", openAiKey, model)
         }
-        for (custom in settings.customProviders) {
+        for (custom in settings.customModelProviders) {
             val key = store.readModelCredential(custom.id)?.takeIf(String::isNotBlank) ?: continue
             val model = custom.models.firstOrNull()?.id?.takeIf(String::isNotBlank) ?: continue
             val base = custom.baseUrl.trimEnd('/')
