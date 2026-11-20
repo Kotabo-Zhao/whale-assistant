@@ -101,13 +101,13 @@ internal class PetActing {
     companion object {
         fun pose(action: PetAction, elapsed: Long) = PetPose(action, elapsed.coerceAtLeast(0))
         fun duration(action: PetAction?): Long = when (action) {
-            PetAction.ACCEPT -> 1700
+            PetAction.ACCEPT -> 2600
             PetAction.ASK -> 4500
-            PetAction.SETBACK -> 2700
-            PetAction.CELEBRATE -> 2200
-            PetAction.TOUCH -> 1050
-            PetAction.REPLY -> 2400
-            PetAction.NOTICE -> 3400
+            PetAction.SETBACK -> 3200
+            PetAction.CELEBRATE -> 3600
+            PetAction.TOUCH -> 2400
+            PetAction.REPLY -> 3400
+            PetAction.NOTICE -> 4000
             else -> 0
         }
     }

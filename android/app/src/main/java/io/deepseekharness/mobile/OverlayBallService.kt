@@ -100,6 +100,7 @@ class OverlayBallService : Service() {
     private lateinit var windowManager: WindowManager
     private var ballView: View? = null
     private var companionFrame: Runnable? = null
+    private var pendingAvatarReload: Runnable? = null
     private var companionFrameCount = 0L
     private var lastCompanionFrameAt = 0L
     private var petDrawable: io.deepseekharness.mobile.overlay.CompanionPetDrawable? = null
@@ -1057,7 +1058,10 @@ class OverlayBallService : Service() {
         // 否则首次挂载时球会一直停在静态站姿、直到下一次亮屏/解锁广播才动起来。
         ballAttached = true
         configureCompanionMotion()
-        loadCompanionAvatar(view, size)
+        pendingAvatarReload?.let(hintHandler::removeCallbacks)
+        val reload = Runnable { if (ballAttached && ballView === view) loadCompanionAvatar(view, size) }
+        pendingAvatarReload = reload
+        hintHandler.postDelayed(reload, 220L)
         return true
     }
 
@@ -1113,6 +1117,8 @@ class OverlayBallService : Service() {
         val wasRunning=companionFrame!=null
         companionFrame?.let(hintHandler::removeCallbacks)
         companionFrame = null
+        pendingAvatarReload?.let(hintHandler::removeCallbacks)
+        pendingAvatarReload = null
         val drawable=petDrawable ?: return
         if (!companionMotionAllowed()) {
             petPlayback.reset()
@@ -2399,7 +2405,14 @@ class OverlayBallService : Service() {
             }, 1200)
         }
 
-        internal fun applyCompanionSizePreference(): Boolean = activeService?.applyCompanionSize() == true
+        internal fun applyCompanionSizePreference(): Boolean {
+            val service = activeService ?: return false
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                return service.applyCompanionSize()
+            }
+            Handler(Looper.getMainLooper()).post { service.applyCompanionSize() }
+            return true
+        }
 
         /** Apply the app-level reduced-motion setting immediately when the floating companion exists. */
         internal fun applyCompanionMotionPreference(): Boolean = activeService?.applyCompanionMotionPreference() == true

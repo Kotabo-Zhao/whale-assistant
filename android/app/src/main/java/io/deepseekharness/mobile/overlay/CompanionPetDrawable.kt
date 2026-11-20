@@ -21,6 +21,7 @@ internal class CompanionPetDrawable(
     private val destination = RectF()
     private var fadeFrom: Bitmap? = null
     private var fadeStartMs = 0L
+    private val liveFrameTick = Runnable { if (!closed && !pose.reduced) invalidateSelf() }
     private val cache = LinkedHashMap<String, Bitmap>(4, .75f, true)
     private var decoding = false
     private val failed = mutableSetOf<String>()
@@ -180,9 +181,70 @@ internal class CompanionPetDrawable(
         val x = bounds.exactCenterX() - side / 2
         val y = bounds.exactCenterY() - side / 2
         destination.set(x, y, x + side, y + side)
+
+        val now = android.os.SystemClock.uptimeMillis()
+        var sx = 1f
+        var sy = 1f
+        var dx = 0f
+        var dy = 0f
+        var rot = 0f
+        var pivotY = y + side * 0.94f
+
+        if (!pose.reduced) {
+            val sec = (now % 60_000L) / 1000.0
+            when (pose.action) {
+                PetAction.IDLE, PetAction.WAIT -> {
+                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 3.2).toFloat()
+                    sx = 1f - 0.012f * s
+                    sy = 1f + 0.018f * s
+                    dy = -side * 0.010f * s
+                }
+                PetAction.PAUSED, PetAction.STOPPED -> {
+                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 4.0).toFloat()
+                    sx = 1f + 0.014f * s
+                    sy = 1f - 0.012f * s
+                }
+                PetAction.THINK, PetAction.OBSERVE, PetAction.ASK -> {
+                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 2.4).toFloat()
+                    rot = 2.6f * s
+                    dy = -side * 0.014f * kotlin.math.abs(s)
+                }
+                PetAction.WORK, PetAction.CONTROL -> {
+                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 1.1).toFloat()
+                    sx = 1f + 0.014f * s
+                    sy = 1f - 0.014f * s
+                    dy = -side * 0.016f * kotlin.math.abs(s)
+                    rot = 1.8f * kotlin.math.sin(sec * 2.0 * Math.PI / 2.2).toFloat()
+                }
+                PetAction.CELEBRATE, PetAction.TOUCH, PetAction.ACCEPT, PetAction.REPLY, PetAction.NOTICE -> {
+                    val hop = kotlin.math.abs(kotlin.math.sin(sec * 2.0 * Math.PI / 0.85)).toFloat()
+                    sx = 1f - 0.025f * hop
+                    sy = 1f + 0.032f * hop
+                    dy = -side * 0.042f * hop
+                    rot = 3.2f * kotlin.math.sin(sec * 2.0 * Math.PI / 1.7).toFloat()
+                }
+                PetAction.DRAG -> {
+                    val swing = kotlin.math.sin(sec * 2.0 * Math.PI / 1.1).toFloat()
+                    pivotY = y + side * 0.14f
+                    rot = 9.0f * swing
+                    dx = side * 0.018f * swing
+                }
+                PetAction.SETBACK, PetAction.ERROR -> {
+                    val shiver = kotlin.math.sin(sec * 2.0 * Math.PI / 0.45).toFloat()
+                    dx = side * 0.012f * shiver
+                    rot = 1.6f * shiver
+                }
+            }
+        }
+
+        canvas.save()
+        canvas.translate(dx, dy)
+        canvas.rotate(rot, x + side * 0.5f, pivotY)
+        canvas.scale(sx, sy, x + side * 0.5f, pivotY)
+
         val prev = fadeFrom
         if (prev != null && !prev.isRecycled && fadeStartMs > 0L) {
-            val elapsed = (android.os.SystemClock.uptimeMillis() - fadeStartMs).coerceAtLeast(0L)
+            val elapsed = (now - fadeStartMs).coerceAtLeast(0L)
             if (elapsed < FADE_DURATION_MS) {
                 val t = elapsed.toFloat() / FADE_DURATION_MS.toFloat()
                 val smooth = t * t * (3f - 2f * t)
@@ -191,14 +253,20 @@ internal class CompanionPetDrawable(
                 canvas.drawBitmap(prev, fadeSource, destination, fadePaint)
                 fadePaint.alpha = (baseAlpha * smooth).toInt().coerceIn(0, 255)
                 canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, fadePaint)
-                main.postDelayed({ if (!closed) invalidateSelf() }, 16L)
-                return
             } else {
                 fadeFrom = null
                 fadeStartMs = 0L
+                canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
             }
+        } else {
+            canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
         }
-        canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
+        canvas.restore()
+
+        if (!pose.reduced) {
+            main.removeCallbacks(liveFrameTick)
+            main.postDelayed(liveFrameTick, 16L)
+        }
     }
 
     override fun getIntrinsicWidth() = PetCels.CELL
@@ -209,6 +277,7 @@ internal class CompanionPetDrawable(
     override fun close() {
         closed = true
         onAtlasReady = null
+        main.removeCallbacks(liveFrameTick)
         fadeFrom = null
         fadeStartMs = 0L
         retainedCel?.recycle()
@@ -217,7 +286,7 @@ internal class CompanionPetDrawable(
         cache.clear()
     }
     companion object {
-        const val FADE_DURATION_MS = 160L
+        const val FADE_DURATION_MS = 320L
         const val MAX_ATLASES = 3
         const val MAX_BITMAP_BYTES = 32L * 1024 * 1024
     }
