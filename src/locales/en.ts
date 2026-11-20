@@ -2265,4 +2265,5 @@ export const english: Readonly<Record<string, string>> = {
   "用第三方或兼容接口？可先点完成，再到「我的 → 模型与密钥 → 自定义供应商」里填 Base URL 与密钥。": "Using a custom or compatible API? Tap Done and add your Base URL & key under Me → Models & Keys.",
   "前往配置模型与密钥": "Configure Models & Keys",
   "快捷空间": "Quick spaces",
+  '核心权限总开关': 'Core permission switches',
 }
