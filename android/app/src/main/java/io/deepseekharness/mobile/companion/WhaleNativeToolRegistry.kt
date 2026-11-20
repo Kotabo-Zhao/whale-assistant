@@ -287,10 +287,30 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_open_url", "用手机系统默认浏览器打开指定网页链接。", mapOf("url" to "完整 http:// 或 https:// 网址"), listOf("url")))
             array.put(schema("whale_share_text", "唤起安卓系统原生分享面板，将文案或摘要直接分享到微信、备忘录等任意应用。", mapOf("text" to "要分享的正文内容", "title" to "可选分享标题"), listOf("text")))
         }
+        array.put(schema(
+            "whale_tool_create",
+            "让 Agent 自己创建或更新一个持久化的自定义可调用工具（名称必须以 custom_ 开头），创建成功后立即注入工具列表并可在本轮及后续所有对话直接调用。支持三种类型：composite（串联现有 whale_* 工具的工作流）、http_json（HTTPS 接口调用，支持 {{param}} 模板与 extractPath）、js（无网络无文件隔离 JS 计算沙箱，写函数体接收 args 并 return 结果）。",
+            mapOf(
+                "name" to "工具名，必须以 custom_ 开头，仅小写字母/数字/下划线，如 custom_weather 或 custom_snr_calc",
+                "description" to "工具用途说明(2~200字)",
+                "kind" to "执行引擎类型：composite / http_json / js",
+                "paramsJson" to "可选，JSON 对象字符串，如 {"city":"城市名"}",
+                "requiredJson" to "可选，必填参数名 JSON 数组字符串，如 ["city"]",
+                "definitionJson" to "必填，JSON 对象字符串：composite 传 {"steps":[{"tool":"whale_...","args":{...}}]}；http_json 传 {"url":"https://...","method":"GET","extractPath":"..."}；js 传 {"code":"return ...;"}",
+            ),
+            listOf("name", "description", "kind", "definitionJson"),
+        ))
+        array.put(schema("whale_tool_list", "列出 Agent 已创建保存的全部自定义工具（custom_*）。", emptyMap(), emptyList()))
+        array.put(schema("whale_tool_delete", "删除指定的 Agent 自造自定义工具。", mapOf("name" to "要删除的 custom_* 工具名"), listOf("name")))
+        for (customSchema in WhaleCustomToolEngine.customToolSchemas(app)) {
+            array.put(customSchema)
+        }
         return array
     }
 
-    fun isMutating(name: String): Boolean = name in setOf(
+    fun isMutating(name: String): Boolean = name.startsWith("custom_") || name in setOf(
+        "whale_tool_create",
+        "whale_tool_delete",
         "whale_worker_submit",
         "whale_worker_cancel",
         "whale_memory_delete",
@@ -1490,7 +1510,63 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     if (autoSpeak == false) WhaleVoiceEngine.stopSpeaking()
                     ToolOutcome(name, "已更新桌宠语音设置", true, WhaleVoiceEngine.snapshotJson(app).toString(), mutating = true)
                 }
-                else -> ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
+                "whale_tool_create" -> {
+                    val toolName = args.str("name").trim()
+                    val desc = args.str("description").trim()
+                    val kind = args.str("kind").trim().lowercase()
+                    val paramsObj = when (val raw = args.opt("paramsJson") ?: args.opt("params")) {
+                        is JSONObject -> raw
+                        is String -> if (raw.trim().isEmpty()) JSONObject() else JSONObject(raw.trim())
+                        else -> JSONObject()
+                    }
+                    val reqList = when (val raw = args.opt("requiredJson") ?: args.opt("required")) {
+                        is JSONArray -> (0 until raw.length()).mapNotNull { raw.optString(it).takeIf(String::isNotBlank) }
+                        is String -> {
+                            val trimmed = raw.trim()
+                            if (trimmed.isEmpty()) emptyList()
+                            else if (trimmed.startsWith("[")) {
+                                val arr = JSONArray(trimmed)
+                                (0 until arr.length()).mapNotNull { arr.optString(it).takeIf(String::isNotBlank) }
+                            } else trimmed.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        }
+                        else -> emptyList()
+                    }
+                    val defObj = when (val raw = args.opt("definitionJson") ?: args.opt("definition")) {
+                        is JSONObject -> raw
+                        is String -> JSONObject(raw.trim())
+                        else -> throw IllegalArgumentException("缺少 definitionJson 工具定义")
+                    }
+                    val res = WhaleCustomToolEngine.createOrUpdate(
+                        file = WhaleCustomToolEngine.storeFile(app),
+                        name = toolName,
+                        description = desc,
+                        kind = kind,
+                        params = paramsObj,
+                        required = reqList,
+                        definition = defObj,
+                    )
+                    ToolOutcome(name, "创建自造工具：$toolName", true, res.toString(), mutating = true)
+                }
+                "whale_tool_list" -> {
+                    val res = WhaleCustomToolEngine.listSummary(WhaleCustomToolEngine.storeFile(app))
+                    ToolOutcome(name, "列出自造工具", true, res.toString())
+                }
+                "whale_tool_delete" -> {
+                    val toolName = args.str("name").trim()
+                    val res = WhaleCustomToolEngine.delete(WhaleCustomToolEngine.storeFile(app), toolName)
+                    ToolOutcome(name, "删除自造工具：$toolName", res.optBoolean("removed"), res.toString(), mutating = true)
+                }
+                else -> {
+                    val customOutcome = WhaleCustomToolEngine.execute(app, name, args) { stepTool, stepArgs ->
+                        val stepRes = execute(stepTool, stepArgs.toString())
+                        stepRes.ok to stepRes.payload
+                    }
+                    if (customOutcome != null) {
+                        ToolOutcome(name, customOutcome.label, customOutcome.ok, customOutcome.payload, mutating = true)
+                    } else {
+                        ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
+                    }
+                }
             }
         } catch (error: Throwable) {
             ToolOutcome(

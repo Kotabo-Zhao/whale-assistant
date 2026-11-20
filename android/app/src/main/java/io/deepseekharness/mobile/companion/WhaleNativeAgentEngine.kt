@@ -82,7 +82,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val store = RuntimeStore(app)
         val settings = store.settings()
         val endpoint = resolveEndpoint(store, settings)
-        val toolSchemas = tools.toolSchemas(trimmed)
+        var toolSchemas = tools.toolSchemas(trimmed)
 
         val messages = JSONArray()
         messages.put(
@@ -157,6 +157,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val t0 = System.currentTimeMillis()
                 onProgress?.invoke(round + 1, "正在执行工具：$fnName", finalReply)
                 val outcome = tools.execute(fnName, fnArgs)
+                if (outcome.ok && (fnName == "whale_tool_create" || fnName == "whale_tool_delete")) {
+                    toolSchemas = tools.toolSchemas(trimmed)
+                }
                 val dt = (System.currentTimeMillis() - t0).coerceAtLeast(1L)
                 if (mutating) {
                     ledger.transition(
