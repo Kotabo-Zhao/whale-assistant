@@ -1,7 +1,5 @@
 # Whale Assistant（鲸鱼助手）
 
-[English](README.en.md) · [繁體中文](README.zh-TW.md) · [한국어](README.ko.md) · [日本語](README.ja.md)
-
 [![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
 [![arm64-v8a](https://img.shields.io/badge/ABI-arm64--v8a-3DDC84?logo=arm&logoColor=white)](https://developer.android.com/ndk/guides/abis)
 [![Kotlin](https://img.shields.io/badge/Kotlin-100%25%20Native-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
