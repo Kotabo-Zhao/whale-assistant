@@ -227,22 +227,6 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_open_url", "用手机系统默认浏览器打开指定网页链接。", mapOf("url" to "完整 http:// 或 https:// 网址"), listOf("url")))
             array.put(schema("whale_share_text", "唤起安卓系统原生分享面板，将文案或摘要直接分享到微信、备忘录等任意应用。", mapOf("text" to "要分享的正文内容", "title" to "可选分享标题"), listOf("text")))
         }
-        if (array.length() == 0) {
-            // 保底核心工具集：避免任意自然口语问句被关键词漏判导致“无工具可用”
-            array.put(schema("whale_memory_search", "按关键词混合语义检索用户本地长期记忆。", mapOf("query" to "检索关键词"), listOf("query")))
-            array.put(schema("whale_memory_save", "将用户明确表达的偏好或长期事实保存到本地长期记忆。", mapOf("text" to "简明完整的记忆内容"), listOf("text")))
-            array.put(schema("whale_knowledge_search", "混合语义检索用户保存在本地资料库中的文档和笔记。", mapOf("query" to "检索关键词"), listOf("query")))
-            array.put(schema("whale_secretary_list", "查询用户的未完成秘书事项与待办列表。", mapOf("query" to "可选筛选关键词"), emptyList()))
-            array.put(schema("whale_secretary_add", "为用户新增一条秘书事项/待办记录。", mapOf("title" to "事项标题", "note" to "可选补充说明"), listOf("title")))
-            array.put(schema("whale_app_navigate", "将鲸鱼助手界面跳转到指定页面。", mapOf("view" to "目标页面：whale-chat / assistant-memory / assistant-tasks / tools / settings"), listOf("view")))
-            array.put(schema("whale_app_appearance", "实时修改整个软件的视觉风格、明暗主题或强调色。", mapOf("style" to "simple 或 cute", "theme" to "system / light / dark"), emptyList()))
-            array.put(schema("whale_phone_apps", "按名称或拼音检索手机已安装应用及包名。", mapOf("query" to "应用名或关键词"), listOf("query")))
-            array.put(schema("whale_phone_launch", "在手机上启动指定包名的目标应用。", mapOf("packageName" to "目标应用完整包名"), listOf("packageName")))
-            array.put(schema("whale_phone_ui_tree", "极速读取当前屏幕精简控件树。", emptyMap(), emptyList()))
-            array.put(schema("whale_phone_action", "执行点击、输入、滑动、返回等原生屏控操作。", mapOf("action" to "click / input / swipe / back / home", "ref" to "可选 r 编号", "text" to "可选目标文字"), listOf("action")))
-            array.put(schema("whale_worker_submit", "派发后台 Worker 异步执行长耗时任务（桌宠与主界面同等完全权限）。", mapOf("task" to "后台任务说明", "title" to "可选短标题"), listOf("task")))
-            array.put(schema("whale_worker_status", "查询后台 Worker 任务执行状态。", emptyMap(), emptyList()))
-        }
         return array
     }
 
@@ -934,7 +918,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .put("charging", bm?.isCharging == true)
                         .put("volumePercent", volCur * 100 / volMax)
                         .put("accessibilityConnected", DeepSeekAccessibilityService.current() != null)
-                        .put("activeWorkers", WorkerDashboardStore(app).activeCount() + WhaleNativeWorkerPool.activeCount())
+                        .put("activeWorkers", (WorkerDashboardStore(app).activeIds() + WhaleNativeWorkerPool.activeIds()).size)
                         .put("scheduledTasks", WhaleScheduledTaskManager.list(app).length())
                         .put("todayTokens", meter.totalTokens)
                         .put("todayEstimatedYuan", String.format(java.util.Locale.US, "%.4f", meter.estimatedYuan))
@@ -1064,7 +1048,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val unseenIds = inbox.unseen().mapNotNull { it.optString("id").takeIf(String::isNotBlank) }
                     if (unseenIds.isNotEmpty()) inbox.markSeen(unseenIds)
                     val page = runCatching { dashboard.page("all", "", 0, 20, true) }.getOrElse { JSONObject() }
-                    WhaleAppControlBus.emit(JSONObject().put("action", "appearance").put("refresh", true))
+                    WhaleAppControlBus.emit(JSONObject().put("action", "refresh"))
                     ToolOutcome(name, "已刷新应用与桌宠状态视图", true, JSONObject().put("refreshed", true).put("attention", page.optInt("attention", 0)).put("running", page.optInt("running", 0)).toString(), mutating = true)
                 }
                 "whale_virtual_screen_control" -> {
