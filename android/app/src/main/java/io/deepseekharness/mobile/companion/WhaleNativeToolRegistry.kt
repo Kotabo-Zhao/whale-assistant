@@ -185,7 +185,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_phone_vision", "多模态看图识屏：安全截取当前手机屏幕并调用视觉模型分析画面、图标、图片内容及按钮坐标（自动拦截密码/支付/锁屏敏感页面）。", mapOf("question" to "可选：想看懂的内容或想找的图标/按钮描述"), emptyList()))
             array.put(schema("whale_phone_vision_click", "视觉定位并直接点击：截屏让多模态视觉模型定位目标图标或无文字按钮的精确屏幕坐标，并立即执行手势点击（适合游戏、Canvas、自定义图标按钮）。", mapOf("target" to "要点击的目标描述，例如：右上角放大镜图标 / 红色关闭按钮"), listOf("target")))
             array.put(schema("whale_virtual_screen_control", "启动、停止或查询「目标应用副屏」状态（在后台独立虚拟屏幕上运行目标应用，不打扰主屏幕；需已开启 Shizuku）。", mapOf("action" to "state / start / stop", "target" to "action=start 时的目标应用包名（可用 whale_phone_apps 查）或组件名"), listOf("action")))
-            array.put(schema("whale_virtual_screen_action", "在已启动的「目标应用副屏」独立虚拟屏幕上执行点击、输入、滑动或返回操作。", mapOf("sessionId" to "可选：副屏会话 ID（不填自动取当前活跃副屏）", "type" to "操作类型，如 tap / swipe / text / key", "x" to "可选 X 坐标", "y" to "可选 Y 坐标", "text" to "可选输入文本"), listOf("type")))
+            array.put(schema("whale_virtual_screen_action", "在已启动的「目标应用副屏」独立虚拟屏幕上执行点击、输入、滑动、读控件树或返回操作。", mapOf("sessionId" to "可选：副屏会话 ID（不填自动取当前活跃副屏）", "action" to "操作类型：tap / swipe / text / tree / key / back / home / follow", "x" to "可选 X 坐标", "y" to "可选 Y 坐标", "text" to "可选输入文本"), listOf("action")))
             array.put(schema("whale_virtual_screen_vision", "多模态看图识别「目标应用副屏」当前画面内容与按钮坐标。", mapOf("sessionId" to "可选：副屏会话 ID（不填自动取当前活跃副屏）", "question" to "可选：想看懂的副屏画面或按钮描述"), emptyList()))
             array.put(schema(
                 "whale_phone_batch",
@@ -1145,9 +1145,11 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         ?: throw IllegalStateException("目标应用副屏未启动，请先调用 whale_virtual_screen_control(action='start') 启动")
                     val sessionId = args.str("sessionId").trim().ifBlank { service.state().optString("sessionId").trim() }
                     require(sessionId.isNotEmpty()) { "副屏会话尚未就绪，请稍候重试" }
-                    val req = JSONObject(args.toString()).put("sessionId", sessionId)
+                    val verb = args.str("action").trim().ifBlank { args.str("type").trim() }
+                    require(verb.isNotEmpty()) { "缺少副屏动作参数 action" }
+                    val req = JSONObject(args.toString()).put("sessionId", sessionId).put("action", verb)
                     val res = VirtualScreenCommands.execute("virtualScreenAction", req.toString())
-                    ToolOutcome(name, "执行副屏操控：${args.str("type")}", res.ok, res.text, mutating = true)
+                    ToolOutcome(name, "执行副屏操控：$verb", res.ok, res.text, mutating = verb != "tree")
                 }
                 "whale_virtual_screen_vision" -> {
                     val service = VirtualScreenService.current
