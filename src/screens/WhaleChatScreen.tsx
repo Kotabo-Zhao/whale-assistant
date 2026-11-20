@@ -108,6 +108,15 @@ function extractActionReceipts(steps?: WhaleNativeChatStep[]): ActionReceipt[] {
         view: 'assistant-memory',
         actionLabel: '打开资料库',
       })
+    } else if (step.tool === 'whale_owner_profile_edit' && !seen.has('profile-edit')) {
+      seen.add('profile-edit')
+      receipts.push({
+        key: 'profile-edit',
+        kind: 'memory',
+        title: step.label || '主人档案已更新',
+        view: 'assistant-memory',
+        actionLabel: '查看记忆',
+      })
     } else if (step.tool === 'whale_memory_save' && !seen.has('mem-save')) {
       seen.add('mem-save')
       receipts.push({

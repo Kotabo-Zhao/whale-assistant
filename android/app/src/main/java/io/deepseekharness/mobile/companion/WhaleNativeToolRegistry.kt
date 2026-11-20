@@ -132,6 +132,17 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_memory_search", "按关键词混合语义检索用户本地长期记忆。", mapOf("query" to "检索关键词"), listOf("query")))
             array.put(schema("whale_memory_save", "将用户明确表达的偏好或长期事实保存到本地长期记忆。", mapOf("text" to "简明完整的记忆内容"), listOf("text")))
             array.put(schema("whale_owner_profile", "读取用户的主人档案摘要与已记录偏好。", emptyMap(), emptyList()))
+            array.put(schema(
+                "whale_owner_profile_edit",
+                "直接设置、更新或清空用户主人档案中的指定字段（立即生效为 confirmed）。支持字段：preferred_name(称呼)、language(语言)、timezone(时区如Asia/Shanghai)、location(常用城市)、occupation(工作与身份)、communication(沟通偏好)、routine(作息与提醒偏好)、devices(常用设备)、projects(主要项目)、current_focus(近期安排)。",
+                mapOf(
+                    "field" to "字段名：preferred_name / language / timezone / location / occupation / communication / routine / devices / projects / current_focus",
+                    "action" to "操作类型：set（默认，设置或更新）或 forget（清空遗忘该字段）",
+                    "value" to "新的字段内容（action=set 时必填，1~240字；timezone 需 IANA 时区如 Asia/Shanghai）",
+                    "validUntilDays" to "可选，仅 current_focus 使用：有效天数，默认 14",
+                ),
+                listOf("field"),
+            ))
         }
         if (includeKnowledge) {
             array.put(schema("whale_knowledge_search", "混合语义检索用户保存在本地资料库中的文档和笔记。", mapOf("query" to "检索关键词"), listOf("query")))
@@ -256,6 +267,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_persona_manage",
         "whale_pet_control",
         "whale_memory_save",
+        "whale_owner_profile_edit",
         "whale_knowledge_save",
         "whale_secretary_add",
         "whale_secretary_complete",
@@ -477,6 +489,43 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_owner_profile" -> {
                     val profile = OwnerContext(app).read()
                     ToolOutcome(name, "读取主人档案", true, OwnerContext.prompt(profile))
+                }
+                "whale_owner_profile_edit" -> {
+                    val field = args.str("field", "").trim()
+                    val action = args.str("action", "set").trim().lowercase().ifEmpty { "set" }
+                    require(field in OwnerProfile.fields.keys) { "不支持的主人档案字段：$field" }
+                    val store = CompanionMemoryStore(app)
+                    val currentView = store.profile(forUser = true)
+                    val fieldsArr = currentView.optJSONArray("fields")
+                    var expectedRevision = ""
+                    if (fieldsArr != null) {
+                        for (i in 0 until fieldsArr.length()) {
+                            val item = fieldsArr.optJSONObject(i) ?: continue
+                            if (item.optString("field") == field) {
+                                expectedRevision = item.optString("revision")
+                                break
+                            }
+                        }
+                    }
+                    require(expectedRevision.isNotEmpty()) { "未能读取主人档案字段版本：$field" }
+                    val req = JSONObject()
+                        .put("action", action)
+                        .put("field", field)
+                        .put("expectedRevision", expectedRevision)
+                    if (action == "set") {
+                        val value = args.str("value", "").trim()
+                        require(value.isNotEmpty()) { "设置主人档案字段 $field 需要提供 value" }
+                        req.put("value", value)
+                        req.put("operationId", java.util.UUID.randomUUID().toString())
+                        if (field == "current_focus") {
+                            val days = args.optInt("validUntilDays", 14).coerceIn(1, 365)
+                            req.put("validUntilMs", System.currentTimeMillis() + days.toLong() * 86_400_000L)
+                        }
+                    }
+                    val res = store.changeProfile(req, forUser = true, fromPetTurn = true)
+                    val fieldLabel = OwnerProfile.fields[field] ?: field
+                    val stepLabel = if (action == "forget") "清空主人档案：$fieldLabel" else "更新主人档案：$fieldLabel"
+                    ToolOutcome(name, stepLabel, true, res.toString(), mutating = true)
                 }
                 "whale_knowledge_search" -> {
                     val query = args.str("query", "").trim()
