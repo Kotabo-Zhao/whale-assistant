@@ -131,6 +131,18 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         if (includeMemory) {
             array.put(schema("whale_memory_search", "按关键词混合语义检索用户本地长期记忆。", mapOf("query" to "检索关键词"), listOf("query")))
             array.put(schema("whale_memory_save", "将用户明确表达的偏好或长期事实保存到本地长期记忆。", mapOf("text" to "简明完整的记忆内容"), listOf("text")))
+            array.put(schema(
+                "whale_memory_update",
+                "纠正或更新指定 ID 的本地长期记忆内容（自动保留修改历史）。",
+                mapOf("id" to "记忆 UUID", "text" to "更新后的完整记忆内容(1~600字)"),
+                listOf("id", "text"),
+            ))
+            array.put(schema(
+                "whale_memory_purge_noise",
+                "批量清理长期记忆中自动抓取的垃圾应用通知噪音（绝不会删除主人档案或用户手动保存的记忆）。",
+                mapOf("dryRun" to "可选：true 仅预览数量和样例，false(默认) 直接清理"),
+                emptyList(),
+            ))
             array.put(schema("whale_owner_profile", "读取用户的主人档案摘要与已记录偏好。", emptyMap(), emptyList()))
             array.put(schema(
                 "whale_owner_profile_edit",
@@ -147,6 +159,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         if (includeKnowledge) {
             array.put(schema("whale_knowledge_search", "混合语义检索用户保存在本地资料库中的文档和笔记。", mapOf("query" to "检索关键词"), listOf("query")))
             array.put(schema("whale_knowledge_save", "将整理好的文字笔记或摘要直接保存到本地资料库。", mapOf("text" to "要保存的完整正文"), listOf("text")))
+            array.put(schema("whale_knowledge_read", "按 ID 读取本地资料库某条笔记/文档的完整正文内容。", mapOf("id" to "资料记录 ID"), listOf("id")))
+            array.put(schema("whale_knowledge_delete", "按 ID 删除本地资料库中的过期或重复记录（可撤销）。", mapOf("id" to "资料记录 ID"), listOf("id")))
         }
         if (includeSecretary) {
             array.put(schema("whale_secretary_list", "查询用户的未完成秘书事项与待办列表。", mapOf("query" to "可选筛选关键词"), emptyList()))
@@ -232,6 +246,39 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_clipboard", "读取或写入安卓系统剪贴板文本。", mapOf("action" to "get 或 set", "text" to "action=set 时要写入的文本"), listOf("action")))
             array.put(schema("whale_device_media", "控制手机媒体音量或播放状态。", mapOf("action" to "volume_up / volume_down / mute / set_volume / play_pause / next / prev", "percent" to "set_volume 时的音量百分比 0-100"), listOf("action")))
             array.put(schema("whale_calendar_read", "读取手机系统日历近期日程（需已授予日历读取权限）。", emptyMap(), emptyList()))
+            array.put(schema(
+                "whale_calendar_create",
+                "在手机系统日历中新增一条日程事件（有写入权限直接静默写入，否则自动拉起预填好的系统日历确认页）。",
+                mapOf(
+                    "title" to "日程标题",
+                    "startIso" to "开始时间，ISO 格式如 2026-11-21T09:30 或毫秒时间戳",
+                    "durationMinutes" to "持续分钟数（默认 60）",
+                    "location" to "可选地点",
+                    "description" to "可选备注说明",
+                ),
+                listOf("title", "startIso"),
+            ))
+            array.put(schema(
+                "whale_alarm_set",
+                "调用手机原生系统闹钟设置指定时间的闹钟（不怕后台被杀）。",
+                mapOf(
+                    "hour" to "小时 (0~23)",
+                    "minute" to "分钟 (0~59)",
+                    "message" to "可选闹钟标签",
+                    "skipUi" to "可选：true(默认) 尽量静默创建",
+                ),
+                listOf("hour", "minute"),
+            ))
+            array.put(schema(
+                "whale_timer_set",
+                "调用手机原生系统时钟设置倒计时计时器（例如番茄钟、休息提醒）。",
+                mapOf(
+                    "seconds" to "倒计时总秒数 (1~86400)",
+                    "message" to "可选计时器标签",
+                    "skipUi" to "可选：true(默认) 尽量直接启动",
+                ),
+                listOf("seconds"),
+            ))
             array.put(schema("whale_notifications_read", "检索本机已捕获的应用通知摘要（自动过滤密码与验证码敏感内容）。", mapOf("query" to "可选搜索关键词", "limit" to "可选条数 1-10，默认 8"), emptyList()))
             array.put(schema("whale_schedule_create", "创建一个到点自动唤醒执行的后台定时/周期任务，执行完自动回传给桌宠和主对话。", mapOf("title" to "任务简短标题", "task" to "到点后要自主执行的完整任务说明", "delayMinutes" to "多少分钟后触发（1-10080）", "repeatDaily" to "可选：true 表示每天循环"), listOf("task", "delayMinutes")))
             array.put(schema("whale_schedule_list", "列出全部尚未触发或每日循环的定时任务。", emptyMap(), emptyList()))
@@ -267,6 +314,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_persona_manage",
         "whale_pet_control",
         "whale_memory_save",
+        "whale_memory_update",
+        "whale_memory_purge_noise",
+        "whale_knowledge_delete",
+        "whale_calendar_create",
+        "whale_alarm_set",
+        "whale_timer_set",
         "whale_owner_profile_edit",
         "whale_knowledge_save",
         "whale_secretary_add",
@@ -486,6 +539,68 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val result = CompanionMemoryStore(app).execute(req.toString(), fromPetTurn = true)
                     ToolOutcome(name, "保存长期记忆", true, result, mutating = true)
                 }
+                "whale_memory_update" -> {
+                    val id = args.str("id", "").trim()
+                    val newText = args.str("text", "").trim()
+                    require(id.isNotEmpty() && newText.isNotEmpty()) { "更新记忆需要提供 id 与 text" }
+                    val store = CompanionMemoryStore(app)
+                    val rows = store.listForUser()
+                    var expectedText: String? = null
+                    for (i in 0 until rows.length()) {
+                        val row = rows.optJSONObject(i) ?: continue
+                        if (row.optString("id") == id) {
+                            expectedText = row.optString("text")
+                            break
+                        }
+                    }
+                    require(expectedText != null) { "未找到记忆 ID：$id" }
+                    val req = JSONObject()
+                        .put("op", "update")
+                        .put("id", id)
+                        .put("expectedText", expectedText)
+                        .put("text", newText)
+                        .put("operationId", java.util.UUID.randomUUID().toString())
+                    val result = store.execute(req.toString(), fromPetTurn = true)
+                    ToolOutcome(name, "更新长期记忆", true, result, mutating = true)
+                }
+                "whale_memory_purge_noise" -> {
+                    val dryRun = args.optBoolean("dryRun", false)
+                    val store = CompanionMemoryStore(app)
+                    val rows = store.listForUser()
+                    val noiseIds = mutableListOf<String>()
+                    val samples = org.json.JSONArray()
+                    for (i in 0 until rows.length()) {
+                        val row = rows.optJSONObject(i) ?: continue
+                        if (row.has("profileKey")) continue
+                        val src = row.optString("source", "").lowercase()
+                        val evSrc = row.optString("evidenceSource", "").lowercase()
+                        val isNoise = src.contains("notification") || evSrc.contains("notification") ||
+                            src == "auto_notification" || src == "ambient_capture"
+                        if (isNoise) {
+                            val id = row.optString("id")
+                            if (id.isNotEmpty()) {
+                                noiseIds.add(id)
+                                if (samples.length() < 8) samples.put(row.optString("text").take(80))
+                            }
+                        }
+                    }
+                    var removed = 0
+                    if (!dryRun) {
+                        for (id in noiseIds) {
+                            val res = runCatching {
+                                JSONObject(store.execute(JSONObject().put("op", "delete").put("id", id).toString(), fromPetTurn = true))
+                            }.getOrNull()
+                            if (res?.optBoolean("removed") == true) removed++
+                        }
+                    }
+                    val out = JSONObject()
+                        .put("dryRun", dryRun)
+                        .put("matchedNoiseCount", noiseIds.size)
+                        .put("removedCount", removed)
+                        .put("remainingTotal", (rows.length() - removed).coerceAtLeast(0))
+                        .put("samples", samples)
+                    ToolOutcome(name, if (dryRun) "预览通知噪音记忆" else "清理通知噪音记忆", true, out.toString(), mutating = !dryRun)
+                }
                 "whale_owner_profile" -> {
                     val profile = OwnerContext(app).read()
                     ToolOutcome(name, "读取主人档案", true, OwnerContext.prompt(profile))
@@ -546,6 +661,29 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val text = args.str("text", "").trim()
                     val saved = CompanionKnowledgeStore(app).add(text, source = "whale_native_chat")
                     ToolOutcome(name, "保存到本地资料库", saved, JSONObject().put("saved", saved).toString(), mutating = true)
+                }
+                "whale_knowledge_read" -> {
+                    val id = args.str("id", "").trim()
+                    require(id.isNotEmpty()) { "请提供资料记录 id" }
+                    val row = CompanionKnowledgeStore(app).findById(id)
+                        ?: throw IllegalArgumentException("未找到该资料记录：$id")
+                    val text = row.optString("text", "")
+                    val out = JSONObject()
+                        .put("id", row.optString("id"))
+                        .put("source", row.optString("source"))
+                        .put("createdAt", row.optLong("createdAt"))
+                        .put("length", text.length)
+                        .put("text", text.take(16000))
+                    ToolOutcome(name, "读取资料全文", true, out.toString())
+                }
+                "whale_knowledge_delete" -> {
+                    val id = args.str("id", "").trim()
+                    require(id.isNotEmpty()) { "请提供要删除的资料记录 id" }
+                    val store = CompanionKnowledgeStore(app)
+                    val row = store.findById(id)
+                        ?: throw IllegalArgumentException("未找到该资料记录：$id")
+                    val removed = store.remove(id, row.optString("text", ""))
+                    ToolOutcome(name, "删除本地资料", removed, JSONObject().put("id", id).put("removed", removed).toString(), mutating = true)
                 }
                 "whale_secretary_list" -> {
                     val query = args.str("query", "").trim()
@@ -922,6 +1060,121 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         arr.put(JSONObject().put("title", ev.title).put("startMs", ev.start).put("endMs", ev.end).put("allDay", ev.allDay))
                     }
                     ToolOutcome(name, "读取未来 7 天系统日程", snap.state == CompanionCalendar.State.OK, JSONObject().put("count", arr.length()).put("events", arr).toString())
+                }
+                "whale_calendar_create" -> {
+                    val title = args.str("title", "").trim()
+                    val startRaw = args.str("startIso", "").trim()
+                    require(title.isNotEmpty() && startRaw.isNotEmpty()) { "创建日程需要 title 和 startIso" }
+                    val durationMin = args.optInt("durationMinutes", 60).coerceIn(5, 1440)
+                    val location = args.str("location", "").trim()
+                    val description = args.str("description", "").trim()
+                    val startMs = startRaw.toLongOrNull() ?: run {
+                        val zone = java.time.ZoneId.systemDefault()
+                        runCatching { java.time.Instant.parse(startRaw).toEpochMilli() }
+                            .recoverCatching { java.time.OffsetDateTime.parse(startRaw).toInstant().toEpochMilli() }
+                            .recoverCatching { java.time.LocalDateTime.parse(startRaw.replace(" ", "T")).atZone(zone).toInstant().toEpochMilli() }
+                            .getOrThrow()
+                    }
+                    val endMs = startMs + durationMin.toLong() * 60_000L
+                    val hasWritePerm = androidx.core.content.ContextCompat.checkSelfPermission(
+                        app,
+                        android.Manifest.permission.WRITE_CALENDAR,
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    var directInsertedId: Long? = null
+                    if (hasWritePerm) {
+                        var calId = 1L
+                        runCatching {
+                            app.contentResolver.query(
+                                android.provider.CalendarContract.Calendars.CONTENT_URI,
+                                arrayOf(android.provider.CalendarContract.Calendars._ID),
+                                "${android.provider.CalendarContract.Calendars.VISIBLE} = 1",
+                                null,
+                                null,
+                            )?.use { c -> if (c.moveToFirst()) calId = c.getLong(0) }
+                        }
+                        val values = android.content.ContentValues().apply {
+                            put(android.provider.CalendarContract.Events.CALENDAR_ID, calId)
+                            put(android.provider.CalendarContract.Events.TITLE, title)
+                            put(android.provider.CalendarContract.Events.DTSTART, startMs)
+                            put(android.provider.CalendarContract.Events.DTEND, endMs)
+                            put(android.provider.CalendarContract.Events.EVENT_TIMEZONE, java.util.TimeZone.getDefault().id)
+                            if (location.isNotEmpty()) put(android.provider.CalendarContract.Events.EVENT_LOCATION, location)
+                            if (description.isNotEmpty()) put(android.provider.CalendarContract.Events.DESCRIPTION, description)
+                        }
+                        val uri = runCatching {
+                            app.contentResolver.insert(android.provider.CalendarContract.Events.CONTENT_URI, values)
+                        }.getOrNull()
+                        directInsertedId = uri?.lastPathSegment?.toLongOrNull()
+                    }
+                    if (directInsertedId != null) {
+                        ToolOutcome(
+                            name,
+                            "写入系统日历：$title",
+                            true,
+                            JSONObject().put("mode", "direct_insert").put("eventId", directInsertedId).put("title", title).put("startMs", startMs).put("endMs", endMs).toString(),
+                            mutating = true,
+                        )
+                    } else {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_INSERT).apply {
+                            data = android.provider.CalendarContract.Events.CONTENT_URI
+                            putExtra(android.provider.CalendarContract.Events.TITLE, title)
+                            putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
+                            putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, endMs)
+                            if (location.isNotEmpty()) putExtra(android.provider.CalendarContract.Events.EVENT_LOCATION, location)
+                            if (description.isNotEmpty()) putExtra(android.provider.CalendarContract.Events.DESCRIPTION, description)
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        app.startActivity(intent)
+                        ToolOutcome(
+                            name,
+                            "拉起系统日历创建：$title",
+                            true,
+                            JSONObject().put("mode", "intent_prefill").put("title", title).put("startMs", startMs).put("endMs", endMs).toString(),
+                            mutating = true,
+                        )
+                    }
+                }
+                "whale_alarm_set" -> {
+                    val hour = args.optInt("hour", -1)
+                    val minute = args.optInt("minute", -1)
+                    require(hour in 0..23 && minute in 0..59) { "闹钟时间无效，需 hour(0~23) 与 minute(0~59)" }
+                    val message = args.str("message", "鲸鱼助手闹钟").trim().ifEmpty { "鲸鱼助手闹钟" }
+                    val skipUi = args.optBoolean("skipUi", true)
+                    val intent = android.content.Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+                        putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour)
+                        putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute)
+                        putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, message)
+                        putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, skipUi)
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    app.startActivity(intent)
+                    ToolOutcome(
+                        name,
+                        String.format(java.util.Locale.US, "设置系统闹钟 %02d:%02d", hour, minute),
+                        true,
+                        JSONObject().put("hour", hour).put("minute", minute).put("message", message).put("skipUi", skipUi).toString(),
+                        mutating = true,
+                    )
+                }
+                "whale_timer_set" -> {
+                    val seconds = args.optInt("seconds", -1)
+                    require(seconds in 1..86400) { "倒计时秒数需在 1~86400 之间" }
+                    val message = args.str("message", "鲸鱼助手倒计时").trim().ifEmpty { "鲸鱼助手倒计时" }
+                    val skipUi = args.optBoolean("skipUi", true)
+                    val intent = android.content.Intent(android.provider.AlarmClock.ACTION_SET_TIMER).apply {
+                        putExtra(android.provider.AlarmClock.EXTRA_LENGTH, seconds)
+                        putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, message)
+                        putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, skipUi)
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    app.startActivity(intent)
+                    ToolOutcome(
+                        name,
+                        "启动系统倒计时（${seconds}秒）",
+                        true,
+                        JSONObject().put("seconds", seconds).put("message", message).put("skipUi", skipUi).toString(),
+                        mutating = true,
+                    )
                 }
                 "whale_notifications_read" -> {
                     val store = CompanionStore(app)

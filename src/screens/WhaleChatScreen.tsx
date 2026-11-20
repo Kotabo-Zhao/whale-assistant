@@ -13,9 +13,13 @@ import {
   ListTodo,
   MessageSquarePlus,
   MessagesSquare,
+  Mic,
   Pencil,
   Slash,
+  Square,
   Trash2,
+  Volume2,
+  VolumeX,
   Wrench,
 } from 'lucide-react'
 import grokMark from '../assets/whale-grok-mark.png'
@@ -209,6 +213,16 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [streamingSteps, setStreamingSteps] = useState<WhaleNativeChatStep[]>([])
   const [streamingPhase, setStreamingPhase] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [recording, setRecording] = useState(false)
+  const [transcribing, setTranscribing] = useState(false)
+  const [voiceNote, setVoiceNote] = useState('')
+  const [autoSpeak, setAutoSpeak] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem('whale.mainChatAutoSpeak.v1') === 'true'
+    } catch {
+      return false
+    }
+  })
   const activeRequestRef = useRef<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -341,6 +355,9 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           elapsedMs: result.elapsedMs,
         },
       ])
+      if (autoSpeak && result.reply.trim() && bridge.testVoiceSpeak) {
+        void bridge.testVoiceSpeak(result.reply).catch(() => {})
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       updateSessionMessages(targetSessionId, prev => [
@@ -368,6 +385,58 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     }).catch(() => {})
   }
 
+  const toggleAutoSpeak = (): void => {
+    setAutoSpeak(prev => {
+      const next = !prev
+      try {
+        window.localStorage.setItem('whale.mainChatAutoSpeak.v1', String(next))
+      } catch {
+        // Ignore storage errors.
+      }
+      if (!next) void bridge.stopVoiceSpeaking?.().catch(() => {})
+      return next
+    })
+  }
+
+  const toggleVoiceRecord = async (): Promise<void> => {
+    if (sending || transcribing) return
+    if (recording) {
+      setRecording(false)
+      setTranscribing(true)
+      setVoiceNote(t('正在识别语音…'))
+      try {
+        const res = await bridge.stopVoiceRecording?.()
+        if (res?.ok && res.text?.trim()) {
+          setVoiceNote('')
+          await sendText(res.text.trim())
+        } else {
+          setVoiceNote(res?.error || t('语音识别失败，请确认已在设置中配置硅基流动语音 Key'))
+        }
+      } catch (err) {
+        setVoiceNote(err instanceof Error ? err.message : t('语音识别失败'))
+      } finally {
+        setTranscribing(false)
+      }
+      return
+    }
+    if (!bridge.startVoiceRecording) {
+      setVoiceNote(t('当前环境不支持原生录音，请在 Android 客户端中使用'))
+      return
+    }
+    void bridge.stopVoiceSpeaking?.().catch(() => {})
+    try {
+      const res = await bridge.startVoiceRecording()
+      if (res.ok) {
+        setRecording(true)
+        setVoiceNote(t('正在听你说话… 再次点击停止并发送'))
+      } else {
+        setVoiceNote(res.error || t('无法启动录音，请先授予麦克风权限'))
+      }
+    } catch (err) {
+      setVoiceNote(err instanceof Error ? err.message : t('无法启动录音'))
+    }
+  }
+
   const phaseLabel = streamingPhase.startsWith('tool:')
     ? t('正在调用原生能力…')
     : streamingPhase === 'synthesizing'
@@ -385,6 +454,16 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     <section className="whale-chat-screen" aria-label={t('鲸鱼助手对话')}>
       <header className="whale-chat-header is-minimal">
         <div className="whale-chat-shortcuts" aria-label={t('常用功能入口')}>
+          <button
+            type="button"
+            className={`whale-icon-chip${autoSpeak ? ' is-active' : ''}`}
+            title={autoSpeak ? t('关闭自动朗读') : t('开启自动朗读')}
+            aria-label={t('切换自动朗读')}
+            aria-pressed={autoSpeak}
+            onClick={toggleAutoSpeak}
+          >
+            {autoSpeak ? <Volume2 size={17} /> : <VolumeX size={17} />}
+          </button>
           <button
             type="button"
             className={`whale-icon-chip${sessionsOpen ? ' is-active' : ''}`}
@@ -620,6 +699,17 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                     >
                       {copiedId === msg.id ? <Check size={13} /> : <Copy size={13} />}
                     </button>
+                    {bridge.testVoiceSpeak && (
+                      <button
+                        type="button"
+                        className="whale-copy-btn"
+                        aria-label={t('朗读回复')}
+                        title={t('朗读回复')}
+                        onClick={() => { void bridge.testVoiceSpeak?.(msg.text).catch(() => {}) }}
+                      >
+                        <Volume2 size={13} />
+                      </button>
+                    )}
                   </footer>
                 )}
               </article>
@@ -689,6 +779,12 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         </div>
       )}
 
+      {voiceNote && (
+        <div className={`whale-voice-status${recording ? ' is-recording' : ''}`} role="status">
+          <span>{voiceNote}</span>
+        </div>
+      )}
+
       <div className="whale-chat-composer-wrap"><form
         className="whale-chat-composer"
         onSubmit={event => {
@@ -721,6 +817,16 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             else if (val === '') setSlashOpen(false)
           }}
         />
+        <button
+          type="button"
+          className={`whale-mic-btn${recording ? ' is-recording' : ''}`}
+          disabled={sending || transcribing}
+          aria-label={recording ? t('停止录音并发送') : t('语音输入')}
+          title={recording ? t('停止录音并发送') : t('语音输入')}
+          onClick={() => { void toggleVoiceRecord() }}
+        >
+          {recording ? <Square size={14} /> : <Mic size={16} />}
+        </button>
         <button
           type="submit"
           className="whale-send-btn"

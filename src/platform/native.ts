@@ -249,6 +249,9 @@ interface NativeRuntimePlugin {
   getVoiceConfig(): Promise<WhaleVoiceConfig>
   saveVoiceConfig(options: { apiKey?: string; baseUrl?: string; voice?: string; speed?: number; autoSpeakPet?: boolean }): Promise<WhaleVoiceConfig>
   testVoiceSpeak(options: { text?: string }): Promise<{ ok: boolean }>
+  startVoiceRecording(): Promise<{ ok: boolean; error?: string }>
+  stopVoiceRecording(): Promise<{ ok: boolean; text?: string; error?: string }>
+  stopVoiceSpeaking(): Promise<{ ok: boolean }>
   requestRecordAudioPermission(): Promise<{ granted: boolean; requested?: boolean }>
   insertTaskDraft(options: { text: string }): Promise<void>
   mailboxState(): Promise<unknown>
@@ -602,6 +605,9 @@ function createNativeBridge(): RuntimeBridge {
     getVoiceConfig: () => NativeRuntime.getVoiceConfig(),
     saveVoiceConfig: options => NativeRuntime.saveVoiceConfig(options),
     testVoiceSpeak: text => NativeRuntime.testVoiceSpeak(text ? { text } : {}),
+    startVoiceRecording: () => NativeRuntime.startVoiceRecording(),
+    stopVoiceRecording: () => NativeRuntime.stopVoiceRecording(),
+    stopVoiceSpeaking: () => NativeRuntime.stopVoiceSpeaking(),
     requestRecordAudioPermission: () => NativeRuntime.requestRecordAudioPermission(),
     insertTaskDraft: text => NativeRuntime.insertTaskDraft({ text }),
     getMailboxState: () => NativeRuntime.mailboxState().then(validateMailboxState),

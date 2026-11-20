@@ -857,3 +857,45 @@
     height: 100%;
   }
 }
+
+/* Main Chat Voice Input & Status Strip */
+.whale-voice-status {
+  margin: 0 14px 4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.76rem;
+  align-self: center;
+}
+
+.whale-voice-status.is-recording {
+  background: rgba(196, 60, 74, 0.11);
+  color: #c43c4a;
+  font-weight: var(--weight-semibold);
+}
+
+.whale-mic-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background-color 130ms ease, color 130ms ease;
+}
+
+.whale-mic-btn:hover:not(:disabled) {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+.whale-mic-btn.is-recording {
+  background: #c43c4a;
+  color: #ffffff;
+}

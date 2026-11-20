@@ -1670,6 +1670,9 @@ export interface RuntimeBridge {
   getVoiceConfig?: () => Promise<WhaleVoiceConfig>
   saveVoiceConfig?: (options: { apiKey?: string; baseUrl?: string; voice?: string; speed?: number; autoSpeakPet?: boolean }) => Promise<WhaleVoiceConfig>
   testVoiceSpeak?: (text?: string) => Promise<{ ok: boolean }>
+  startVoiceRecording?: () => Promise<{ ok: boolean; error?: string }>
+  stopVoiceRecording?: () => Promise<{ ok: boolean; text?: string; error?: string }>
+  stopVoiceSpeaking?: () => Promise<{ ok: boolean }>
   requestRecordAudioPermission?: () => Promise<{ granted: boolean; requested?: boolean }>
   setHarnessViewport?(viewport: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
   listHarnessReleases: () => Promise<HarnessReleaseList>

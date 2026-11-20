@@ -4356,6 +4356,37 @@ class MobileRuntimePlugin : Plugin() {
     }
 
     @PluginMethod
+    fun startVoiceRecording(call: PluginCall) {
+        execute(call) {
+            val err = io.deepseekharness.mobile.companion.WhaleVoiceEngine.startRecording(context)
+            if (err != null) {
+                JSObject().put("ok", false).put("error", err)
+            } else {
+                JSObject().put("ok", true)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun stopVoiceRecording(call: PluginCall) {
+        execute(call) {
+            val res = io.deepseekharness.mobile.companion.WhaleVoiceEngine.stopAndTranscribe(context)
+            res.fold(
+                onSuccess = { text -> JSObject().put("ok", true).put("text", text) },
+                onFailure = { err -> JSObject().put("ok", false).put("error", err.message ?: "语音识别失败") },
+            )
+        }
+    }
+
+    @PluginMethod
+    fun stopVoiceSpeaking(call: PluginCall) {
+        execute(call) {
+            io.deepseekharness.mobile.companion.WhaleVoiceEngine.stopSpeaking()
+            JSObject().put("ok", true)
+        }
+    }
+
+    @PluginMethod
     fun requestRecordAudioPermission(call: PluginCall) {
         val act = activity
         if (act == null) {
