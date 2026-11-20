@@ -28,13 +28,7 @@ describe('WhaleChatScreen', () => {
 
   it('renders welcome state and sends a native chat turn with tool receipt', async () => {
     render(
-      <WhaleChatScreen
-        bridge={mockBridge}
-        onOpenMemory={vi.fn()}
-        onOpenTasks={vi.fn()}
-        onOpenWorkshop={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
+      <WhaleChatScreen bridge={mockBridge} onNavigate={vi.fn()} />,
     )
 
     const input = screen.getByRole('textbox')
@@ -49,13 +43,7 @@ describe('WhaleChatScreen', () => {
 
   it('opens the session drawer from the header button', () => {
     render(
-      <WhaleChatScreen
-        bridge={mockBridge}
-        onOpenMemory={vi.fn()}
-        onOpenTasks={vi.fn()}
-        onOpenWorkshop={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
+      <WhaleChatScreen bridge={mockBridge} onNavigate={vi.fn()} />,
     )
 
     const listBtn = screen.getByRole('button', { name: /会话列表/ })
