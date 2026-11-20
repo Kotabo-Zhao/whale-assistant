@@ -1,135 +1,133 @@
 /* ============================================================================
- * Whale Assistant Flagship Dual-Architecture Design System
+ * Whale Assistant Studio Dual-Architecture Design System
  *
- * 1. data-style='simple' — Grok Bot Minimalist Architecture
- *    True OLED pitch-black (#000000) / crisp editorial white (#FFFFFF),
- *    borderless editorial AI canvas, floating monochrome pill composer,
- *    zero decorative shadows, 1px architectural hairlines.
+ * 1. data-style='simple' — Deep-Sea Precision Instrument
+ *    Mist Paper (#F7F8FA) / True Abyss (#07090D), single Cobalt/Sky accent,
+ *    borderless editorial AI stream, whisper-quiet 1px hairlines, zero clutter.
  *
- * 2. data-style='cute'   — iOS Cozy Kawaii Architecture (Finch / Waterllama)
- *    Warm milk-cream (#FBF8F3) / starlight indigo (#131626), plush 2px pastel
- *    borders, tactile 3D bottom-lip buttons, floating iOS capsule bottom dock,
- *    pastel sky/butter/mint/strawberry accents, Whale-Chan character stage.
+ * 2. data-style='cute'   — Pelagic Porcelain & Whale-Chan
+ *    Sea-Salt Porcelain (#F4F8FC) / Midnight Tide (#0C1322), luminous cerulean
+ *    & seafoam accents, restrained tactile focus only on primary actions.
  * ============================================================================ */
 
 /* --------------------------------------------------------------------------
- * STYLE 1: Grok Bot Minimalism (simple)
+ * STYLE 1: Deep-Sea Precision Instrument (simple)
  * -------------------------------------------------------------------------- */
 :root[data-style='simple'] {
-  --bg: #ffffff;
+  --bg: #f7f8fa;
   --surface: #ffffff;
-  --surface-muted: #f4f4f5;
-  --surface-hover: #e4e4e7;
-  --ink: #09090b;
-  --muted: #64646f;
-  --field-label: #27272a;
-  --icon-muted: #71717a;
-  --line: rgba(9, 9, 11, 0.09);
-  --line-alt: rgba(9, 9, 11, 0.09);
-  --line-strong: rgba(9, 9, 11, 0.16);
-  --line-faint: rgba(9, 9, 11, 0.05);
-  --blue: #09090b;
-  --blue-hover: #27272a;
-  --blue-soft: rgba(9, 9, 11, 0.06);
-  --blue-line: rgba(9, 9, 11, 0.22);
+  --surface-muted: #eceff4;
+  --surface-hover: #e2e7ef;
+  --ink: #0e1116;
+  --muted: #5b6472;
+  --field-label: #2c3440;
+  --icon-muted: #687385;
+  --line: rgba(14, 17, 22, 0.08);
+  --line-alt: rgba(14, 17, 22, 0.08);
+  --line-strong: rgba(14, 17, 22, 0.15);
+  --line-faint: rgba(14, 17, 22, 0.045);
+  --blue: #1456d1;
+  --blue-hover: #0f46ad;
+  --blue-soft: rgba(20, 86, 209, 0.08);
+  --blue-line: rgba(20, 86, 209, 0.22);
   --on-accent: #ffffff;
-  --brand-bg: #09090b;
-  --radius-control: 10px;
-  --radius-inner: 12px;
-  --radius-card: 14px;
+  --brand-bg: #0e1116;
+  --radius-control: 12px;
+  --radius-inner: 14px;
+  --radius-card: 16px;
   --shadow-card: none;
-  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.08);
-  --ring: 2px solid rgba(9, 9, 11, 0.16);
+  --shadow-elevated: 0 6px 20px rgba(14, 17, 22, 0.06);
+  --ring: 2px solid rgba(20, 86, 209, 0.24);
   --tactile-lip: none;
 }
 
 :root[data-style='simple'][data-theme='dark'] {
-  --bg: #000000;
-  --surface: #0b0b0d;
-  --surface-muted: #16161a;
-  --surface-hover: #222228;
-  --ink: #fafafa;
-  --muted: #9898a3;
-  --field-label: #d4d4d8;
-  --icon-muted: #8e8e98;
-  --line: rgba(255, 255, 255, 0.1);
-  --line-alt: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.2);
-  --line-faint: rgba(255, 255, 255, 0.06);
-  --blue: #ffffff;
-  --blue-hover: #e4e4e7;
-  --blue-soft: rgba(255, 255, 255, 0.1);
-  --blue-line: rgba(255, 255, 255, 0.26);
-  --on-accent: #000000;
-  --brand-bg: #ffffff;
+  --bg: #07090d;
+  --surface: #10141c;
+  --surface-muted: #171d28;
+  --surface-hover: #1f2736;
+  --ink: #f2f5f9;
+  --muted: #8692a6;
+  --field-label: #cfd7e3;
+  --icon-muted: #8692a6;
+  --line: rgba(242, 245, 249, 0.09);
+  --line-alt: rgba(242, 245, 249, 0.09);
+  --line-strong: rgba(242, 245, 249, 0.18);
+  --line-faint: rgba(242, 245, 249, 0.05);
+  --blue: #5ba4ff;
+  --blue-hover: #7bb7ff;
+  --blue-soft: rgba(91, 164, 255, 0.12);
+  --blue-line: rgba(91, 164, 255, 0.28);
+  --on-accent: #07090d;
+  --brand-bg: #f2f5f9;
   --shadow-card: none;
-  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.72);
-  --ring: 2px solid rgba(255, 255, 255, 0.28);
+  --shadow-elevated: 0 10px 28px rgba(0, 0, 0, 0.55);
+  --ring: 2px solid rgba(91, 164, 255, 0.32);
   --tactile-lip: none;
 }
 
 /* --------------------------------------------------------------------------
- * STYLE 2: iOS Cozy Kawaii — Finch / Waterllama Inspired (cute)
+ * STYLE 2: Pelagic Porcelain & Whale-Chan (cute)
  * -------------------------------------------------------------------------- */
 :root[data-style='cute'] {
-  --bg: #fbf8f3;
+  --bg: #f4f8fc;
   --surface: #ffffff;
-  --surface-muted: #f2f6ff;
-  --surface-hover: #e6f0ff;
-  --ink: #24304a;
-  --muted: #697896;
-  --field-label: #415275;
-  --icon-muted: #7889ab;
-  --line: #dfe8f7;
-  --line-alt: #dfe8f7;
-  --line-strong: #c5d8fa;
-  --line-faint: #eef3fc;
-  --blue: #4b89f7;
-  --blue-hover: #3776eb;
-  --blue-soft: #eaf2ff;
-  --blue-line: #b5d0ff;
+  --surface-muted: #e9f1fa;
+  --surface-hover: #dce9f7;
+  --ink: #17263d;
+  --muted: #5f7492;
+  --field-label: #334a6b;
+  --icon-muted: #6c82a3;
+  --line: rgba(23, 38, 61, 0.09);
+  --line-alt: rgba(23, 38, 61, 0.09);
+  --line-strong: rgba(23, 38, 61, 0.17);
+  --line-faint: rgba(23, 38, 61, 0.05);
+  --blue: #2b7fff;
+  --blue-hover: #1a6ce8;
+  --blue-soft: rgba(43, 127, 255, 0.1);
+  --blue-line: rgba(43, 127, 255, 0.24);
   --on-accent: #ffffff;
-  --brand-bg: #4b89f7;
-  --pastel-sky: #e7f1ff;
-  --pastel-butter: #fff5d6;
-  --pastel-mint: #e3f7ee;
-  --pastel-berry: #ffebf0;
-  --radius-control: 16px;
-  --radius-inner: 20px;
-  --radius-card: 26px;
-  --shadow-card: 0 3px 0 #dfe8f7, 0 8px 20px rgba(75, 137, 247, 0.06);
-  --shadow-elevated: 0 4px 0 #cdddf9, 0 14px 30px rgba(75, 137, 247, 0.14);
-  --ring: 3px solid rgba(75, 137, 247, 0.25);
-  --tactile-lip: 0 3px 0 #2e67d1;
+  --brand-bg: #2b7fff;
+  --pastel-sky: #e8f2ff;
+  --pastel-butter: #fdf5df;
+  --pastel-mint: #e4f4f0;
+  --pastel-berry: #fdebf0;
+  --radius-control: 14px;
+  --radius-inner: 18px;
+  --radius-card: 20px;
+  --shadow-card: 0 2px 10px rgba(23, 38, 61, 0.04);
+  --shadow-elevated: 0 8px 24px rgba(23, 38, 61, 0.09);
+  --ring: 2px solid rgba(43, 127, 255, 0.28);
+  --tactile-lip: none;
 }
 
 :root[data-style='cute'][data-theme='dark'] {
-  --bg: #131626;
-  --surface: #1d2238;
-  --surface-muted: #262d49;
-  --surface-hover: #30395b;
-  --ink: #f3f6ff;
-  --muted: #a6b4d4;
-  --field-label: #ccd7f0;
-  --icon-muted: #95a7cf;
-  --line: #2d3657;
-  --line-alt: #2d3657;
-  --line-strong: #3e4b75;
-  --line-faint: #242b47;
-  --blue: #8cc2ff;
-  --blue-hover: #a8d2ff;
-  --blue-soft: rgba(140, 194, 255, 0.16);
-  --blue-line: rgba(140, 194, 255, 0.36);
-  --on-accent: #10203d;
-  --brand-bg: #8cc2ff;
-  --pastel-sky: rgba(140, 194, 255, 0.15);
-  --pastel-butter: rgba(255, 224, 138, 0.14);
-  --pastel-mint: rgba(126, 232, 188, 0.14);
-  --pastel-berry: rgba(255, 166, 193, 0.15);
-  --shadow-card: 0 3px 0 #0b0e1a, 0 8px 20px rgba(0, 0, 0, 0.32);
-  --shadow-elevated: 0 4px 0 #090b15, 0 14px 32px rgba(0, 0, 0, 0.5);
-  --ring: 3px solid rgba(140, 194, 255, 0.32);
-  --tactile-lip: 0 3px 0 #5b96db;
+  --bg: #0c1322;
+  --surface: #141f35;
+  --surface-muted: #1b2944;
+  --surface-hover: #233455;
+  --ink: #edf3fc;
+  --muted: #8da2c2;
+  --field-label: #c4d3eb;
+  --icon-muted: #8da2c2;
+  --line: rgba(237, 243, 252, 0.1);
+  --line-alt: rgba(237, 243, 252, 0.1);
+  --line-strong: rgba(237, 243, 252, 0.18);
+  --line-faint: rgba(237, 243, 252, 0.05);
+  --blue: #6ec5ff;
+  --blue-hover: #8fd3ff;
+  --blue-soft: rgba(110, 197, 255, 0.14);
+  --blue-line: rgba(110, 197, 255, 0.3);
+  --on-accent: #0c1322;
+  --brand-bg: #6ec5ff;
+  --pastel-sky: rgba(110, 197, 255, 0.13);
+  --pastel-butter: rgba(255, 224, 138, 0.12);
+  --pastel-mint: rgba(126, 232, 188, 0.12);
+  --pastel-berry: rgba(255, 166, 193, 0.13);
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.24);
+  --shadow-elevated: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --ring: 2px solid rgba(110, 197, 255, 0.32);
+  --tactile-lip: none;
 }
 
 :root {
@@ -166,7 +164,7 @@ body {
 /* iOS Cozy Floating Capsule Dock on Mobile in Cute Mode */
 @media (max-width: 899px) {
   :root[data-style='cute'] .bottom-navigation {
-    margin: 4px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+    margin: 0; border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0; box-shadow: none;
     padding: 5px 8px;
     border-radius: 999px;
     border: 1px solid var(--line);

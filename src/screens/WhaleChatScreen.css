@@ -878,3 +878,146 @@
 @media (max-width: 899px) {
   .whale-chat-screen { max-width: 100%; width: 100%; height: 100%; }
 }
+
+
+/* ============================================================================
+ * Studio Redesign Overrides (frontend-design restraint & visual hierarchy)
+ * ============================================================================ */
+.whale-chat-header {
+  border-bottom: 1px solid var(--line-faint);
+  background: transparent;
+  min-height: 46px;
+}
+
+.whale-chat-brand h1 {
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.whale-icon-chip {
+  border-color: transparent;
+  background: transparent;
+}
+
+.whale-icon-chip:hover,
+.whale-icon-chip.is-active {
+  background: var(--surface-muted);
+  border-color: transparent;
+}
+
+.whale-chat-empty {
+  justify-content: center;
+  gap: 14px;
+  padding: 20px 12px 12px;
+}
+
+.whale-cute-greeting {
+  border: 0;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 0.78rem;
+  padding: 4px 12px;
+  box-shadow: none;
+}
+
+.whale-chat-empty h2 {
+  font-size: 1.32rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.whale-quick-hub {
+  gap: 6px;
+}
+
+.whale-hub-pill,
+:root[data-style='cute'] .whale-hub-pill {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: none;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+}
+
+.whale-starter-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  max-width: 520px;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.whale-starter-card,
+:root[data-style='cute'] .whale-starter-card,
+:root[data-style='simple'] .whale-starter-card {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 12px 4px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.whale-starter-card:hover {
+  background: var(--surface-muted);
+}
+
+.whale-starter-card strong {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.whale-starter-card span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.whale-msg-assistant .whale-msg-bubble,
+:root[data-style='cute'] .whale-msg-assistant .whale-msg-bubble {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 2px 2px;
+  line-height: 1.68;
+}
+
+.whale-msg-user .whale-msg-bubble,
+:root[data-style='cute'] .whale-msg-user .whale-msg-bubble {
+  border: 0;
+  background: var(--surface-muted);
+  color: var(--ink);
+  box-shadow: none;
+  border-radius: 18px 18px 4px 18px;
+  padding: 9px 14px;
+}
+
+.whale-chat-composer-wrap {
+  padding: 6px 10px max(8px, env(safe-area-inset-bottom, 8px));
+  background: var(--bg);
+}
+
+.whale-chat-composer,
+:root[data-style='cute'] .whale-chat-composer {
+  border: 1px solid var(--line-strong);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow-elevated);
+  padding: 4px 5px 4px 10px;
+}
+
+.whale-send-btn {
+  border-radius: 999px;
+  background: var(--blue);
+  color: var(--on-accent);
+  box-shadow: none;
+}
