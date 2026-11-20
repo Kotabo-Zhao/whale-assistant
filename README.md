@@ -9,14 +9,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **运行在 Android 设备上的 100% 原生个人 Super Agent。**  
-Whale Assistant 从早期容器方案彻底重构为轻量纯原生 Lite 架构：完全剥离 395 MB PRoot/Ubuntu 外部容器，内置原生 Kotlin 多轮流式引擎、40 项进程内工具、本地 BGE-base-zh-v1.5 混合 RAG、后台 Worker 并发池、无障碍屏控 v2 以及常驻全局总管悬浮桌宠——打开即聊，无需配置复杂运行环境。
+Whale Assistant 从早期容器方案彻底重构为轻量纯原生 Lite 架构：完全剥离 395 MB PRoot/Ubuntu 外部容器，内置原生 Kotlin 多轮流式引擎、51 项进程内工具、本地 BGE-base-zh-v1.5 混合 RAG、后台 Worker 并发池、无障碍屏控 v2 以及常驻全局总管悬浮桌宠——打开即聊，无需配置复杂运行环境。
 
 | 项目 | 说明 |
 | :--- | :--- |
 | 应用版本 | `0.4.0-whale.1`（Lite 纯原生版） |
 | 应用包名 | `io.deepseekharness.mobile` |
 | 最低系统 | Android 8.0（API 26）及以上，仅 `arm64-v8a` |
-| 核心引擎 | 纯原生 Kotlin SSE 流式引擎 + 40 项进程内工具 + 3 线程原生 Worker 池 |
+| 核心引擎 | 纯原生 Kotlin SSE 流式引擎 + 51 项进程内工具 + 3 线程原生 Worker 池 |
 | 本地检索 | 内置 `BGE-base-zh-v1.5` 中文向量模型 + SQLite 词法 RRF 混合 RAG |
 | 覆盖升级 | 固定 Nightly 签名密钥库 + 递增 `versionCode`，支持无缝覆盖安装 |
 | 开源协议 | MIT（详见 [LICENSE](LICENSE)） |
@@ -31,7 +31,7 @@ Whale Assistant 从早期容器方案彻底重构为轻量纯原生 Lite 架构�
 - **原生级流畅体验**：启动第 0 帧即应用主题无闪烁，首页全屏满视口适配安全区，内置多会话管理抽屉、`/` 快捷指令栏、URL/长文本一键归档与工具执行回执卡片。
 
 ### 2. 悬浮桌宠：常驻全局的 Super Agent Router
-- **总管所有任务与完全权限**：桌宠不再是受限小弹窗，而是与 App 主界面拥有完全一致的 40 项原生工具权限的全局调度总管——简单问题即时答复或调用工具，复杂长耗时任务直接派发给后台 Worker，手机操作无缝接管原生屏控。
+- **总管所有任务与完全权限**：桌宠不再是受限小弹窗，而是与 App 主界面拥有完全一致的 51 项原生工具权限的全局调度总管——简单问题即时答复或调用工具，复杂长耗时任务直接派发给后台 Worker，手机操作无缝接管原生屏控。
 - **可爱头顶 Token 计费进度条**：`WhaleTokenMeter` 优先解析大模型流式/非流式响应中的真实 `usage`（含 DeepSeek `prompt_cache_hit_tokens` 缓存命中），按主流模型公开单价实时估算当日用量与人民币费用，在桌宠头顶以圆角胶囊进度条动态展示（随当日额度从薄荷绿 → 暖杏橙 → 珊瑚粉渐变）。
 - **自适应底部抽屉对话窗**：基于 `Gravity.BOTTOM` 与 `frame.bottom` 精准避让系统软键盘，消除打字遮挡与退格键失灵问题。
 - **实时屏控提示与防断连**：发起屏控时自动收起对话窗并跳过自身悬浮层锁定前台目标应用，底部同步显示不抢焦点、不挡点击的星蓝状态胶囊（如 `🐳 正在读取屏幕…` / `🐳 操控：click「搜索」`）。
@@ -40,7 +40,7 @@ Whale Assistant 从早期容器方案彻底重构为轻量纯原生 Lite 架构�
 - 内置离线中文向量模型 `BGE-base-zh-v1.5` 与 SQLite 全文索引。
 - `WhaleNativeRagRetriever` 在每轮对话前自动并行执行向量检索 + 词法检索与 RRF 融合排序（600ms 超时上限，超时或低配机自动无感降级词法检索），自动注入最相关的 `[资料#N]` 与 `[记忆#N]` 片段，无需手动触发。
 
-### 4. 40 项原生工具、后台 Worker 与离线功能工坊
+### 4. 51 项原生工具、后台 Worker 与离线功能工坊
 - **全软件实时操控（`WhaleAppControlBus`）**：对话中一句话即可切换页面、切换极简/可爱双风格与明暗主题、切换语言、管理人设卡片、启停或调整桌宠、修改自治开关。
 - **原生后台 Worker 并发池（`WhaleNativeWorkerPool`）**：支持 `whale_worker_submit` / `whale_worker_status` / `whale_worker_cancel`，3 线程异步跑完长耗时任务后自动回写 `WorkerDashboardStore` 看板与 `WorkerReportInbox`。
 - **本地代码工作区与离线工坊**：支持多文件项目读写/补丁/删除，以及在「功能工坊」中通过自然语言生成离线微应用（支持 `window.whaleStorage` 本地持久化）并立即启用打开。
@@ -69,7 +69,7 @@ Whale Assistant 从早期容器方案彻底重构为轻量纯原生 Lite 架构�
 │  Android 原生内核层（100% Kotlin，零 PRoot 依赖）              │
 │  · WhaleNativeAgentEngine（SSE 流式 + 多轮工具 + 真实 usage）  │
 │  · WhaleNativeRagRetriever（BGE-base-zh-v1.5 + SQLite RRF）   │
-│  · WhaleNativeToolRegistry（40 项进程内工具）                  │
+│  · WhaleNativeToolRegistry（51 项进程内工具）                  │
 │  · WhaleNativeWorkerPool（3 线程后台异步 Worker 池）           │
 │  · OverlayBallService（全局总管桌宠 + Token 进度条 + 屏控提示） │
 │  · WhaleFastPhoneController（无障碍屏控 v2 + 安全策略守卫）     │

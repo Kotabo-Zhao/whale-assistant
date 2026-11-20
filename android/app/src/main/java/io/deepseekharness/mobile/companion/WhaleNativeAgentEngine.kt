@@ -409,6 +409,6 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         if (!has(key) || isNull(key)) fallback else optString(key, fallback)
 
     companion object {
-        private const val MAX_TOOL_ROUNDS = 6
+        private const val MAX_TOOL_ROUNDS = 14
     }
 }

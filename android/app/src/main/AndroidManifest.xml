@@ -328,5 +328,8 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".companion.WhaleScheduledTaskReceiver"
+            android:exported="false" />
     </application>
 </manifest>

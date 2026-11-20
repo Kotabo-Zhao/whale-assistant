@@ -204,6 +204,11 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_clipboard", "读取或写入安卓系统剪贴板文本。", mapOf("action" to "get 或 set", "text" to "action=set 时要写入的文本"), listOf("action")))
             array.put(schema("whale_device_media", "控制手机媒体音量或播放状态。", mapOf("action" to "volume_up / volume_down / mute / set_volume / play_pause / next / prev", "percent" to "set_volume 时的音量百分比 0-100"), listOf("action")))
             array.put(schema("whale_calendar_read", "读取手机系统日历近期日程（需已授予日历读取权限）。", emptyMap(), emptyList()))
+            array.put(schema("whale_notifications_read", "检索本机已捕获的应用通知摘要（自动过滤密码与验证码敏感内容）。", mapOf("query" to "可选搜索关键词", "limit" to "可选条数 1-10，默认 8"), emptyList()))
+            array.put(schema("whale_schedule_create", "创建一个到点自动唤醒执行的后台定时/周期任务，执行完自动回传给桌宠和主对话。", mapOf("title" to "任务简短标题", "task" to "到点后要自主执行的完整任务说明", "delayMinutes" to "多少分钟后触发（1-10080）", "repeatDaily" to "可选：true 表示每天循环"), listOf("task", "delayMinutes")))
+            array.put(schema("whale_schedule_list", "列出全部尚未触发或每日循环的定时任务。", emptyMap(), emptyList()))
+            array.put(schema("whale_schedule_cancel", "按 ID 取消一个定时任务。", mapOf("id" to "定时任务 ID"), listOf("id")))
+            array.put(schema("whale_device_status", "一键查询手机综合状态：电量、充电、音量、网络、无障碍、桌宠、活跃 Worker 及今日 Token 与估算费用。", emptyMap(), emptyList()))
         }
         if (array.length() == 0) {
             // 保底核心工具集：避免任意自然口语问句被关键词漏判导致“无工具可用”
@@ -230,6 +235,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_memory_delete",
         "whale_clipboard",
         "whale_device_media",
+        "whale_schedule_create",
+        "whale_schedule_cancel",
         "whale_app_navigate",
         "whale_app_appearance",
         "whale_app_language",
@@ -837,6 +844,61 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         arr.put(JSONObject().put("title", ev.title).put("startMs", ev.start).put("endMs", ev.end).put("allDay", ev.allDay))
                     }
                     ToolOutcome(name, "读取未来 7 天系统日程", snap.state == CompanionCalendar.State.OK, JSONObject().put("count", arr.length()).put("events", arr).toString())
+                }
+                "whale_notifications_read" -> {
+                    val store = CompanionStore(app)
+                    val authorized = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(app).contains(app.packageName)
+                    val req = JSONObject()
+                        .put("query", args.str("query", "").trim())
+                        .put("limit", args.optInt("limit", 8).coerceIn(1, 10))
+                        .toString()
+                    val res = CompanionNotificationModel.execute(
+                        enabled = true,
+                        param = req,
+                        now = System.currentTimeMillis(),
+                        capture = store.notificationCapture,
+                        authorized = authorized,
+                        connected = CompanionNotificationService.isConnected(),
+                        excluded = store.excludedPackages(),
+                    ) { store.read() }
+                    ToolOutcome(name, "读取本机通知摘要", true, res)
+                }
+                "whale_schedule_create" -> {
+                    val task = args.str("task").trim()
+                    require(task.isNotEmpty()) { "缺少定时任务内容 task" }
+                    val delayMin = args.optLong("delayMinutes", 15L)
+                    val title = args.str("title").trim().ifBlank { task.take(32) }
+                    val repeatDaily = args.optBoolean("repeatDaily", false)
+                    val created = WhaleScheduledTaskManager.create(app, title, task, delayMin, repeatDaily)
+                    ToolOutcome(name, "已设定定时任务：$title（${delayMin}分钟后）", true, created.toString(), mutating = true)
+                }
+                "whale_schedule_list" -> {
+                    val items = WhaleScheduledTaskManager.list(app)
+                    ToolOutcome(name, "查询定时任务列表", true, JSONObject().put("count", items.length()).put("items", items).toString())
+                }
+                "whale_schedule_cancel" -> {
+                    val id = args.str("id").trim()
+                    require(id.isNotEmpty()) { "缺少定时任务 ID" }
+                    val removed = WhaleScheduledTaskManager.cancel(app, id)
+                    ToolOutcome(name, if (removed) "已取消定时任务" else "未找到该定时任务", removed, JSONObject().put("id", id).put("cancelled", removed).toString(), mutating = true)
+                }
+                "whale_device_status" -> {
+                    val bm = app.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+                    val am = app.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                    val volCur = am?.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) ?: 0
+                    val volMax = (am?.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) ?: 1).coerceAtLeast(1)
+                    val meter = WhaleTokenMeter.snapshot(app)
+                    val payload = JSONObject()
+                        .put("batteryPercent", bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1)
+                        .put("charging", bm?.isCharging == true)
+                        .put("volumePercent", volCur * 100 / volMax)
+                        .put("accessibilityConnected", DeepSeekAccessibilityService.current() != null)
+                        .put("activeWorkers", WorkerDashboardStore(app).activeCount() + WhaleNativeWorkerPool.activeCount())
+                        .put("scheduledTasks", WhaleScheduledTaskManager.list(app).length())
+                        .put("todayTokens", meter.totalTokens)
+                        .put("todayEstimatedYuan", String.format(java.util.Locale.US, "%.4f", meter.estimatedYuan))
+                        .toString()
+                    ToolOutcome(name, "读取手机综合状态", true, payload)
                 }
                 else -> ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
             }
