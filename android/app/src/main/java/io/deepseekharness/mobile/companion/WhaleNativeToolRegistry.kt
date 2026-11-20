@@ -294,9 +294,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "name" to "工具名，必须以 custom_ 开头，仅小写字母/数字/下划线，如 custom_weather 或 custom_snr_calc",
                 "description" to "工具用途说明(2~200字)",
                 "kind" to "执行引擎类型：composite / http_json / js",
-                "paramsJson" to "可选，JSON 对象字符串，如 {"city":"城市名"}",
-                "requiredJson" to "可选，必填参数名 JSON 数组字符串，如 ["city"]",
-                "definitionJson" to "必填，JSON 对象字符串：composite 传 {"steps":[{"tool":"whale_...","args":{...}}]}；http_json 传 {"url":"https://...","method":"GET","extractPath":"..."}；js 传 {"code":"return ...;"}",
+                "paramsJson" to """可选，JSON 对象字符串，如 {"city":"城市名"}""",
+                "requiredJson" to """可选，必填参数名 JSON 数组字符串，如 ["city"]""",
+                "definitionJson" to """必填，JSON 对象字符串：composite 传 {"steps":[{"tool":"whale_...","args":{...}}]}；http_json 传 {"url":"https://...","method":"GET","extractPath":"..."}；js 传 {"code":"return ...;"}""",
             ),
             listOf("name", "description", "kind", "definitionJson"),
         ))
