@@ -1064,7 +1064,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val unseenIds = inbox.unseen().mapNotNull { it.optString("id").takeIf(String::isNotBlank) }
                     if (unseenIds.isNotEmpty()) inbox.markSeen(unseenIds)
                     val page = runCatching { dashboard.page("all", "", 0, 20, true) }.getOrElse { JSONObject() }
-                    WhaleAppControlBus.emit("appearance", JSONObject().put("refresh", true))
+                    WhaleAppControlBus.emit(JSONObject().put("action", "appearance").put("refresh", true))
                     ToolOutcome(name, "已刷新应用与桌宠状态视图", true, JSONObject().put("refreshed", true).put("attention", page.optInt("attention", 0)).put("running", page.optInt("running", 0)).toString(), mutating = true)
                 }
                 "whale_virtual_screen_control" -> {
