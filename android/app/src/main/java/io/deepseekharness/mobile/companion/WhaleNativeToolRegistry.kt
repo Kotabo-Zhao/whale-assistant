@@ -46,19 +46,17 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
     fun toolSchemas(userText: String): JSONArray {
         val text = userText.trim()
         val array = JSONArray()
-        val includeAppControl = Regex(
-            "(跳转|打开.*页|切到|去.*页|主题|深色|浅色|暗黑|风格|极简|grok|可爱|鲸鱼娘|语言|英文|中文|设置|开关|自治|流畅|平衡|严格|动效|静音|通知|备份|navigate|theme|style|dark|light|setting|language)",
-            RegexOption.IGNORE_CASE,
-        ).containsMatchIn(text)
-        val includePersona = Regex("(人设|角色|性格|称呼|persona|character)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includePet = Regex("(桌宠|悬浮球|悬浮窗|宠物|大小|位置|隐藏桌宠|开启桌宠|关闭桌宠|pet|overlay|ball)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includeMemory = Regex("(记住|记忆|偏好|习惯|我喜欢|上次|档案|memory|prefer)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includeKnowledge = Regex("(资料|笔记|文档|知识库|总结|保存|记录|note|knowledge|doc)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includeSecretary = Regex("(提醒|事项|待办|日程|安排|计划|完成|勾掉|删掉.*事项|今天|明天|todo|task|remind|schedule)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includeWorkshop = Regex("(工坊|小工具|小应用|打卡|计时|记账|置顶|启用|运行.*工具|创建.*功能|做个.*软件|workshop|tool)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includeCode = Regex("(写代码|编程|项目|源码|文件|函数|重构|补丁|修改代码|删除文件|搜索代码|code|project|src|html|js|ts|kotlin|python|json)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includePhone = Regex("(打开|启动|点击|输入|滑动|返回|看看屏幕|当前页面|装了哪些|应用|app|微信|设置|操作手机|无障碍|shizuku|副屏|screen|click|launch)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val includeDevice = Regex("(电量|电池|手机|充电|后台|任务|进度|状态|battery|worker|工单)", RegexOption.IGNORE_CASE).containsMatchIn(text)
+        // 全量暴露全部原生工具：不再按关键词隐藏工具，避免自然口语或自检时漏掉工具
+        val includeAppControl = text.length >= 0
+        val includePersona = true
+        val includePet = true
+        val includeMemory = true
+        val includeKnowledge = true
+        val includeSecretary = true
+        val includeWorkshop = true
+        val includeCode = true
+        val includePhone = true
+        val includeDevice = true
 
         if (includeAppControl) {
             array.put(schema(
@@ -200,6 +198,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 listOf("task"),
             ))
             array.put(schema("whale_worker_cancel", "取消一个正在运行的原生后台 Worker 任务。", mapOf("id" to "Worker 任务 ID"), listOf("id")))
+            array.put(schema("whale_web_search", "联网实时搜索网页信息，返回标题、摘要与链接。", mapOf("query" to "搜索关键词", "limit" to "可选返回条数（1-8，默认 5）"), listOf("query")))
+            array.put(schema("whale_web_fetch", "联网抓取指定 HTTPS/HTTP 网页或文本接口的正文内容。", mapOf("url" to "完整网页 URL", "maxChars" to "可选最大字符数，默认 6000"), listOf("url")))
+            array.put(schema("whale_memory_delete", "按 ID 删除一条本地长期记忆。", mapOf("id" to "记忆 UUID"), listOf("id")))
+            array.put(schema("whale_clipboard", "读取或写入安卓系统剪贴板文本。", mapOf("action" to "get 或 set", "text" to "action=set 时要写入的文本"), listOf("action")))
+            array.put(schema("whale_device_media", "控制手机媒体音量或播放状态。", mapOf("action" to "volume_up / volume_down / mute / set_volume / play_pause / next / prev", "percent" to "set_volume 时的音量百分比 0-100"), listOf("action")))
+            array.put(schema("whale_calendar_read", "读取手机系统日历近期日程（需已授予日历读取权限）。", emptyMap(), emptyList()))
         }
         if (array.length() == 0) {
             // 保底核心工具集：避免任意自然口语问句被关键词漏判导致“无工具可用”
@@ -223,6 +227,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
     fun isMutating(name: String): Boolean = name in setOf(
         "whale_worker_submit",
         "whale_worker_cancel",
+        "whale_memory_delete",
+        "whale_clipboard",
+        "whale_device_media",
         "whale_app_navigate",
         "whale_app_appearance",
         "whale_app_language",
@@ -699,6 +706,137 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     require(id.isNotEmpty()) { "缺少 Worker ID" }
                     val cancelled = WhaleNativeWorkerPool.cancel(id)
                     ToolOutcome(name, if (cancelled) "已取消后台 Worker" else "未找到运行中的后台 Worker", cancelled, JSONObject().put("id", id).put("cancelled", cancelled).toString(), mutating = true)
+                }
+                "whale_web_search" -> {
+                    val q = args.str("query").trim()
+                    require(q.isNotEmpty()) { "缺少搜索关键词 query" }
+                    val limit = args.optInt("limit", 5).coerceIn(1, 8)
+                    val encoded = java.net.URLEncoder.encode(q, "UTF-8")
+                    val url = java.net.URL("https://html.duckduckgo.com/html/?q=$encoded")
+                    val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 10_000
+                        readTimeout = 12_000
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
+                    }
+                    val html = try {
+                        val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
+                        stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                    } finally {
+                        conn.disconnect()
+                    }
+                    val linkRegex = Regex("""<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                    val snipRegex = Regex("""<a[^>]*class="result__snippet"[^>]*>(.*?)</a>|<div[^>]*class="result__snippet"[^>]*>(.*?)</div>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                    val links = linkRegex.findAll(html).toList()
+                    val snips = snipRegex.findAll(html).toList()
+                    fun cleanHtml(raw: String): String = raw.replace(Regex("<[^>]+>"), " ")
+                        .replace("&amp;", "&").replace("&quot;", """).replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">")
+                        .replace(Regex("\s+"), " ").trim()
+                    val items = JSONArray()
+                    for (i in 0 until minOf(limit, links.size)) {
+                        val href = links[i].groupValues[1]
+                        val title = cleanHtml(links[i].groupValues[2])
+                        val snippet = snips.getOrNull(i)?.let { cleanHtml(it.groupValues[1].ifBlank { it.groupValues[2] }) }.orEmpty()
+                        items.put(JSONObject().put("title", title).put("url", href).put("snippet", snippet.take(260)))
+                    }
+                    ToolOutcome(name, "联网搜索：$q", true, JSONObject().put("query", q).put("count", items.length()).put("items", items).toString())
+                }
+                "whale_web_fetch" -> {
+                    val rawUrl = args.str("url").trim()
+                    require(rawUrl.startsWith("https://") || rawUrl.startsWith("http://")) { "仅支持 http:// 或 https:// 网址" }
+                    val maxChars = args.optInt("maxChars", 6000).coerceIn(500, 12_000)
+                    val conn = (java.net.URL(rawUrl).openConnection() as java.net.HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        instanceFollowRedirects = true
+                        connectTimeout = 10_000
+                        readTimeout = 12_000
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
+                    }
+                    val (code, rawText) = try {
+                        val c = conn.responseCode
+                        val stream = if (c in 200..299) conn.inputStream else conn.errorStream
+                        c to (stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty())
+                    } finally {
+                        conn.disconnect()
+                    }
+                    val cleaned = rawText
+                        .replace(Regex("<script[^>]*>[\s\S]*?</script>", RegexOption.IGNORE_CASE), " ")
+                        .replace(Regex("<style[^>]*>[\s\S]*?</style>", RegexOption.IGNORE_CASE), " ")
+                        .replace(Regex("<[^>]+>"), " ")
+                        .replace(Regex("\s+"), " ")
+                        .trim()
+                        .take(maxChars)
+                    ToolOutcome(name, "抓取网页内容", code in 200..299, JSONObject().put("url", rawUrl).put("status", code).put("content", cleaned).toString())
+                }
+                "whale_memory_delete" -> {
+                    val id = args.str("id").trim()
+                    require(id.isNotEmpty()) { "缺少记忆 UUID" }
+                    val res = CompanionMemoryStore(app).execute(JSONObject().put("op", "delete").put("id", id).toString(), fromPetTurn = true)
+                    ToolOutcome(name, "删除长期记忆", true, res, mutating = true)
+                }
+                "whale_clipboard" -> {
+                    val action = args.str("action", "get").trim().lowercase()
+                    val latch = java.util.concurrent.CountDownLatch(1)
+                    var outText = ""
+                    var errMsg: String? = null
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        try {
+                            val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            if (action == "set") {
+                                val value = args.str("text")
+                                cm.setPrimaryClip(android.content.ClipData.newPlainText("whale", value))
+                                outText = value
+                            } else {
+                                outText = cm.primaryClip?.getItemAt(0)?.coerceToText(app)?.toString().orEmpty()
+                            }
+                        } catch (t: Throwable) {
+                            errMsg = t.message ?: t.javaClass.simpleName
+                        } finally {
+                            latch.countDown()
+                        }
+                    }
+                    latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
+                    if (errMsg != null) throw IllegalStateException(errMsg)
+                    ToolOutcome(name, if (action == "set") "写入剪贴板" else "读取剪贴板", true, JSONObject().put("action", action).put("text", outText.take(4000)).toString(), mutating = action == "set")
+                }
+                "whale_device_media" -> {
+                    val action = args.str("action").trim().lowercase()
+                    val am = app.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                    when (action) {
+                        "volume_up" -> am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_RAISE, 0)
+                        "volume_down" -> am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_LOWER, 0)
+                        "mute" -> am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_MUTE, 0)
+                        "set_volume" -> {
+                            val pct = args.optInt("percent", 50).coerceIn(0, 100)
+                            val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                            am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, (max * pct / 100), 0)
+                        }
+                        "play_pause", "next", "prev" -> {
+                            val key = when (action) {
+                                "next" -> android.view.KeyEvent.KEYCODE_MEDIA_NEXT
+                                "prev" -> android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                                else -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                            }
+                            val now = android.os.SystemClock.uptimeMillis()
+                            am.dispatchMediaKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN, key, 0))
+                            am.dispatchMediaKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_UP, key, 0))
+                        }
+                        else -> throw IllegalArgumentException("不支持的媒体控制动作：$action")
+                    }
+                    val cur = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                    val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                    ToolOutcome(name, "媒体与音量控制：$action", true, JSONObject().put("action", action).put("volumePercent", cur * 100 / max).toString(), mutating = true)
+                }
+                "whale_calendar_read" -> {
+                    val snap = CompanionCalendar.read(app, days = 7)
+                    if (snap.state == CompanionCalendar.State.NO_PERMISSION) {
+                        throw IllegalStateException("未授予系统日历读取权限，请先在系统权限中开启日历权限")
+                    }
+                    val arr = JSONArray()
+                    snap.events.take(20).forEach { ev ->
+                        arr.put(JSONObject().put("title", ev.title).put("startMs", ev.start).put("endMs", ev.end).put("allDay", ev.allDay))
+                    }
+                    ToolOutcome(name, "读取未来 7 天系统日程", snap.state == CompanionCalendar.State.OK, JSONObject().put("count", arr.length()).put("events", arr).toString())
                 }
                 else -> ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
             }

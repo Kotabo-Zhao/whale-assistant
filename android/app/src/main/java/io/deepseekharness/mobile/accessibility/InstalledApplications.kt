@@ -20,13 +20,34 @@ object InstalledApplications {
     fun list(context: Context, query: String, offset: Int): JSONObject {
         require(query.length <= 160 && query.none { it.isISOControl() } && offset >= 0) { "应用筛选参数无效" }
         val manager = context.packageManager
-        val applications = if (Build.VERSION.SDK_INT >= 33) {
-            manager.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))
-        } else {
-            @Suppress("DEPRECATION")
-            manager.getInstalledApplications(0)
+        val byPackage = LinkedHashMap<String, ApplicationInfo>()
+        val installedList = runCatching {
+            if (Build.VERSION.SDK_INT >= 33) {
+                manager.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                manager.getInstalledApplications(0)
+            }
+        }.getOrDefault(emptyList())
+        installedList.forEach { byPackage[it.packageName] = it }
+
+        // 兼容国产 ROM / Android 11+ 限制 QUERY_ALL_PACKAGES 时回退合并全部桌面可启动应用
+        val launcherIntent = android.content.Intent(android.content.Intent.ACTION_MAIN)
+            .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+        val resolvedList = runCatching {
+            if (Build.VERSION.SDK_INT >= 33) {
+                manager.queryIntentActivities(launcherIntent, PackageManager.ResolveInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                manager.queryIntentActivities(launcherIntent, 0)
+            }
+        }.getOrDefault(emptyList())
+        resolvedList.forEach { info ->
+            val appInfo = info.activityInfo?.applicationInfo ?: return@forEach
+            byPackage.putIfAbsent(appInfo.packageName, appInfo)
         }
-        val entries = ApplicationSearch.installed(applications.map { app ->
+
+        val entries = ApplicationSearch.installed(byPackage.values.map { app ->
             ApplicationSearch.InstalledApplication(
                 packageName = app.packageName,
                 label = runCatching { manager.getApplicationLabel(app).toString() }
