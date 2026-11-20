@@ -31,9 +31,9 @@ class CompanionPetMotionTest {
         actor.react(PetAction.ACCEPT, 100)
         actor.react(PetAction.SETBACK, 200); actor.react(PetAction.REPLY, 300)
         assertEquals(PetAction.ACCEPT, actor.sample(1000).action)
-        assertEquals(800L, actor.untilStateChange(1000))
-        assertEquals(PetAction.REPLY, actor.sample(1800).action)
-        assertEquals(PetAction.WORK, actor.sample(4200).action)
+        assertEquals(1700L, actor.untilStateChange(1000))
+        assertEquals(PetAction.REPLY, actor.sample(2700).action)
+        assertEquals(PetAction.WORK, actor.sample(6100).action)
     }
     @Test fun newThinkingAndDragClearStaleReplies() {
         val actor = PetActing(); actor.sample(0); actor.react(PetAction.REPLY, 10)
