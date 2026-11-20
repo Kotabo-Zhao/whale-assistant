@@ -1,7 +1,7 @@
 /* ============================================================================
- * WhaleChatScreen — Dual-Personality Chat Architecture
- *   simple: Grok Bot (transparent header, borderless editorial AI stream, floating monochrome pill composer)
- *   cute:   iOS Cozy Kawaii (Whale-Chan halo stage, plush speech bubbles + inline avatar, 4 pastel starter cards)
+ * WhaleChatScreen — Clean Studio Chat Architecture
+ * Zero specificity wars, zero 2px borders, borderless editorial AI stream,
+ * crisp divider-list starters, and a single floating pill composer.
  * ============================================================================ */
 
 .whale-chat-screen {
@@ -16,34 +16,33 @@
   background: var(--bg);
 }
 
-/* Header */
+/* 1. Top Header */
 .whale-chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: max(8px, env(safe-area-inset-top, 8px)) 10px 8px;
+  min-height: 48px;
+  padding: max(8px, env(safe-area-inset-top, 8px)) 14px 8px;
   flex-shrink: 0;
-  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line-faint);
-}
-
-:root[data-style='cute'] .whale-chat-header {
-  padding: max(8px, env(safe-area-inset-top, 8px)) 10px 8px;
-  background: var(--surface);
-  border-bottom: 2px solid var(--line);
 }
 
 .whale-chat-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
 }
 
 .whale-brand-avatar {
+  width: 26px;
+  height: 26px;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: 8px;
   flex-shrink: 0;
 }
 
@@ -54,29 +53,13 @@
 
 .whale-chat-brand h1 {
   margin: 0;
-  font-size: 1.02rem;
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.025em;
+  font-size: 0.98rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.whale-chat-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.7rem;
-  color: var(--muted);
-  margin-top: 1px;
-}
-
-:root[data-style='cute'] .whale-chat-badge {
-  color: var(--blue);
-  background: var(--blue-soft);
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-weight: var(--weight-semibold);
 }
 
 .whale-chat-shortcuts {
@@ -89,50 +72,40 @@
 .whale-icon-chip {
   width: 36px;
   height: 36px;
-  border-radius: 999px;
-  border: 1px solid transparent;
+  border-radius: 10px;
+  border: 0;
   background: transparent;
   color: var(--icon-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: background-color 130ms ease, color 130ms ease;
 }
 
 .whale-icon-chip:hover,
 .whale-icon-chip.is-active {
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-
-:root[data-style='cute'] .whale-icon-chip {
-  border: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--surface-muted);
   color: var(--ink);
 }
 
-:root[data-style='cute'] .whale-icon-chip.is-active {
-  border-color: var(--blue-line);
-  background: var(--blue-soft);
+.whale-icon-chip.is-active {
   color: var(--blue);
+  background: var(--blue-soft);
 }
 
-/* Ambient Context Bar */
+/* 2. Ambient Context Strip */
 .whale-ambient-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 14px;
+  margin: 8px 14px 0;
+  padding: 7px 12px;
+  border-radius: 12px;
   background: var(--blue-soft);
-  border-bottom: 1px solid var(--blue-line);
-  font-size: 0.79rem;
-}
-
-:root[data-style='cute'] .whale-ambient-bar {
-  margin: 6px 10px 0;
-  border-radius: 999px;
   border: 1px solid var(--blue-line);
+  font-size: 0.78rem;
 }
 
 .whale-ambient-text {
@@ -160,7 +133,7 @@
   color: var(--on-accent);
   border-radius: 999px;
   padding: 3px 10px;
-  font-size: 0.73rem;
+  font-size: 0.72rem;
   font-weight: var(--weight-semibold);
   cursor: pointer;
 }
@@ -185,28 +158,24 @@
   padding: 2px;
 }
 
-/* Sessions Drawer */
+/* 3. Sessions Drawer */
 .whale-sessions-drawer {
+  margin: 8px 14px 0;
   background: var(--surface);
-  border-bottom: 1px solid var(--line);
-  padding: 10px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-elevated);
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-:root[data-style='cute'] .whale-sessions-drawer {
-  margin: 6px 10px 0;
-  border-radius: 22px;
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-card);
 }
 
 .whale-sessions-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 
@@ -216,7 +185,7 @@
   gap: 5px;
   padding: 5px 11px;
   border-radius: 999px;
-  border: 1px solid var(--blue-line);
+  border: 0;
   background: var(--blue-soft);
   color: var(--blue);
   font-size: 0.76rem;
@@ -230,8 +199,8 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 200px;
+  gap: 2px;
+  max-height: 210px;
   overflow-y: auto;
 }
 
@@ -239,14 +208,12 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 6px;
-  border-radius: var(--radius-control);
-  border: 1px solid transparent;
+  padding: 3px 6px;
+  border-radius: 10px;
 }
 
 .whale-sessions-list li.is-active {
   background: var(--blue-soft);
-  border-color: var(--blue-line);
 }
 
 .whale-session-select {
@@ -261,7 +228,7 @@
   color: var(--ink);
   font-size: 0.85rem;
   text-align: left;
-  padding: 5px 6px;
+  padding: 6px;
   cursor: pointer;
 }
 
@@ -275,6 +242,7 @@
   color: var(--muted);
   font-size: 0.72rem;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .whale-session-action {
@@ -308,54 +276,43 @@
   color: var(--ink);
 }
 
-/* Stream & Empty Hero */
+/* 4. Chat Stream & Empty Hero */
 .whale-chat-stream {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 10px 10px 10px;
+  padding: 16px 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
 }
 
 .whale-chat-empty {
   flex: 1 0 auto;
-  justify-content: center;
-  text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 18px 8px;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 18px 4px 12px;
 }
 
 .whale-hero-stage {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-:root[data-style='cute'] .whale-hero-stage {
-  padding: 10px;
-  border-radius: 999px;
-  background: radial-gradient(circle, var(--pastel-sky) 0%, transparent 72%);
-}
-
 .whale-chat-hero-mark {
-  border-radius: 18px;
-  object-fit: cover;
-}
-
-:root[data-style='simple'] .whale-chat-hero-mark {
   border-radius: 16px;
-  border: 1px solid var(--line-strong);
+  object-fit: cover;
+  border: 1px solid var(--line);
 }
 
 :root[data-style='cute'] .whale-chat-hero-mark {
   border-radius: 999px;
   border: 1.5px solid var(--surface);
-  box-shadow: 0 0 0 2.5px var(--blue-line), 0 12px 26px rgba(75, 137, 247, 0.18);
+  box-shadow: 0 0 0 2px var(--blue-line), 0 10px 24px rgba(37, 122, 244, 0.14);
 }
 
 .whale-cute-greeting {
@@ -365,102 +322,108 @@
 :root[data-style='cute'] .whale-cute-greeting {
   display: inline-flex;
   align-items: center;
-  padding: 5px 14px;
+  padding: 4px 12px;
   border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--blue-soft);
   color: var(--blue);
-  font-size: 0.8rem;
+  font-size: 0.77rem;
   font-weight: var(--weight-semibold);
-  box-shadow: 0 2px 0 var(--line);
 }
 
 .whale-chat-empty h2 {
-  margin: 4px 0 0;
-  font-size: 1.42rem;
-  letter-spacing: -0.03em;
+  margin: 2px 0 0;
+  font-size: 1.38rem;
+  letter-spacing: -0.028em;
   font-weight: var(--weight-bold);
+  color: var(--ink);
+  line-height: 1.28;
 }
 
-.whale-chat-empty p {
-  margin: 0;
-  max-width: 32em;
-  color: var(--muted);
-  font-size: 0.86rem;
-  line-height: 1.6;
+/* Quick Workspace Strip */
+.whale-quick-hub {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 2px;
 }
 
-/* Starter Cards — Grok Flat Hairline vs. iOS Kawaii 4-Pastel Plush */
+.whale-hub-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.79rem;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: border-color 130ms ease, background-color 130ms ease, color 130ms ease;
+}
+
+.whale-hub-pill svg {
+  color: var(--blue);
+}
+
+.whale-hub-pill:hover {
+  border-color: var(--blue-line);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+/* Starter Prompt Hairline List (Editorial, Zero Card Soup) */
 .whale-starter-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  margin-top: 14px;
+  max-width: 520px;
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
 }
 
 .whale-starter-card {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 13px 6px;
   text-align: left;
-  padding: 14px 15px;
-  border-radius: var(--radius-card);
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+  transition: background-color 120ms ease;
 }
 
-:root[data-style='simple'] .whale-starter-card {
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-}
-
-:root[data-style='simple'] .whale-starter-card:hover:not(:disabled) {
+.whale-starter-card:hover:not(:disabled) {
   background: var(--surface-muted);
-  border-color: var(--line-strong);
-}
-
-:root[data-style='cute'] .whale-starter-card {
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background: var(--surface);
-  box-shadow: 0 3px 0 var(--line);
-}
-
-:root[data-style='cute'] .whale-starter-card:nth-child(1) { background: var(--pastel-sky); }
-:root[data-style='cute'] .whale-starter-card:nth-child(2) { background: var(--pastel-butter); }
-:root[data-style='cute'] .whale-starter-card:nth-child(3) { background: var(--pastel-mint); }
-:root[data-style='cute'] .whale-starter-card:nth-child(4) { background: var(--pastel-berry); }
-
-:root[data-style='cute'] .whale-starter-card:active:not(:disabled) {
-  transform: translateY(2px);
-  box-shadow: none;
 }
 
 .whale-starter-card strong {
-  font-size: 0.9rem;
-  font-weight: var(--weight-bold);
+  font-size: 0.89rem;
+  font-weight: var(--weight-semibold);
   color: var(--ink);
+  letter-spacing: -0.01em;
 }
 
 .whale-starter-card span {
-  font-size: 0.77rem;
+  font-size: 0.78rem;
   color: var(--muted);
   line-height: 1.45;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* Messages — Grok Borderless Editorial vs. iOS Kawaii Plush Bubbles with Avatar */
+/* 5. Messages — Borderless Editorial Assistant + Crisp User Pill */
 .whale-msg {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  max-width: 92%;
+  gap: 6px;
+  max-width: 100%;
   content-visibility: auto;
   contain-intrinsic-size: auto 84px;
 }
@@ -468,13 +431,13 @@
 .whale-msg-user {
   align-self: flex-end;
   align-items: flex-end;
+  max-width: 86%;
 }
 
 .whale-msg-assistant {
   align-self: flex-start;
   align-items: flex-start;
   width: 100%;
-  max-width: 100%;
 }
 
 .whale-msg-row {
@@ -490,8 +453,8 @@
 
 :root[data-style='cute'] .whale-msg-inline-avatar {
   display: block;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   object-fit: cover;
   border: 1px solid var(--blue-line);
@@ -502,28 +465,19 @@
 .whale-msg-col {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
   flex: 1 1 auto;
 }
 
 .whale-msg-bubble {
-  padding: 9px 12px;
-  border-radius: 20px;
   font-size: 0.95rem;
-  line-height: 1.66;
+  line-height: 1.68;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.whale-msg-user .whale-msg-bubble {
-  background: var(--blue);
-  color: var(--on-accent);
-  border-bottom-right-radius: 6px;
-}
-
-/* Grok Bot: Assistant replies are BORDERLESS editorial prose directly on canvas! */
-:root[data-style='simple'] .whale-msg-assistant .whale-msg-bubble {
+.whale-msg-assistant .whale-msg-bubble {
   background: transparent;
   color: var(--ink);
   border: 0;
@@ -532,42 +486,125 @@
   border-radius: 0;
 }
 
-:root[data-style='simple'] .whale-msg-user .whale-msg-bubble {
+.whale-msg-user .whale-msg-bubble {
   background: var(--surface-muted);
   color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 9px 12px;
-}
-
-/* iOS Kawaii: Plush speech bubble with 2px pastel border & bottom depth */
-:root[data-style='cute'] .whale-msg-assistant .whale-msg-bubble {
-  background: var(--surface);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  box-shadow: 0 3px 0 var(--line);
-  border-radius: 22px 22px 22px 6px;
-}
-
-:root[data-style='cute'] .whale-msg-user .whale-msg-bubble {
-  border-radius: 22px 22px 6px 22px;
-  box-shadow: var(--tactile-lip);
+  border: 0;
+  border-radius: 18px 18px 4px 18px;
+  padding: 10px 14px;
 }
 
 .whale-msg.is-error .whale-msg-bubble {
-  border: 1px solid rgba(185, 56, 68, 0.35);
-  background: rgba(185, 56, 68, 0.06);
-  color: #b93844;
+  border: 1px solid rgba(196, 60, 74, 0.3);
+  background: rgba(196, 60, 74, 0.07);
+  color: #c43c4a;
   padding: 10px 14px;
   border-radius: 14px;
 }
 
-/* Tool Steps & Action Receipt Cards */
+/* Markdown Polish inside Assistant Replies */
+.whale-markdown {
+  white-space: normal;
+}
+
+.whale-markdown > :first-child {
+  margin-top: 0;
+}
+
+.whale-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.whale-markdown p {
+  margin: 0 0 0.72em;
+}
+
+.whale-markdown h1,
+.whale-markdown h2,
+.whale-markdown h3 {
+  margin: 1.05em 0 0.45em;
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.32;
+}
+
+.whale-markdown h1 { font-size: 1.15rem; }
+.whale-markdown h2 { font-size: 1.05rem; }
+.whale-markdown h3 { font-size: 0.98rem; }
+
+.whale-markdown ul,
+.whale-markdown ol {
+  margin: 0.4em 0 0.75em;
+  padding-left: 1.3em;
+}
+
+.whale-markdown li + li {
+  margin-top: 0.28em;
+}
+
+.whale-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.84em;
+  padding: 0.14em 0.4em;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+.whale-markdown pre {
+  margin: 0.75em 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.whale-markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+
+.whale-markdown blockquote {
+  margin: 0.7em 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2.5px solid var(--blue-line);
+  color: var(--muted);
+}
+
+.whale-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: 0.86rem;
+}
+
+.whale-markdown th,
+.whale-markdown td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.whale-markdown th {
+  font-weight: var(--weight-semibold);
+  color: var(--muted);
+}
+
+.whale-markdown a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Tool Steps Accordion */
 .whale-msg-steps {
   font-size: 0.77rem;
   color: var(--muted);
   background: var(--surface-muted);
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 6px 10px;
   align-self: flex-start;
 }
@@ -579,6 +616,11 @@
   gap: 5px;
   color: var(--blue);
   font-weight: var(--weight-semibold);
+  list-style: none;
+}
+
+.whale-msg-steps summary::-webkit-details-marker {
+  display: none;
 }
 
 .whale-msg-steps ul {
@@ -598,9 +640,11 @@
 
 .whale-msg-steps small {
   margin-left: auto;
-  opacity: 0.75;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
+/* Action Receipts */
 .whale-receipt-list {
   display: flex;
   flex-direction: column;
@@ -613,47 +657,41 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 9px 13px;
-  border-radius: var(--radius-inner);
-  border: 1px solid var(--line-strong);
-  background: var(--surface-muted);
-  font-size: 0.8rem;
-}
-
-:root[data-style='cute'] .whale-receipt-card {
-  border: 1px solid var(--blue-line);
-  background: var(--pastel-sky);
-  border-radius: 18px;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .whale-receipt-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--ink);
+  font-size: 0.81rem;
   font-weight: var(--weight-semibold);
+  color: var(--ink);
 }
 
 .whale-receipt-title svg {
   color: var(--blue);
-  flex-shrink: 0;
 }
 
 .whale-receipt-btns {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
 }
 
 .whale-receipt-btn {
   border: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-muted);
   color: var(--ink);
   border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 0.74rem;
+  padding: 4px 11px;
+  font-size: 0.75rem;
+  font-weight: var(--weight-medium);
   cursor: pointer;
 }
 
@@ -664,62 +702,58 @@
   font-weight: var(--weight-semibold);
 }
 
+/* Message Footer Metadata */
 .whale-msg-meta {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.71rem;
+  font-size: 0.73rem;
   color: var(--muted);
-  padding-inline: 2px;
+  font-variant-numeric: tabular-nums;
 }
 
 .whale-copy-btn {
   border: 0;
   background: transparent;
   color: var(--muted);
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 6px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  cursor: pointer;
 }
 
 .whale-copy-btn:hover {
-  color: var(--blue);
-  background: var(--blue-soft);
+  background: var(--surface-muted);
+  color: var(--ink);
 }
 
 .whale-thinking {
-  opacity: 0.78;
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
-.whale-streaming::after {
-  content: '▍';
-  display: inline-block;
-  margin-left: 2px;
-  color: var(--blue);
-  animation: whale-pulse-soft 0.9s ease-in-out infinite;
-}
-
-/* Composer Assist & Floating Pill Composer */
+/* 6. Composer Assist & Floating Pill Composer */
 .whale-composer-assist {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 6px 16px 2px;
-  background: var(--bg);
+  padding: 6px 14px 2px;
 }
 
 .whale-assist-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 12px;
+  padding: 5px 11px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
-  font-size: 0.78rem;
+  font-size: 0.77rem;
+  font-weight: var(--weight-medium);
   cursor: pointer;
 }
 
@@ -731,29 +765,26 @@
 }
 
 .whale-chat-composer-wrap {
-  padding: 8px 14px 12px;
+  flex-shrink: 0;
+  padding: 6px 12px max(10px, env(safe-area-inset-bottom, 10px));
   background: var(--bg);
 }
 
 .whale-chat-composer {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 6px 6px 10px;
-  border-radius: 28px;
-  background: var(--surface-muted);
+  gap: 6px;
+  padding: 4px 5px 4px 8px;
+  border-radius: 26px;
   border: 1px solid var(--line-strong);
-}
-
-:root[data-style='cute'] .whale-chat-composer {
   background: var(--surface);
-  border: 1px solid var(--blue-line);
-  box-shadow: 0 3px 0 var(--line);
+  box-shadow: var(--shadow-elevated);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .whale-chat-composer:focus-within {
   border-color: var(--blue);
-  box-shadow: var(--ring);
+  box-shadow: var(--ring), var(--shadow-elevated);
 }
 
 .whale-slash-btn {
@@ -766,31 +797,40 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
-.whale-slash-btn.is-active,
-.whale-slash-btn:hover {
+.whale-slash-btn:hover,
+.whale-slash-btn.is-active {
   background: var(--blue-soft);
   color: var(--blue);
 }
 
 .whale-chat-composer input {
   flex: 1 1 auto;
-  min-height: 38px;
-  padding: 6px 4px;
+  min-width: 0;
   border: 0;
+  outline: none;
   background: transparent;
   color: var(--ink);
-  font: inherit;
   font-size: 0.94rem;
-  outline: none;
+  padding: 8px 4px;
+  box-shadow: none;
+}
+
+.whale-chat-composer input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.whale-chat-composer input::placeholder {
+  color: var(--muted);
 }
 
 .whale-send-btn {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
   border: 0;
   background: var(--blue);
@@ -798,9 +838,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
   flex-shrink: 0;
-  box-shadow: var(--tactile-lip);
+  cursor: pointer;
+  transition: background-color 130ms ease, opacity 130ms ease;
 }
 
 .whale-send-btn:hover:not(:disabled) {
@@ -808,216 +848,14 @@
 }
 
 .whale-send-btn:disabled {
-  opacity: 0.36;
-  cursor: default;
-  box-shadow: none;
-}
-
-/* Markdown Typography */
-.whale-markdown p { margin: 0 0 8px; }
-.whale-markdown p:last-child { margin-bottom: 0; }
-.whale-markdown ul, .whale-markdown ol { margin: 4px 0 8px; padding-left: 20px; }
-.whale-markdown pre {
-  margin: 8px 0;
-  padding: 11px 13px;
-  border-radius: 12px;
-  background: var(--surface-muted);
-  border: 1px solid var(--line);
-  overflow-x: auto;
-  font-size: 0.84rem;
-}
-.whale-markdown code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.86em;
-  background: var(--surface-muted);
-  padding: 1px 5px;
-  border-radius: 6px;
-}
-.whale-markdown pre code { background: transparent; padding: 0; }
-
-@media (max-width: 560px) {
-  .whale-starter-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .whale-msg {
-    max-width: 100%;
-  }
-}
-
-.whale-quick-hub {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.whale-hub-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 13px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 0.8rem;
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-
-:root[data-style='cute'] .whale-hub-pill {
-  border-width: 1px;
-  box-shadow: 0 2px 0 var(--line);
-}
-
-.whale-chat-composer-wrap {
-  flex-shrink: 0;
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 @media (max-width: 899px) {
-  .whale-chat-screen { max-width: 100%; width: 100%; height: 100%; }
-}
-
-
-/* ============================================================================
- * Studio Redesign Overrides (frontend-design restraint & visual hierarchy)
- * ============================================================================ */
-.whale-chat-header {
-  border-bottom: 1px solid var(--line-faint);
-  background: transparent;
-  min-height: 46px;
-}
-
-.whale-chat-brand h1 {
-  font-size: 0.98rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-}
-
-.whale-icon-chip {
-  border-color: transparent;
-  background: transparent;
-}
-
-.whale-icon-chip:hover,
-.whale-icon-chip.is-active {
-  background: var(--surface-muted);
-  border-color: transparent;
-}
-
-.whale-chat-empty {
-  justify-content: center;
-  gap: 14px;
-  padding: 20px 12px 12px;
-}
-
-.whale-cute-greeting {
-  border: 0;
-  background: var(--blue-soft);
-  color: var(--blue);
-  font-size: 0.78rem;
-  padding: 4px 12px;
-  box-shadow: none;
-}
-
-.whale-chat-empty h2 {
-  font-size: 1.32rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.3;
-}
-
-.whale-quick-hub {
-  gap: 6px;
-}
-
-.whale-hub-pill,
-:root[data-style='cute'] .whale-hub-pill {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  box-shadow: none;
-  padding: 5px 12px;
-  font-size: 0.78rem;
-}
-
-.whale-starter-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  width: 100%;
-  max-width: 520px;
-  margin-top: 8px;
-  border-top: 1px solid var(--line);
-}
-
-.whale-starter-card,
-:root[data-style='cute'] .whale-starter-card,
-:root[data-style='simple'] .whale-starter-card {
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  padding: 12px 4px;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.whale-starter-card:hover {
-  background: var(--surface-muted);
-}
-
-.whale-starter-card strong {
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.whale-starter-card span {
-  font-size: 0.78rem;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-.whale-msg-assistant .whale-msg-bubble,
-:root[data-style='cute'] .whale-msg-assistant .whale-msg-bubble {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  padding: 2px 2px;
-  line-height: 1.68;
-}
-
-.whale-msg-user .whale-msg-bubble,
-:root[data-style='cute'] .whale-msg-user .whale-msg-bubble {
-  border: 0;
-  background: var(--surface-muted);
-  color: var(--ink);
-  box-shadow: none;
-  border-radius: 18px 18px 4px 18px;
-  padding: 9px 14px;
-}
-
-.whale-chat-composer-wrap {
-  padding: 6px 10px max(8px, env(safe-area-inset-bottom, 8px));
-  background: var(--bg);
-}
-
-.whale-chat-composer,
-:root[data-style='cute'] .whale-chat-composer {
-  border: 1px solid var(--line-strong);
-  border-radius: 24px;
-  background: var(--surface);
-  box-shadow: var(--shadow-elevated);
-  padding: 4px 5px 4px 10px;
-}
-
-.whale-send-btn {
-  border-radius: 999px;
-  background: var(--blue);
-  color: var(--on-accent);
-  box-shadow: none;
+  .whale-chat-screen {
+    max-width: 100%;
+    width: 100%;
+    height: 100%;
+  }
 }

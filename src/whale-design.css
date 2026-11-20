@@ -1,192 +1,238 @@
 /* ============================================================================
- * Whale Assistant Studio Dual-Architecture Design System
+ * Whale Assistant — Complete Studio UI System
  *
- * 1. data-style='simple' — Deep-Sea Precision Instrument
- *    Mist Paper (#F7F8FA) / True Abyss (#07090D), single Cobalt/Sky accent,
- *    borderless editorial AI stream, whisper-quiet 1px hairlines, zero clutter.
+ * Dual intentional aesthetics sharing one disciplined layout architecture:
+ *   1. data-style='simple' — Deep-Sea Precision Instrument
+ *      Crisp Mist Paper (#F7F8FA) / True Abyss (#07090D), Cobalt accent,
+ *      whisper-quiet 1px hairlines, tight editorial typography, zero clutter.
+ *   2. data-style='cute'   — Pelagic Porcelain & Whale-Chan
+ *      Sea-Salt Porcelain (#F4F8FC) / Midnight Tide (#0C1322), luminous
+ *      cerulean accent, soft organic radii, zero heavy 2px borders or 3D lips.
  *
- * 2. data-style='cute'   — Pelagic Porcelain & Whale-Chan
- *    Sea-Salt Porcelain (#F4F8FC) / Midnight Tide (#0C1322), luminous cerulean
- *    & seafoam accents, restrained tactile focus only on primary actions.
+ * Covers ALL surfaces: navigation shell, settings, autonomy & voice controls,
+ * segmented tabs, inset grouped lists, tactile pill switches, forms, buttons,
+ * dialogs, memory/knowledge library, tasks/briefings, workshop, and onboarding.
  * ============================================================================ */
 
 /* --------------------------------------------------------------------------
- * STYLE 1: Deep-Sea Precision Instrument (simple)
+ * 1. Design Tokens
  * -------------------------------------------------------------------------- */
 :root[data-style='simple'] {
   --bg: #f7f8fa;
   --surface: #ffffff;
-  --surface-muted: #eceff4;
-  --surface-hover: #e2e7ef;
-  --ink: #0e1116;
-  --muted: #5b6472;
-  --field-label: #2c3440;
-  --icon-muted: #687385;
-  --line: rgba(14, 17, 22, 0.08);
-  --line-alt: rgba(14, 17, 22, 0.08);
-  --line-strong: rgba(14, 17, 22, 0.15);
-  --line-faint: rgba(14, 17, 22, 0.045);
+  --surface-raised: #ffffff;
+  --surface-muted: #edf0f5;
+  --surface-hover: #e3e8f0;
+  --surface-sunken: #f1f3f7;
+  --ink: #0d1117;
+  --muted: #5a6475;
+  --field-label: #2c3544;
+  --icon-muted: #697589;
+  --line: rgba(13, 17, 23, 0.08);
+  --line-alt: rgba(13, 17, 23, 0.08);
+  --line-strong: rgba(13, 17, 23, 0.15);
+  --line-faint: rgba(13, 17, 23, 0.045);
   --blue: #1456d1;
-  --blue-hover: #0f46ad;
-  --blue-soft: rgba(20, 86, 209, 0.08);
-  --blue-line: rgba(20, 86, 209, 0.22);
+  --blue-hover: #0e44ab;
+  --blue-soft: rgba(20, 86, 209, 0.09);
+  --blue-line: rgba(20, 86, 209, 0.24);
   --on-accent: #ffffff;
-  --brand-bg: #0e1116;
-  --radius-control: 12px;
-  --radius-inner: 14px;
+  --brand-bg: #0d1117;
+  --radius-control: 10px;
+  --radius-inner: 12px;
   --radius-card: 16px;
-  --shadow-card: none;
-  --shadow-elevated: 0 6px 20px rgba(14, 17, 22, 0.06);
-  --ring: 2px solid rgba(20, 86, 209, 0.24);
+  --shadow-card: 0 1px 2px rgba(13, 17, 23, 0.03);
+  --shadow-segment: 0 1px 3px rgba(13, 17, 23, 0.08), 0 0 0 0.5px rgba(13, 17, 23, 0.04);
+  --shadow-elevated: 0 8px 24px rgba(13, 17, 23, 0.08);
+  --ring: 0 0 0 2.5px rgba(20, 86, 209, 0.22);
   --tactile-lip: none;
 }
 
 :root[data-style='simple'][data-theme='dark'] {
   --bg: #07090d;
-  --surface: #10141c;
-  --surface-muted: #171d28;
-  --surface-hover: #1f2736;
-  --ink: #f2f5f9;
-  --muted: #8692a6;
-  --field-label: #cfd7e3;
-  --icon-muted: #8692a6;
-  --line: rgba(242, 245, 249, 0.09);
-  --line-alt: rgba(242, 245, 249, 0.09);
-  --line-strong: rgba(242, 245, 249, 0.18);
-  --line-faint: rgba(242, 245, 249, 0.05);
-  --blue: #5ba4ff;
-  --blue-hover: #7bb7ff;
-  --blue-soft: rgba(91, 164, 255, 0.12);
-  --blue-line: rgba(91, 164, 255, 0.28);
+  --surface: #10151e;
+  --surface-raised: #151c28;
+  --surface-muted: #18202e;
+  --surface-hover: #212c3f;
+  --surface-sunken: #0b0e14;
+  --ink: #f1f4f9;
+  --muted: #8895aa;
+  --field-label: #cdd6e4;
+  --icon-muted: #8895aa;
+  --line: rgba(241, 244, 249, 0.085);
+  --line-alt: rgba(241, 244, 249, 0.085);
+  --line-strong: rgba(241, 244, 249, 0.16);
+  --line-faint: rgba(241, 244, 249, 0.045);
+  --blue: #5ca4ff;
+  --blue-hover: #7eb8ff;
+  --blue-soft: rgba(92, 164, 255, 0.13);
+  --blue-line: rgba(92, 164, 255, 0.28);
   --on-accent: #07090d;
-  --brand-bg: #f2f5f9;
+  --brand-bg: #f1f4f9;
   --shadow-card: none;
-  --shadow-elevated: 0 10px 28px rgba(0, 0, 0, 0.55);
-  --ring: 2px solid rgba(91, 164, 255, 0.32);
+  --shadow-segment: 0 1px 4px rgba(0, 0, 0, 0.42);
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --ring: 0 0 0 2.5px rgba(92, 164, 255, 0.3);
   --tactile-lip: none;
 }
 
-/* --------------------------------------------------------------------------
- * STYLE 2: Pelagic Porcelain & Whale-Chan (cute)
- * -------------------------------------------------------------------------- */
 :root[data-style='cute'] {
-  --bg: #f4f8fc;
+  --bg: #f3f7fc;
   --surface: #ffffff;
-  --surface-muted: #e9f1fa;
-  --surface-hover: #dce9f7;
-  --ink: #17263d;
-  --muted: #5f7492;
-  --field-label: #334a6b;
-  --icon-muted: #6c82a3;
-  --line: rgba(23, 38, 61, 0.09);
-  --line-alt: rgba(23, 38, 61, 0.09);
-  --line-strong: rgba(23, 38, 61, 0.17);
-  --line-faint: rgba(23, 38, 61, 0.05);
-  --blue: #2b7fff;
-  --blue-hover: #1a6ce8;
-  --blue-soft: rgba(43, 127, 255, 0.1);
-  --blue-line: rgba(43, 127, 255, 0.24);
+  --surface-raised: #ffffff;
+  --surface-muted: #e8f0fa;
+  --surface-hover: #dce8f7;
+  --surface-sunken: #edf4fc;
+  --ink: #16243a;
+  --muted: #5c7291;
+  --field-label: #32496b;
+  --icon-muted: #6980a3;
+  --line: rgba(22, 36, 58, 0.08);
+  --line-alt: rgba(22, 36, 58, 0.08);
+  --line-strong: rgba(22, 36, 58, 0.15);
+  --line-faint: rgba(22, 36, 58, 0.045);
+  --blue: #257af4;
+  --blue-hover: #1766dc;
+  --blue-soft: rgba(37, 122, 244, 0.1);
+  --blue-line: rgba(37, 122, 244, 0.24);
   --on-accent: #ffffff;
-  --brand-bg: #2b7fff;
-  --pastel-sky: #e8f2ff;
+  --brand-bg: #257af4;
+  --pastel-sky: #e7f1ff;
   --pastel-butter: #fdf5df;
-  --pastel-mint: #e4f4f0;
+  --pastel-mint: #e3f4ef;
   --pastel-berry: #fdebf0;
-  --radius-control: 14px;
-  --radius-inner: 18px;
-  --radius-card: 20px;
-  --shadow-card: 0 2px 10px rgba(23, 38, 61, 0.04);
-  --shadow-elevated: 0 8px 24px rgba(23, 38, 61, 0.09);
-  --ring: 2px solid rgba(43, 127, 255, 0.28);
+  --radius-control: 12px;
+  --radius-inner: 14px;
+  --radius-card: 18px;
+  --shadow-card: 0 1px 3px rgba(22, 36, 58, 0.04);
+  --shadow-segment: 0 1px 4px rgba(22, 36, 58, 0.08);
+  --shadow-elevated: 0 8px 24px rgba(22, 36, 58, 0.09);
+  --ring: 0 0 0 2.5px rgba(37, 122, 244, 0.24);
   --tactile-lip: none;
 }
 
 :root[data-style='cute'][data-theme='dark'] {
-  --bg: #0c1322;
-  --surface: #141f35;
-  --surface-muted: #1b2944;
-  --surface-hover: #233455;
-  --ink: #edf3fc;
-  --muted: #8da2c2;
+  --bg: #0b1220;
+  --surface: #131d32;
+  --surface-raised: #192641;
+  --surface-muted: #1b2844;
+  --surface-hover: #243558;
+  --surface-sunken: #0f1729;
+  --ink: #ecf2fc;
+  --muted: #8ea3c4;
   --field-label: #c4d3eb;
-  --icon-muted: #8da2c2;
-  --line: rgba(237, 243, 252, 0.1);
-  --line-alt: rgba(237, 243, 252, 0.1);
-  --line-strong: rgba(237, 243, 252, 0.18);
-  --line-faint: rgba(237, 243, 252, 0.05);
-  --blue: #6ec5ff;
-  --blue-hover: #8fd3ff;
-  --blue-soft: rgba(110, 197, 255, 0.14);
-  --blue-line: rgba(110, 197, 255, 0.3);
-  --on-accent: #0c1322;
-  --brand-bg: #6ec5ff;
-  --pastel-sky: rgba(110, 197, 255, 0.13);
+  --icon-muted: #8ea3c4;
+  --line: rgba(236, 242, 252, 0.09);
+  --line-alt: rgba(236, 242, 252, 0.09);
+  --line-strong: rgba(236, 242, 252, 0.17);
+  --line-faint: rgba(236, 242, 252, 0.045);
+  --blue: #6bc3ff;
+  --blue-hover: #8fd2ff;
+  --blue-soft: rgba(107, 195, 255, 0.14);
+  --blue-line: rgba(107, 195, 255, 0.3);
+  --on-accent: #0b1220;
+  --brand-bg: #6bc3ff;
+  --pastel-sky: rgba(107, 195, 255, 0.13);
   --pastel-butter: rgba(255, 224, 138, 0.12);
   --pastel-mint: rgba(126, 232, 188, 0.12);
   --pastel-berry: rgba(255, 166, 193, 0.13);
-  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.24);
-  --shadow-elevated: 0 10px 28px rgba(0, 0, 0, 0.45);
-  --ring: 2px solid rgba(110, 197, 255, 0.32);
+  --shadow-card: none;
+  --shadow-segment: 0 1px 4px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 12px 30px rgba(0, 0, 0, 0.48);
+  --ring: 0 0 0 2.5px rgba(107, 195, 255, 0.3);
   --tactile-lip: none;
 }
 
-:root {
+:root[data-style] {
+  --header-bg: var(--bg);
+  --track: var(--line);
+  --icon-solid-bg: var(--ink);
+  --on-solid: var(--surface);
+  --assistant-brand-1: var(--on-accent);
+  --assistant-brand-2: var(--blue);
+  --assistant-brand-3: var(--ink);
+  --assistant-brand-4: var(--blue);
+  --assistant-brand-5: var(--muted);
+  --assistant-brand-6: var(--blue-soft);
+  --assistant-brand-8: var(--blue-soft);
+  --assistant-brand-9: var(--surface-muted);
+  --assistant-brand-13: var(--blue);
+  --assistant-brand-14: var(--blue-hover);
   --weight-bold: 700;
   --weight-semibold: 600;
   --weight-medium: 520;
 }
 
+/* --------------------------------------------------------------------------
+ * 2. Base Typography & Scrollbar Discipline
+ * -------------------------------------------------------------------------- */
 body {
   color: var(--ink);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
+.screen-heading h1,
+.screen-heading h2,
+.page-heading h1,
+.page-heading h2 {
+  letter-spacing: -0.025em;
+  font-weight: var(--weight-bold);
+  color: var(--ink);
+}
+
+.screen-heading p,
+.page-heading p {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.78rem;
+  font-weight: var(--weight-medium);
+  color: var(--muted);
+}
+
 /* --------------------------------------------------------------------------
- * Navigation Shell — Grok Minimal Rail vs. iOS Kawaii Floating Capsule Dock
+ * 3. Navigation Shell — Clean Edge-to-Edge Rail & Mobile Dock
  * -------------------------------------------------------------------------- */
 .app-sidebar {
-  background: var(--bg);
+  background: var(--surface);
   border-right: 1px solid var(--line);
 }
 
-:root[data-style='cute'] .app-sidebar {
-  background: var(--surface);
-  border-right: 2px solid var(--line);
-}
-
-.bottom-navigation {
-  background: var(--surface);
+.bottom-navigation,
+:root[data-style='cute'] .bottom-navigation,
+:root[data-style='simple'] .bottom-navigation {
+  margin: 0;
+  border: 0;
   border-top: 1px solid var(--line);
-}
-
-/* iOS Cozy Floating Capsule Dock on Mobile in Cute Mode */
-@media (max-width: 899px) {
-  :root[data-style='cute'] .bottom-navigation {
-    margin: 0; border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0; box-shadow: none;
-    padding: 5px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--line);
-    box-shadow: var(--shadow-card);
-    background: var(--surface);
-  }
-
-  :root[data-style='simple'] .bottom-navigation {
-    background: var(--bg);
-    border-top: 1px solid var(--line);
-    padding-block: 4px;
-  }
+  border-radius: 0;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 4px 12px max(6px, env(safe-area-inset-bottom, 6px));
+  gap: 8px;
 }
 
 .sidebar-item,
 .bottom-navigation-item {
-  border-radius: var(--radius-control);
+  border-radius: 12px;
+  color: var(--muted);
+  font-weight: var(--weight-medium);
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
-:root[data-style='cute'] .bottom-navigation-item,
-:root[data-style='cute'] .sidebar-item {
-  border-radius: 999px;
+.bottom-navigation-item {
+  min-height: 46px;
+  font-size: 0.76rem;
+  gap: 3px;
 }
 
 .sidebar-item.is-active,
@@ -206,390 +252,11 @@ body {
   border: 1px solid var(--blue-line);
 }
 
-/* --------------------------------------------------------------------------
- * Typography, Cards & Lists — Sharp Editorial vs. Tactile iOS Plush
- * -------------------------------------------------------------------------- */
-.screen-heading h1,
-.screen-heading h2 {
-  letter-spacing: -0.025em;
-  font-weight: var(--weight-bold);
-}
-
-.settings-section,
-.runtime-card,
-.memory-card,
-.knowledge-card {
-  border-radius: var(--radius-card);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-card);
-}
-
-:root[data-style='cute'] .settings-section,
-:root[data-style='cute'] .runtime-card,
-:root[data-style='cute'] .memory-card,
-:root[data-style='cute'] .knowledge-card,
-:root[data-style='cute'] .management-list,
-:root[data-style='cute'] .whale-autonomy-card {
-  border-width: 2px;
-}
-
-.management-list {
-  border-radius: var(--radius-card);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-}
-
-:root[data-style='simple'] .management-list {
-  border-radius: 12px;
-  background: var(--bg);
-}
-
-.management-row {
-  min-height: 60px;
-  padding: 10px 12px;
-  border-radius: var(--radius-inner);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 64px;
-}
-
-.management-row:hover {
-  background: var(--surface-muted);
-}
-
-.management-icon {
-  background: var(--blue-soft);
-  color: var(--blue);
-  border-radius: var(--radius-control);
-}
-
-:root[data-style='cute'] .management-icon {
-  border-radius: 16px;
-}
-
-.management-copy strong {
-  font-weight: var(--weight-semibold);
-  letter-spacing: -0.01em;
-}
-
-.management-copy small {
-  line-height: 1.55;
-  color: var(--muted);
-}
-
-/* Buttons & Inputs */
-.button,
-.icon-button,
-input,
-select,
-textarea {
-  border-radius: var(--radius-control);
-}
-
-.button-primary {
-  color: var(--on-accent);
-  background: var(--blue);
-  border-color: var(--blue);
-  font-weight: var(--weight-semibold);
-  box-shadow: var(--tactile-lip);
-}
-
-.button-primary:hover:not(:disabled) {
-  background: var(--blue-hover);
-  border-color: var(--blue-hover);
-}
-
-:root[data-style='cute'] .button-primary:active:not(:disabled) {
-  transform: translateY(2px);
-  box-shadow: none;
-}
-
-.settings-search {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  box-shadow: var(--shadow-card);
-}
-
-:root[data-style='cute'] .settings-search {
-  border-width: 2px;
-}
-
-.settings-search:focus-within {
-  border-color: var(--blue-line);
-  box-shadow: var(--ring);
-}
-
-/* Dual-Style Visual Picker Cards (AppearanceSettings) */
-.whale-style-picker {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.whale-style-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  text-align: left;
-  border-radius: var(--radius-card);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  cursor: pointer;
-  box-shadow: var(--shadow-card);
-}
-
-.whale-style-card:hover {
-  background: var(--surface-muted);
-}
-
-.whale-style-card[aria-pressed='true'] {
-  border-color: var(--blue);
-  background: var(--blue-soft);
-}
-
-.whale-style-thumb {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  object-fit: cover;
-  flex-shrink: 0;
-  border: 1.5px solid var(--line);
-}
-
-.whale-style-card[data-preview='cute'] .whale-style-thumb {
-  border-radius: 999px;
-  border-color: var(--blue-line);
-}
-
-.whale-style-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.whale-style-copy strong {
-  font-size: 0.94rem;
-  font-weight: var(--weight-bold);
-  color: var(--ink);
-}
-
-.whale-style-copy small {
-  font-size: 0.76rem;
-  color: var(--muted);
-  line-height: 1.38;
-}
-
-/* Grouped Settings Cards */
-.account-sections {
-  gap: 10px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.account-group-toggle {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-inner);
-  background: var(--surface);
-  min-height: 58px;
-  box-shadow: var(--shadow-card);
-}
-
-:root[data-style='cute'] .account-group-toggle {
-  border-width: 2px;
-  border-radius: 20px;
-}
-
-.account-group-toggle[aria-expanded='true'] {
-  background: var(--blue-soft);
-  color: var(--blue);
-  border-color: var(--blue-line);
-  box-shadow: none;
-}
-
-:root[data-style='simple'] .management-row {
+.mobile-header {
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line-faint);
-  border-radius: 0;
-}
-
-:root[data-style='simple'] .management-row:last-child {
-  border-bottom: none;
-}
-
-.companion-settings-group {
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.toggle-row {
-  min-height: 56px;
-  padding-block: 10px;
-}
-
-/* Unified Autonomy & Permissions Card */
-.whale-autonomy-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-  padding: 11px 12px;
-  margin-bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-}
-
-.whale-autonomy-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.whale-autonomy-head strong {
-  font-size: 0.95rem;
-  font-weight: var(--weight-bold);
-}
-
-.whale-autonomy-head span {
-  font-size: 0.78rem;
-  color: var(--blue);
-  background: var(--blue-soft);
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-weight: var(--weight-semibold);
-}
-
-.whale-autonomy-pills {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.whale-autonomy-pill {
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
-  color: var(--muted);
-  border-radius: var(--radius-control);
-  min-height: 38px;
-  padding: 6px 10px;
-  font-size: 0.82rem;
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-
-:root[data-style='cute'] .whale-autonomy-pill {
-  border-radius: 999px;
-  border-width: 2px;
-}
-
-.whale-autonomy-pill.is-active {
-  background: var(--blue);
-  color: var(--on-accent);
-  border-color: var(--blue);
-  font-weight: var(--weight-semibold);
-  box-shadow: var(--tactile-lip);
-}
-
-.whale-autonomy-desc {
-  margin: 0;
-  font-size: 0.81rem;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-.whale-perm-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line-faint);
-}
-
-.whale-perm-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
-  color: var(--ink);
-  font-size: 0.78rem;
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-
-:root[data-style='cute'] .whale-perm-chip {
-  border-width: 1.5px;
-  background: var(--pastel-sky);
-  border-color: var(--blue-line);
-}
-
-.whale-perm-chip:hover {
-  border-color: var(--blue-line);
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-
-@media (max-width: 640px) {
-  .account-sections {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .whale-style-picker {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .management-row {
-    padding: 13px 15px;
-  }
-}
-
-:root[data-style] {
-  --header-bg: var(--surface);
-  --surface-sunken: var(--bg);
-  --track: var(--line);
-  --icon-solid-bg: var(--ink);
-  --on-solid: var(--surface);
-  --assistant-brand-1: var(--on-accent);
-  --assistant-brand-2: var(--blue);
-  --assistant-brand-3: var(--ink);
-  --assistant-brand-4: var(--blue);
-  --assistant-brand-5: var(--muted);
-  --assistant-brand-6: var(--blue-soft);
-  --assistant-brand-8: var(--blue-soft);
-  --assistant-brand-9: var(--surface-muted);
-  --assistant-brand-13: var(--blue);
-  --assistant-brand-14: var(--blue-hover);
-}
-
-.appearance-details {
-  border-top: 1px solid var(--line);
-  padding: 14px 0;
-}
-
-.appearance-details > summary {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 0.9rem;
-  min-height: 40px;
-  align-content: center;
-}
-
-.appearance-details[open] > summary {
-  color: var(--ink);
-  margin-bottom: 12px;
-}
-
-.memory-card,
-.knowledge-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 68px;
 }
 
 /* Zero-Overlap Full-Height Chat Frame */
@@ -610,24 +277,459 @@ textarea {
   flex: 1 1 auto;
 }
 
-/* Unified 3-master-switch permission rows inside WhaleAutonomyCard */
+/* --------------------------------------------------------------------------
+ * 4. Unified Inset Surfaces, Cards & Hairline Lists (Zero 2px Borders)
+ * -------------------------------------------------------------------------- */
+.settings-section,
+.runtime-card,
+.runtime-overview,
+.detail-section,
+.launch-panel,
+.memory-card,
+.knowledge-card,
+.management-list,
+.whale-autonomy-card {
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+}
+
+.settings-section,
+.detail-section {
+  padding: 16px;
+}
+
+.management-list {
+  overflow: hidden;
+  padding: 4px;
+}
+
+.management-row {
+  min-height: 56px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: var(--radius-inner);
+  background: transparent;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+  transition: background-color 120ms ease;
+}
+
+.management-row + .management-row {
+  position: relative;
+}
+
+.management-row + .management-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 52px;
+  right: 12px;
+  height: 1px;
+  background: var(--line-faint);
+  pointer-events: none;
+}
+
+.management-row:hover {
+  background: var(--surface-muted);
+}
+
+.management-icon {
+  width: 34px;
+  height: 34px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  border-radius: 10px;
+}
+
+:root[data-style='cute'] .management-icon {
+  border-radius: 12px;
+}
+
+.management-copy strong {
+  font-size: 0.92rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.management-copy small {
+  font-size: 0.78rem;
+  line-height: 1.48;
+  color: var(--muted);
+}
+
+.memory-card,
+.knowledge-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
+}
+
+/* --------------------------------------------------------------------------
+ * 5. Buttons, Inputs & Tactile Pill Switches
+ * -------------------------------------------------------------------------- */
+.button,
+.icon-button,
+input:not([type='checkbox']):not([type='radio']):not([type='range']),
+select,
+textarea {
+  border-radius: var(--radius-control);
+  transition: border-color 130ms ease, background-color 130ms ease, box-shadow 130ms ease, color 130ms ease;
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='range']),
+select,
+textarea {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: var(--ring);
+}
+
+.button {
+  min-height: 40px;
+  font-weight: var(--weight-medium);
+  letter-spacing: -0.005em;
+}
+
+.button-primary {
+  color: var(--on-accent);
+  background: var(--blue);
+  border: 1px solid var(--blue);
+  font-weight: var(--weight-semibold);
+  box-shadow: none;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--blue-hover);
+  border-color: var(--blue-hover);
+}
+
+.button-secondary {
+  color: var(--ink);
+  background: var(--surface-muted);
+  border: 1px solid transparent;
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.button-quiet {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.button-quiet:hover:not(:disabled) {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+/* Custom iOS/Android Pill Switch for all role="switch" & toggle-row checkboxes */
+input[type='checkbox'][role='switch'],
+.toggle-row input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  cursor: pointer;
+  transition: background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+input[type='checkbox'][role='switch']::after,
+.toggle-row input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+input[type='checkbox'][role='switch']:checked,
+.toggle-row input[type='checkbox']:checked {
+  background: var(--blue);
+}
+
+input[type='checkbox'][role='switch']:checked::after,
+.toggle-row input[type='checkbox']:checked::after {
+  transform: translateX(18px);
+}
+
+input[type='checkbox'][role='switch']:focus-visible,
+.toggle-row input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+input[type='checkbox'][role='switch']:disabled,
+.toggle-row input[type='checkbox']:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toggle-row {
+  min-height: 54px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.toggle-row:last-child {
+  border-bottom: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * 6. Settings Search, Category Segment Bar & Style Picker
+ * -------------------------------------------------------------------------- */
+.settings-search {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  box-shadow: none;
+  padding: 2px 4px 2px 14px;
+}
+
+.settings-search:focus-within {
+  border-color: var(--blue);
+  box-shadow: var(--ring);
+}
+
+.account-sections {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 12px;
+  border-radius: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--line-faint);
+}
+
+.account-group-toggle {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  min-height: 42px;
+  box-shadow: none;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.account-group-toggle:hover {
+  color: var(--ink);
+}
+
+.account-group-toggle[aria-expanded='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-segment);
+}
+
+.account-group-toggle[aria-expanded='true'] svg {
+  color: var(--blue);
+}
+
+.companion-settings-group {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.appearance-details {
+  border-top: 1px solid var(--line);
+  padding: 12px 0;
+}
+
+.appearance-details > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.88rem;
+  min-height: 40px;
+  align-content: center;
+}
+
+.appearance-details[open] > summary {
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+
+/* Dual-Style Visual Picker Cards (AppearanceSettings) */
+.whale-style-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.whale-style-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: none;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.whale-style-card:hover {
+  background: var(--surface-muted);
+}
+
+.whale-style-card[aria-pressed='true'] {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.whale-style-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+}
+
+.whale-style-card[data-preview='cute'] .whale-style-thumb {
+  border-radius: 999px;
+  border-color: var(--blue-line);
+}
+
+.whale-style-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.whale-style-copy strong {
+  font-size: 0.92rem;
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+}
+
+.whale-style-copy small {
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* --------------------------------------------------------------------------
+ * 7. Unified Autonomy, Master Switches & Voice Control Card
+ * -------------------------------------------------------------------------- */
+.whale-autonomy-card {
+  padding: 16px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.whale-autonomy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.whale-autonomy-head strong {
+  font-size: 0.98rem;
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.015em;
+}
+
+.whale-autonomy-head span {
+  font-size: 0.74rem;
+  color: var(--blue);
+  background: var(--blue-soft);
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: var(--weight-semibold);
+}
+
+/* Segmented Control for 3 Autonomy Presets */
+.whale-autonomy-pills {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.whale-autonomy-pill {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 9px;
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.whale-autonomy-pill.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+  box-shadow: var(--shadow-segment);
+}
+
+.whale-autonomy-desc {
+  margin: -4px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Hairline Master Switch List (No Box-Inside-Box) */
 .whale-master-switches {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
+  margin: 0;
+  border-top: 1px solid var(--line-faint);
 }
 
 .whale-master-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.2));
-  background: var(--surface-subtle, rgba(127, 127, 127, 0.06));
+  gap: 14px;
+  padding: 12px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line-faint);
+  border-radius: 0;
+  background: transparent;
   cursor: pointer;
+}
+
+.whale-master-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 4px;
 }
 
 .whale-master-copy {
@@ -638,58 +740,186 @@ textarea {
 }
 
 .whale-master-copy strong {
-  font-size: 13.5px;
-  line-height: 1.3;
+  font-size: 0.88rem;
+  font-weight: var(--weight-semibold);
+  line-height: 1.35;
+  color: var(--ink);
 }
 
 .whale-master-copy small {
-  font-size: 11.5px;
-  line-height: 1.35;
-  opacity: 0.72;
+  font-size: 0.76rem;
+  line-height: 1.42;
+  color: var(--muted);
 }
 
-.whale-master-row input[type='checkbox'] {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  accent-color: var(--accent, #2563eb);
-  cursor: pointer;
-}
-
-/* SiliconFlow 1-Key Voice Config Box inside WhaleAutonomyCard */
+/* SiliconFlow 1-Key Voice Section (Integrated Hairline Panel) */
 .whale-voice-box {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.2));
-  background: var(--surface-subtle, rgba(127, 127, 127, 0.05));
+  margin-top: 0;
+  padding: 14px 0 2px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .whale-voice-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 13px;
+  gap: 8px;
+}
+
+.whale-voice-head strong {
+  font-size: 0.88rem;
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+}
+
+.whale-voice-head span {
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-weight: var(--weight-medium);
 }
 
 .whale-voice-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .whale-voice-row input,
 .whale-voice-row select {
-  flex: 1 1 140px;
+  flex: 1 1 150px;
   min-width: 0;
-  padding: 7px 10px;
-  border-radius: 9px;
-  border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.25));
-  background: var(--surface, transparent);
-  color: inherit;
-  font-size: 13px;
+  min-height: 38px;
+  padding: 7px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font-size: 0.83rem;
+}
+
+.whale-perm-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-faint);
+}
+
+.whale-perm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--ink);
+  font-size: 0.79rem;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: border-color 130ms ease, background-color 130ms ease, color 130ms ease;
+}
+
+.whale-perm-chip:hover:not(:disabled) {
+  border-color: var(--blue-line);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.whale-perm-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+ * 8. Secondary Screens Cohesion (Tasks, Library, Workshop, Dialogs, Onboarding)
+ * -------------------------------------------------------------------------- */
+.assistant-task-card {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blue);
+  border-radius: var(--radius-inner);
+  background: var(--surface);
+  box-shadow: none;
+  padding: 14px 16px;
+}
+
+.assistant-task-card:hover {
+  transform: none;
+  border-color: var(--blue-line);
+  box-shadow: none;
+}
+
+.task-destinations,
+.workspace-tabs {
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  border: 1px solid var(--line-faint);
+}
+
+.task-destinations button[aria-pressed='true'],
+.workspace-tabs button[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-segment);
+  font-weight: var(--weight-semibold);
+}
+
+.workspace-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-inner);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.workspace-card:hover {
+  transform: none;
+  border-color: var(--blue-line);
+  box-shadow: none;
+}
+
+.authored-tools,
+.tools-plugin-link {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.dialog-backdrop,
+.knowledge-detail-backdrop {
+  background: rgba(7, 9, 13, 0.56);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.dialog-panel,
+.knowledge-detail-page {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-elevated);
+}
+
+@media (max-width: 640px) {
+  .account-sections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .whale-style-picker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .management-row {
+    padding: 11px 10px;
+  }
+  .whale-autonomy-card {
+    padding: 14px;
+  }
 }

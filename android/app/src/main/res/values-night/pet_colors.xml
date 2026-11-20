@@ -1,27 +1,30 @@
 <resources>
-    <color name="pet_surface">#1D263B</color>
-    <color name="pet_canvas">#151E31</color>
-    <color name="pet_ink">#F6F4FF</color>
-    <color name="pet_muted">#BBC7DE</color>
-    <color name="pet_accent">#C2D0FF</color>
-    <color name="pet_soft">#303E60</color>
-    <color name="pet_primary">#B5C7FF</color>
-    <color name="pet_on_primary">#1B2C53</color>
-    <color name="pet_line">#404F6D</color>
-    <color name="pet_answer">#24304A</color>
-    <color name="pet_alert">#FFADB6</color>
-    <color name="pet_rose">#493347</color>
-    <color name="pet_honey">#493F39</color>
+    <!-- Midnight Tide (Cute Dark) -->
+    <color name="pet_surface">#111A2C</color>
+    <color name="pet_canvas">#0B1220</color>
+    <color name="pet_ink">#ECF2FC</color>
+    <color name="pet_muted">#8EA3C4</color>
+    <color name="pet_accent">#6BC3FF</color>
+    <color name="pet_soft">#1C2D4D</color>
+    <color name="pet_primary">#6BC3FF</color>
+    <color name="pet_on_primary">#0B1220</color>
+    <color name="pet_line">#22324F</color>
+    <color name="pet_answer">#162238</color>
+    <color name="pet_alert">#FF8F9A</color>
+    <color name="pet_rose">#33243B</color>
+    <color name="pet_honey">#332E24</color>
     <color name="pet_pink">#F092B7</color>
     <color name="pet_gold">#F2BD70</color>
-    <color name="pet_simple_surface">#1B1F25</color>
-    <color name="pet_simple_canvas">#111315</color>
-    <color name="pet_simple_ink">#EDF0F5</color>
-    <color name="pet_simple_muted">#B4BDCA</color>
-    <color name="pet_simple_accent">#A8C2FF</color>
-    <color name="pet_simple_soft">#263752</color>
-    <color name="pet_simple_primary">#A8C2FF</color>
-    <color name="pet_simple_on_primary">#152747</color>
-    <color name="pet_simple_line">#3B424E</color>
-    <color name="pet_simple_answer">#242A33</color>
+
+    <!-- True Abyss (Simple Dark) -->
+    <color name="pet_simple_surface">#10151E</color>
+    <color name="pet_simple_canvas">#07090D</color>
+    <color name="pet_simple_ink">#F1F4F9</color>
+    <color name="pet_simple_muted">#8895AA</color>
+    <color name="pet_simple_accent">#5CA4FF</color>
+    <color name="pet_simple_soft">#18253B</color>
+    <color name="pet_simple_primary">#5CA4FF</color>
+    <color name="pet_simple_on_primary">#07090D</color>
+    <color name="pet_simple_line">#1F2837</color>
+    <color name="pet_simple_answer">#141B27</color>
 </resources>

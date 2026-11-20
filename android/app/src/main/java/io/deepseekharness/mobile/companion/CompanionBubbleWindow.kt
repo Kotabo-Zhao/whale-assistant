@@ -330,9 +330,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
         }.apply {
             orientation = LinearLayout.VERTICAL
-            background = ui.shape(ui.surface, 20, ui.line)
+            background = ui.shape(ui.surface, 22, ui.line)
             clipToOutline = true
-            setPadding(dp(1), dp(1), dp(1), dp(1))
+            setPadding(0, 0, 0, 0)
         }
         val knowledgeAllowed = CompanionStore(context).knowledgeModelAccess
         val accessBadge = TextView(context).apply {
@@ -352,17 +352,17 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             background = bar(); addView(accessBadge)
         }
         val workerBadge = ui.text("近况", 12f, accent, true).apply {
-            gravity = Gravity.CENTER; minHeight = dp(44)
-            maxWidth = minOf((width * 0.43f).toInt(),dp((134 * fontScale.coerceAtLeast(1f)).toInt()))
+            gravity = Gravity.CENTER; minHeight = dp(34)
+            maxWidth = minOf((width * 0.40f).toInt(), dp((124 * fontScale.coerceAtLeast(1f)).toInt()))
             maxLines = if (fontScale >= 1.4f) 2 else 1; ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(dp(9), 0, dp(9), 0); contentDescription = "和小鲸聊聊近况"
-            background = ui.action(ui.soft, 12); setOnClickListener { openTaskInbox() }
+            setPadding(dp(11), 0, dp(11), 0); contentDescription = "和小鲸聊聊近况"
+            background = ui.action(ui.soft, 18); setOnClickListener { openTaskInbox() }
         }
-        val expandButton = ui.text(if (heightMode == "large") "收拢" else "大窗", 12f, foreground, true).apply {
-            gravity = Gravity.CENTER; minHeight = dp(40)
-            setPadding(dp(10), 0, dp(10), 0)
+        val expandButton = ui.text(if (heightMode == "large") "收拢" else "大窗", 12f, secondary, true).apply {
+            gravity = Gravity.CENTER; minHeight = dp(34)
+            setPadding(dp(9), 0, dp(9), 0)
             contentDescription = "切换桌宠大窗模式"
-            background = ui.action(ui.surface, 12)
+            background = ui.action(Color.TRANSPARENT, 12)
             setOnClickListener {
                 heightMode = if (heightMode == "large") "auto" else "large"
                 sizeStore.chatHeightMode = heightMode
@@ -379,13 +379,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val grabber = android.view.View(context).apply {
             background = ui.shape(ui.line, 99)
         }
-        panel.addView(grabber, LinearLayout.LayoutParams(dp(38), dp(4)).apply {
+        panel.addView(grabber, LinearLayout.LayoutParams(dp(34), dp(3)).apply {
             gravity = Gravity.CENTER_HORIZONTAL
-            topMargin = dp(7)
+            topMargin = dp(8)
             bottomMargin = dp(2)
         })
         val subtitle = ui.string(R.string.pet_ui_chat_title).takeIf { fontScale < 1.4f }
         panel.addView(ui.header(ui.string(R.string.pet_ui_name), subtitle, headingEnd))
+        panel.addView(ui.divider())
         val shortcuts = LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(2), dp(8), 0)
         }
@@ -428,10 +429,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         sizeRow("宽度", listOf("窄", "自动", "宽"), widthMode) { widthMode = it; sizeStore.chatWidthMode = it }
         sizeRow("高度", listOf("低", "自动", "高"), heightMode) { heightMode = it; sizeStore.chatHeightMode = it }
         fun shortcut(label: String, icon: Int, description: String, click: () -> Unit) {
-            shortcuts.addView(ui.text(label, 13f, foreground).apply {
-                gravity = Gravity.CENTER; minHeight = dp(44); contentDescription = description
-                setPadding(dp(5), 0, dp(5), 0); background = ui.action(ui.surface, 10)
-                ui.leadingIcon(this, icon, 16)
+            shortcuts.addView(ui.text(label, 12.5f, secondary).apply {
+                gravity = Gravity.CENTER; minHeight = dp(38); contentDescription = description
+                setPadding(dp(6), 0, dp(6), 0); background = ui.action(Color.TRANSPARENT, 10)
+                ui.leadingIcon(this, icon, 15)
                 if(fontScale>=1.4f && metrics.heightPixels>metrics.widthPixels) {
                     val leading=compoundDrawablesRelative[0]
                     setCompoundDrawablesRelative(null,leading,null,null)
@@ -460,7 +461,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setPadding(dp(14), dp(10), dp(14), dp(10))
             gravity = if (showAbove) Gravity.BOTTOM else Gravity.TOP
         }
         val scroll = ScrollView(context).apply { addView(content); isVerticalScrollBarEnabled = false; setBackgroundColor(ui.canvas) }
@@ -480,16 +481,21 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         controls.addView(toolShelf); controls.addView(sessionActions)
         controlsScroll.addView(controls)
         syncControls()
-        panel.addView(shortcuts); panel.addView(controlsScroll)
+        panel.addView(ui.divider()); panel.addView(shortcuts); panel.addView(controlsScroll)
         content.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
             if (bottom - top != oldBottom - oldTop) panel.post { if (root === panel) positionUpdater?.invoke() }
         }
         fun styleBubble(view: android.view.View, isUser: Boolean) {
-            view.setPadding(dp(10), dp(7), dp(10), dp(7))
-            view.background = ui.shape(if (isUser) ui.soft else ui.answer, 12, null).apply {
-                val round = dp(15).toFloat(); val tip = dp(5).toFloat()
-                cornerRadii = if (isUser) floatArrayOf(round,round,tip,tip,round,round,round,round)
-                    else floatArrayOf(tip,tip,round,round,round,round,round,round)
+            if (isUser) {
+                view.setPadding(dp(12), dp(8), dp(12), dp(8))
+                view.background = ui.shape(ui.soft, 16, null).apply {
+                    val round = dp(16).toFloat(); val tip = dp(4).toFloat()
+                    cornerRadii = floatArrayOf(round, round, tip, tip, round, round, round, round)
+                }
+            } else {
+                view.setPadding(dp(2), dp(4), dp(2), dp(6))
+                view.background = null
+                if (view is TextView) view.setLineSpacing(dp(3).toFloat(), 1.08f)
             }
         }
         fun atBottom(): Boolean = scroll.getChildAt(0)?.let { child ->
@@ -718,13 +724,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             })
         }
-        val send = ui.text(ui.string(R.string.pet_ui_send), 14f, ui.onPrimary, true).apply {
-            gravity = Gravity.CENTER; minWidth = dp(54); minHeight = dp(44)
-            background = ui.action(ui.primary, 12); isEnabled = !busy || inFlightUser != null
+        val send = ui.text(ui.string(R.string.pet_ui_send), 13.5f, ui.onPrimary, true).apply {
+            gravity = Gravity.CENTER; minWidth = dp(54); minHeight = dp(38)
+            setPadding(dp(12), 0, dp(12), 0)
+            background = ui.action(ui.primary, 19); isEnabled = !busy || inFlightUser != null
         }
         val footer = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(2), dp(2), dp(2), dp(2)); background = ui.shape(ui.canvas, 14, ui.line)
+            setPadding(dp(6), dp(4), dp(5), dp(4)); background = ui.shape(ui.canvas, 24, ui.line)
         }
 
         val continueButton = TextView(context).apply {

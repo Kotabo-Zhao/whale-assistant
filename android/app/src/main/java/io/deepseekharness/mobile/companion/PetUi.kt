@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
@@ -39,50 +40,55 @@ internal class PetUi(private val context: Context) {
     fun dp(n: Int) = (n * context.resources.displayMetrics.density).roundToInt()
     fun string(id: Int): String = palette.getString(id)
     fun shape(fill: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply {
-        setColor(fill); cornerRadius = dp(if (simple) minOf(16, radius) else maxOf(14, radius)).toFloat()
+        setColor(fill); cornerRadius = dp(if (simple) minOf(22, radius) else radius).toFloat()
         if (stroke != null) setStroke(dp(1), stroke)
     }
     fun action(fill: Int, radius: Int, stroke: Int? = null) =
-        RippleDrawable(ColorStateList.valueOf((accent and 0x00ffffff) or 0x24000000), shape(fill, radius, stroke), null)
+        RippleDrawable(ColorStateList.valueOf((accent and 0x00ffffff) or 0x22000000), shape(fill, radius, stroke), null)
+
+    fun divider() = View(context).apply {
+        setBackgroundColor(line)
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, maxOf(1, dp(1)))
+    }
 
     fun text(value: CharSequence, size: Float, color: Int = ink, bold: Boolean = false) = TextView(context).apply {
         text = value; textSize = size; setTextColor(color)
         if (bold) setTypeface(typeface, Typeface.BOLD)
     }
-    fun leadingIcon(view: TextView, id: Int, size: Int = 18) = with(view) {
+    fun leadingIcon(view: TextView, id: Int, size: Int = 16) = with(view) {
         val icon = requireNotNull(palette.getDrawable(id)).mutate().apply {
             setTint(currentTextColor); setBounds(0, 0, dp(size), dp(size))
         }
-        setCompoundDrawablesRelative(icon, null, null, null); compoundDrawablePadding = dp(6)
+        setCompoundDrawablesRelative(icon, null, null, null); compoundDrawablePadding = dp(5)
     }
     fun header(title: String, subtitle: String? = null, end: View? = null, icon: Int = R.drawable.ic_pet_whale): LinearLayout {
         val row = LinearLayout(context).apply {
-            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(8), dp(10), dp(8))
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(6), dp(10), dp(8))
         }
-        val tint = when (icon) { R.drawable.ic_whale_nav_memory -> rose; R.drawable.ic_pet_assign -> honey; else -> soft }
-        row.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(if (simple) surface else tint, surface, surface)).apply {
-            val r = dp(if (simple) 16 else 22).toFloat()
-            cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f)
+        row.background = GradientDrawable().apply {
+            setColor(surface)
+            val r = dp(if (simple) 18 else 22).toFloat()
+            cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
         }
         if (simple) {
             row.addView(android.widget.ImageView(context).apply {
                 setImageDrawable(palette.getDrawable(icon)?.mutate()?.apply { setTint(accent) })
-                setPadding(dp(4),dp(4),dp(4),dp(4))
+                setPadding(dp(4), dp(4), dp(4), dp(4))
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(dp(32),dp(32)))
-        } else row.addView(PetPortrait(context, this, icon), LinearLayout.LayoutParams(dp(52), dp(52)))
+            }, LinearLayout.LayoutParams(dp(28), dp(28)))
+        } else row.addView(PetPortrait(context, this, icon), LinearLayout.LayoutParams(dp(40), dp(40)))
         row.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, dp(2), 0)
-            addView(text(title, 17f, ink, true).apply { ViewCompat.setAccessibilityHeading(this, true) })
-            if (!subtitle.isNullOrBlank()) addView(text(subtitle, 12f, muted))
+            orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, dp(4), 0)
+            addView(text(title, 15.5f, ink, true).apply { ViewCompat.setAccessibilityHeading(this, true) })
+            if (!subtitle.isNullOrBlank()) addView(text(subtitle, 11.5f, muted))
         }, LinearLayout.LayoutParams(0, -2, 1f))
         if (end != null) row.addView(end)
         return row
     }
 
-    fun close(onClick: () -> Unit) = text("×", 22f, muted).apply {
+    fun close(onClick: () -> Unit) = text("×", 21f, muted).apply {
         contentDescription = string(R.string.pet_menu_close); gravity = Gravity.CENTER
-        minWidth = dp(48); minHeight = dp(48); background = action(surface, 18)
+        minWidth = dp(40); minHeight = dp(40); background = action(Color.TRANSPARENT, 12)
         isFocusable = true; setOnClickListener { io.deepseekharness.mobile.WhaleMotion.feedback(this); onClick() }
     }
 
@@ -101,7 +107,7 @@ internal class PetUi(private val context: Context) {
 
     fun finishDialog(dialog: AlertDialog, widthDp: Int = 364) {
         dialog.window?.apply {
-            setWindowAnimations(if(io.deepseekharness.mobile.WhaleMotion.enabled()) R.style.WhaleOverlayMotion else 0)
+            setWindowAnimations(if (io.deepseekharness.mobile.WhaleMotion.enabled()) R.style.WhaleOverlayMotion else 0)
             setBackgroundDrawable(shape(surface, 20, line))
             setLayout(minOf(dp(widthDp), (context.resources.displayMetrics.widthPixels - dp(24)).coerceAtLeast(1)),
                 WindowManager.LayoutParams.WRAP_CONTENT)
@@ -109,7 +115,7 @@ internal class PetUi(private val context: Context) {
         }
         for (id in listOf(AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_POSITIVE)) {
             dialog.getButton(id)?.apply {
-                isAllCaps = false; minHeight = dp(48)
+                isAllCaps = false; minHeight = dp(44)
                 setTextColor(if (id == AlertDialog.BUTTON_POSITIVE) onPrimary else accent)
                 background = action(if (id == AlertDialog.BUTTON_POSITIVE) primary else surface, 12)
             }

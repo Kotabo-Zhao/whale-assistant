@@ -1,27 +1,30 @@
 <resources>
-    <color name="pet_surface">#FFFCFF</color>
-    <color name="pet_canvas">#F5F6FC</color>
-    <color name="pet_ink">#292F49</color>
-    <color name="pet_muted">#58637C</color>
-    <color name="pet_accent">#495E9A</color>
-    <color name="pet_soft">#E8EDFF</color>
-    <color name="pet_primary">#5268A9</color>
+    <!-- Pelagic Porcelain (Cute Light) -->
+    <color name="pet_surface">#FFFFFF</color>
+    <color name="pet_canvas">#F3F7FC</color>
+    <color name="pet_ink">#16243A</color>
+    <color name="pet_muted">#5C7291</color>
+    <color name="pet_accent">#257AF4</color>
+    <color name="pet_soft">#E6F0FF</color>
+    <color name="pet_primary">#257AF4</color>
     <color name="pet_on_primary">#FFFFFF</color>
-    <color name="pet_line">#D8DEED</color>
+    <color name="pet_line">#DCE6F4</color>
     <color name="pet_answer">#FFFFFF</color>
-    <color name="pet_alert">#9F414D</color>
-    <color name="pet_rose">#FBE8EF</color>
-    <color name="pet_honey">#FFF0D4</color>
+    <color name="pet_alert">#C43C4A</color>
+    <color name="pet_rose">#FDEBF0</color>
+    <color name="pet_honey">#FDF5DF</color>
     <color name="pet_pink">#D9759B</color>
     <color name="pet_gold">#C48425</color>
+
+    <!-- Deep-Sea Precision (Simple Light) -->
     <color name="pet_simple_surface">#FFFFFF</color>
-    <color name="pet_simple_canvas">#F3F5F8</color>
-    <color name="pet_simple_ink">#17202B</color>
-    <color name="pet_simple_muted">#667181</color>
-    <color name="pet_simple_accent">#315FCF</color>
-    <color name="pet_simple_soft">#E8EFFF</color>
-    <color name="pet_simple_primary">#315FCF</color>
+    <color name="pet_simple_canvas">#F7F8FA</color>
+    <color name="pet_simple_ink">#0D1117</color>
+    <color name="pet_simple_muted">#5A6475</color>
+    <color name="pet_simple_accent">#1456D1</color>
+    <color name="pet_simple_soft">#E8F0FE</color>
+    <color name="pet_simple_primary">#1456D1</color>
     <color name="pet_simple_on_primary">#FFFFFF</color>
-    <color name="pet_simple_line">#DCE2E9</color>
+    <color name="pet_simple_line">#E2E7EF</color>
     <color name="pet_simple_answer">#FFFFFF</color>
 </resources>
