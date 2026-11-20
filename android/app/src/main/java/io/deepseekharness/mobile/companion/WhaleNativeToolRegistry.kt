@@ -200,6 +200,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 listOf("task"),
             ))
             array.put(schema("whale_worker_cancel", "取消一个正在运行的原生后台 Worker 任务。", mapOf("id" to "Worker 任务 ID"), listOf("id")))
+            array.put(schema("whale_worker_manage", "管理与清理后台 Worker 历史及桌宠红点徽标（解决界面残余数字与历史记录删不掉的问题）。", mapOf("action" to "clear_completed（清理已完成与残留徽标）/ delete（按 id 删除单条）/ clear_badge（仅清零桌宠待办红点）", "id" to "action=delete 时的 Worker ID"), listOf("action")))
+            array.put(schema("whale_ui_refresh", "强制刷新鲸鱼助手主界面与悬浮桌宠状态徽标，同步最新数据视图。", emptyMap(), emptyList()))
             array.put(schema("whale_web_search", "联网实时搜索网页信息，返回标题、摘要与链接。", mapOf("query" to "搜索关键词", "limit" to "可选返回条数（1-8，默认 5）"), listOf("query")))
             array.put(schema("whale_web_fetch", "联网抓取指定 HTTPS/HTTP 网页或文本接口的正文内容。", mapOf("url" to "完整网页 URL", "maxChars" to "可选最大字符数，默认 6000"), listOf("url")))
             array.put(schema("whale_memory_delete", "按 ID 删除一条本地长期记忆。", mapOf("id" to "记忆 UUID"), listOf("id")))
@@ -244,6 +246,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_open_url",
         "whale_share_text",
         "whale_phone_vision_click",
+        "whale_worker_manage",
+        "whale_ui_refresh",
         "whale_app_navigate",
         "whale_app_appearance",
         "whale_app_language",
@@ -684,20 +688,31 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 }
                 "whale_worker_status" -> {
                     val targetId = args.str("id").trim()
-                    val active = WorkerDashboardStore(app).activeCount() + WhaleNativeWorkerPool.activeCount()
+                    val dashboard = WorkerDashboardStore(app)
+                    val poolIds = WhaleNativeWorkerPool.activeIds()
+                    val dashIds = dashboard.activeIds()
+                    val mergedActiveIds = poolIds + dashIds
+                    val dashPage = runCatching { dashboard.page("all", "", 0, 20, true) }.getOrElse { JSONObject() }
+                    val dashItems = dashPage.optJSONArray("items") ?: JSONArray()
+                    val badgeCount = dashPage.optInt("attention", 0).let { att ->
+                        if (att > 0) att else dashPage.optInt("running", mergedActiveIds.size)
+                    }
                     val phase = io.deepseekharness.mobile.DeviceControlState.current.phase
                     val briefings = JSONArray().apply {
                         runCatching { WorkerReportInbox(app).briefings().takeLast(6) }.getOrNull().orEmpty().forEach { put(it) }
                     }
                     val payload = JSONObject()
-                        .put("activeWorkers", active)
+                        .put("activeWorkers", mergedActiveIds.size)
+                        .put("badgeCount", badgeCount)
                         .put("nativeWorkers", WhaleNativeWorkerPool.snapshot())
+                        .put("dashboardWorkers", dashItems)
                         .put("recentBriefings", briefings)
                         .put("deviceControlPhase", phase)
                     if (targetId.isNotEmpty()) {
                         WhaleNativeWorkerPool.get(targetId)?.let { payload.put("targetWorker", it) }
+                            ?: runCatching { dashboard.detail(targetId, 0, 12) }.getOrNull()?.let { payload.put("targetWorker", it) }
                     }
-                    ToolOutcome(name, "检查后台任务与回传结果", true, payload.toString())
+                    ToolOutcome(name, "检查后台任务、实时进度与徽标状态", true, payload.toString())
                 }
                 "whale_worker_submit" -> {
                     val task = args.str("task").trim()
@@ -1003,6 +1018,41 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             )
                         }
                     }
+                }
+                "whale_worker_manage" -> {
+                    val action = args.str("action", "clear_completed").trim().lowercase()
+                    val dashboard = WorkerDashboardStore(app)
+                    val out = when (action) {
+                        "delete" -> {
+                            val id = args.str("id").trim()
+                            require(id.isNotEmpty()) { "缺少要删除的 Worker ID" }
+                            val poolRemoved = WhaleNativeWorkerPool.remove(id)
+                            val dashRemoved = runCatching { dashboard.deleteWorker(id) }.getOrDefault(false)
+                            JSONObject().put("action", action).put("id", id).put("removed", poolRemoved || dashRemoved)
+                        }
+                        "clear_badge" -> {
+                            val inbox = WorkerReportInbox(app)
+                            val unseenIds = inbox.unseen().mapNotNull { it.optString("id").takeIf(String::isNotBlank) }
+                            if (unseenIds.isNotEmpty()) inbox.markSeen(unseenIds)
+                            val cleared = dashboard.clearStaleAndFinished()
+                            JSONObject().put("action", action).put("clearedCount", cleared + unseenIds.size)
+                        }
+                        else -> {
+                            val poolCleared = WhaleNativeWorkerPool.clearFinished()
+                            val dashCleared = dashboard.clearStaleAndFinished()
+                            JSONObject().put("action", "clear_completed").put("clearedCount", poolCleared + dashCleared)
+                        }
+                    }
+                    ToolOutcome(name, "清理后台任务与桌宠徽标", true, out.toString(), mutating = true)
+                }
+                "whale_ui_refresh" -> {
+                    val dashboard = WorkerDashboardStore(app)
+                    val inbox = WorkerReportInbox(app)
+                    val unseenIds = inbox.unseen().mapNotNull { it.optString("id").takeIf(String::isNotBlank) }
+                    if (unseenIds.isNotEmpty()) inbox.markSeen(unseenIds)
+                    val page = runCatching { dashboard.page("all", "", 0, 20, true) }.getOrElse { JSONObject() }
+                    WhaleAppControlBus.emit("appearance", JSONObject().put("refresh", true))
+                    ToolOutcome(name, "已刷新应用与桌宠状态视图", true, JSONObject().put("refreshed", true).put("attention", page.optInt("attention", 0)).put("running", page.optInt("running", 0)).toString(), mutating = true)
                 }
                 else -> ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
             }

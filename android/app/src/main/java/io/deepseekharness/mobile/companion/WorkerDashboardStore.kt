@@ -13,14 +13,58 @@ internal class WorkerDashboardStore(private val context: Context, private val co
     private val dir = File(context.noBackupFilesDir, "worker-dashboard").apply { mkdirs() }
     private val guestDir = File(context.noBackupFilesDir.canonicalFile, "dsh-runtime/current/root/.dsh/mobile-workers")
     /** 返回当前仍处于活跃执行/排队状态的后台 Worker 数量，供空闲休眠巡检避免误杀在途任务。 */
-    fun activeCount(): Int = synchronized(lock) {
-        val files = dir.listFiles { file -> file.isFile && file.name.endsWith(".json") } ?: return@synchronized 0
-        var count = 0
+    fun activeIds(): Set<String> = synchronized(lock) {
+        val files = dir.listFiles { file -> file.isFile && file.name.endsWith(".json") && file.name != "commands.json" } ?: return@synchronized emptySet()
+        val ids = mutableSetOf<String>()
         for (file in files) {
             val row = runCatching { WorkerCardCatalog.full(file) }.getOrNull() ?: continue
-            if (row.optString("state") in ACTIVE_STATES) count += 1
+            if (row.optString("state") in ACTIVE_STATES) {
+                row.optString("id").takeIf(String::isNotBlank)?.let(ids::add)
+            }
         }
-        count
+        ids
+    }
+
+    fun activeCount(): Int = activeIds().size
+
+    fun deleteWorker(id: String): Boolean = synchronized(lock) {
+        val target = File(dir, "$id.json")
+        val deleted = target.exists() && target.delete()
+        File(dir, "$id.upload").delete()
+        if (deleted) {
+            catalogCache = null
+            listeners.forEach { it() }
+        }
+        deleted
+    }
+
+    fun clearStaleAndFinished(): Int = synchronized(lock) {
+        var cleared = 0
+        val files = dir.listFiles { file -> file.isFile && file.name.endsWith(".json") && file.name != "commands.json" }.orEmpty()
+        for (file in files) {
+            val row = runCatching { WorkerCardCatalog.full(file) }.getOrNull()
+            val state = row?.optString("state").orEmpty()
+            if (row == null || state !in ACTIVE_STATES || state == "waiting" || state == "blocked") {
+                if (file.delete()) cleared++
+            }
+        }
+        synchronized(commandLock) {
+            val cmdFile = File(dir, "commands.json")
+            if (cmdFile.exists()) {
+                cmdFile.delete()
+                cleared++
+            }
+        }
+        if (heldFile.exists()) {
+            heldFile.delete()
+            cleared++
+        }
+        val inbox = WorkerReportInbox(context)
+        val unseenIds = inbox.unseen().mapNotNull { it.optString("id").takeIf(String::isNotBlank) }
+        if (unseenIds.isNotEmpty()) inbox.markSeen(unseenIds)
+        catalogCache = null
+        listeners.forEach { it() }
+        cleared
     }
 
     fun put(row: JSONObject) = synchronized(lock) {

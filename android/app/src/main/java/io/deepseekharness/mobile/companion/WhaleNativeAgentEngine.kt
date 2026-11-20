@@ -73,6 +73,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         history: List<Pair<String, String>> = emptyList(),
         sessionId: String = "whale-main",
         listener: StreamListener? = null,
+        onProgress: ((round: Int, step: String, preview: String) -> Unit)? = null,
     ): ChatResult {
         val startedAt = System.currentTimeMillis()
         val trimmed = userMessage.trim()
@@ -101,11 +102,30 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
 
         for (round in 0 until MAX_TOOL_ROUNDS) {
             listener?.onPhase(if (round == 0) "thinking" else "synthesizing")
+            onProgress?.invoke(round + 1, "第 ${round + 1} 轮推理中…", finalReply)
+            val streamBridge = if (listener != null || onProgress != null) {
+                object : StreamListener {
+                    private val liveBuf = StringBuilder()
+                    override fun onDelta(chunk: String) {
+                        listener?.onDelta(chunk)
+                        if (onProgress != null) {
+                            liveBuf.append(chunk)
+                            if (liveBuf.length % 24 < chunk.length || liveBuf.length <= 24) {
+                                onProgress.invoke(round + 1, "第 ${round + 1} 轮生成回复中…", liveBuf.toString().takeLast(280))
+                            }
+                        }
+                    }
+                    override fun onStep(step: StepRecord) { listener?.onStep(step) }
+                    override fun onPhase(phase: String) { listener?.onPhase(phase) }
+                }
+            } else {
+                null
+            }
             val turn = callChatCompletionsWithRetry(
                 endpoint = endpoint,
                 messages = messages,
                 toolsArray = if (toolSchemas.length() > 0) toolSchemas else null,
-                listener = listener,
+                listener = streamBridge,
             )
             val content = turn.content.trim()
             val toolCalls = turn.toolCalls
@@ -135,6 +155,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     ledger.transition(opId, UnifiedExecutionLedger.State.DISPATCHING)
                 }
                 val t0 = System.currentTimeMillis()
+                onProgress?.invoke(round + 1, "正在执行工具：$fnName", finalReply)
                 val outcome = tools.execute(fnName, fnArgs)
                 val dt = (System.currentTimeMillis() - t0).coerceAtLeast(1L)
                 if (mutating) {
@@ -199,6 +220,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
     private fun buildSystemPrompt(userQuery: String): String = buildString {
         append("你是 Whale Assistant（鲸鱼助手），运行在用户手机上的全局总管 Router 与 100% 原生个人 Super Agent。无论从主界面还是悬浮桌宠唤起，你都总管所有任务并拥有完全权限：简单问答/单步工具立刻执行；复杂长耗时任务主动通过 whale_worker_submit 派发给后台 Worker；手机操作直接调用 whale_phone_* 原生屏控。\n")
         append("风格要求：简洁、自然、直接、有温度，像一个靠谱的私人助理，不堆砌机械术语或多余确认。\n")
+        append("诚实与精确原则：遇到不确定或超出训练截止时间的新信息，不要凭印象否定用户或把「不知道」说成「不存在」，先调用 whale_web_search 查证；回答自己有哪些工具或当前任务数时，以本轮真实工具列表与 whale_worker_status 返回为准，严禁凭记忆编造或前后矛盾。\n")
         append("你对整个鲸鱼助手软件拥有完全的控制权：可以直接切换页面、调整极简/鲸鱼娘双风格与深浅主题、切换语言、修改任意伴侣与自治设置、管理人设卡片、启停悬浮桌宠、读写记忆/资料/待办、在本地编写多文件代码、在工坊创作并立即启用打开小工具、派发或取消后台 Worker 长耗时任务（桌宠与主界面拥有完全相同的权限），以及通过无障碍操控手机。收到指令后直接调用原生工具执行，无需让用户手动去设置里找。\n")
         runCatching {
             val persona = CompanionPersonaStore(app).active()

@@ -126,6 +126,9 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                             userMessage = task,
                             history = emptyList(),
                             sessionId = "whale-worker-$commandId",
+                            onProgress = { round, step, preview ->
+                                WhaleNativeWorkerPool.updateProgress(commandId, round = round, step = step, preview = preview)
+                            },
                         )
                         publishCallback("done", res.reply)
                         res.reply
