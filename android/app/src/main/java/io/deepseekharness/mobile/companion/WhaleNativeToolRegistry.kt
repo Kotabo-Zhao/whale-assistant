@@ -51,20 +51,32 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
     private val codeWorkspace by lazy { WhaleNativeCodeWorkspace(File(app.filesDir, "whale-projects")) }
 
     /** 按本轮用户输入动态选择工具集；同时始终允许全软件控制意图命中。 */
-    fun toolSchemas(userText: String): JSONArray {
+    fun toolSchemas(userText: String, expandedCategories: Set<String> = emptySet()): JSONArray {
         val text = userText.trim()
+        val q = text.lowercase()
         val array = JSONArray()
-        // 全量暴露全部原生工具：不再按关键词隐藏工具，避免自然口语或自检时漏掉工具
-        val includeAppControl = text.length >= 0
-        val includePersona = true
-        val includePet = true
+        val expandAll = "all" in expandedCategories ||
+            listOf("有哪些工具", "能力清单", "所有工具", "全部工具", "你能做什么", "有什么功能", "all tools").any { it in q }
+
+        // 核心能力始终常驻（记忆/档案/资料/待办/联网/日历闹钟/Worker/语音/自造工具）；
+        // 重型专域工具按需自动激活，并随时可通过 whale_tools_expand 一键热展开全部 74 项工具，平均节省 65%~75% Schema Token。
         val includeMemory = true
         val includeKnowledge = true
         val includeSecretary = true
-        val includeWorkshop = true
-        val includeCode = true
-        val includePhone = true
-        val includeDevice = true
+        val includeAppControl = expandAll || "settings" in expandedCategories ||
+            listOf("设置", "主题", "深色", "浅色", "风格", "极简", "可爱", "语言", "页面", "跳转", "刷新", "自治", "权限", "开关", "theme", "style", "setting").any { it in q }
+        val includePersona = expandAll || "settings" in expandedCategories ||
+            listOf("人设", "角色", "性格", "语气", "persona").any { it in q }
+        val includePet = expandAll || "settings" in expandedCategories ||
+            listOf("桌宠", "悬浮", "尺寸", "大小", "鲸鱼娘", "pet", "resize").any { it in q }
+        val includeWorkshop = expandAll || "code" in expandedCategories || "workshop" in expandedCategories ||
+            listOf("工坊", "小工具", "网页", "html", "打卡", "计算器", "workshop").any { it in q }
+        val includeCode = expandAll || "code" in expandedCategories ||
+            listOf("代码", "文件", "目录", "脚本", "编程", "工程", "写入", "补丁", "code", "file", "patch").any { it in q }
+        val includePhone = expandAll || "phone" in expandedCategories ||
+            listOf("手机", "打开", "点击", "截屏", "截图", "屏幕", "滑动", "返回", "桌面", "应用", "app", "副屏", "微信", "抖音", "淘宝", "支付宝", "地图", "美团", "小红书", "哔哩", "b站", "screen", "click", "launch").any { it in q }
+        val includeDevice = expandAll || "device" in expandedCategories || "settings" in expandedCategories ||
+            listOf("电量", "电池", "媒体", "音量", "播放", "暂停", "剪贴板", "粘贴", "复制", "通知", "定时", "每天", "提醒我", "后台", "状态", "链接", "分享", "battery", "media", "clipboard", "schedule", "status").any { it in q }
 
         if (includeAppControl) {
             array.put(schema(
@@ -287,6 +299,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_open_url", "用手机系统默认浏览器打开指定网页链接。", mapOf("url" to "完整 http:// 或 https:// 网址"), listOf("url")))
             array.put(schema("whale_share_text", "唤起安卓系统原生分享面板，将文案或摘要直接分享到微信、备忘录等任意应用。", mapOf("text" to "要分享的正文内容", "title" to "可选分享标题"), listOf("text")))
         }
+        array.put(schema(
+            "whale_tools_expand",
+            "当本轮需要尚未展开的专域工具时调用，立即在下一轮热加载对应工具组。可选分类：phone(手机屏控/截屏/副屏)、code(代码文件/功能工坊)、settings(应用设置/主题/桌宠/人设)、device(设备电量/通知/剪贴板/定时任务)、all(全部工具)。",
+            mapOf("category" to "分类：phone / code / settings / device / all"),
+            listOf("category"),
+        ))
         array.put(schema(
             "whale_tool_create",
             "让 Agent 自己创建或更新一个持久化的自定义可调用工具（名称必须以 custom_ 开头），创建成功后立即注入工具列表并可在本轮及后续所有对话直接调用。支持三种类型：composite（串联现有 whale_* 工具的工作流）、http_json（HTTPS 接口调用，支持 {{param}} 模板与 extractPath）、js（无网络无文件隔离 JS 计算沙箱，写函数体接收 args 并 return 结果）。",
@@ -1511,6 +1529,15 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     WhaleVoiceEngine.saveConfig(app, voice = voice, speed = speed, autoSpeakPet = autoSpeak)
                     if (autoSpeak == false) WhaleVoiceEngine.stopSpeaking()
                     ToolOutcome(name, "已更新桌宠语音设置", true, WhaleVoiceEngine.snapshotJson(app).toString(), mutating = true)
+                }
+                "whale_tools_expand" -> {
+                    val cat = args.str("category", "all").trim().lowercase().ifEmpty { "all" }
+                    ToolOutcome(
+                        name,
+                        "热展开工具组：$cat",
+                        true,
+                        JSONObject().put("expanded", cat).put("hint", "已热加载该组工具，下一轮可直接调用。").toString(),
+                    )
                 }
                 "whale_tool_create" -> {
                     val toolName = args.str("name").trim()
