@@ -56,7 +56,7 @@ internal class CompanionPetDrawable(
 
     private fun decode(name: String): Bitmap {
         val cellSize = targetSize.coerceIn(96, PetCels.CELL)
-        val bitmap = resources.assets.open("pet-cels/$name.webp").use {
+        val raw = resources.assets.open("pet-cels/$name.webp").use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply {
                 // Bake density scaling during the off-main decode. A 264px avatar should
                 // not keep every 320px source cel resident after doubling its frame count.
@@ -65,8 +65,18 @@ internal class CompanionPetDrawable(
             })
         } ?: error("Missing pet animation: $name")
         val rows = PetCels.clips.getValue(name).rows
-        require(bitmap.width == cellSize * PetCels.COLUMNS && bitmap.height == cellSize * rows)
-        return bitmap
+        val expectedW = cellSize * PetCels.COLUMNS
+        val expectedH = cellSize * rows
+        if (raw.width == expectedW && raw.height == expectedH) return raw
+        if (raw.width >= PetCels.COLUMNS && raw.height >= rows) {
+            return if (raw.width > expectedW || raw.height > expectedH) {
+                Bitmap.createScaledBitmap(raw, expectedW, expectedH, true).also {
+                    if (it !== raw) raw.recycle()
+                }
+            } else raw
+        }
+        raw.recycle()
+        error("Invalid pet atlas dimensions for $name: ${raw.width}x${raw.height}")
     }
 
     fun setPose(next: PetPose, cel: PetCelSample = PetCels.sample(next)) {

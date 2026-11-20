@@ -21,7 +21,7 @@ class WhaleTokenMeterTest {
             dailyBudgetTokens = 200_000,
         )
         assertEquals(500L, small.totalTokens)
-        assertEquals("✨ 500", small.compactLabel())
+        assertEquals("🐳 500", small.compactLabel())
         assertTrue(small.progress in 0.002f..0.003f)
 
         val mid = WhaleTokenMeter.Snapshot(
@@ -33,7 +33,7 @@ class WhaleTokenMeterTest {
             dailyBudgetTokens = 200_000,
         )
         assertEquals(12_500L, mid.totalTokens)
-        assertEquals("✨ 12.5k · ¥0.03", mid.compactLabel())
+        assertEquals("🐳 12.5k · ¥0.03", mid.compactLabel())
 
         val overBudget = WhaleTokenMeter.Snapshot(
             day = "2026-11-20",
@@ -44,7 +44,7 @@ class WhaleTokenMeterTest {
             dailyBudgetTokens = 200_000,
         )
         assertEquals(1.0f, overBudget.progress, 0.0001f)
-        assertEquals("✨ 1.5M · ¥4.80", overBudget.compactLabel())
+        assertEquals("🐳 1.5M · ¥4.80", overBudget.compactLabel())
     }
 
     @Test

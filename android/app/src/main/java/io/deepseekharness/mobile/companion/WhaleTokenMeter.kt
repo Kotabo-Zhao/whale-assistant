@@ -52,9 +52,9 @@ internal object WhaleTokenMeter {
             }
             val yuan = estimatedYuan
             return if (yuan >= 0.01) {
-                String.format(Locale.US, "✨ %s · ¥%.2f", tokenStr, yuan)
+                String.format(Locale.US, "🐳 %s · ¥%.2f", tokenStr, yuan)
             } else {
-                "✨ $tokenStr"
+                "🐳 $tokenStr"
             }
         }
     }

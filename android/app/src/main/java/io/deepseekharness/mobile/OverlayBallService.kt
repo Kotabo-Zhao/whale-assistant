@@ -100,7 +100,6 @@ class OverlayBallService : Service() {
     private lateinit var windowManager: WindowManager
     private var ballView: View? = null
     private var companionFrame: Runnable? = null
-    private var pendingAvatarReload: Runnable? = null
     private var companionFrameCount = 0L
     private var lastCompanionFrameAt = 0L
     private var petDrawable: io.deepseekharness.mobile.overlay.CompanionPetDrawable? = null
@@ -119,32 +118,62 @@ class OverlayBallService : Service() {
         val label = root.findViewById<TextView>(R.id.companion_token_label) ?: return
         val track = root.findViewById<android.view.View>(R.id.companion_token_track) ?: return
         val fill = root.findViewById<android.view.View>(R.id.companion_token_fill) ?: return
+        val glint = root.findViewById<android.view.View>(R.id.companion_token_glint)
         val dp = resources.displayMetrics.density
-        pill.background = android.graphics.drawable.GradientDrawable().apply {
+        val (borderColor, fillStart, fillEnd, trackBg) = when {
+            snap.progress >= 0.85f -> intArrayOf(
+                android.graphics.Color.rgb(255, 168, 194),
+                android.graphics.Color.rgb(255, 148, 180),
+                android.graphics.Color.rgb(255, 110, 146),
+                android.graphics.Color.argb(66, 255, 142, 174),
+            )
+            snap.progress >= 0.60f -> intArrayOf(
+                android.graphics.Color.rgb(255, 206, 142),
+                android.graphics.Color.rgb(255, 184, 108),
+                android.graphics.Color.rgb(255, 218, 122),
+                android.graphics.Color.argb(62, 255, 182, 104),
+            )
+            else -> intArrayOf(
+                android.graphics.Color.rgb(142, 214, 252),
+                android.graphics.Color.rgb(104, 196, 255),
+                android.graphics.Color.rgb(112, 234, 206),
+                android.graphics.Color.argb(58, 104, 196, 248),
+            )
+        }
+        // 奶霜蓝白渐变小胶囊，配柔粉/海蓝描边与立体轻阴影
+        pill.background = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(
+                android.graphics.Color.argb(246, 255, 253, 250),
+                android.graphics.Color.argb(242, 238, 249, 255),
+            ),
+        ).apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
             cornerRadius = 999f
-            setColor(android.graphics.Color.argb(232, 255, 252, 246))
-            setStroke((1.2f * dp).toInt().coerceAtLeast(1), android.graphics.Color.rgb(165, 222, 238))
+            setStroke((1.5f * dp).toInt().coerceAtLeast(1), borderColor)
         }
+        pill.elevation = 3f * dp
         track.background = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
             cornerRadius = 999f
-            setColor(android.graphics.Color.argb(46, 56, 132, 168))
+            setColor(trackBg)
+            setStroke((0.6f * dp).toInt().coerceAtLeast(1), android.graphics.Color.argb(140, 255, 255, 255))
         }
-        val fillColor = when {
-            snap.progress >= 0.85f -> android.graphics.Color.rgb(255, 118, 148)
-            snap.progress >= 0.60f -> android.graphics.Color.rgb(255, 184, 102)
-            else -> android.graphics.Color.rgb(86, 214, 186)
-        }
-        fill.background = android.graphics.drawable.GradientDrawable().apply {
+        fill.background = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+            intArrayOf(fillStart, fillEnd),
+        ).apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
             cornerRadius = 999f
-            setColor(fillColor)
+        }
+        glint?.background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.OVAL
+            setColor(android.graphics.Color.argb(210, 255, 255, 255))
         }
         label.text = snap.compactLabel()
         track.post {
-            val totalW = track.width.takeIf { it > 0 } ?: (48 * dp).toInt()
-            val minW = (6 * dp).toInt()
+            val totalW = track.width.takeIf { it > 0 } ?: (54 * dp).toInt()
+            val minW = (8 * dp).toInt()
             val targetW = (totalW * snap.progress).toInt().coerceIn(minW, totalW)
             val lp = fill.layoutParams
             if (lp.width != targetW) {
@@ -1017,7 +1046,13 @@ class OverlayBallService : Service() {
         // 只认当前这颗球的回调，避免重建期间旧视图的回调覆盖新状态。
         view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(attached: View) {
-                if (attached === ballView) { ballAttached = true;configureCompanionMotion() }
+                if (attached === ballView) {
+                    ballAttached = true
+                    if (petDrawable == null && avatarGeneration == 0L) {
+                        loadCompanionAvatar(attached, layoutParams.width.coerceAtLeast(1))
+                    }
+                    configureCompanionMotion()
+                }
             }
 
             override fun onViewDetachedFromWindow(detached: View) {
@@ -1057,11 +1092,8 @@ class OverlayBallService : Service() {
         // 必须在 configureCompanionMotion 之前置位：动画门控（companionMotionAllowed）要求球已挂上，
         // 否则首次挂载时球会一直停在静态站姿、直到下一次亮屏/解锁广播才动起来。
         ballAttached = true
+        loadCompanionAvatar(view, size)
         configureCompanionMotion()
-        pendingAvatarReload?.let(hintHandler::removeCallbacks)
-        val reload = Runnable { if (ballAttached && ballView === view) loadCompanionAvatar(view, size) }
-        pendingAvatarReload = reload
-        hintHandler.postDelayed(reload, 220L)
         return true
     }
 
@@ -1117,8 +1149,6 @@ class OverlayBallService : Service() {
         val wasRunning=companionFrame!=null
         companionFrame?.let(hintHandler::removeCallbacks)
         companionFrame = null
-        pendingAvatarReload?.let(hintHandler::removeCallbacks)
-        pendingAvatarReload = null
         val drawable=petDrawable ?: return
         if (!companionMotionAllowed()) {
             petPlayback.reset()
@@ -1173,6 +1203,8 @@ class OverlayBallService : Service() {
         avatarExecutor.execute {
             val next = runCatching {
                 io.deepseekharness.mobile.overlay.CompanionPetDrawable(resources,size,avatarExecutor,hintHandler)
+            }.onFailure {
+                android.util.Log.w("WhalePet", "Failed to load companion avatar (size=$size)", it)
             }.getOrNull() ?: return@execute
             if (avatarDestroyed) { next.close(); return@execute }
             val posted = hintHandler.post {
