@@ -745,7 +745,13 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .replace(Regex("\s+"), " ").trim()
                     val items = JSONArray()
                     for (i in 0 until minOf(limit, links.size)) {
-                        val href = links[i].groupValues[1]
+                        val rawHref = links[i].groupValues[1]
+                        val uddg = Regex("""[?&]uddg=([^&]+)""").find(rawHref)?.groupValues?.get(1)
+                        val href = when {
+                            uddg != null -> runCatching { java.net.URLDecoder.decode(uddg, "UTF-8") }.getOrDefault(rawHref)
+                            rawHref.startsWith("//") -> "https:$rawHref"
+                            else -> rawHref
+                        }
                         val title = cleanHtml(links[i].groupValues[2])
                         val snippet = snips.getOrNull(i)?.let { cleanHtml(it.groupValues[1].ifBlank { it.groupValues[2] }) }.orEmpty()
                         items.put(JSONObject().put("title", title).put("url", href).put("snippet", snippet.take(260)))

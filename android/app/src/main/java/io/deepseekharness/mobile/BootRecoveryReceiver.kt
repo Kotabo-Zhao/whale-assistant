@@ -18,7 +18,6 @@ class BootRecoveryReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_USER_UNLOCKED) return
-        runCatching { io.deepseekharness.mobile.companion.WhaleScheduledTaskManager.rescheduleAll(context.applicationContext) }
 
         // 广播运行在主线程：这里逃出的任何异常都会终结整个进程（用户看到的「闪退」）。
         // 恢复流程本身允许失败（服务会自行校验权限并降级），因此整体兜底，只记录诊断不抛出。
@@ -34,6 +33,7 @@ class BootRecoveryReceiver : BroadcastReceiver() {
 
         runCatching { io.deepseekharness.mobile.companion.CompanionReminder(appContext).restore() }
         runCatching { io.deepseekharness.mobile.companion.CompanionRecurringReminder(appContext).restore() }
+        runCatching { io.deepseekharness.mobile.companion.WhaleScheduledTaskManager.rescheduleAll(appContext) }
 
         val store = RuntimeStore(appContext)
 
