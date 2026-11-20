@@ -12,6 +12,14 @@ import io.deepseekharness.mobile.accessibility.InstalledApplications
 import io.deepseekharness.mobile.features.WhaleFeatureActivity
 import io.deepseekharness.mobile.features.WhaleFeatureStore
 import io.deepseekharness.mobile.overlay.OverlayBallPreferences
+import io.deepseekharness.mobile.virtualscreen.VirtualScreenCommands
+import io.deepseekharness.mobile.virtualscreen.VirtualScreenPolicy
+import io.deepseekharness.mobile.virtualscreen.VirtualScreenPreferences
+import io.deepseekharness.mobile.virtualscreen.VirtualScreenService
+import io.deepseekharness.mobile.virtualscreen.VirtualScreenStart
+import io.deepseekharness.mobile.virtualscreen.VirtualScreenStartRequest
+import io.deepseekharness.mobile.virtualscreen.VirtualScreenTargetKind
+import io.deepseekharness.mobile.virtualscreen.putVirtualScreenStart
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -176,6 +184,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
             array.put(schema("whale_phone_vision", "多模态看图识屏：安全截取当前手机屏幕并调用视觉模型分析画面、图标、图片内容及按钮坐标（自动拦截密码/支付/锁屏敏感页面）。", mapOf("question" to "可选：想看懂的内容或想找的图标/按钮描述"), emptyList()))
             array.put(schema("whale_phone_vision_click", "视觉定位并直接点击：截屏让多模态视觉模型定位目标图标或无文字按钮的精确屏幕坐标，并立即执行手势点击（适合游戏、Canvas、自定义图标按钮）。", mapOf("target" to "要点击的目标描述，例如：右上角放大镜图标 / 红色关闭按钮"), listOf("target")))
+            array.put(schema("whale_virtual_screen_control", "启动、停止或查询「目标应用副屏」状态（在后台独立虚拟屏幕上运行目标应用，不打扰主屏幕；需已开启 Shizuku）。", mapOf("action" to "state / start / stop", "target" to "action=start 时的目标应用包名（可用 whale_phone_apps 查）或组件名"), listOf("action")))
+            array.put(schema("whale_virtual_screen_action", "在已启动的「目标应用副屏」独立虚拟屏幕上执行点击、输入、滑动或返回操作。", mapOf("sessionId" to "可选：副屏会话 ID（不填自动取当前活跃副屏）", "type" to "操作类型，如 tap / swipe / text / key", "x" to "可选 X 坐标", "y" to "可选 Y 坐标", "text" to "可选输入文本"), listOf("type")))
+            array.put(schema("whale_virtual_screen_vision", "多模态看图识别「目标应用副屏」当前画面内容与按钮坐标。", mapOf("sessionId" to "可选：副屏会话 ID（不填自动取当前活跃副屏）", "question" to "可选：想看懂的副屏画面或按钮描述"), emptyList()))
             array.put(schema(
                 "whale_phone_batch",
                 "单轮原子执行最多 8 步连贯手机操作并在结束后自动回传最新精简控件树，大幅降低多步屏控延迟。",
@@ -248,6 +259,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_phone_vision_click",
         "whale_worker_manage",
         "whale_ui_refresh",
+        "whale_virtual_screen_control",
+        "whale_virtual_screen_action",
         "whale_app_navigate",
         "whale_app_appearance",
         "whale_app_language",
@@ -1053,6 +1066,119 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val page = runCatching { dashboard.page("all", "", 0, 20, true) }.getOrElse { JSONObject() }
                     WhaleAppControlBus.emit("appearance", JSONObject().put("refresh", true))
                     ToolOutcome(name, "已刷新应用与桌宠状态视图", true, JSONObject().put("refreshed", true).put("attention", page.optInt("attention", 0)).put("running", page.optInt("running", 0)).toString(), mutating = true)
+                }
+                "whale_virtual_screen_control" -> {
+                    val action = args.str("action", "state").trim().lowercase()
+                    when (action) {
+                        "state" -> {
+                            val st = VirtualScreenService.current?.state()
+                                ?: JSONObject().put("active", false).put("starting", false).put("error", VirtualScreenService.lastError)
+                            ToolOutcome(name, "查询目标应用副屏状态", true, st.toString())
+                        }
+                        "stop" -> {
+                            val service = VirtualScreenService.current
+                            if (service == null) {
+                                app.stopService(Intent(app, VirtualScreenService::class.java))
+                                ToolOutcome(name, "副屏已停止", true, JSONObject().put("active", false).toString(), mutating = true)
+                            } else {
+                                val released = runCatching { service.requestStop().get(15, java.util.concurrent.TimeUnit.SECONDS) }.getOrDefault(false)
+                                ToolOutcome(name, if (released) "已停止目标应用副屏" else "停止副屏超时", released, JSONObject().put("active", !released).toString(), mutating = true)
+                            }
+                        }
+                        "start" -> {
+                            if (android.os.Build.VERSION.SDK_INT < 29) {
+                                throw IllegalStateException("目标应用副屏需要 Android 10（API 29）及以上系统")
+                            }
+                            if (VirtualScreenService.current != null) {
+                                val cur = VirtualScreenService.current?.state() ?: JSONObject().put("active", true)
+                                ToolOutcome(name, "目标应用副屏已在运行", true, cur.toString(), mutating = true)
+                            } else {
+                                val target = args.str("target").trim()
+                                require(target.isNotEmpty()) { "启动副屏需要传入 target（应用包名或组件名）" }
+                                val component = when (VirtualScreenPreferences.targetKind(target)) {
+                                    VirtualScreenTargetKind.COMPONENT -> VirtualScreenPolicy.component(target)
+                                    VirtualScreenTargetKind.PACKAGE -> {
+                                        val launch = app.packageManager.getLaunchIntentForPackage(target)
+                                            ?: throw IllegalStateException("未找到 $target 的可启动入口")
+                                        val flat = launch.component?.flattenToShortString()
+                                            ?: throw IllegalStateException("未找到 $target 的组件入口")
+                                        VirtualScreenPolicy.component(flat)
+                                    }
+                                    VirtualScreenTargetKind.INVALID -> throw IllegalArgumentException("目标应用包名或组件无效：$target")
+                                }
+                                val startReq = VirtualScreenPreferences.parseStart(JSONObject().put("target", target))
+                                VirtualScreenPreferences.apply(app, VirtualScreenPreferences.updateFromStart(startReq))
+                                val settings = VirtualScreenPreferences.read(app)
+                                val metrics = android.util.DisplayMetrics()
+                                val dm = app.getSystemService(android.hardware.display.DisplayManager::class.java)
+                                runCatching { dm?.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.getRealMetrics(metrics) }
+                                val (sw, sh, sd) = if (metrics.widthPixels > 0 && metrics.heightPixels > 0 && metrics.density > 0f) {
+                                    Triple(metrics.widthPixels, metrics.heightPixels, metrics.density)
+                                } else {
+                                    val fb = app.resources.displayMetrics
+                                    Triple(fb.widthPixels, fb.heightPixels, fb.density)
+                                }
+                                val spec = VirtualScreenStart.resolve(startReq, settings, sw, sh, sd)
+                                val orientation = startReq.orientation ?: settings.orientation
+                                val adaptive = startReq.adaptive ?: settings.adaptive
+                                androidx.core.content.ContextCompat.startForegroundService(
+                                    app,
+                                    Intent(app, VirtualScreenService::class.java)
+                                        .putExtra("component", component)
+                                        .putVirtualScreenStart(spec, adaptive, orientation),
+                                )
+                                var latestState = VirtualScreenService.current?.state()
+                                for (step in 0 until 12) {
+                                    if (latestState?.optString("sessionId")?.isNotBlank() == true) break
+                                    android.os.SystemClock.sleep(250L)
+                                    latestState = VirtualScreenService.current?.state()
+                                }
+                                val payload = latestState ?: JSONObject().put("starting", true).put("component", component)
+                                ToolOutcome(name, "已启动目标应用副屏：$target", true, payload.toString(), mutating = true)
+                            }
+                        }
+                        else -> throw IllegalArgumentException("不支持的副屏操作：$action")
+                    }
+                }
+                "whale_virtual_screen_action" -> {
+                    val service = VirtualScreenService.current
+                        ?: throw IllegalStateException("目标应用副屏未启动，请先调用 whale_virtual_screen_control(action='start') 启动")
+                    val sessionId = args.str("sessionId").trim().ifBlank { service.state().optString("sessionId").trim() }
+                    require(sessionId.isNotEmpty()) { "副屏会话尚未就绪，请稍候重试" }
+                    val req = JSONObject(args.toString()).put("sessionId", sessionId)
+                    val res = VirtualScreenCommands.execute("virtualScreenAction", req.toString())
+                    ToolOutcome(name, "执行副屏操控：${args.str("type")}", res.ok, res.text, mutating = true)
+                }
+                "whale_virtual_screen_vision" -> {
+                    val service = VirtualScreenService.current
+                        ?: throw IllegalStateException("目标应用副屏未启动，请先调用 whale_virtual_screen_control(action='start') 启动")
+                    val state = service.state()
+                    val sessionId = args.str("sessionId").trim().ifBlank { state.optString("sessionId").trim() }
+                    require(sessionId.isNotEmpty()) { "副屏会话尚未就绪，请稍候重试" }
+                    val res = VirtualScreenCommands.execute("virtualScreenCapture", JSONObject().put("sessionId", sessionId).toString())
+                    if (!res.ok) {
+                        ToolOutcome(name, "获取副屏画面失败", false, res.text)
+                    } else {
+                        val env = JSONObject(res.text)
+                        val b64 = env.optString("imageBase64").ifBlank { env.optString("dataBase64") }.ifBlank { env.optString("jpegBase64") }
+                        if (b64.isBlank()) {
+                            ToolOutcome(name, "读取副屏状态", true, res.text)
+                        } else {
+                            val jpeg = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                            val w = state.optInt("widthPx", 720).coerceAtLeast(1)
+                            val h = state.optInt("heightPx", 1280).coerceAtLeast(1)
+                            val analysis = WhaleVisionScreenAnalyzer.analyzeScreen(
+                                context = app,
+                                jpeg = jpeg,
+                                screenWidth = w,
+                                screenHeight = h,
+                                packageName = state.optString("component", "virtual-screen"),
+                                question = args.str("question", "").trim(),
+                                locateTarget = false,
+                            )
+                            ToolOutcome(name, "多模态识屏（副屏）", analysis.ok, JSONObject().put("sessionId", sessionId).put("analysis", analysis.text).toString())
+                        }
+                    }
                 }
                 else -> ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
             }
