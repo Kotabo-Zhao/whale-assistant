@@ -115,14 +115,7 @@ internal class CompanionPetDrawable(
 
     private fun show(bitmap: Bitmap, cel: PetCelSample) {
         if (retainedCel == null && displayed === bitmap && displayedClip == cel.clip && displayedFrame == cel.frame) return
-        val clipSwitched = displayedClip != cel.clip && !displayed.isRecycled
-        if (clipSwitched) {
-            val prevRect = displayedSource()
-            fadeFrom = retainedCel ?: displayed
-            fadeSource.set(prevRect)
-            fadeStartMs = android.os.SystemClock.uptimeMillis()
-        }
-        if (retainedCel != null && fadeFrom !== retainedCel) retainedCel?.recycle()
+        retainedCel?.recycle()
         retainedCel = null
         displayed = bitmap; displayedClip = cel.clip; displayedFrame = cel.frame
         invalidateSelf()
@@ -201,7 +194,8 @@ internal class CompanionPetDrawable(
         var targetRot = 0f
         var targetPivotFrac = 0.94f
 
-        if (!pose.reduced) {
+        val isTransitionClip = displayedClip.endsWith("_enter") || displayedClip.endsWith("_return")
+        if (!pose.reduced && !isTransitionClip) {
             val sec = (now % 60_000L) / 1000.0
             when (pose.action) {
                 PetAction.IDLE, PetAction.WAIT -> {
@@ -277,25 +271,7 @@ internal class CompanionPetDrawable(
         canvas.rotate(curRot, x + side * 0.5f, pivotY)
         canvas.scale(curSx, curSy, x + side * 0.5f, pivotY)
 
-        val prev = fadeFrom
-        if (prev != null && !prev.isRecycled && fadeStartMs > 0L) {
-            val elapsed = (now - fadeStartMs).coerceAtLeast(0L)
-            if (elapsed < FADE_DURATION_MS) {
-                val t = elapsed.toFloat() / FADE_DURATION_MS.toFloat()
-                val smooth = t * t * (3f - 2f * t)
-                val baseAlpha = paint.alpha
-                fadePaint.alpha = (baseAlpha * (1f - smooth)).toInt().coerceIn(0, 255)
-                canvas.drawBitmap(prev, fadeSource, destination, fadePaint)
-                fadePaint.alpha = (baseAlpha * smooth).toInt().coerceIn(0, 255)
-                canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, fadePaint)
-            } else {
-                fadeFrom = null
-                fadeStartMs = 0L
-                canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
-            }
-        } else {
-            canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
-        }
+        canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
         canvas.restore()
 
         if (!pose.reduced) {
