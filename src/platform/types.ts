@@ -1632,6 +1632,17 @@ export interface RuntimeWorkspaceFileList {
 
 export interface MarketProposal { id: string; packageName: string; createdAt: number; kind: 'install' | 'update'; suggestedVersion: string | null }
 
+export interface WhaleVoiceConfig {
+  configured: boolean
+  baseUrl: string
+  voice: string
+  speed: number
+  autoSpeakPet: boolean
+  hasRecordPermission: boolean
+  asrModel?: string
+  ttsModel?: string
+}
+
 export interface CompanionQuickSettings {
   memoryEnabled: boolean
   bubbleMemoryAccess: boolean
@@ -1656,6 +1667,10 @@ export interface RuntimeBridge {
   whaleNativeChat: (request: WhaleNativeChatRequest) => Promise<WhaleNativeChatResult>
   addWhaleChatListener?: (listener: (event: WhaleNativeChatStreamEvent) => void) => Promise<ListenerHandle>
   addWhaleAppControlListener?: (listener: (event: WhaleAppControlEvent) => void) => Promise<ListenerHandle>
+  getVoiceConfig?: () => Promise<WhaleVoiceConfig>
+  saveVoiceConfig?: (options: { apiKey?: string; baseUrl?: string; voice?: string; speed?: number; autoSpeakPet?: boolean }) => Promise<WhaleVoiceConfig>
+  testVoiceSpeak?: (text?: string) => Promise<{ ok: boolean }>
+  requestRecordAudioPermission?: () => Promise<{ granted: boolean; requested?: boolean }>
   setHarnessViewport?(viewport: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
   listHarnessReleases: () => Promise<HarnessReleaseList>
   manageHarnessVersions: (operation: HarnessVersionOperation, version?: string) => Promise<HarnessVersionsState>

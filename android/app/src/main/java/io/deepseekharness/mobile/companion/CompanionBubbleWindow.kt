@@ -787,7 +787,57 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 addView(action,LinearLayout.LayoutParams(0,-2,1f))
             }
         })
+        val ttsBtn = ui.text(if (WhaleVoiceEngine.readConfig(context).autoSpeakPet) "🔊" else "🔇", 15f, foreground).apply {
+            gravity = Gravity.CENTER; minWidth = dp(36); minHeight = dp(40)
+            contentDescription = "切换桌宠自动朗读"
+            setOnClickListener {
+                val cur = WhaleVoiceEngine.readConfig(context).autoSpeakPet
+                val next = !cur
+                WhaleVoiceEngine.saveConfig(context, autoSpeakPet = next)
+                if (!next) WhaleVoiceEngine.stopSpeaking()
+                text = if (next) "🔊" else "🔇"
+            }
+        }
+        val micBtn = ui.text("🎙", 15f, foreground).apply {
+            gravity = Gravity.CENTER; minWidth = dp(38); minHeight = dp(40)
+            contentDescription = "语音输入"
+        }
+        micBtn.setOnClickListener {
+            if (WhaleVoiceEngine.isRecording) {
+                micBtn.text = "…"
+                micBtn.isEnabled = false
+                status.text = "正在识别语音…"; status.visibility = android.view.View.VISIBLE
+                executor.execute {
+                    val res = WhaleVoiceEngine.stopAndTranscribe(context)
+                    handler.post {
+                        micBtn.text = "🎙"
+                        micBtn.isEnabled = true
+                        res.onSuccess { spoken ->
+                            status.visibility = android.view.View.GONE
+                            input.setText(spoken)
+                            input.setSelection(spoken.length)
+                            if (send.isEnabled) send.performClick()
+                        }.onFailure { err ->
+                            status.text = err.message ?: "语音识别失败"
+                            status.visibility = android.view.View.VISIBLE
+                        }
+                    }
+                }
+            } else {
+                val err = WhaleVoiceEngine.startRecording(context)
+                if (err != null) {
+                    status.text = err
+                    status.visibility = android.view.View.VISIBLE
+                } else {
+                    micBtn.text = "⏹"
+                    status.text = "正在听你说话… 再次点击停止并发送"
+                    status.visibility = android.view.View.VISIBLE
+                }
+            }
+        }
+        footer.addView(micBtn)
         footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        footer.addView(ttsBtn)
         shortcut(ui.string(R.string.pet_menu_session), R.drawable.ic_whale_nav_chat, ui.string(R.string.pet_menu_session)) {
             toolShelf.removeAllViews()
             sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
@@ -1159,6 +1209,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     result.onSuccess { answer ->
                         pendingQuestion = null; questionDialog?.dismiss(); questionDialog = null; answerQuestion.visibility = android.view.View.GONE
                         onState("reply")
+                        if (WhaleVoiceEngine.readConfig(context).autoSpeakPet) {
+                            WhaleVoiceEngine.speakText(context, answer.text)
+                        }
                         history.add(prior.last()); history.add(answer.message())
                         while (history.size > 18) { history.removeAt(0); history.removeAt(0) }
                         chat.snapshot(history)?.let { snapshot -> executor.execute {

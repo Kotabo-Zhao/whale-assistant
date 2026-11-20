@@ -2266,4 +2266,12 @@ export const english: Readonly<Record<string, string>> = {
   "前往配置模型与密钥": "Configure Models & Keys",
   "快捷空间": "Quick spaces",
   '核心权限总开关': 'Core permission switches',
+  '桌宠拟人语音（硅基流动 1 Key）': 'Pet Human-like Voice (SiliconFlow 1-Key)',
+  '硅基流动 API Key（免费听 + 拟人说）': 'SiliconFlow API Key (Free ASR + Emotional TTS)',
+  '保存语音 Key': 'Save Voice Key',
+  '选择桌宠音色': 'Choose Pet Voice',
+  '试听一声': 'Test Voice',
+  '授予麦克风权限': 'Grant Microphone',
+  '麦克风已授权': 'Microphone Granted',
+  '语音配置已保存': 'Voice config saved',
 }

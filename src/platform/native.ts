@@ -9,6 +9,7 @@ import { createBrowserBridge } from './browser'
 import { validateSelfCheckOperation, type SelfCheckOperation } from '../runtimeSelfCheck'
 import type {
   CompanionQuickSettings,
+  WhaleVoiceConfig,
   AppThemeMode,
   PluginRequest,
   PluginCatalog,
@@ -245,6 +246,10 @@ interface NativeRuntimePlugin {
   openCompanionSettings(): Promise<void>
   getCompanionQuickSettings(): Promise<CompanionQuickSettings>
   setCompanionQuickSetting(options: { field: keyof CompanionQuickSettings; value: boolean }): Promise<CompanionQuickSettings>
+  getVoiceConfig(): Promise<WhaleVoiceConfig>
+  saveVoiceConfig(options: { apiKey?: string; baseUrl?: string; voice?: string; speed?: number; autoSpeakPet?: boolean }): Promise<WhaleVoiceConfig>
+  testVoiceSpeak(options: { text?: string }): Promise<{ ok: boolean }>
+  requestRecordAudioPermission(): Promise<{ granted: boolean; requested?: boolean }>
   insertTaskDraft(options: { text: string }): Promise<void>
   mailboxState(): Promise<unknown>
   mailboxDirectory(options: { root: MailboxRoot; subdirectory?: string }): Promise<unknown>
@@ -594,6 +599,10 @@ function createNativeBridge(): RuntimeBridge {
     openCompanionSettings: () => NativeRuntime.openCompanionSettings(),
     getCompanionQuickSettings: () => NativeRuntime.getCompanionQuickSettings(),
     setCompanionQuickSetting: (field, value) => NativeRuntime.setCompanionQuickSetting({ field, value }),
+    getVoiceConfig: () => NativeRuntime.getVoiceConfig(),
+    saveVoiceConfig: options => NativeRuntime.saveVoiceConfig(options),
+    testVoiceSpeak: text => NativeRuntime.testVoiceSpeak(text ? { text } : {}),
+    requestRecordAudioPermission: () => NativeRuntime.requestRecordAudioPermission(),
     insertTaskDraft: text => NativeRuntime.insertTaskDraft({ text }),
     getMailboxState: () => NativeRuntime.mailboxState().then(validateMailboxState),
     getMailboxDirectory: (root, subdirectory) => NativeRuntime

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Bell, Accessibility, Sparkles } from 'lucide-react'
+import { Bell, Accessibility, Sparkles, Volume2, Mic } from 'lucide-react'
 import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
-import type { CompanionQuickSettings } from '../platform/types'
+import type { CompanionQuickSettings, WhaleVoiceConfig } from '../platform/types'
 import {
   AUTONOMY_PRESETS,
   DEFAULT_AUTONOMY_PRESET,
@@ -30,6 +30,15 @@ const MASTER_SWITCHES: Array<{ key: MasterSwitchKey; title: string; hint: string
     title: '主动陪伴、通知与日程简报',
     hint: '合并通知摘要、桌面气泡、日历读取、休息提醒与每日简报。',
   },
+]
+
+const VOICE_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: 'diana', label: 'Diana · 欢快女声（推荐）' },
+  { id: 'claire', label: 'Claire · 温柔女声' },
+  { id: 'bella', label: 'Bella · 活力女声' },
+  { id: 'anna', label: 'Anna · 沉稳女声' },
+  { id: 'alex', label: 'Alex · 沉稳男声' },
+  { id: 'benjamin', label: 'Benjamin · 低沉男声' },
 ]
 
 const PRESET_MASTER_FLAGS: Record<AutonomyPresetId, Record<MasterSwitchKey, boolean>> = {
@@ -92,6 +101,16 @@ export function WhaleAutonomyCard({
     PRESET_MASTER_FLAGS[resolveAutonomyPreset(autonomyId).id],
   )
   const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [voiceCfg, setVoiceCfg] = useState<WhaleVoiceConfig>({
+    configured: false,
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    voice: 'diana',
+    speed: 1.05,
+    autoSpeakPet: true,
+    hasRecordPermission: false,
+  })
+  const [voiceKeyInput, setVoiceKeyInput] = useState('')
+  const [voiceStatus, setVoiceStatus] = useState('')
 
   useEffect(() => {
     let active = true
@@ -103,6 +122,11 @@ export function WhaleAutonomyCard({
       .catch(() => {
         // Keep local preset defaults on web preview.
       })
+    if (runtimeBridge.getVoiceConfig) {
+      void runtimeBridge.getVoiceConfig()
+        .then(cfg => { if (active && cfg) setVoiceCfg(cfg) })
+        .catch(() => undefined)
+    }
     return () => {
       active = false
     }
@@ -141,6 +165,18 @@ export function WhaleAutonomyCard({
       setSyncState('saved')
     } catch {
       setSyncState('error')
+    }
+  }
+
+  const saveVoice = async (patch: { apiKey?: string; voice?: string; autoSpeakPet?: boolean }): Promise<void> => {
+    if (!runtimeBridge.saveVoiceConfig) return
+    try {
+      const next = await runtimeBridge.saveVoiceConfig(patch)
+      setVoiceCfg(next)
+      if (patch.apiKey !== undefined) setVoiceKeyInput('')
+      setVoiceStatus(t('语音配置已保存'))
+    } catch {
+      setVoiceStatus('')
     }
   }
 
@@ -189,6 +225,62 @@ export function WhaleAutonomyCard({
           </label>
         ))}
       </div>
+
+      <div className="whale-voice-box">
+        <div className="whale-voice-head">
+          <strong>{t('桌宠拟人语音（硅基流动 1 Key）')}</strong>
+          <span>{voiceStatus || (voiceCfg.configured ? t('已配置') : t('未配置'))}</span>
+        </div>
+        <div className="whale-voice-row">
+          <input
+            type="password"
+            value={voiceKeyInput}
+            placeholder={t('硅基流动 API Key（免费听 + 拟人说）')}
+            onChange={e => setVoiceKeyInput(e.target.value)}
+          />
+          <button
+            type="button"
+            className="whale-perm-chip"
+            disabled={!voiceKeyInput.trim()}
+            onClick={() => { void saveVoice({ apiKey: voiceKeyInput.trim() }) }}
+          >
+            {t('保存语音 Key')}
+          </button>
+        </div>
+        <div className="whale-voice-row">
+          <select
+            aria-label={t('选择桌宠音色')}
+            value={voiceCfg.voice}
+            onChange={e => { void saveVoice({ voice: e.target.value }) }}
+          >
+            {VOICE_OPTIONS.map(opt => (
+              <option key={opt.id} value={opt.id}>{opt.label}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="whale-perm-chip"
+            disabled={!voiceCfg.configured}
+            onClick={() => { void runtimeBridge.testVoiceSpeak?.() }}
+          >
+            <Volume2 size={13} aria-hidden="true" />
+            {t('试听一声')}
+          </button>
+          <button
+            type="button"
+            className="whale-perm-chip"
+            onClick={() => {
+              void runtimeBridge.requestRecordAudioPermission?.().then(res => {
+                if (res?.granted) setVoiceCfg(prev => ({ ...prev, hasRecordPermission: true }))
+              })
+            }}
+          >
+            <Mic size={13} aria-hidden="true" />
+            {voiceCfg.hasRecordPermission ? t('麦克风已授权') : t('授予麦克风权限')}
+          </button>
+        </div>
+      </div>
+
       {(onOpenOverlay || onOpenAccessibility || onOpenNotifications) && (
         <div className="whale-perm-shortcuts" aria-label={t('系统权限快捷授权')}>
           {onOpenOverlay && (

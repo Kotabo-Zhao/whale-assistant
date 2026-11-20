@@ -213,6 +213,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_worker_cancel", "取消一个正在运行的原生后台 Worker 任务。", mapOf("id" to "Worker 任务 ID"), listOf("id")))
             array.put(schema("whale_worker_manage", "管理与清理后台 Worker 历史及桌宠红点徽标（解决界面残余数字与历史记录删不掉的问题）。", mapOf("action" to "clear_completed（清理已完成与残留徽标）/ delete（按 id 删除单条）/ clear_badge（仅清零桌宠待办红点）", "id" to "action=delete 时的 Worker ID"), listOf("action")))
             array.put(schema("whale_ui_refresh", "强制刷新鲸鱼助手主界面与悬浮桌宠状态徽标，同步最新数据视图。", emptyMap(), emptyList()))
+            array.put(schema("whale_voice_speak", "用硅基流动 CosyVoice2 拟人语音让桌宠大声说出一句话。", mapOf("text" to "要朗读的自然中文或英文内容", "voice" to "可选音色：diana / claire / bella / anna / alex / benjamin"), listOf("text")))
+            array.put(schema("whale_voice_config", "修改桌宠语音配置（切换音色、语速或开关自动朗读）。", mapOf("autoSpeakPet" to "可选：true 或 false", "voice" to "可选：diana（欢快女声）/ claire（温柔女声）/ bella（活力女声）/ anna（沉稳女声）/ alex（沉稳男声）", "speed" to "可选语速 0.7-1.5"), emptyList()))
             array.put(schema("whale_web_search", "联网实时搜索网页信息，返回标题、摘要与链接。", mapOf("query" to "搜索关键词", "limit" to "可选返回条数（1-8，默认 5）"), listOf("query")))
             array.put(schema("whale_web_fetch", "联网抓取指定 HTTPS/HTTP 网页或文本接口的正文内容。", mapOf("url" to "完整网页 URL", "maxChars" to "可选最大字符数，默认 6000"), listOf("url")))
             array.put(schema("whale_memory_delete", "按 ID 删除一条本地长期记忆。", mapOf("id" to "记忆 UUID"), listOf("id")))
@@ -245,6 +247,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_ui_refresh",
         "whale_virtual_screen_control",
         "whale_virtual_screen_action",
+        "whale_voice_speak",
+        "whale_voice_config",
         "whale_app_navigate",
         "whale_app_appearance",
         "whale_app_language",
@@ -1165,6 +1169,24 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             ToolOutcome(name, "多模态识屏（副屏）", analysis.ok, JSONObject().put("sessionId", sessionId).put("analysis", analysis.text).toString())
                         }
                     }
+                }
+                "whale_voice_speak" -> {
+                    val text = args.str("text").trim()
+                    require(text.isNotEmpty()) { "缺少要朗读的文本 text" }
+                    val voice = args.str("voice").trim().takeIf { it.isNotEmpty() }
+                    if (WhaleVoiceEngine.readConfig(app).apiKey.isBlank()) {
+                        throw IllegalStateException("尚未配置硅基流动 API Key，请先在设置中填写语音 Key")
+                    }
+                    WhaleVoiceEngine.speakText(app, text, voiceOverride = voice)
+                    ToolOutcome(name, "桌宠开始语音播报", true, JSONObject().put("speaking", true).put("chars", text.length).toString(), mutating = true)
+                }
+                "whale_voice_config" -> {
+                    val autoSpeak = if (args.has("autoSpeakPet") && !args.isNull("autoSpeakPet")) args.optBoolean("autoSpeakPet") else null
+                    val voice = args.str("voice").trim().takeIf { it.isNotEmpty() }
+                    val speed = if (args.has("speed") && !args.isNull("speed")) args.optDouble("speed", 1.05).toFloat() else null
+                    WhaleVoiceEngine.saveConfig(app, voice = voice, speed = speed, autoSpeakPet = autoSpeak)
+                    if (autoSpeak == false) WhaleVoiceEngine.stopSpeaking()
+                    ToolOutcome(name, "已更新桌宠语音设置", true, WhaleVoiceEngine.snapshotJson(app).toString(), mutating = true)
                 }
                 else -> ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
             }

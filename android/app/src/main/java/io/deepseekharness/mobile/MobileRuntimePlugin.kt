@@ -4319,6 +4319,58 @@ class MobileRuntimePlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getVoiceConfig(call: PluginCall) {
+        execute(call) {
+            JSObject(io.deepseekharness.mobile.companion.WhaleVoiceEngine.snapshotJson(context).toString())
+        }
+    }
+
+    @PluginMethod
+    fun saveVoiceConfig(call: PluginCall) {
+        execute(call) {
+            val apiKey = if (call.data.has("apiKey")) call.getString("apiKey") else null
+            val baseUrl = call.getString("baseUrl")
+            val voice = call.getString("voice")
+            val speed = call.getDouble("speed")?.toFloat()
+            val autoSpeak = call.getBoolean("autoSpeakPet")
+            io.deepseekharness.mobile.companion.WhaleVoiceEngine.saveConfig(
+                context = context,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
+                voice = voice,
+                speed = speed,
+                autoSpeakPet = autoSpeak,
+            )
+            JSObject(io.deepseekharness.mobile.companion.WhaleVoiceEngine.snapshotJson(context).toString())
+        }
+    }
+
+    @PluginMethod
+    fun testVoiceSpeak(call: PluginCall) {
+        execute(call) {
+            val text = call.getString("text")?.takeIf(String::isNotBlank)
+                ?: "哈喽主人！小鲸鱼已经连上硅基流动的拟人语音啦，以后可以随时直接跟我说话哦。"
+            io.deepseekharness.mobile.companion.WhaleVoiceEngine.speakText(context, text)
+            JSObject().put("ok", true)
+        }
+    }
+
+    @PluginMethod
+    fun requestRecordAudioPermission(call: PluginCall) {
+        val act = activity
+        if (act == null) {
+            call.reject("无法获取当前界面", "NO_ACTIVITY")
+            return
+        }
+        if (io.deepseekharness.mobile.companion.WhaleVoiceEngine.hasRecordPermission(context)) {
+            call.resolve(JSObject().put("granted", true))
+            return
+        }
+        androidx.core.app.ActivityCompat.requestPermissions(act, arrayOf(android.Manifest.permission.RECORD_AUDIO), 4109)
+        call.resolve(JSObject().put("granted", false).put("requested", true))
+    }
+
+    @PluginMethod
     fun openCompanionSettings(call: PluginCall) {
         execute(call) {
             context.startActivity(Intent(context, io.deepseekharness.mobile.companion.CompanionActivity::class.java)
