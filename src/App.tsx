@@ -5546,8 +5546,8 @@ export function App() {
     <div className="app-shell management-shell">
       <AppBackground />
       <AppSidebar activeView={activeView} onNavigate={setActiveView} />
-      <div className={'app-frame' + (activeView === 'whale-chat' ? ' is-chat-frame' : '')}>
-        {activeView !== 'whale-chat' && <header className="mobile-header">
+      <div className={'app-frame' + (activeView === 'whale-chat' ? ' is-chat-frame' : '') + (activeView !== 'conversation' && activeView !== 'harness' ? ' is-headerless' : '')}>
+        {(activeView === 'conversation' || activeView === 'harness') && <header className="mobile-header">
           <button className="header-brand-group brand-home" type="button" aria-label={t('鲸鱼助手')} onClick={() => setActiveView(canEnterConversation(runtime, settings) && !conversationEntrySuppressed.current ? 'harness' : 'conversation')}><Brand /></button>
           <div className="header-actions">
             <PhaseBadge phase={runtime.phase} />

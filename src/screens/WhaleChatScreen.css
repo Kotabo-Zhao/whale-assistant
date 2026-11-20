@@ -20,15 +20,13 @@
 .whale-chat-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 48px;
-  padding: max(8px, env(safe-area-inset-top, 8px)) 14px 8px;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 40px;
+  padding: max(6px, env(safe-area-inset-top, 6px)) 12px 2px;
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line-faint);
+  background: transparent;
+  border-bottom: 0;
 }
 
 .whale-chat-brand {

@@ -17,11 +17,9 @@ import {
   Slash,
   Trash2,
   Wrench,
-  X,
 } from 'lucide-react'
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
-import whaleChanBadge from '../assets/whale-chan-badge.png'
 import { t } from '../i18n'
 import { useInterfaceStyle } from '../theme'
 import type { RuntimeBridge, WhaleNativeChatStep } from '../platform/types'
@@ -43,15 +41,6 @@ export interface WhaleChatSession {
   title: string
   updatedAt: number
   messages: WhaleChatMessage[]
-}
-
-interface AmbientNotice {
-  id: string
-  kind: 'briefing' | 'capture'
-  text: string
-  actionLabel: string
-  prompt: string
-  targetView: AppView
 }
 
 interface ActionReceipt {
@@ -198,13 +187,11 @@ export interface WhaleChatScreenProps {
 
 export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const style = useInterfaceStyle()
-  const headerMark = style === 'simple' ? grokMark : whaleChanBadge
   const heroMark = style === 'simple' ? grokMark : whaleChanAvatar
   const [sessions, setSessions] = useState<WhaleChatSession[]>(loadSessions)
   const [activeId, setActiveId] = useState<string>(() => loadActiveSessionId(loadSessions()))
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [slashOpen, setSlashOpen] = useState(false)
-  const [ambient, setAmbient] = useState<AmbientNotice | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [input, setInput] = useState('')
@@ -238,61 +225,6 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, streamingText, streamingSteps])
-
-  // 按需情境轻条：静默感知新分享入库的资料与待处理简报/提醒，平时隐藏不打扰。
-  useEffect(() => {
-    let disposed = false
-    const cleanups: Array<() => Promise<void>> = []
-
-    const refreshAmbient = async (preferCapture = false) => {
-      if (!bridge.companionDashboard) return
-      try {
-        if (preferCapture) {
-          const cap = await bridge.companionDashboard({ operation: 'knowledgeRecentCaptures' }) as { items?: Array<{ title?: string }> }
-          if (!disposed && Array.isArray(cap?.items) && cap.items.length > 0) {
-            setAmbient({
-              id: `cap-${cap.items.length}`,
-              kind: 'capture',
-              text: t('已静默收入 {0} 条新资料，可随时总结', cap.items.length),
-              actionLabel: t('一键总结'),
-              prompt: '帮我检索并总结我刚刚存入本地资料库的最新内容。',
-              targetView: 'assistant-memory',
-            })
-            return
-          }
-        }
-        const brief = await bridge.companionDashboard({ operation: 'assistantBriefings' }) as { items?: Array<{ title?: string }> }
-        if (!disposed && Array.isArray(brief?.items) && brief.items.length > 0) {
-          setAmbient({
-            id: `brief-${brief.items.length}`,
-            kind: 'briefing',
-            text: t('有 {0} 条待关注事项与简报', brief.items.length),
-            actionLabel: t('让鲸鱼梳理'),
-            prompt: '帮我梳理我当前未完成的待办事项和最新简报重点。',
-            targetView: 'assistant-tasks',
-          })
-        }
-      } catch {
-        // Ignore when running outside native container.
-      }
-    }
-
-    void refreshAmbient(false)
-    if (bridge.addKnowledgeCapturesListener) {
-      void bridge.addKnowledgeCapturesListener(() => { void refreshAmbient(true) })
-        .then(h => { if (disposed) void h.remove(); else cleanups.push(() => h.remove()) })
-        .catch(() => {})
-    }
-    if (bridge.addAssistantBriefingsListener) {
-      void bridge.addAssistantBriefingsListener(() => { void refreshAmbient(false) })
-        .then(h => { if (disposed) void h.remove(); else cleanups.push(() => h.remove()) })
-        .catch(() => {})
-    }
-    return () => {
-      disposed = true
-      cleanups.forEach(fn => { void fn() })
-    }
-  }, [bridge])
 
   useEffect(() => {
     if (!bridge.addWhaleChatListener) return
@@ -442,11 +374,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
 
   return (
     <section className="whale-chat-screen" aria-label={t('鲸鱼助手对话')}>
-      <header className="whale-chat-header">
-        <div className="whale-chat-brand">
-          <img src={headerMark} alt="" width={28} height={28} className="whale-brand-avatar" />
-          <h1>{currentSession.title === '新对话' ? t('鲸鱼助手') : currentSession.title}</h1>
-        </div>
+      <header className="whale-chat-header is-minimal">
         <div className="whale-chat-shortcuts" aria-label={t('常用功能入口')}>
           <button
             type="button"
@@ -470,44 +398,6 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           </button>
         </div>
       </header>
-
-      {ambient && (
-        <div className="whale-ambient-bar" role="region" aria-label={t('情境提示')}>
-          <span className="whale-ambient-text">
-            {ambient.kind === 'briefing' ? <BellRing size={14} aria-hidden="true" /> : <BookmarkCheck size={14} aria-hidden="true" />}
-            {ambient.text}
-          </span>
-          <div className="whale-ambient-actions">
-            <button
-              type="button"
-              className="whale-ambient-btn"
-              disabled={sending}
-              onClick={() => {
-                const prompt = ambient.prompt
-                setAmbient(null)
-                void sendText(prompt)
-              }}
-            >
-              {ambient.actionLabel}
-            </button>
-            <button
-              type="button"
-              className="whale-ambient-link"
-              onClick={() => onNavigate(ambient.targetView)}
-            >
-              {t('查看')}
-            </button>
-            <button
-              type="button"
-              className="whale-ambient-close"
-              aria-label={t('关闭提示')}
-              onClick={() => setAmbient(null)}
-            >
-              <X size={13} />
-            </button>
-          </div>
-        </div>
-      )}
 
       {sessionsOpen && (
         <aside className="whale-sessions-drawer" aria-label={t('本地会话管理')}>

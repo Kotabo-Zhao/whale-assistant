@@ -260,10 +260,15 @@ body {
 }
 
 /* Zero-Overlap Full-Height Chat Frame */
-.app-frame.is-chat-frame {
+.app-frame.is-chat-frame,
+.app-frame.is-headerless {
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
+}
+
+.app-frame.is-headerless:not(.is-chat-frame) > .app-main {
+  padding-top: max(12px, env(safe-area-inset-top, 12px));
 }
 
 .app-main.is-chat-main {
@@ -378,17 +383,13 @@ textarea {
   transition: border-color 130ms ease, background-color 130ms ease, box-shadow 130ms ease, color 130ms ease;
 }
 
-input:not([type='checkbox']):not([type='radio']):not([type='range']),
-select,
-textarea {
+:where(input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea) {
   border: 1px solid var(--line-strong);
   background: var(--surface);
   color: var(--ink);
 }
 
-input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
-select:focus,
-textarea:focus {
+:where(input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea):focus {
   outline: none;
   border-color: var(--blue);
   box-shadow: var(--ring);
@@ -685,8 +686,9 @@ input[type='checkbox'][role='switch']:disabled,
   color: var(--muted);
   border-radius: 9px;
   min-height: 36px;
-  padding: 6px 10px;
-  font-size: 0.82rem;
+  padding: 6px 6px;
+  font-size: 0.78rem;
+  white-space: nowrap;
   font-weight: var(--weight-medium);
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
@@ -922,4 +924,10 @@ input[type='checkbox'][role='switch']:disabled,
   .whale-autonomy-card {
     padding: 14px;
   }
+}
+
+.settings-search input {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
