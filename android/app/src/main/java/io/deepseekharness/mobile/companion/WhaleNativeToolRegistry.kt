@@ -122,7 +122,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "控制全屏悬浮桌宠：启动、隐藏关闭、调整尺寸或重置屏幕位置。",
                 mapOf(
                     "action" to "start / stop / resize / reset_position / state",
-                    "sizeDp" to "resize 时可选尺寸：48 / 56 / 64 / 72",
+                    "sizeDp" to "resize 时无级尺寸（44~160 任意整数 dp，默认 88）",
                     "state" to "state 时可选桌宠状态：idle / listening / thinking / happy",
                 ),
                 listOf("action"),
@@ -530,9 +530,11 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             ToolOutcome(name, "隐藏悬浮桌宠", true, JSONObject().put("ok", true).put("action", "stop").toString(), mutating = true)
                         }
                         "resize" -> {
-                            val size = args.str("sizeDp", "56").toIntOrNull() ?: 56
+                            val raw = args.str("sizeDp", "88").toIntOrNull() ?: OverlayBallPreferences.DEFAULT_SIZE_DP
+                            val size = raw.coerceIn(OverlayBallPreferences.MIN_SIZE_DP, OverlayBallPreferences.MAX_SIZE_DP)
                             OverlayBallPreferences.from(app).writeSizeDp(size)
-                            ToolOutcome(name, "调整桌宠尺寸为 ${size}dp", true, JSONObject().put("ok", true).put("sizeDp", size).toString(), mutating = true)
+                            val applied = OverlayBallService.applyCompanionSizePreference()
+                            ToolOutcome(name, "调整桌宠尺寸为 ${size}dp", true, JSONObject().put("ok", true).put("sizeDp", size).put("appliedLive", applied).toString(), mutating = true)
                         }
                         "reset_position" -> {
                             OverlayBallPreferences.from(app).clearPosition()

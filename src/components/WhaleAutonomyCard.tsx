@@ -111,6 +111,7 @@ export function WhaleAutonomyCard({
   })
   const [voiceKeyInput, setVoiceKeyInput] = useState('')
   const [voiceStatus, setVoiceStatus] = useState('')
+  const [petSizeDp, setPetSizeDp] = useState(88)
 
   useEffect(() => {
     let active = true
@@ -125,6 +126,11 @@ export function WhaleAutonomyCard({
     if (runtimeBridge.getVoiceConfig) {
       void runtimeBridge.getVoiceConfig()
         .then(cfg => { if (active && cfg) setVoiceCfg(cfg) })
+        .catch(() => undefined)
+    }
+    if (runtimeBridge.getPetSize) {
+      void runtimeBridge.getPetSize()
+        .then(res => { if (active && res && typeof res.sizeDp === 'number') setPetSizeDp(res.sizeDp) })
         .catch(() => undefined)
     }
     return () => {
@@ -224,6 +230,30 @@ export function WhaleAutonomyCard({
             />
           </label>
         ))}
+      </div>
+
+      <div className="whale-voice-box">
+        <div className="whale-voice-head">
+          <strong>{t('桌宠大小无级调节')}</strong>
+          <span>{petSizeDp} dp</span>
+        </div>
+        <div className="whale-size-slider-row">
+          <small>44</small>
+          <input
+            type="range"
+            min={44}
+            max={160}
+            step={1}
+            value={petSizeDp}
+            aria-label={t('桌宠大小无级调节')}
+            onChange={e => {
+              const next = Number(e.target.value)
+              setPetSizeDp(next)
+              void runtimeBridge.setPetSize?.(next).catch(() => undefined)
+            }}
+          />
+          <small>160</small>
+        </div>
       </div>
 
       <div className="whale-voice-box">

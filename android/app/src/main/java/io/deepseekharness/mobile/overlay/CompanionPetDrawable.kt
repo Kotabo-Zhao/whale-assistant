@@ -15,8 +15,12 @@ internal class CompanionPetDrawable(
     private val main: Handler = Handler(Looper.getMainLooper()),
 ) : Drawable(), AutoCloseable {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
+    private val fadeSource = Rect()
     private val destination = RectF()
+    private var fadeFrom: Bitmap? = null
+    private var fadeStartMs = 0L
     private val cache = LinkedHashMap<String, Bitmap>(4, .75f, true)
     private var decoding = false
     private val failed = mutableSetOf<String>()
@@ -99,7 +103,14 @@ internal class CompanionPetDrawable(
 
     private fun show(bitmap: Bitmap, cel: PetCelSample) {
         if (retainedCel == null && displayed === bitmap && displayedClip == cel.clip && displayedFrame == cel.frame) return
-        retainedCel?.recycle()
+        val clipSwitched = displayedClip != cel.clip && !displayed.isRecycled
+        if (clipSwitched) {
+            val prevRect = displayedSource()
+            fadeFrom = retainedCel ?: displayed
+            fadeSource.set(prevRect)
+            fadeStartMs = android.os.SystemClock.uptimeMillis()
+        }
+        if (retainedCel != null && fadeFrom !== retainedCel) retainedCel?.recycle()
         retainedCel = null
         displayed = bitmap; displayedClip = cel.clip; displayedFrame = cel.frame
         invalidateSelf()
@@ -139,7 +150,7 @@ internal class CompanionPetDrawable(
         val entries = cache.entries.iterator()
         while ((cache.size > MAX_ATLASES || cachedBitmapBytes > cacheLimitBytes) && entries.hasNext()) {
             val entry = entries.next()
-            if (entry.value === displayed) continue
+            if (entry.value === displayed || entry.value === fadeFrom) continue
             entry.value.recycle()
             entries.remove()
         }
@@ -169,6 +180,24 @@ internal class CompanionPetDrawable(
         val x = bounds.exactCenterX() - side / 2
         val y = bounds.exactCenterY() - side / 2
         destination.set(x, y, x + side, y + side)
+        val prev = fadeFrom
+        if (prev != null && !prev.isRecycled && fadeStartMs > 0L) {
+            val elapsed = (android.os.SystemClock.uptimeMillis() - fadeStartMs).coerceAtLeast(0L)
+            if (elapsed < FADE_DURATION_MS) {
+                val t = elapsed.toFloat() / FADE_DURATION_MS.toFloat()
+                val smooth = t * t * (3f - 2f * t)
+                val baseAlpha = paint.alpha
+                fadePaint.alpha = (baseAlpha * (1f - smooth)).toInt().coerceIn(0, 255)
+                canvas.drawBitmap(prev, fadeSource, destination, fadePaint)
+                fadePaint.alpha = (baseAlpha * smooth).toInt().coerceIn(0, 255)
+                canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, fadePaint)
+                main.postDelayed({ if (!closed) invalidateSelf() }, 16L)
+                return
+            } else {
+                fadeFrom = null
+                fadeStartMs = 0L
+            }
+        }
         canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
     }
 
@@ -180,12 +209,15 @@ internal class CompanionPetDrawable(
     override fun close() {
         closed = true
         onAtlasReady = null
+        fadeFrom = null
+        fadeStartMs = 0L
         retainedCel?.recycle()
         retainedCel = null
         cache.values.forEach { if (!it.isRecycled) it.recycle() }
         cache.clear()
     }
     companion object {
+        const val FADE_DURATION_MS = 160L
         const val MAX_ATLASES = 3
         const val MAX_BITMAP_BYTES = 32L * 1024 * 1024
     }

@@ -1673,6 +1673,8 @@ export interface RuntimeBridge {
   startVoiceRecording?: () => Promise<{ ok: boolean; error?: string }>
   stopVoiceRecording?: () => Promise<{ ok: boolean; text?: string; error?: string }>
   stopVoiceSpeaking?: () => Promise<{ ok: boolean }>
+  getPetSize?: () => Promise<{ sizeDp: number; minDp: number; maxDp: number }>
+  setPetSize?: (sizeDp: number) => Promise<{ ok: boolean; sizeDp: number; appliedLive: boolean }>
   requestRecordAudioPermission?: () => Promise<{ granted: boolean; requested?: boolean }>
   setHarnessViewport?(viewport: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
   listHarnessReleases: () => Promise<HarnessReleaseList>

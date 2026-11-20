@@ -252,6 +252,8 @@ interface NativeRuntimePlugin {
   startVoiceRecording(): Promise<{ ok: boolean; error?: string }>
   stopVoiceRecording(): Promise<{ ok: boolean; text?: string; error?: string }>
   stopVoiceSpeaking(): Promise<{ ok: boolean }>
+  getPetSize(): Promise<{ sizeDp: number; minDp: number; maxDp: number }>
+  setPetSize(options: { sizeDp: number }): Promise<{ ok: boolean; sizeDp: number; appliedLive: boolean }>
   requestRecordAudioPermission(): Promise<{ granted: boolean; requested?: boolean }>
   insertTaskDraft(options: { text: string }): Promise<void>
   mailboxState(): Promise<unknown>
@@ -608,6 +610,8 @@ function createNativeBridge(): RuntimeBridge {
     startVoiceRecording: () => NativeRuntime.startVoiceRecording(),
     stopVoiceRecording: () => NativeRuntime.stopVoiceRecording(),
     stopVoiceSpeaking: () => NativeRuntime.stopVoiceSpeaking(),
+    getPetSize: () => NativeRuntime.getPetSize(),
+    setPetSize: sizeDp => NativeRuntime.setPetSize({ sizeDp }),
     requestRecordAudioPermission: () => NativeRuntime.requestRecordAudioPermission(),
     insertTaskDraft: text => NativeRuntime.insertTaskDraft({ text }),
     getMailboxState: () => NativeRuntime.mailboxState().then(validateMailboxState),

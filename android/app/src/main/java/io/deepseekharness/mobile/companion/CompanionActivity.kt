@@ -1079,16 +1079,47 @@ class CompanionActivity : AppCompatActivity() {
 
     private fun chooseAvatarSize() {
         val preferences = io.deepseekharness.mobile.overlay.OverlayBallPreferences.from(this)
-        val sizes = io.deepseekharness.mobile.overlay.OverlayBallPreferences.SIZES_DP
-        val current = sizes.indexOf(preferences.readSizeDp()).coerceAtLeast(0)
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("选择鲸鱼娘大小")
-            .setSingleChoiceItems(arrayOf("小 · 64 dp", "中 · 88 dp", "大 · 112 dp"), current) { dialog, index ->
-                preferences.writeSizeDp(sizes[index])
-                val applied = io.deepseekharness.mobile.OverlayBallService.applyCompanionSizePreference()
-                dialog.dismiss()
-                android.widget.Toast.makeText(this, if (applied) "形象大小已更新。" else "已保存，下次显示悬浮形象时生效。", android.widget.Toast.LENGTH_LONG).show()
+        val minDp = io.deepseekharness.mobile.overlay.OverlayBallPreferences.MIN_SIZE_DP
+        val maxDp = io.deepseekharness.mobile.overlay.OverlayBallPreferences.MAX_SIZE_DP
+        val initial = preferences.readSizeDp().coerceIn(minDp, maxDp)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(14), dp(22), dp(8))
+        }
+        val label = TextView(this).apply {
+            text = "当前大小：${initial} dp（拖动实时预览）"
+            textSize = 15f
+            setTextColor(ink)
+            setPadding(0, 0, 0, dp(10))
+        }
+        val seek = android.widget.SeekBar(this).apply {
+            max = maxDp - minDp
+            progress = initial - minDp
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: android.widget.SeekBar?, p: Int, fromUser: Boolean) {
+                    val value = minDp + p
+                    label.text = "当前大小：${value} dp（拖动实时预览）"
+                    if (fromUser) {
+                        preferences.writeSizeDp(value)
+                        io.deepseekharness.mobile.OverlayBallService.applyCompanionSizePreference()
+                    }
+                }
+                override fun onStartTrackingTouch(bar: android.widget.SeekBar?) = Unit
+                override fun onStopTrackingTouch(bar: android.widget.SeekBar?) = Unit
+            })
+        }
+        box.addView(label)
+        box.addView(seek)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("无级调节鲸鱼娘大小")
+            .setView(box)
+            .setPositiveButton("完成") { _, _ -> render() }
+            .setNeutralButton("恢复默认 88 dp") { _, _ ->
+                preferences.writeSizeDp(io.deepseekharness.mobile.overlay.OverlayBallPreferences.DEFAULT_SIZE_DP)
+                io.deepseekharness.mobile.OverlayBallService.applyCompanionSizePreference()
                 render()
-            }.setNegativeButton("取消", null).show()
+            }
+            .show()
     }
 
     private fun readinessCard() {

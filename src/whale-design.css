@@ -931,3 +931,22 @@ input[type='checkbox'][role='switch']:disabled,
   background: transparent;
   box-shadow: none;
 }
+
+.whale-size-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.whale-size-slider-row small {
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.whale-size-slider-row input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}

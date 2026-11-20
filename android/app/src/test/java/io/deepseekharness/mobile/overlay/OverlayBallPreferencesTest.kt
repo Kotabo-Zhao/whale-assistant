@@ -30,6 +30,17 @@ class OverlayBallPreferencesTest {
     }
 
     @Test
+    fun supportsSteplessSizeValuesWithinRange() {
+        val preferences = OverlayBallPreferences(FakeStorage())
+        for (size in listOf(44, 57, 73, 105, 138, 160)) {
+            preferences.writeSizeDp(size)
+            assertEquals(size, preferences.readSizeDp())
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { preferences.writeSizeDp(43) }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { preferences.writeSizeDp(161) }
+    }
+
+    @Test
     fun returnsNullWhenNothingStored() {
         val preferences = OverlayBallPreferences(FakeStorage())
         assertNull(preferences.readPosition())

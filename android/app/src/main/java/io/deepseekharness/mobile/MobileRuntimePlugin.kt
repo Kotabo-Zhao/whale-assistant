@@ -4387,6 +4387,31 @@ class MobileRuntimePlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getPetSize(call: PluginCall) {
+        execute(call) {
+            val size = io.deepseekharness.mobile.overlay.OverlayBallPreferences.from(context).readSizeDp()
+            JSObject()
+                .put("sizeDp", size)
+                .put("minDp", io.deepseekharness.mobile.overlay.OverlayBallPreferences.MIN_SIZE_DP)
+                .put("maxDp", io.deepseekharness.mobile.overlay.OverlayBallPreferences.MAX_SIZE_DP)
+        }
+    }
+
+    @PluginMethod
+    fun setPetSize(call: PluginCall) {
+        execute(call) {
+            val raw = call.getInt("sizeDp") ?: io.deepseekharness.mobile.overlay.OverlayBallPreferences.DEFAULT_SIZE_DP
+            val size = raw.coerceIn(
+                io.deepseekharness.mobile.overlay.OverlayBallPreferences.MIN_SIZE_DP,
+                io.deepseekharness.mobile.overlay.OverlayBallPreferences.MAX_SIZE_DP,
+            )
+            io.deepseekharness.mobile.overlay.OverlayBallPreferences.from(context).writeSizeDp(size)
+            val applied = OverlayBallService.applyCompanionSizePreference()
+            JSObject().put("ok", true).put("sizeDp", size).put("appliedLive", applied)
+        }
+    }
+
+    @PluginMethod
     fun requestRecordAudioPermission(call: PluginCall) {
         val act = activity
         if (act == null) {

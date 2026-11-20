@@ -18,9 +18,9 @@ class OverlayBallPreferences(private val storage: Storage) {
         fun writeInt(key: String, value: Int)
     }
 
-    fun readSizeDp(): Int = storage.readInt(KEY_SIZE)?.takeIf { it in SIZES_DP } ?: DEFAULT_SIZE_DP
+    fun readSizeDp(): Int = storage.readInt(KEY_SIZE)?.takeIf { it in SIZE_RANGE } ?: DEFAULT_SIZE_DP
     fun writeSizeDp(size: Int) {
-        require(size in SIZES_DP) { "不支持的悬浮形象尺寸" }
+        require(size in SIZE_RANGE) { "不支持的悬浮形象尺寸（允许范围：${MIN_SIZE_DP}..${MAX_SIZE_DP} dp）" }
         storage.writeInt(KEY_SIZE, size)
     }
 
@@ -53,6 +53,9 @@ class OverlayBallPreferences(private val storage: Storage) {
         const val KEY_X = "ball_x"
         const val KEY_Y = "ball_y"
         const val KEY_SIZE = "ball_size_dp"
+        const val MIN_SIZE_DP = 44
+        const val MAX_SIZE_DP = 160
+        val SIZE_RANGE = MIN_SIZE_DP..MAX_SIZE_DP
         const val DEFAULT_SIZE_DP = 88
         val SIZES_DP = listOf(64, DEFAULT_SIZE_DP, 112)
 
