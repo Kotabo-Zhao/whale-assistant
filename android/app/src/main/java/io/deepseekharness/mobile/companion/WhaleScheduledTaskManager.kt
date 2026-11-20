@@ -114,6 +114,32 @@ internal object WhaleScheduledTaskManager {
         }
     }
 
+    @Synchronized
+    fun rescheduleAll(context: Context) {
+        val app = context.applicationContext
+        val now = System.currentTimeMillis()
+        val arr = loadRaw(app)
+        val next = JSONArray()
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            val id = item.optString("id").trim()
+            if (id.isEmpty()) continue
+            var trigger = item.optLong("triggerAtMs", 0L)
+            if (trigger <= now) {
+                if (item.optBoolean("repeatDaily", false)) {
+                    trigger = now + 60_000L
+                    item.put("triggerAtMs", trigger)
+                } else {
+                    trigger = now + 15_000L
+                    item.put("triggerAtMs", trigger)
+                }
+            }
+            next.put(item)
+            scheduleAlarm(app, id, trigger)
+        }
+        saveRaw(app, next)
+    }
+
     private fun scheduleAlarm(app: Context, id: String, triggerAtMs: Long) {
         val am = app.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val pi = pendingIntent(app, id)

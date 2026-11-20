@@ -209,6 +209,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_schedule_list", "列出全部尚未触发或每日循环的定时任务。", emptyMap(), emptyList()))
             array.put(schema("whale_schedule_cancel", "按 ID 取消一个定时任务。", mapOf("id" to "定时任务 ID"), listOf("id")))
             array.put(schema("whale_device_status", "一键查询手机综合状态：电量、充电、音量、网络、无障碍、桌宠、活跃 Worker 及今日 Token 与估算费用。", emptyMap(), emptyList()))
+            array.put(schema("whale_open_url", "用手机系统默认浏览器打开指定网页链接。", mapOf("url" to "完整 http:// 或 https:// 网址"), listOf("url")))
+            array.put(schema("whale_share_text", "唤起安卓系统原生分享面板，将文案或摘要直接分享到微信、备忘录等任意应用。", mapOf("text" to "要分享的正文内容", "title" to "可选分享标题"), listOf("text")))
         }
         if (array.length() == 0) {
             // 保底核心工具集：避免任意自然口语问句被关键词漏判导致“无工具可用”
@@ -237,6 +239,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_device_media",
         "whale_schedule_create",
         "whale_schedule_cancel",
+        "whale_open_url",
+        "whale_share_text",
         "whale_app_navigate",
         "whale_app_appearance",
         "whale_app_language",
@@ -899,6 +903,26 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .put("todayEstimatedYuan", String.format(java.util.Locale.US, "%.4f", meter.estimatedYuan))
                         .toString()
                     ToolOutcome(name, "读取手机综合状态", true, payload)
+                }
+                "whale_open_url" -> {
+                    val rawUrl = args.str("url").trim()
+                    require(rawUrl.startsWith("https://") || rawUrl.startsWith("http://")) { "仅支持 http:// 或 https:// 网址" }
+                    val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(rawUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    app.startActivity(intent)
+                    ToolOutcome(name, "打开网页链接", true, JSONObject().put("opened", rawUrl).toString(), mutating = true)
+                }
+                "whale_share_text" -> {
+                    val text = args.str("text").trim()
+                    require(text.isNotEmpty()) { "缺少要分享的文本 text" }
+                    val title = args.str("title").trim().ifBlank { "分享内容" }
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, text)
+                        putExtra(Intent.EXTRA_SUBJECT, title)
+                    }
+                    val chooser = Intent.createChooser(sendIntent, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    app.startActivity(chooser)
+                    ToolOutcome(name, "唤起系统分享", true, JSONObject().put("sharedChars", text.length).toString(), mutating = true)
                 }
                 else -> ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
             }

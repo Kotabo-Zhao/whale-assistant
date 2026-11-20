@@ -32,7 +32,7 @@ internal object WhaleNativeWorkerPool {
             .put("finishedAtMs", finishedAtMs)
     }
 
-    private val executor = Executors.newFixedThreadPool(3) { runnable ->
+    private val executor = Executors.newFixedThreadPool(4) { runnable ->
         Thread(runnable, "whale-native-worker").apply { isDaemon = true }
     }
     private val entries = ConcurrentHashMap<String, WorkerEntry>()
@@ -74,7 +74,7 @@ internal object WhaleNativeWorkerPool {
 
     fun snapshot(): JSONArray {
         val arr = JSONArray()
-        entries.values.sortedByDescending { it.startedAtMs }.take(20).forEach { arr.put(it.json()) }
+        entries.values.sortedByDescending { it.startedAtMs }.take(40).forEach { arr.put(it.json()) }
         return arr
     }
 

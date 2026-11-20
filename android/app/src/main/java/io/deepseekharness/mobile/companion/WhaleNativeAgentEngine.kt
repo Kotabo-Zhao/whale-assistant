@@ -89,12 +89,12 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 .put("role", "system")
                 .put("content", buildSystemPrompt(trimmed)),
         )
-        history.takeLast(14).forEach { (role, text) ->
+        history.takeLast(32).forEach { (role, text) ->
             if (role in setOf("user", "assistant") && text.isNotBlank()) {
-                messages.put(JSONObject().put("role", role).put("content", text.take(6000)))
+                messages.put(JSONObject().put("role", role).put("content", text.take(12_000)))
             }
         }
-        messages.put(JSONObject().put("role", "user").put("content", trimmed.take(8000)))
+        messages.put(JSONObject().put("role", "user").put("content", trimmed.take(32_000)))
 
         val steps = ArrayList<StepRecord>()
         var finalReply = ""
@@ -151,7 +151,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     JSONObject()
                         .put("role", "tool")
                         .put("tool_call_id", callId)
-                        .put("content", outcome.payload.take(12_000)),
+                        .put("content", outcome.payload.take(24_000)),
                 )
             }
         }
@@ -269,7 +269,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val conn = (URL(endpoint.url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 20_000
-            readTimeout = 90_000
+            readTimeout = 180_000
             doOutput = true
             setRequestProperty("Authorization", "Bearer ${endpoint.apiKey}")
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
