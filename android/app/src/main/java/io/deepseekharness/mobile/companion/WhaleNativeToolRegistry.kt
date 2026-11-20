@@ -174,6 +174,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 ),
                 listOf("action"),
             ))
+            array.put(schema("whale_phone_vision", "多模态看图识屏：安全截取当前手机屏幕并调用视觉模型分析画面、图标、图片内容及按钮坐标（自动拦截密码/支付/锁屏敏感页面）。", mapOf("question" to "可选：想看懂的内容或想找的图标/按钮描述"), emptyList()))
+            array.put(schema("whale_phone_vision_click", "视觉定位并直接点击：截屏让多模态视觉模型定位目标图标或无文字按钮的精确屏幕坐标，并立即执行手势点击（适合游戏、Canvas、自定义图标按钮）。", mapOf("target" to "要点击的目标描述，例如：右上角放大镜图标 / 红色关闭按钮"), listOf("target")))
             array.put(schema(
                 "whale_phone_batch",
                 "单轮原子执行最多 8 步连贯手机操作并在结束后自动回传最新精简控件树，大幅降低多步屏控延迟。",
@@ -241,6 +243,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_schedule_cancel",
         "whale_open_url",
         "whale_share_text",
+        "whale_phone_vision_click",
         "whale_app_navigate",
         "whale_app_appearance",
         "whale_app_language",
@@ -929,6 +932,77 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val chooser = Intent.createChooser(sendIntent, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     app.startActivity(chooser)
                     ToolOutcome(name, "唤起系统分享", true, JSONObject().put("sharedChars", text.length).toString(), mutating = true)
+                }
+                "whale_phone_vision" -> {
+                    val service = DeepSeekAccessibilityService.current()
+                        ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
+                    val question = args.str("question", "").trim()
+                    val cap = withPhoneControlNotice("正在看图识屏…") { service.captureScreenJpeg() }
+                    if (!cap.ok || cap.jpeg == null) {
+                        ToolOutcome(name, "看图识屏受限", false, JSONObject().put("error", cap.error ?: "截屏失败").toString())
+                    } else {
+                        val analysis = WhaleVisionScreenAnalyzer.analyzeScreen(
+                            context = app,
+                            jpeg = cap.jpeg,
+                            screenWidth = cap.width,
+                            screenHeight = cap.height,
+                            packageName = cap.packageName,
+                            question = question,
+                            locateTarget = false,
+                        )
+                        ToolOutcome(
+                            name,
+                            if (analysis.ok) "多模态看图识屏完成" else "视觉识屏失败",
+                            analysis.ok,
+                            JSONObject()
+                                .put("packageName", cap.packageName)
+                                .put("screenWidth", cap.width)
+                                .put("screenHeight", cap.height)
+                                .put("provider", analysis.provider)
+                                .put("model", analysis.model)
+                                .put("analysis", analysis.text)
+                                .toString(),
+                        )
+                    }
+                }
+                "whale_phone_vision_click" -> {
+                    val service = DeepSeekAccessibilityService.current()
+                        ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
+                    val target = args.str("target").trim()
+                    require(target.isNotEmpty()) { "缺少要视觉定位点击的目标 target" }
+                    val cap = withPhoneControlNotice("视觉定位「${target.take(10)}」…") { service.captureScreenJpeg() }
+                    if (!cap.ok || cap.jpeg == null) {
+                        ToolOutcome(name, "视觉截屏受限", false, JSONObject().put("error", cap.error ?: "截屏失败").toString(), mutating = true)
+                    } else {
+                        val loc = WhaleVisionScreenAnalyzer.analyzeScreen(
+                            context = app,
+                            jpeg = cap.jpeg,
+                            screenWidth = cap.width,
+                            screenHeight = cap.height,
+                            packageName = cap.packageName,
+                            question = target,
+                            locateTarget = true,
+                        )
+                        if (!loc.ok || loc.x == null || loc.y == null) {
+                            ToolOutcome(name, "未能在画面中找到目标", false, JSONObject().put("error", loc.text).put("provider", loc.provider).put("model", loc.model).toString(), mutating = true)
+                        } else {
+                            val tapArgs = JSONObject().put("action", "click").put("x", loc.x).put("y", loc.y).toString()
+                            val tapRes = withPhoneControlNotice("视觉点击「${loc.text.take(10)}」") { service.fastControl("fastAct", tapArgs) }
+                            ToolOutcome(
+                                name,
+                                "视觉点击「${loc.text}」(${loc.x},${loc.y})",
+                                tapRes.ok,
+                                JSONObject()
+                                    .put("clicked", tapRes.ok)
+                                    .put("label", loc.text)
+                                    .put("x", loc.x)
+                                    .put("y", loc.y)
+                                    .put("detail", tapRes.text)
+                                    .toString(),
+                                mutating = true,
+                            )
+                        }
+                    }
                 }
                 else -> ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
             }

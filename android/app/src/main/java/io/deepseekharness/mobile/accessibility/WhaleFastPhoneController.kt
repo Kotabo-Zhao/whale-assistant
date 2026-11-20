@@ -29,6 +29,85 @@ import java.util.concurrent.atomic.AtomicReference
  * 5. 坚守全部系统级安全底线：锁屏/熄屏拦截、受保护系统包拦截、密码/验证码/支付/权限敏感窗口零妥协拦截。
  */
 internal class WhaleFastPhoneController(private val service: DeepSeekAccessibilityService) {
+    data class ScreenCaptureResult(
+        val ok: Boolean,
+        val jpeg: ByteArray? = null,
+        val width: Int = 0,
+        val height: Int = 0,
+        val packageName: String = "",
+        val error: String? = null,
+    )
+
+    fun captureScreenJpeg(): ScreenCaptureResult {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return ScreenCaptureResult(false, error = "无障碍截屏需要 Android 11（API 30）及以上系统")
+        }
+        val pair = requireSafeRoot()
+        if (pair == null) {
+            val err = safeGuardError()
+            return ScreenCaptureResult(false, error = err.text)
+        }
+        val (_, pkg) = pair
+        val metrics = service.resources.displayMetrics
+        val latch = CountDownLatch(1)
+        val resultRef = AtomicReference<ScreenCaptureResult?>(null)
+        service.takeScreenshot(
+            android.view.Display.DEFAULT_DISPLAY,
+            service.mainExecutor,
+            object : AccessibilityService.TakeScreenshotCallback {
+                override fun onSuccess(screenshot: AccessibilityService.ScreenshotResult) {
+                    try {
+                        val hw = screenshot.hardwareBuffer
+                        val cs = screenshot.colorSpace
+                        val wrapped = android.graphics.Bitmap.wrapHardwareBuffer(hw, cs)
+                        hw.close()
+                        if (wrapped == null) {
+                            resultRef.set(ScreenCaptureResult(false, error = "无法解码屏幕帧缓冲"))
+                            return
+                        }
+                        val soft = wrapped.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                        wrapped.recycle()
+                        val maxSide = 1080f
+                        val scale = minOf(1f, maxSide / maxOf(soft.width, soft.height).coerceAtLeast(1))
+                        val scaled = if (scale < 0.99f) {
+                            android.graphics.Bitmap.createScaledBitmap(
+                                soft,
+                                (soft.width * scale).toInt().coerceAtLeast(1),
+                                (soft.height * scale).toInt().coerceAtLeast(1),
+                                true,
+                            ).also { soft.recycle() }
+                        } else {
+                            soft
+                        }
+                        val out = java.io.ByteArrayOutputStream()
+                        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, out)
+                        scaled.recycle()
+                        resultRef.set(
+                            ScreenCaptureResult(
+                                ok = true,
+                                jpeg = out.toByteArray(),
+                                width = metrics.widthPixels,
+                                height = metrics.heightPixels,
+                                packageName = pkg,
+                            ),
+                        )
+                    } catch (t: Throwable) {
+                        resultRef.set(ScreenCaptureResult(false, error = "截屏压缩失败：${t.message ?: t.javaClass.simpleName}"))
+                    } finally {
+                        latch.countDown()
+                    }
+                }
+
+                override fun onFailure(errorCode: Int) {
+                    resultRef.set(ScreenCaptureResult(false, error = "系统无障碍截屏被拒绝（错误码 $errorCode），可能是受保护画面或截屏频率过快"))
+                    latch.countDown()
+                }
+            },
+        )
+        val done = latch.await(5, TimeUnit.SECONDS)
+        if (!done) return ScreenCaptureResult(false, error = "无障碍截屏超时")
+        return resultRef.get() ?: ScreenCaptureResult(false, error = "未获取到截屏结果")
+    }
     private data class CachedSnapshot(
         val packageName: String,
         val capturedAtMs: Long,
