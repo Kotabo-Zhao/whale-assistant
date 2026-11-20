@@ -950,3 +950,36 @@ input[type='checkbox'][role='switch']:disabled,
   accent-color: var(--blue);
   cursor: pointer;
 }
+
+/* ─── Kawaii Sticker Icon Pack (Cute Mode) ──────────────────────────────── */
+.whale-cute-icon {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 1.5px 2.5px rgba(30, 58, 95, 0.16));
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+button:active .whale-cute-icon,
+.bottom-navigation-item.is-active .whale-cute-icon,
+.account-group-toggle[aria-expanded='true'] .whale-cute-icon {
+  transform: scale(1.08);
+}
+
+:root[data-style='cute'] .whale-send-btn {
+  background: linear-gradient(135deg, #f2f9ff 0%, #dff2ff 100%);
+  border: 1.5px solid #9bd4ff;
+  box-shadow: 0 2px 8px rgba(74, 168, 240, 0.24);
+}
+
+:root[data-style='cute'] .whale-send-btn:disabled {
+  opacity: 0.48;
+  box-shadow: none;
+}
+
+.whale-signature.is-maid-badge {
+  border-radius: 50%;
+  border: 1.5px solid rgba(130, 206, 255, 0.72);
+  box-shadow: 0 2px 8px rgba(42, 108, 168, 0.18);
+  object-fit: cover;
+}

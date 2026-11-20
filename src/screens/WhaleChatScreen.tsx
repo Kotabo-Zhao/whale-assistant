@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
+import { CuteIcon } from '../components/CuteIcon'
 import { t } from '../i18n'
 import { useInterfaceStyle } from '../theme'
 import type { RuntimeBridge, WhaleNativeChatStep } from '../platform/types'
@@ -444,6 +445,12 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       : t('正在思考…')
 
   const renderReceiptIcon = (kind: ActionReceipt['kind']) => {
+    if (style === 'cute') {
+      if (kind === 'secretary') return <CuteIcon name="notifications" size={18} />
+      if (kind === 'knowledge') return <CuteIcon name="memory" size={18} />
+      if (kind === 'memory') return <CuteIcon name="assistant" size={18} />
+      return <CuteIcon name="workshop" size={18} />
+    }
     if (kind === 'secretary') return <BellRing size={14} aria-hidden="true" />
     if (kind === 'knowledge') return <BookmarkCheck size={14} aria-hidden="true" />
     if (kind === 'memory') return <Brain size={14} aria-hidden="true" />
@@ -462,7 +469,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             aria-pressed={autoSpeak}
             onClick={toggleAutoSpeak}
           >
-            {autoSpeak ? <Volume2 size={17} /> : <VolumeX size={17} />}
+            {style === 'cute' ? <CuteIcon name={autoSpeak ? 'voice-on' : 'voice-off'} size={21} /> : (autoSpeak ? <Volume2 size={17} /> : <VolumeX size={17} />)}
           </button>
           <button
             type="button"
@@ -472,7 +479,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             aria-expanded={sessionsOpen}
             onClick={() => setSessionsOpen(open => !open)}
           >
-            <MessagesSquare size={17} />
+            {style === 'cute' ? <CuteIcon name="chat" size={21} /> : <MessagesSquare size={17} />}
           </button>
           <button
             type="button"
@@ -482,7 +489,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             disabled={sending}
             onClick={startNewSession}
           >
-            <MessageSquarePlus size={17} />
+            {style === 'cute' ? <CuteIcon name="new-chat" size={21} /> : <MessageSquarePlus size={17} />}
           </button>
         </div>
       </header>
@@ -579,15 +586,15 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             <h2>{t('今天想一起做点什么？')}</h2>
             <div className="whale-quick-hub" aria-label={t('快捷空间')}>
               <button type="button" className="whale-hub-pill" onClick={() => onNavigate('assistant-memory')}>
-                <BookOpen size={14} aria-hidden="true" />
+                {style === 'cute' ? <CuteIcon name="memory" size={19} /> : <BookOpen size={14} aria-hidden="true" />}
                 {t('记忆与资料')}
               </button>
               <button type="button" className="whale-hub-pill" onClick={() => onNavigate('assistant-tasks')}>
-                <ListTodo size={14} aria-hidden="true" />
+                {style === 'cute' ? <CuteIcon name="tasks" size={19} /> : <ListTodo size={14} aria-hidden="true" />}
                 {t('事项与日程')}
               </button>
               <button type="button" className="whale-hub-pill" onClick={() => onNavigate('tools')}>
-                <Hammer size={14} aria-hidden="true" />
+                {style === 'cute' ? <CuteIcon name="workshop" size={19} /> : <Hammer size={14} aria-hidden="true" />}
                 {t('功能工坊')}
               </button>
             </div>
@@ -801,7 +808,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           disabled={sending}
           onClick={() => setSlashOpen(open => !open)}
         >
-          <Slash size={15} />
+          {style === 'cute' ? <CuteIcon name="slash" size={20} /> : <Slash size={15} />}
         </button>
         <input
           ref={inputRef}
@@ -825,7 +832,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           title={recording ? t('停止录音并发送') : t('语音输入')}
           onClick={() => { void toggleVoiceRecord() }}
         >
-          {recording ? <Square size={14} /> : <Mic size={16} />}
+          {recording ? <Square size={14} /> : (style === 'cute' ? <CuteIcon name="mic" size={21} /> : <Mic size={16} />)}
         </button>
         <button
           type="submit"
@@ -833,7 +840,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           disabled={sending || input.trim() === ''}
           aria-label={t('发送')}
         >
-          <ArrowUp size={18} />
+          {style === 'cute' ? <CuteIcon name="send" size={21} /> : <ArrowUp size={18} />}
         </button>
       </form></div>
     </section>
