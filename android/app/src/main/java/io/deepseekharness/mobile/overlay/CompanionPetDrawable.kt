@@ -16,11 +16,20 @@ internal class CompanionPetDrawable(
 ) : Drawable(), AutoCloseable {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val fxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; textAlign = Paint.Align.CENTER }
     private val source = Rect()
     private val fadeSource = Rect()
     private val destination = RectF()
     private var fadeFrom: Bitmap? = null
     private var fadeStartMs = 0L
+    private var lastAction: PetAction = PetAction.IDLE
+    private var impulseStartMs = 0L
+    private var curSx = 1f
+    private var curSy = 1f
+    private var curDx = 0f
+    private var curDy = 0f
+    private var curRot = 0f
+    private var curPivotFrac = 0.94f
     private val liveFrameTick = Runnable { if (!closed && !pose.reduced) invalidateSelf() }
     private val cache = LinkedHashMap<String, Bitmap>(4, .75f, true)
     private var decoding = false
@@ -68,6 +77,7 @@ internal class CompanionPetDrawable(
 
     fun setPose(next: PetPose, cel: PetCelSample = PetCels.sample(next)) {
         if (closed) return
+        if (next.action != lastAction) { lastAction = next.action; impulseStartMs = android.os.SystemClock.uptimeMillis() }
         pose = next
         currentCel = cel
         wanted = currentCel.clip
@@ -78,6 +88,7 @@ internal class CompanionPetDrawable(
 
     fun setAnimatedPose(next: PetPose, playback: PetPlayback, now: Long, quietIdle: Boolean) {
         if (closed) return
+        if (next.action != lastAction) { lastAction = next.action; impulseStartMs = android.os.SystemClock.uptimeMillis() }
         pose = next
         val visible = PetCelSample(displayedClip, displayedFrame, currentCel.nextMs)
         currentCel = playback.sample(next, now, quietIdle, visible) { name ->
@@ -183,64 +194,88 @@ internal class CompanionPetDrawable(
         destination.set(x, y, x + side, y + side)
 
         val now = android.os.SystemClock.uptimeMillis()
-        var sx = 1f
-        var sy = 1f
-        var dx = 0f
-        var dy = 0f
-        var rot = 0f
-        var pivotY = y + side * 0.94f
+        var targetSx = 1f
+        var targetSy = 1f
+        var targetDx = 0f
+        var targetDy = 0f
+        var targetRot = 0f
+        var targetPivotFrac = 0.94f
 
         if (!pose.reduced) {
             val sec = (now % 60_000L) / 1000.0
             when (pose.action) {
                 PetAction.IDLE, PetAction.WAIT -> {
-                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 3.2).toFloat()
-                    sx = 1f - 0.012f * s
-                    sy = 1f + 0.018f * s
-                    dy = -side * 0.010f * s
+                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 3.0).toFloat()
+                    targetSx = 1f - 0.015f * s
+                    targetSy = 1f + 0.022f * s
+                    targetDy = -side * 0.014f * s
+                    targetRot = 1.1f * kotlin.math.sin(sec * 2.0 * Math.PI / 6.0).toFloat()
                 }
                 PetAction.PAUSED, PetAction.STOPPED -> {
-                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 4.0).toFloat()
-                    sx = 1f + 0.014f * s
-                    sy = 1f - 0.012f * s
+                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 3.8).toFloat()
+                    targetSx = 1f + 0.018f * s
+                    targetSy = 1f - 0.015f * s
+                    targetRot = 1.4f * s
                 }
                 PetAction.THINK, PetAction.OBSERVE, PetAction.ASK -> {
-                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 2.4).toFloat()
-                    rot = 2.6f * s
-                    dy = -side * 0.014f * kotlin.math.abs(s)
+                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 2.2).toFloat()
+                    targetRot = 3.2f * s
+                    targetDy = -side * 0.018f * kotlin.math.abs(s)
+                    targetSx = 1f - 0.010f * kotlin.math.abs(s)
+                    targetSy = 1f + 0.014f * kotlin.math.abs(s)
                 }
                 PetAction.WORK, PetAction.CONTROL -> {
-                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 1.1).toFloat()
-                    sx = 1f + 0.014f * s
-                    sy = 1f - 0.014f * s
-                    dy = -side * 0.016f * kotlin.math.abs(s)
-                    rot = 1.8f * kotlin.math.sin(sec * 2.0 * Math.PI / 2.2).toFloat()
+                    val s = kotlin.math.sin(sec * 2.0 * Math.PI / 0.95).toFloat()
+                    targetSx = 1f + 0.018f * s
+                    targetSy = 1f - 0.018f * s
+                    targetDy = -side * 0.020f * kotlin.math.abs(s)
+                    targetRot = 2.4f * kotlin.math.sin(sec * 2.0 * Math.PI / 1.9).toFloat()
                 }
                 PetAction.CELEBRATE, PetAction.TOUCH, PetAction.ACCEPT, PetAction.REPLY, PetAction.NOTICE -> {
-                    val hop = kotlin.math.abs(kotlin.math.sin(sec * 2.0 * Math.PI / 0.85)).toFloat()
-                    sx = 1f - 0.025f * hop
-                    sy = 1f + 0.032f * hop
-                    dy = -side * 0.042f * hop
-                    rot = 3.2f * kotlin.math.sin(sec * 2.0 * Math.PI / 1.7).toFloat()
+                    val hop = kotlin.math.abs(kotlin.math.sin(sec * 2.0 * Math.PI / 0.78)).toFloat()
+                    targetSx = 1f - 0.032f * hop
+                    targetSy = 1f + 0.042f * hop
+                    targetDy = -side * 0.052f * hop
+                    targetRot = 4.0f * kotlin.math.sin(sec * 2.0 * Math.PI / 1.56).toFloat()
                 }
                 PetAction.DRAG -> {
-                    val swing = kotlin.math.sin(sec * 2.0 * Math.PI / 1.1).toFloat()
-                    pivotY = y + side * 0.14f
-                    rot = 9.0f * swing
-                    dx = side * 0.018f * swing
+                    val swing = kotlin.math.sin(sec * 2.0 * Math.PI / 1.05).toFloat()
+                    targetPivotFrac = 0.14f
+                    targetRot = 10.5f * swing
+                    targetDx = side * 0.022f * swing
                 }
                 PetAction.SETBACK, PetAction.ERROR -> {
-                    val shiver = kotlin.math.sin(sec * 2.0 * Math.PI / 0.45).toFloat()
-                    dx = side * 0.012f * shiver
-                    rot = 1.6f * shiver
+                    val shiver = kotlin.math.sin(sec * 2.0 * Math.PI / 0.42).toFloat()
+                    targetDx = side * 0.016f * shiver
+                    targetRot = 2.2f * shiver
                 }
+            }
+
+            // Spring-damped state-change pop impulse (classic Live2D settle)
+            val impElapsed = (now - impulseStartMs).coerceAtLeast(0L)
+            if (impulseStartMs > 0L && impElapsed < 320L) {
+                val p = impElapsed / 320f
+                val wave = kotlin.math.sin(p * Math.PI * 2.0).toFloat() * (1f - p) * (1f - p)
+                targetSx += 0.065f * wave
+                targetSy -= 0.065f * wave
+                targetDy -= side * 0.025f * kotlin.math.abs(wave)
             }
         }
 
+        // Smooth exponential damping across state transitions (zero discontinuity)
+        val damp = if (pose.reduced) 1f else 0.16f
+        curSx += (targetSx - curSx) * damp
+        curSy += (targetSy - curSy) * damp
+        curDx += (targetDx - curDx) * damp
+        curDy += (targetDy - curDy) * damp
+        curRot += (targetRot - curRot) * damp
+        curPivotFrac += (targetPivotFrac - curPivotFrac) * damp
+        val pivotY = y + side * curPivotFrac
+
         canvas.save()
-        canvas.translate(dx, dy)
-        canvas.rotate(rot, x + side * 0.5f, pivotY)
-        canvas.scale(sx, sy, x + side * 0.5f, pivotY)
+        canvas.translate(curDx, curDy)
+        canvas.rotate(curRot, x + side * 0.5f, pivotY)
+        canvas.scale(curSx, curSy, x + side * 0.5f, pivotY)
 
         val prev = fadeFrom
         if (prev != null && !prev.isRecycled && fadeStartMs > 0L) {
@@ -264,8 +299,58 @@ internal class CompanionPetDrawable(
         canvas.restore()
 
         if (!pose.reduced) {
+            drawStateParticles(canvas, x, y, side, now)
             main.removeCallbacks(liveFrameTick)
             main.postDelayed(liveFrameTick, 16L)
+        }
+    }
+
+    private fun drawStateParticles(canvas: Canvas, x: Float, y: Float, side: Float, now: Long) {
+        val sec = (now % 60_000L) / 1000.0
+        when (pose.action) {
+            PetAction.CELEBRATE, PetAction.TOUCH, PetAction.ACCEPT -> {
+                val colors = intArrayOf(0xFFFFD166.toInt(), 0xFFFF8FAB.toInt(), 0xFF6BC3FF.toInt())
+                for (i in 0 until 3) {
+                    val phase = ((sec * 0.7 + i * 0.33) % 1.0).toFloat()
+                    val alpha = (kotlin.math.sin(phase * Math.PI).toFloat() * 220f).toInt().coerceIn(0, 220)
+                    val px = x + side * (0.22f + i * 0.28f) + kotlin.math.sin(sec * 3.0 + i).toFloat() * side * 0.03f
+                    val py = y + side * (0.34f - phase * 0.24f)
+                    val r = side * (0.028f + 0.014f * kotlin.math.sin(phase * Math.PI).toFloat())
+                    fxPaint.color = (colors[i] and 0x00FFFFFF) or (alpha shl 24)
+                    canvas.drawCircle(px, py, r, fxPaint)
+                }
+            }
+            PetAction.PAUSED, PetAction.STOPPED -> {
+                fxPaint.textSize = side * 0.11f
+                for (i in 0 until 2) {
+                    val phase = ((sec * 0.35 + i * 0.5) % 1.0).toFloat()
+                    val alpha = (kotlin.math.sin(phase * Math.PI).toFloat() * 190f).toInt().coerceIn(0, 190)
+                    val px = x + side * (0.72f + phase * 0.14f)
+                    val py = y + side * (0.32f - phase * 0.22f)
+                    fxPaint.color = 0x006BC3FF or (alpha shl 24)
+                    canvas.drawText(if (i == 0) "z" else "Z", px, py, fxPaint)
+                }
+            }
+            PetAction.THINK, PetAction.OBSERVE, PetAction.ASK -> {
+                for (i in 0 until 3) {
+                    val phase = ((sec * 0.55 + i * 0.33) % 1.0).toFloat()
+                    val alpha = (kotlin.math.sin(phase * Math.PI).toFloat() * 170f).toInt().coerceIn(0, 170)
+                    val px = x + side * (0.74f + i * 0.06f)
+                    val py = y + side * (0.26f - phase * 0.14f)
+                    fxPaint.color = 0x005CA4FF or (alpha shl 24)
+                    canvas.drawCircle(px, py, side * (0.018f + i * 0.005f), fxPaint)
+                }
+            }
+            PetAction.CONTROL, PetAction.WORK -> {
+                val pulse = ((sec * 1.1) % 1.0).toFloat()
+                val alpha = ((1f - pulse) * 140f).toInt().coerceIn(0, 140)
+                fxPaint.color = 0x00257AF4 or (alpha shl 24)
+                fxPaint.style = Paint.Style.STROKE
+                fxPaint.strokeWidth = maxOf(1.5f, side * 0.015f)
+                canvas.drawCircle(x + side * 0.5f, y + side * 0.52f, side * (0.32f + pulse * 0.16f), fxPaint)
+                fxPaint.style = Paint.Style.FILL
+            }
+            else -> Unit
         }
     }
 
@@ -286,7 +371,7 @@ internal class CompanionPetDrawable(
         cache.clear()
     }
     companion object {
-        const val FADE_DURATION_MS = 320L
+        const val FADE_DURATION_MS = 360L
         const val MAX_ATLASES = 3
         const val MAX_BITMAP_BYTES = 32L * 1024 * 1024
     }

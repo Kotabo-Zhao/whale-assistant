@@ -56,12 +56,12 @@ internal data class WhaleDesign(
             val sea = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") == "simple"
             val dark = AppThemePreference.isDark(AppThemePreference.current(context), AppThemePreference.systemNight(context))
             val values = when {
-                // Grok Bot OLED dark & pure white light
-                sea && dark -> listOf("#000000", "#0b0b0d", "#16161a", "#fafafa", "#9898a3", "#26262c", "#ffffff", "#000000", "#1f1f24")
-                sea -> listOf("#ffffff", "#ffffff", "#f4f4f5", "#09090b", "#64646f", "#e4e4e7", "#09090b", "#ffffff", "#f4f4f5")
-                // iOS Cozy Kawaii (Finch / Waterllama) starlight dark & warm milk-cream light
-                dark -> listOf("#131626", "#1d2238", "#262d49", "#f3f6ff", "#a6b4d4", "#2d3657", "#8cc2ff", "#10203d", "#263654")
-                else -> listOf("#fbf8f3", "#ffffff", "#f2f6ff", "#24304a", "#697896", "#dfe8f7", "#4b89f7", "#ffffff", "#eaf2ff")
+                // Deep-Sea Precision Instrument (simple)
+                sea && dark -> listOf("#07090d", "#10151e", "#151c28", "#f1f4f9", "#8895aa", "#1f2837", "#5ca4ff", "#07090d", "#18253b")
+                sea -> listOf("#f7f8fa", "#ffffff", "#edf0f5", "#0d1117", "#5a6475", "#e2e7ef", "#1456d1", "#ffffff", "#e8f0fe")
+                // Pelagic Porcelain & Midnight Tide (cute)
+                dark -> listOf("#0b1220", "#131d32", "#192641", "#ecf2fc", "#8ea3c4", "#22324f", "#6bc3ff", "#0b1220", "#1c2d4d")
+                else -> listOf("#f3f7fc", "#ffffff", "#e8f0fa", "#16243a", "#5c7291", "#dce6f4", "#257af4", "#ffffff", "#e6f0ff")
             }.map(Color::parseColor)
             return WhaleDesign(sea, dark, values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8])
         }
