@@ -744,8 +744,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val links = linkRegex.findAll(html).toList()
                     val snips = snipRegex.findAll(html).toList()
                     fun cleanHtml(raw: String): String = raw.replace(Regex("<[^>]+>"), " ")
-                        .replace("&amp;", "&").replace("&quot;", """).replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">")
-                        .replace(Regex("\s+"), " ").trim()
+                        .replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">")
+                        .replace(Regex("\\s+"), " ").trim()
                     val items = JSONArray()
                     for (i in 0 until minOf(limit, links.size)) {
                         val rawHref = links[i].groupValues[1]
@@ -780,8 +780,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         conn.disconnect()
                     }
                     val cleaned = rawText
-                        .replace(Regex("<script[^>]*>[\s\S]*?</script>", RegexOption.IGNORE_CASE), " ")
-                        .replace(Regex("<style[^>]*>[\s\S]*?</style>", RegexOption.IGNORE_CASE), " ")
+                        .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), " ")
+                        .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), " ")
                         .replace(Regex("<[^>]+>"), " ")
                         .replace(Regex("\s+"), " ")
                         .trim()
