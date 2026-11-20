@@ -17,7 +17,14 @@ internal class CompanionPetDrawable(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
     private val destination = RectF()
-    private val cache = LinkedHashMap<String, Bitmap>(4, .75f, true)
+    private val cache = LinkedHashMap<String, Bitmap>(10, .75f, true)
+    private var curSx = 1f
+    private var curSy = 1f
+    private var curDy = 0f
+    private var curRot = 0f
+    private var curPivotFrac = 0.94f
+    private var lastDrawMs = 0L
+    private val liveTick = Runnable { if (!closed && !pose.reduced) invalidateSelf() }
     private var decoding = false
     private val failed = mutableSetOf<String>()
     @Volatile private var closed = false
@@ -44,6 +51,7 @@ internal class CompanionPetDrawable(
         // Constructor is called on the avatar executor. One idle atlas is enough to attach.
         displayed = decode("idle")
         cache["idle"] = displayed
+        prewarmHotAtlases()
     }
 
     private fun decode(name: String): Bitmap {
@@ -135,6 +143,22 @@ internal class CompanionPetDrawable(
         }
     }
 
+    private fun prewarmHotAtlases() {
+        val hot = listOf("touch_enter", "touch", "reading_enter", "reading", "drag_enter", "drag")
+        decoder.execute {
+            for (name in hot) {
+                if (closed) break
+                val bmp = runCatching { decode(name) }.getOrNull() ?: continue
+                val posted = main.post {
+                    if (closed) bmp.recycle()
+                    else if (name !in cache) { cache[name] = bmp; trim() }
+                    else bmp.recycle()
+                }
+                if (!posted) bmp.recycle()
+            }
+        }
+    }
+
     private fun trim() {
         val entries = cache.entries.iterator()
         while ((cache.size > MAX_ATLASES || cachedBitmapBytes > cacheLimitBytes) && entries.hasNext()) {
@@ -169,7 +193,69 @@ internal class CompanionPetDrawable(
         val x = bounds.exactCenterX() - side / 2
         val y = bounds.exactCenterY() - side / 2
         destination.set(x, y, x + side, y + side)
+
+        val now = android.os.SystemClock.uptimeMillis()
+        val dt = if (lastDrawMs == 0L) 0.016f else ((now - lastDrawMs).coerceIn(4L, 50L) / 1000f)
+        lastDrawMs = now
+
+        var targetSx = 1f
+        var targetSy = 1f
+        var targetDy = 0f
+        var targetRot = 0f
+        var targetPivot = 0.94f
+
+        if (!pose.reduced) {
+            val sec = (now % 60_000L) / 1000.0
+            when (pose.action) {
+                PetAction.IDLE, PetAction.WAIT -> {
+                    val b = kotlin.math.sin(sec * 2.0 * Math.PI / 3.2).toFloat()
+                    targetSx = 1f - 0.009f * b
+                    targetSy = 1f + 0.014f * b
+                    targetDy = -side * 0.007f * b
+                }
+                PetAction.PAUSED, PetAction.STOPPED -> {
+                    val b = kotlin.math.sin(sec * 2.0 * Math.PI / 4.0).toFloat()
+                    targetSx = 1f + 0.011f * b
+                    targetSy = 1f - 0.010f * b
+                }
+                PetAction.DRAG -> {
+                    val swing = kotlin.math.sin(sec * 2.0 * Math.PI / 1.05).toFloat()
+                    targetPivot = 0.16f
+                    targetRot = 6.5f * swing
+                }
+                PetAction.CELEBRATE, PetAction.TOUCH -> {
+                    val hop = kotlin.math.abs(kotlin.math.sin(sec * 2.0 * Math.PI / 0.85)).toFloat()
+                    targetSx = 1f - 0.012f * hop
+                    targetSy = 1f + 0.018f * hop
+                    targetDy = -side * 0.016f * hop
+                }
+                else -> {
+                    val b = kotlin.math.sin(sec * 2.0 * Math.PI / 2.6).toFloat()
+                    targetSx = 1f - 0.007f * b
+                    targetSy = 1f + 0.010f * b
+                }
+            }
+        }
+
+        val alpha = if (pose.reduced) 1f else (1f - kotlin.math.exp(-9.5f * dt))
+        curSx += (targetSx - curSx) * alpha
+        curSy += (targetSy - curSy) * alpha
+        curDy += (targetDy - curDy) * alpha
+        curRot += (targetRot - curRot) * alpha
+        curPivotFrac += (targetPivot - curPivotFrac) * alpha
+        val pivotY = y + side * curPivotFrac
+
+        canvas.save()
+        canvas.translate(0f, curDy)
+        canvas.rotate(curRot, x + side * 0.5f, pivotY)
+        canvas.scale(curSx, curSy, x + side * 0.5f, pivotY)
         canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
+        canvas.restore()
+
+        if (!pose.reduced) {
+            main.removeCallbacks(liveTick)
+            main.postDelayed(liveTick, 16L)
+        }
     }
 
     override fun getIntrinsicWidth() = PetCels.CELL
@@ -180,13 +266,14 @@ internal class CompanionPetDrawable(
     override fun close() {
         closed = true
         onAtlasReady = null
+        main.removeCallbacks(liveTick)
         retainedCel?.recycle()
         retainedCel = null
         cache.values.forEach { if (!it.isRecycled) it.recycle() }
         cache.clear()
     }
     companion object {
-        const val MAX_ATLASES = 3
-        const val MAX_BITMAP_BYTES = 32L * 1024 * 1024
+        const val MAX_ATLASES = 8
+        const val MAX_BITMAP_BYTES = 48L * 1024 * 1024
     }
 }
