@@ -116,7 +116,7 @@ internal object WhaleVisionScreenAnalyzer {
         }
     }
 
-    private fun extractJsonObject(raw: String): JSONObject? {
+    internal fun extractJsonObject(raw: String): JSONObject? {
         val start = raw.indexOf('{')
         val end = raw.lastIndexOf('}')
         if (start < 0 || end <= start) return null

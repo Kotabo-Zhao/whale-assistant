@@ -20,6 +20,8 @@ internal object WhaleNativeRagRetriever {
 
     private val greetingOnly = Regex("^(你好|您好|嗨|哈喽|在吗|早上好|晚上好|谢谢|好的|ok|hi|hello|hey)[!！。.~～?？\\s]*$", RegexOption.IGNORE_CASE)
 
+    internal fun isGreetingOnly(query: String): Boolean = query.trim().length < 2 || greetingOnly.matches(query.trim())
+
     fun retrieveContext(context: Context, userQuery: String): String {
         val query = userQuery.trim()
         if (query.length < 4 || greetingOnly.matches(query)) return ""
@@ -84,7 +86,7 @@ internal object WhaleNativeRagRetriever {
         return if (lexicalRaw != null) parseSnippets(lexicalRaw, maxItems = 3, maxChars = 180) else emptyList()
     }
 
-    private fun parseSnippets(rawJson: String, maxItems: Int, maxChars: Int): List<String> {
+    internal fun parseSnippets(rawJson: String, maxItems: Int, maxChars: Int): List<String> {
         val root = runCatching { JSONObject(rawJson) }.getOrNull() ?: return emptyList()
         val items = root.optJSONArray("items") ?: JSONArray()
         val out = ArrayList<String>(maxItems)
