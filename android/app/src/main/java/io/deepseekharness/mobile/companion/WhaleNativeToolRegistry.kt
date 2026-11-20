@@ -783,7 +783,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), " ")
                         .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), " ")
                         .replace(Regex("<[^>]+>"), " ")
-                        .replace(Regex("\s+"), " ")
+                        .replace(Regex("\\s+"), " ")
                         .trim()
                         .take(maxChars)
                     ToolOutcome(name, "抓取网页内容", code in 200..299, JSONObject().put("url", rawUrl).put("status", code).put("content", cleaned).toString())
