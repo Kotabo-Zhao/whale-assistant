@@ -304,11 +304,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         var widthMode = sizeStore.chatWidthMode
         var heightMode = sizeStore.chatHeightMode
         fun windowWidth(screen: Int): Int {
-            val available = (screen - dp(12)).coerceAtLeast(1)
+            val available = (screen - dp(6)).coerceAtLeast(1)
             return when (widthMode) {
                 "small" -> minOf(dp(380), (available * .86f).toInt())
                 "large" -> available
-                else -> minOf(dp(680), (available * .96f).toInt())
+                else -> minOf(dp(680), available)
             }.coerceAtLeast(1)
         }
         var width = windowWidth(metrics.widthPixels)
@@ -460,7 +460,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(10))
+            setPadding(dp(8), dp(6), dp(8), dp(6))
             gravity = if (showAbove) Gravity.BOTTOM else Gravity.TOP
         }
         val scroll = ScrollView(context).apply { addView(content); isVerticalScrollBarEnabled = false; setBackgroundColor(ui.canvas) }
@@ -485,8 +485,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (bottom - top != oldBottom - oldTop) panel.post { if (root === panel) positionUpdater?.invoke() }
         }
         fun styleBubble(view: android.view.View, isUser: Boolean) {
-            view.setPadding(dp(12), dp(8), dp(12), dp(8))
-            view.background = ui.shape(if (isUser) ui.soft else ui.answer, 14, if (isUser) null else ui.line).apply {
+            view.setPadding(dp(10), dp(7), dp(10), dp(7))
+            view.background = ui.shape(if (isUser) ui.soft else ui.answer, 12, null).apply {
                 val round = dp(15).toFloat(); val tip = dp(5).toFloat()
                 cornerRadii = if (isUser) floatArrayOf(round,round,tip,tip,round,round,round,round)
                     else floatArrayOf(tip,tip,round,round,round,round,round,round)
@@ -499,11 +499,11 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         fun bubble(message: String, isUser: Boolean): TextView {
             val shouldFollow = isUser || atBottom()
             val view = TextView(context).apply {
-                text = CompanionRichText.render(message, ui); textSize = 15f; setTextColor(ui.ink); setLinkTextColor(ui.accent); tag = isUser; maxWidth = width - dp(45)
+                text = CompanionRichText.render(message, ui); textSize = 15f; setTextColor(ui.ink); setLinkTextColor(ui.accent); tag = isUser; maxWidth = if (isUser) width - dp(36) else width - dp(18)
                 movementMethod = android.text.method.LinkMovementMethod.getInstance()
                 styleBubble(this, isUser)
             }
-            content.addView(view, LinearLayout.LayoutParams(-2, -2).apply { gravity = if (isUser) Gravity.END else Gravity.START; bottomMargin = dp(6) })
+            content.addView(view, LinearLayout.LayoutParams(if (isUser) -2 else -1, -2).apply { gravity = if (isUser) Gravity.END else Gravity.START; bottomMargin = dp(5) })
             if(liveMotion) io.deepseekharness.mobile.WhaleMotion.enter(view)
             if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
             return view
@@ -1253,7 +1253,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 width = nextWidth
                 params.width = width
                 workerBadge.maxWidth = minOf((width * .43f).toInt(), dp((134 * fontScale.coerceAtLeast(1f)).toInt()))
-                val bodyWidth = (width - dp(45)).coerceAtLeast(1)
+                val bodyWidth = (width - dp(18)).coerceAtLeast(1)
                 for (index in 0 until content.childCount) {
                     when (val child = content.getChildAt(index)) {
                         is TextView -> child.maxWidth = bodyWidth
