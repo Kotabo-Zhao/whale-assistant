@@ -37,7 +37,7 @@ export type CuteIconName =
   | 'workshop'
   | 'workspace'
 
-export const CUTE_ICONS: Record<CuteIconName, string> = {
+const CUTE_ICONS: Record<CuteIconName, string> = {
   appearance: appearanceIcon,
   assistant: assistantIcon,
   chat: chatIcon,
