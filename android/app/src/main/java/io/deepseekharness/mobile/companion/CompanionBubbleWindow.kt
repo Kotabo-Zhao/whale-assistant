@@ -809,6 +809,34 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             gravity = Gravity.CENTER; minWidth = dp(38); minHeight = dp(40)
             contentDescription = "语音输入"
         }
+        footer.addView(micBtn)
+        footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        footer.addView(ttsBtn)
+        shortcut(ui.string(R.string.pet_menu_session), R.drawable.ic_whale_nav_chat, ui.string(R.string.pet_menu_session)) {
+            toolShelf.removeAllViews()
+            sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
+            syncControls()
+            controlsScroll.scrollTo(0,0)
+            panel.post { positionUpdater?.invoke() }
+        }
+        footer.addView(send)
+        input.setOnEditorActionListener { _, action, key ->
+            val enter = key?.keyCode == android.view.KeyEvent.KEYCODE_ENTER || key?.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+            if (enter && android.view.inputmethod.BaseInputConnection.getComposingSpanStart(input.text) >= 0) return@setOnEditorActionListener false
+            val submit = key == null && action == android.view.inputmethod.EditorInfo.IME_ACTION_SEND ||
+                enter && key != null && !key.isShiftPressed && !key.isAltPressed
+            if (submit && (key == null || key.action == android.view.KeyEvent.ACTION_DOWN && key.repeatCount == 0) &&
+                input.text.isNotBlank() && send.isEnabled) send.performClick()
+            submit
+        }
+        val sendState = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        val stateRow = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
+        sendState.addView(stateRow)
+        val status = ui.text("",12f,secondary).apply {
+            minHeight=dp(36); gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(2),dp(4),dp(2))
+            accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        stateRow.addView(status,LinearLayout.LayoutParams(0,-2,1f))
         micBtn.setOnClickListener {
             if (WhaleVoiceEngine.isRecording) {
                 micBtn.text = "…"
@@ -842,34 +870,6 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
         }
-        footer.addView(micBtn)
-        footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        footer.addView(ttsBtn)
-        shortcut(ui.string(R.string.pet_menu_session), R.drawable.ic_whale_nav_chat, ui.string(R.string.pet_menu_session)) {
-            toolShelf.removeAllViews()
-            sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
-            syncControls()
-            controlsScroll.scrollTo(0,0)
-            panel.post { positionUpdater?.invoke() }
-        }
-        footer.addView(send)
-        input.setOnEditorActionListener { _, action, key ->
-            val enter = key?.keyCode == android.view.KeyEvent.KEYCODE_ENTER || key?.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
-            if (enter && android.view.inputmethod.BaseInputConnection.getComposingSpanStart(input.text) >= 0) return@setOnEditorActionListener false
-            val submit = key == null && action == android.view.inputmethod.EditorInfo.IME_ACTION_SEND ||
-                enter && key != null && !key.isShiftPressed && !key.isAltPressed
-            if (submit && (key == null || key.action == android.view.KeyEvent.ACTION_DOWN && key.repeatCount == 0) &&
-                input.text.isNotBlank() && send.isEnabled) send.performClick()
-            submit
-        }
-        val sendState = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        val stateRow = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
-        sendState.addView(stateRow)
-        val status = ui.text("",12f,secondary).apply {
-            minHeight=dp(36); gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(2),dp(4),dp(2))
-            accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
-        }
-        stateRow.addView(status,LinearLayout.LayoutParams(0,-2,1f))
         val endWait = ui.text("结束等待", 13f, accent).apply {
             minHeight=dp(44); gravity=Gravity.CENTER
             contentDescription="结束等待并保留原消息；已提交的后台任务不会取消"
