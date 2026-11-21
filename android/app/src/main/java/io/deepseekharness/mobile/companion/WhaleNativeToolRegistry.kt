@@ -158,9 +158,6 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_owner_profile", "读取用户的主人档案摘要与已记录偏好。", emptyMap(), emptyList()))
             array.put(schema(
                 "whale_owner_profile_edit",
-        "whale_goal_create",
-        "whale_goal_update",
-        "whale_playbook_save",
                 "直接设置、更新或清空用户主人档案中的指定字段（立即生效为 confirmed）。支持字段：preferred_name(称呼)、language(语言)、timezone(时区如Asia/Shanghai)、location(常用城市)、occupation(工作与身份)、communication(沟通偏好)、routine(作息与提醒偏好)、devices(常用设备)、projects(主要项目)、current_focus(近期安排)。",
                 mapOf(
                     "field" to "字段名：preferred_name / language / timezone / location / occupation / communication / routine / devices / projects / current_focus",
@@ -405,6 +402,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_alarm_set",
         "whale_timer_set",
         "whale_owner_profile_edit",
+        "whale_goal_create",
+        "whale_goal_update",
+        "whale_playbook_save",
         "whale_knowledge_save",
         "whale_secretary_add",
         "whale_secretary_complete",
