@@ -101,20 +101,25 @@ internal object PetInitiative {
             throw error
         }
         val digest = CompanionBubbleChatPolicy.memoryDigest(topic.text)
-        if (!available() || !stillAllowed(context, topic) || !reserve(context, frequency, now, digest)) return null
+        val prefs = context.getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
+        if (!available() || !stillAllowed(context, topic) || !CompanionProactiveChatPolicy.due(frequency, prefs.getString("attempt_" + frequency, null), now)) return null
         val opening = try {
             question(client.complete(prompt(topic, now), 300))
         } catch (error: Exception) {
-            status(context, "模型请求失败，已计入本周期次数")
+            status(context, "模型请求失败，稍后将重试")
             throw error
         }
         val current = available() && stillAllowed(context, topic)
+        val valid = opening?.takeIf { current }
+        if (valid != null) {
+            reserve(context, frequency, now, digest)
+        }
         status(context, when {
             !current -> "状态已改变，本次提问已丢弃"
-            opening == null -> "本轮没有适合展示的问题"
-            else -> "本轮已生成一个提问"
+            valid == null -> "本轮保持安静，不消耗主动次数"
+            else -> "本轮已生成一条主动建议"
         })
-        return opening?.takeIf { current }
+        return valid
     }
 
     internal fun status(context: Context, value: String) {
@@ -135,7 +140,10 @@ internal object PetInitiative {
         val prefs = context.getSharedPreferences("companion_proactive_chat_v1", Context.MODE_PRIVATE)
         val key = CompanionProactiveChatPolicy.key(frequency, now)
         if (prefs.getString("attempt_" + frequency, null) == key) return false
-        return prefs.edit().putString("attempt_daily", CompanionProactiveChatPolicy.key("daily", now))
+        return prefs.edit()
+            .putString("attempt_active", CompanionProactiveChatPolicy.key("active", now))
+            .putString("attempt_balanced", CompanionProactiveChatPolicy.key("balanced", now))
+            .putString("attempt_daily", CompanionProactiveChatPolicy.key("daily", now))
             .putString("attempt_weekly", CompanionProactiveChatPolicy.key("weekly", now))
             .apply { if (digest == CompanionBubbleChatPolicy.memoryDigest("")) putBoolean("met", true) }
             .putString("last_considered", digest).commit()

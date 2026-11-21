@@ -4944,6 +4944,31 @@ class MobileRuntimePlugin : Plugin() {
      * 否则用户更新 Shizuku 后会以为「版本识别错了」。
      */
     /** 彻底脱离 DeepSeek Harness / PRoot 的原生直连对话入口。 */
+    private val activeNativeChats = java.util.concurrent.ConcurrentHashMap<String, io.deepseekharness.mobile.companion.WhaleNativeAgentEngine.RunControl>()
+
+    /** 允许用户在 Agent 运行中途随时插话、补充或修正意图，无需死等当前回复结束。 */
+    @PluginMethod
+    fun whaleNativeChatSteer(call: PluginCall) {
+        val requestId = call.getString("requestId")?.trim().orEmpty()
+        val message = call.getString("message")?.trim().orEmpty()
+        val control = if (requestId.isNotEmpty()) activeNativeChats[requestId] else null
+        if (control != null && message.isNotEmpty()) {
+            control.steer(message)
+            call.resolve(JSObject().put("ok", true).put("steered", true))
+        } else {
+            call.resolve(JSObject().put("ok", true).put("steered", false))
+        }
+    }
+
+    /** 立即中止正在执行的原生对话/工具流。 */
+    @PluginMethod
+    fun whaleNativeChatCancel(call: PluginCall) {
+        val requestId = call.getString("requestId")?.trim().orEmpty()
+        val control = if (requestId.isNotEmpty()) activeNativeChats[requestId] else null
+        control?.cancel()
+        call.resolve(JSObject().put("ok", true))
+    }
+
     @PluginMethod
     fun whaleNativeChat(call: PluginCall) {
         val message = call.getString("message")?.trim().orEmpty()
@@ -4998,8 +5023,14 @@ class MobileRuntimePlugin : Plugin() {
                         )
                     }
                 }
-                val result = engine.send(message, history, sessionId, listener)
-                call.resolve(JSObject.fromJSONObject(result.json()))
+                val control = io.deepseekharness.mobile.companion.WhaleNativeAgentEngine.RunControl()
+                activeNativeChats[requestId] = control
+                try {
+                    val result = engine.send(message, history, sessionId, listener, control = control)
+                    call.resolve(JSObject.fromJSONObject(result.json()))
+                } finally {
+                    activeNativeChats.remove(requestId, control)
+                }
             } catch (error: Throwable) {
                 call.reject(error.message ?: "原生对话执行失败", error as? Exception)
             }

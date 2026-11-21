@@ -39,6 +39,8 @@ export interface WhaleChatMessage {
   model?: string
   elapsedMs?: number
   error?: boolean
+  suggestions?: string[]
+  steered?: boolean
 }
 
 export interface WhaleChatSession {
@@ -71,6 +73,32 @@ const QUICK_SLASH_ACTIONS = [
   { id: 'recall', label: '查记忆', prefix: '查一下我之前让你记住的偏好和近期重要事项。', sendNow: true },
   { id: 'workshop', label: '造小工具', prefix: '帮我在功能工坊创作并立即启用一个离线小工具：', sendNow: false },
 ] as const
+
+function buildTimeAwareStarters(): ReadonlyArray<{ label: string; text: string }> {
+  const hour = new Date().getHours()
+  if (hour >= 5 && hour < 11) {
+    return [
+      { label: '早安今日规划', text: '帮我看看今天的日程和未完成待办，按优先级排个上午行动清单。' },
+      { label: '查我的长期记忆', text: '查一下我之前让你记住的偏好和重要信息。' },
+      { label: '做个离线小工具', text: '帮我在功能工坊创建一个极简「每日习惯打卡」离线小工具，支持数据持久化。' },
+      { label: '查看手机与后台', text: '帮我看看手机电量和当前有没有后台任务在运行。' },
+    ]
+  }
+  if (hour >= 19 || hour < 5) {
+    return [
+      { label: '晚间进度复盘', text: '帮我复盘一下今天还没完成的待办，顺手把需要明天做的重新排一下。' },
+      { label: '查我的长期记忆', text: '查一下我之前让你记住的偏好和重要信息。' },
+      { label: '设个明日提醒', text: '帮我给明天早上定个闹钟或提醒，先问我几点起。' },
+      { label: '做个离线小工具', text: '帮我在功能工坊创建一个极简「每日习惯打卡」离线小工具，支持数据持久化。' },
+    ]
+  }
+  return STARTER_PROMPTS
+}
+
+function stripStreamingMarker(text: string): string {
+  const idx = text.indexOf('<!--whale_next')
+  return idx >= 0 ? text.slice(0, idx).trimEnd() : text
+}
 
 const LEGACY_STORAGE_KEY = 'whale.nativeChatHistory.v1'
 const SESSIONS_STORAGE_KEY = 'whale.nativeChatSessions.v2'
@@ -225,6 +253,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     }
   })
   const activeRequestRef = useRef<string | null>(null)
+  const pendingFollowUpRef = useRef<string[]>([])
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const md = useMemo(() => new MarkdownIt({ html: false, linkify: true, breaks: true }), [])
@@ -261,6 +290,9 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       } else if (event.type === 'step' && event.step) {
         setStreamingSteps(prev => [...prev, event.step!])
       } else if (event.type === 'phase' && event.phase) {
+        if (event.phase === 'restarting') {
+          setStreamingText('')
+        }
         setStreamingPhase(event.phase)
       }
     }).then(handle => {
@@ -318,10 +350,51 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     setRenameDraft('')
   }
 
+  const cancelCurrentTurn = async (): Promise<void> => {
+    const reqId = activeRequestRef.current
+    if (!reqId) return
+    pendingFollowUpRef.current = []
+    setStreamingPhase('cancelling')
+    try {
+      await bridge.whaleNativeChatCancel?.({ requestId: reqId })
+    } catch {
+      // Ignore cancel bridge errors.
+    }
+  }
+
   const sendText = async (raw: string): Promise<void> => {
     const text = raw.trim()
-    if (!text || sending) return
+    if (!text) return
     const targetSessionId = currentSession.id
+
+    // 运行中允许随时插话、补充或修正：不锁输入框，立即实时注入正在运行的 Agent 引擎
+    if (sending && activeRequestRef.current) {
+      const steerMsg: WhaleChatMessage = {
+        id: `u-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        role: 'user',
+        text,
+        steered: true,
+      }
+      updateSessionMessages(targetSessionId, prev => [...prev, steerMsg], text)
+      setInput('')
+      setSlashOpen(false)
+      setStreamingPhase('steering')
+      const reqId = activeRequestRef.current
+      let steeredLive = false
+      if (bridge.whaleNativeChatSteer) {
+        try {
+          const res = await bridge.whaleNativeChatSteer({ requestId: reqId, message: text })
+          steeredLive = Boolean(res?.steered)
+        } catch {
+          steeredLive = false
+        }
+      }
+      if (!steeredLive) {
+        pendingFollowUpRef.current.push(text)
+      }
+      return
+    }
+
     const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const userMsg: WhaleChatMessage = {
       id: `u-${Date.now()}`,
@@ -354,9 +427,10 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           steps: result.steps,
           model: result.model,
           elapsedMs: result.elapsedMs,
+          suggestions: result.suggestions,
         },
       ])
-      if (autoSpeak && result.reply.trim() && bridge.testVoiceSpeak) {
+      if (autoSpeak && !result.cancelled && result.reply.trim() && bridge.testVoiceSpeak) {
         void bridge.testVoiceSpeak(result.reply).catch(() => {})
       }
     } catch (error) {
@@ -376,6 +450,11 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       setStreamingSteps([])
       setStreamingPhase('')
       setSending(false)
+      if (pendingFollowUpRef.current.length > 0) {
+        const queued = pendingFollowUpRef.current.join('\n')
+        pendingFollowUpRef.current = []
+        window.setTimeout(() => { void sendText(queued) }, 40)
+      }
     }
   }
 
@@ -400,7 +479,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   }
 
   const toggleVoiceRecord = async (): Promise<void> => {
-    if (sending || transcribing) return
+    if (transcribing) return
     if (recording) {
       setRecording(false)
       setTranscribing(true)
@@ -599,7 +678,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
               </button>
             </div>
             <div className="whale-starter-grid">
-              {STARTER_PROMPTS.map(item => (
+              {buildTimeAwareStarters().map(item => (
                 <button
                   key={item.label}
                   type="button"
@@ -647,6 +726,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                   </div>
                 ) : (
                   <div className="whale-msg-bubble">
+                    {msg.steered && <span className="whale-steered-tag">{t('中途补充')}</span>}
                     {msg.text}
                     {msg.error && (msg.text.includes('API Key') || msg.text.includes('模型与密钥')) && (
                       <div style={{ marginTop: 8 }}>
@@ -719,6 +799,20 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                     )}
                   </footer>
                 )}
+                {msg.role === 'assistant' && !msg.error && msg.suggestions && msg.suggestions.length > 0 && msg.id === messages[messages.length - 1]?.id && (
+                  <div className="whale-next-suggestions" aria-label={t('建议下一步')}>
+                    {msg.suggestions.map((sug, idx) => (
+                      <button
+                        key={`${msg.id}-sug-${idx}`}
+                        type="button"
+                        className="whale-next-chip"
+                        onClick={() => { void sendText(sug) }}
+                      >
+                        {sug}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </article>
             )
           })
@@ -741,7 +835,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             {streamingText ? (
               <div
                 className="whale-msg-bubble whale-markdown whale-streaming"
-                dangerouslySetInnerHTML={{ __html: md.render(streamingText) }}
+                dangerouslySetInnerHTML={{ __html: md.render(stripStreamingMarker(streamingText)) }}
               />
             ) : (
               <div className="whale-msg-bubble whale-thinking">{phaseLabel}</div>
@@ -814,8 +908,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           ref={inputRef}
           type="text"
           value={input}
-          disabled={sending}
-          placeholder={t('发消息、粘贴链接或输入 / 快捷记录…')}
+          placeholder={sending ? t('回复中… 可随时打字插话、补充或修正') : t('发消息、粘贴链接或输入 / 快捷记录…')}
           aria-label={t('输入消息')}
           onChange={event => {
             const val = event.target.value
@@ -827,21 +920,34 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         <button
           type="button"
           className={`whale-mic-btn${recording ? ' is-recording' : ''}`}
-          disabled={sending || transcribing}
+          disabled={transcribing}
           aria-label={recording ? t('停止录音并发送') : t('语音输入')}
           title={recording ? t('停止录音并发送') : t('语音输入')}
           onClick={() => { void toggleVoiceRecord() }}
         >
           {recording ? <Square size={14} /> : (style === 'cute' ? <CuteIcon name="mic" size={21} /> : <Mic size={16} />)}
         </button>
-        <button
-          type="submit"
-          className="whale-send-btn"
-          disabled={sending || input.trim() === ''}
-          aria-label={t('发送')}
-        >
-          {style === 'cute' ? <CuteIcon name="send" size={21} /> : <ArrowUp size={18} />}
-        </button>
+        {sending && input.trim() === '' ? (
+          <button
+            type="button"
+            className="whale-send-btn is-stop"
+            aria-label={t('停止生成')}
+            title={t('停止生成')}
+            onClick={() => { void cancelCurrentTurn() }}
+          >
+            <Square size={14} />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className={`whale-send-btn${sending ? ' is-steer' : ''}`}
+            disabled={input.trim() === ''}
+            aria-label={sending ? t('中途补充并调整') : t('发送')}
+            title={sending ? t('中途补充并调整') : t('发送')}
+          >
+            {style === 'cute' ? <CuteIcon name="send" size={21} /> : <ArrowUp size={18} />}
+          </button>
+        )}
       </form></div>
     </section>
   )

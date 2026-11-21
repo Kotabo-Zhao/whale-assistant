@@ -1665,6 +1665,8 @@ export interface CompanionQuickSettings {
 
 export interface RuntimeBridge {
   whaleNativeChat: (request: WhaleNativeChatRequest) => Promise<WhaleNativeChatResult>
+  whaleNativeChatSteer?: (request: { requestId: string; message: string }) => Promise<{ ok: boolean; steered: boolean }>
+  whaleNativeChatCancel?: (request: { requestId: string }) => Promise<{ ok: boolean }>
   addWhaleChatListener?: (listener: (event: WhaleNativeChatStreamEvent) => void) => Promise<ListenerHandle>
   addWhaleAppControlListener?: (listener: (event: WhaleAppControlEvent) => void) => Promise<ListenerHandle>
   getVoiceConfig?: () => Promise<WhaleVoiceConfig>
@@ -2433,4 +2435,6 @@ export interface WhaleNativeChatResult {
   model: string
   elapsedMs: number
   mode: string
+  suggestions?: string[]
+  cancelled?: boolean
 }

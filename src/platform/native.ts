@@ -125,7 +125,9 @@ import {
 } from './validation'
 
 interface NativeRuntimePlugin {
-  whaleNativeChat(request: { message: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; sessionId?: string; requestId?: string }): Promise<{ reply: string; steps: Array<{ tool: string; label: string; ok: boolean; durationMs: number }>; model: string; elapsedMs: number; mode: string }>
+  whaleNativeChat(request: { message: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; sessionId?: string; requestId?: string }): Promise<{ reply: string; steps: Array<{ tool: string; label: string; ok: boolean; durationMs: number }>; model: string; elapsedMs: number; mode: string; suggestions?: string[]; cancelled?: boolean }>
+  whaleNativeChatSteer(request: { requestId: string; message: string }): Promise<{ ok: boolean; steered: boolean }>
+  whaleNativeChatCancel(request: { requestId: string }): Promise<{ ok: boolean }>
   setHarnessViewport(options: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
   listHarnessReleases(): Promise<unknown>
   manageHarnessVersions(options: { operation: HarnessVersionOperation; version?: string }): Promise<unknown>
@@ -779,6 +781,8 @@ function createNativeBridge(): RuntimeBridge {
     testModelConnectivity: options => NativeRuntime.testModelConnectivity(options).then(validateModelConnectivityResult),
     listModelCatalog: options => NativeRuntime.listModelCatalog(options).then(validateModelCatalogResult),
     whaleNativeChat: request => NativeRuntime.whaleNativeChat(request),
+    whaleNativeChatSteer: request => NativeRuntime.whaleNativeChatSteer(request),
+    whaleNativeChatCancel: request => NativeRuntime.whaleNativeChatCancel(request),
     addWhaleChatListener: listener => NativeRuntime.addListener('whaleNativeChatEvent', listener),
     addWhaleAppControlListener: listener => NativeRuntime.addListener('whaleAppControl', listener),
   }

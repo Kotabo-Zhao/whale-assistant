@@ -5,10 +5,12 @@ import java.util.Locale
 
 /** Frequency keys are local-calendar labels, never precise alarm or delivery evidence. */
 internal object CompanionProactiveChatPolicy {
-    private val frequencies = setOf("daily", "weekly")
+    private val frequencies = setOf("active", "balanced", "daily", "weekly")
     fun key(frequency: String, now: Calendar): String {
         require(frequency in frequencies)
         val unit = when (frequency) {
+            "active" -> String.format(Locale.ROOT, "%04d-%03d-%02d-%d", now.get(Calendar.YEAR), now.get(Calendar.DAY_OF_YEAR), now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE) / 20)
+            "balanced" -> String.format(Locale.ROOT, "%04d-%03d-%02d", now.get(Calendar.YEAR), now.get(Calendar.DAY_OF_YEAR), now.get(Calendar.HOUR_OF_DAY) / 2)
             "daily" -> String.format(Locale.ROOT, "%04d-%03d", now.get(Calendar.YEAR), now.get(Calendar.DAY_OF_YEAR))
             else -> String.format(Locale.ROOT, "%04d-%02d", now.weekYear, now.get(Calendar.WEEK_OF_YEAR))
         }

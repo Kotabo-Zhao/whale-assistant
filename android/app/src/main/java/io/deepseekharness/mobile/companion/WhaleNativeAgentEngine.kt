@@ -11,7 +11,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 import java.util.concurrent.Callable
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Whale 原生 Super Agent 引擎（彻底脱离 DeepSeek Harness / PRoot / Node）。
@@ -42,22 +48,67 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             .put("durationMs", durationMs)
     }
 
+    /** 运行中实时控制句柄：支持随时中途插话/修正（steer）与立即打断停止（cancel）。 */
+    class RunControl {
+        val cancelled = AtomicBoolean(false)
+        val steerInterrupt = AtomicBoolean(false)
+        private val inToolPhase = AtomicBoolean(false)
+        private val steerQueue = ConcurrentLinkedQueue<String>()
+        private val activeConn = AtomicReference<HttpURLConnection?>(null)
+
+        fun setToolPhase(active: Boolean) { inToolPhase.set(active) }
+        fun attachConnection(conn: HttpURLConnection?) { activeConn.set(conn) }
+        fun clearConnection(conn: HttpURLConnection?) { activeConn.compareAndSet(conn, null) }
+
+        fun cancel() {
+            cancelled.set(true)
+            runCatching { activeConn.getAndSet(null)?.disconnect() }
+        }
+
+        fun steer(note: String) {
+            val clean = note.trim()
+            if (clean.isEmpty() || cancelled.get()) return
+            steerQueue.add(clean)
+            if (!inToolPhase.get()) {
+                steerInterrupt.set(true)
+                runCatching { activeConn.getAndSet(null)?.disconnect() }
+            }
+        }
+
+        fun hasPendingSteer(): Boolean = !steerQueue.isEmpty()
+
+        fun drainSteers(): List<String> {
+            val out = ArrayList<String>()
+            while (true) {
+                val item = steerQueue.poll() ?: break
+                out.add(item)
+            }
+            return out
+        }
+    }
+
     data class ChatResult(
         val reply: String,
         val steps: List<StepRecord>,
         val model: String,
         val elapsedMs: Long,
         val mode: String = "native_direct_sse",
+        val suggestions: List<String> = emptyList(),
+        val cancelled: Boolean = false,
     ) {
         fun json(): JSONObject {
             val stepsArr = JSONArray()
             steps.forEach { stepsArr.put(it.json()) }
+            val sugArr = JSONArray()
+            suggestions.forEach { sugArr.put(it) }
             return JSONObject()
                 .put("reply", reply)
                 .put("steps", stepsArr)
                 .put("model", model)
                 .put("elapsedMs", elapsedMs)
                 .put("mode", mode)
+                .put("suggestions", sugArr)
+                .put("cancelled", cancelled)
         }
     }
 
@@ -76,6 +127,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         sessionId: String = "whale-main",
         listener: StreamListener? = null,
         onProgress: ((round: Int, step: String, preview: String) -> Unit)? = null,
+        control: RunControl? = null,
     ): ChatResult {
         val startedAt = System.currentTimeMillis()
         val trimmed = userMessage.trim()
@@ -152,12 +204,48 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             } else {
                 null
             }
-            val turn = callChatCompletionsWithRetry(
-                endpoint = endpoint,
-                messages = messages,
-                toolsArray = if (toolSchemas.length() > 0) toolSchemas else null,
-                listener = streamBridge,
-            )
+            if (control?.cancelled?.get() == true) break
+            var partialStream = ""
+            val turn = try {
+                callChatCompletionsWithRetry(
+                    endpoint = endpoint,
+                    messages = messages,
+                    toolsArray = if (toolSchemas.length() > 0) toolSchemas else null,
+                    listener = if (streamBridge != null) object : StreamListener {
+                        override fun onDelta(chunk: String) {
+                            partialStream += chunk
+                            streamBridge.onDelta(chunk)
+                        }
+                        override fun onStep(step: StepRecord) { streamBridge.onStep(step) }
+                        override fun onPhase(phase: String) { streamBridge.onPhase(phase) }
+                    } else null,
+                    control = control,
+                )
+            } catch (err: Throwable) {
+                if (control?.cancelled?.get() == true) {
+                    finalReply = partialStream.trim()
+                    break
+                }
+                if (control?.steerInterrupt?.getAndSet(false) == true && control.hasPendingSteer()) {
+                    val notes = control.drainSteers()
+                    messages.put(JSONObject().put("role", "user").put("content", "[用户中途补充/修正] ${notes.joinToString("\n")}"))
+                    listener?.onPhase("restarting")
+                    continue
+                }
+                throw err
+            }
+            if (control?.cancelled?.get() == true) {
+                finalReply = turn.content.trim().ifBlank { partialStream.trim() }
+                break
+            }
+            if (control?.steerInterrupt?.getAndSet(false) == true || control?.hasPendingSteer() == true) {
+                val notes = control.drainSteers()
+                if (notes.isNotEmpty() && (turn.toolCalls == null || turn.toolCalls.length() == 0)) {
+                    messages.put(JSONObject().put("role", "user").put("content", "[用户中途补充/修正] ${notes.joinToString("\n")}"))
+                    listener?.onPhase("restarting")
+                    continue
+                }
+            }
             val content = turn.content.trim()
             val toolCalls = turn.toolCalls
 
@@ -215,7 +303,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 return outcome to dt
             }
 
-            val executed: List<Pair<WhaleNativeToolRegistry.ToolOutcome, Long>> = if (canParallel) {
+            control?.setToolPhase(true)
+            val executed: List<Pair<WhaleNativeToolRegistry.ToolOutcome, Long>> = try { if (canParallel) {
                 listener?.onPhase("tool:parallel(${planned.size})")
                 onProgress?.invoke(round + 1, "正在并行执行 ${planned.size} 项只读工具…", finalReply)
                 val futures = parallelToolPool.invokeAll(planned.map { p -> Callable { runSingle(p) } })
@@ -230,7 +319,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     onProgress?.invoke(round + 1, "正在执行工具：${p.fnName}", finalReply)
                     runSingle(p)
                 }
-            }
+            } } finally { control?.setToolPhase(false) }
 
             var needSchemaRefresh = false
             for (idx in planned.indices) {
@@ -260,16 +349,28 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (needSchemaRefresh) {
                 toolSchemas = tools.toolSchemas(trimmed, expandedCategories)
             }
+            if (control?.cancelled?.get() == true) break
+            if (control?.hasPendingSteer() == true) {
+                val notes = control.drainSteers()
+                if (notes.isNotEmpty()) {
+                    messages.put(JSONObject().put("role", "user").put("content", "[用户中途补充/修正] ${notes.joinToString("\n")}"))
+                    listener?.onPhase("steering")
+                }
+            }
         }
 
+        val wasCancelled = control?.cancelled?.get() == true
         if (finalReply.isBlank()) {
-            finalReply = "已执行完相关步骤，但模型未生成总结，请再试一次。"
+            finalReply = if (wasCancelled) "已停止生成。" else "已执行完相关步骤，但模型未生成总结，请再试一次。"
         }
+        val (cleanReply, suggestions) = extractSuggestions(finalReply)
         return ChatResult(
-            reply = finalReply,
+            reply = cleanReply,
             steps = steps,
             model = endpoint.model,
             elapsedMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(1L),
+            suggestions = if (wasCancelled) emptyList() else suggestions,
+            cancelled = wasCancelled,
         )
     }
 
@@ -303,10 +404,12 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
     }
 
     private fun buildStaticSystemPrompt(): String = buildString {
-        append("你是 Whale Assistant（鲸鱼助手），运行在用户手机上的全局总管 Router 与 100% 原生个人 Super Agent。简单问答/单步工具立刻执行；复杂长耗时任务主动用 whale_worker_submit 派发给后台 Worker。\n")
+        append("你是 Whale Assistant（鲸鱼助手），运行在用户手机上的主动式私人幕僚与 100% 原生 Super Agent。简单问答与只读核查立即一步到位执行；复杂长耗时任务主动用 whale_worker_submit 派发给后台 Worker。\n")
+        append("主动幕僚原则：不要被动等待追问。看到用户的目标、待办或日程线索时，主动串联所需只读查询并给出完整建议与下一步落地选项；若收到 [用户中途补充/修正]，立即以最新补充为准调整思路与方案。\n")
         append("风格：简洁、自然、直接、有温度，像靠谱的私人助理，不堆砌术语或多余确认。\n")
         append("精确原则：不确定的新信息先调用 whale_web_search 查证，绝不编造；若需要手机屏控、代码工坊、应用设置或设备定时等专域工具而当前列表未展开，先调用 whale_tools_expand 热加载即可立即使用。\n")
-        append("工具效率：多个互不依赖的只读查询尽量在同一轮并行发出 tool_calls，避免重复调用相同参数。")
+        append("工具效率：多个互不依赖的只读查询尽量在同一轮并行发出 tool_calls，避免重复调用相同参数。\n")
+        append("下一步行动提案：在每次最终回复的最末尾，另起一行输出 <!--whale_next:[\"简短建议1\",\"简短建议2\",\"简短建议3\"]-->，给出 2~3 条贴合本轮上下文、用户点一下就能直接执行的中文短建议（每条不超过 16 字，绝不写空泛废话）。")
         runCatching {
             val persona = CompanionPersonaStore(app).active()
             val personaPrompt = CompanionBubbleChatPolicy.personaContext(persona)
@@ -331,9 +434,20 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (confirmed.isNotEmpty()) {
                 append("[主人档案] ").append(confirmed.joinToString("；")).append("\n")
             }
+            val nowStr = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.CHINA).format(Date())
+            append("[当前时间] ").append(nowStr).append("\n")
             val openMatters = owner.optJSONArray("openMatters")
             if (openMatters != null && openMatters.length() > 0) {
-                append("[待办事项] 共 ").append(openMatters.length()).append(" 条未完成\n")
+                val top = mutableListOf<String>()
+                for (i in 0 until minOf(5, openMatters.length())) {
+                    val m = openMatters.optJSONObject(i) ?: continue
+                    val title = m.optString("title").ifBlank { m.optString("text") }.trim()
+                    val due = m.optString("dueAt").ifBlank { m.optString("when") }.trim()
+                    if (title.isNotEmpty()) top.add(if (due.isNotEmpty()) "$title($due)" else title)
+                }
+                append("[未完成待办] 共 ").append(openMatters.length()).append(" 条")
+                if (top.isNotEmpty()) append("：").append(top.joinToString("；"))
+                append("\n")
             }
         }
         runCatching {
@@ -353,12 +467,15 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         messages: JSONArray,
         toolsArray: JSONArray?,
         listener: StreamListener?,
+        control: RunControl? = null,
     ): AssistantTurn {
         var lastError: Throwable? = null
         for (attempt in 0..1) {
+            if (control?.cancelled?.get() == true) throw InterruptedException("cancelled")
             try {
-                return callChatCompletions(endpoint, messages, toolsArray, listener)
+                return callChatCompletions(endpoint, messages, toolsArray, listener, control = control)
             } catch (error: TransientHttpException) {
+                if (control?.cancelled?.get() == true || control?.steerInterrupt?.get() == true) throw error
                 lastError = error
                 if (attempt == 0) {
                     runCatching { Thread.sleep(800L) }
@@ -378,6 +495,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         toolsArray: JSONArray?,
         listener: StreamListener?,
         includeUsageOption: Boolean = true,
+        control: RunControl? = null,
     ): AssistantTurn {
         val wantStream = listener != null
         val body = JSONObject()
@@ -401,6 +519,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             if (wantStream) setRequestProperty("Accept", "text/event-stream, application/json")
         }
+        control?.attachConnection(conn)
         try {
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
@@ -408,7 +527,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (code !in 200..299) {
                 val errText = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
                 if (code == 400 && wantStream && includeUsageOption && errText.contains("stream_options", ignoreCase = true)) {
-                    return callChatCompletions(endpoint, messages, toolsArray, listener, includeUsageOption = false)
+                    return callChatCompletions(endpoint, messages, toolsArray, listener, includeUsageOption = false, control = control)
                 }
                 val msg = "模型接口返回 HTTP $code：${errText.take(240)}"
                 if (code == 429 || code in 502..504) throw TransientHttpException(msg)
@@ -441,6 +560,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             return AssistantTurn(content, message.optJSONArray("tool_calls"))
         } finally {
+            control?.clearConnection(conn)
             conn.disconnect()
         }
     }
@@ -535,6 +655,21 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         if (!has(key) || isNull(key)) fallback else optString(key, fallback)
 
     companion object {
+        private val NEXT_BLOCK_REGEX = Regex("<!--whale_next:(\\[[\\s\\S]*?\\])-->")
+
+        internal fun extractSuggestions(raw: String): Pair<String, List<String>> {
+            val match = NEXT_BLOCK_REGEX.find(raw) ?: return raw.trim() to emptyList()
+            val clean = raw.replace(NEXT_BLOCK_REGEX, "").trim()
+            val list = ArrayList<String>()
+            runCatching {
+                val arr = JSONArray(match.groupValues[1])
+                for (i in 0 until arr.length()) {
+                    val item = arr.optString(i).trim()
+                    if (item.isNotEmpty() && item.length <= 28 && list.size < 3) list.add(item)
+                }
+            }
+            return clean to list
+        }
         private const val MAX_TOOL_ROUNDS = 14
         private val parallelToolPool = Executors.newFixedThreadPool(4)
     }
