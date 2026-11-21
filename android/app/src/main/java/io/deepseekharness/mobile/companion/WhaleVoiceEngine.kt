@@ -65,7 +65,7 @@ internal object WhaleVoiceEngine {
         val autoSpeakPet: Boolean,
     )
 
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private val ttsFetchExecutor = Executors.newSingleThreadExecutor { r ->
         Thread(r, "whale-tts-fetch").apply { isDaemon = true }
     }
