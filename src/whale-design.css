@@ -983,3 +983,168 @@ button:active .whale-cute-icon,
   box-shadow: 0 2px 8px rgba(42, 108, 168, 0.18);
   object-fit: cover;
 }
+
+/* ─── Flagship Dual-Aesthetic Polish (Ultra-Cute vs. Editorial Simple) ──── */
+
+/* 1. Editorial Luxury Simple Mode (Light & Dark) */
+:root[data-style='simple'] {
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-muted: #f2f3f5;
+  --surface-hover: #e9ebef;
+  --ink: #0a0c10;
+  --muted: #667085;
+  --line: rgba(10, 12, 16, 0.075);
+  --line-strong: rgba(10, 12, 16, 0.14);
+  --blue: #111318;
+  --blue-hover: #242934;
+  --blue-soft: rgba(10, 12, 16, 0.06);
+  --blue-line: rgba(10, 12, 16, 0.16);
+  --on-accent: #ffffff;
+  --shadow-card: 0 1px 2px rgba(10, 12, 16, 0.03), 0 4px 12px rgba(10, 12, 16, 0.025);
+  --shadow-elevated: 0 10px 30px rgba(10, 12, 16, 0.07);
+}
+
+:root[data-style='simple'][data-theme='dark'] {
+  --bg: #060709;
+  --surface: #0e1015;
+  --surface-raised: #13161d;
+  --surface-muted: #171b24;
+  --surface-hover: #1f2430;
+  --ink: #f3f4f6;
+  --muted: #8b93a3;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --blue: #f3f4f6;
+  --blue-hover: #ffffff;
+  --blue-soft: rgba(255, 255, 255, 0.08);
+  --blue-line: rgba(255, 255, 255, 0.20);
+  --on-accent: #060709;
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-elevated: 0 14px 36px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+:root[data-style='simple'] h1,
+:root[data-style='simple'] h2 {
+  letter-spacing: -0.028em;
+}
+
+:root[data-style='simple'] .settings-section,
+:root[data-style='simple'] .management-list,
+:root[data-style='simple'] .whale-autonomy-card,
+:root[data-style='simple'] .account-group-toggle {
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  transition: border-color 160ms ease, background-color 160ms ease, transform 140ms ease;
+}
+
+:root[data-style='simple'] .bottom-navigation {
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+}
+
+:root[data-style='simple'] .bottom-navigation-item.is-active {
+  background: var(--blue-soft);
+  color: var(--ink);
+  border-radius: 14px;
+}
+
+/* 2. Dreamy Porcelain Kawaii Cute Mode (Light & Dark) */
+:root[data-style='cute'] {
+  --bg: #f6faff;
+  --surface: #fffefb;
+  --surface-raised: #ffffff;
+  --surface-muted: #ebf5ff;
+  --surface-hover: #dff0ff;
+  --ink: #1b3354;
+  --muted: #5d789c;
+  --line: rgba(96, 178, 240, 0.22);
+  --line-strong: rgba(74, 168, 240, 0.36);
+  --blue: #2f92ec;
+  --blue-hover: #1e7fd9;
+  --blue-soft: rgba(98, 189, 255, 0.16);
+  --blue-line: rgba(98, 189, 255, 0.42);
+  --radius-card: 22px;
+  --radius-inner: 16px;
+  --shadow-card: 0 4px 16px rgba(64, 148, 218, 0.09);
+  --shadow-elevated: 0 10px 28px rgba(64, 148, 218, 0.16);
+}
+
+:root[data-style='cute'][data-theme='dark'] {
+  --bg: #0a1424;
+  --surface: #122138;
+  --surface-raised: #182b47;
+  --surface-muted: #1a304f;
+  --surface-hover: #223d63;
+  --ink: #eef6ff;
+  --muted: #92b2d8;
+  --line: rgba(132, 208, 255, 0.22);
+  --line-strong: rgba(132, 208, 255, 0.38);
+  --shadow-card: 0 6px 20px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(168, 224, 255, 0.08);
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.48);
+}
+
+:root[data-style='cute'] body,
+:root[data-style='cute'] .app-shell,
+:root[data-style='cute'] .whale-chat-screen {
+  background: radial-gradient(circle at 50% 14%, rgba(255, 245, 228, 0.72) 0%, rgba(236, 247, 255, 0.92) 52%, #f4f9ff 100%);
+}
+
+:root[data-style='cute'][data-theme='dark'] body,
+:root[data-style='cute'][data-theme='dark'] .app-shell,
+:root[data-style='cute'][data-theme='dark'] .whale-chat-screen {
+  background: radial-gradient(circle at 50% 14%, rgba(30, 62, 102, 0.56) 0%, rgba(12, 24, 42, 0.96) 54%, #091322 100%);
+}
+
+:root[data-style='cute'] .settings-section,
+:root[data-style='cute'] .management-list,
+:root[data-style='cute'] .whale-autonomy-card {
+  border: 1.5px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 254, 251, 0.96) 0%, rgba(244, 250, 255, 0.96) 100%);
+}
+
+:root[data-style='cute'][data-theme='dark'] .settings-section,
+:root[data-style='cute'][data-theme='dark'] .management-list,
+:root[data-style='cute'][data-theme='dark'] .whale-autonomy-card {
+  background: linear-gradient(180deg, rgba(22, 39, 64, 0.94) 0%, rgba(16, 30, 50, 0.96) 100%);
+}
+
+:root[data-style='cute'] .account-group-toggle {
+  border-radius: 18px;
+  border: 1.5px solid var(--line);
+  background: linear-gradient(180deg, #fffefb 0%, #eef7ff 100%);
+  box-shadow: 0 3px 10px rgba(74, 168, 240, 0.10);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.16s ease;
+}
+
+:root[data-style='cute'][data-theme='dark'] .account-group-toggle {
+  background: linear-gradient(180deg, #172b46 0%, #12233a 100%);
+}
+
+:root[data-style='cute'] .account-group-toggle:active {
+  transform: scale(0.95);
+}
+
+:root[data-style='cute'] .bottom-navigation {
+  border-top: 1.5px solid rgba(154, 214, 252, 0.45);
+  background: color-mix(in srgb, #fffefb 88%, #eaf6ff 12%);
+  box-shadow: 0 -4px 18px rgba(74, 168, 240, 0.08);
+}
+
+:root[data-style='cute'][data-theme='dark'] .bottom-navigation {
+  border-top-color: rgba(132, 208, 255, 0.24);
+  background: rgba(14, 26, 44, 0.88);
+}
+
+:root[data-style='cute'] .bottom-navigation-item.is-active {
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(114, 198, 255, 0.22) 0%, rgba(126, 232, 206, 0.18) 100%);
+  border: 1px solid rgba(132, 208, 255, 0.48);
+  color: #1e7fd9;
+}
+
+:root[data-style='cute'][data-theme='dark'] .bottom-navigation-item.is-active {
+  color: #82d0ff;
+  border-color: rgba(132, 208, 255, 0.36);
+}

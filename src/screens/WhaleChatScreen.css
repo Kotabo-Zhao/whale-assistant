@@ -1281,3 +1281,173 @@
   display: grid;
   place-items: center;
 }
+
+/* ─── Flagship Chat Surface Polish (Simple Editorial vs. Cute Porcelain) ── */
+@keyframes whaleHeroFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+}
+
+:root[data-style='cute'] .whale-hero-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(224, 244, 255, 0.65) 68%, transparent 100%);
+  animation: whaleHeroFloat 3.6s ease-in-out infinite;
+}
+
+:root[data-style='cute'] .whale-chat-hero-mark {
+  border-radius: 999px;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(146, 212, 255, 0.32), 0 10px 26px rgba(64, 152, 224, 0.24);
+}
+
+:root[data-style='cute'][data-theme='dark'] .whale-chat-hero-mark {
+  border-color: rgba(168, 224, 255, 0.72);
+  box-shadow: 0 0 0 5px rgba(107, 195, 255, 0.20), 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-style='cute'] .whale-cute-greeting {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(255, 253, 248, 0.92) 0%, rgba(232, 246, 255, 0.92) 100%);
+  border: 1px solid rgba(150, 212, 252, 0.55);
+  color: #2c6ea8;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(74, 168, 240, 0.12);
+}
+
+:root[data-style='cute'][data-theme='dark'] .whale-cute-greeting {
+  background: rgba(24, 44, 70, 0.85);
+  border-color: rgba(132, 208, 255, 0.34);
+  color: #9dd4ff;
+}
+
+:root[data-style='cute'] .whale-hub-pill {
+  border-radius: 999px;
+  border: 1.5px solid rgba(154, 214, 252, 0.65);
+  background: linear-gradient(180deg, #fffefb 0%, #eef8ff 100%);
+  box-shadow: 0 3px 10px rgba(74, 168, 240, 0.11);
+  transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+:root[data-style='cute'][data-theme='dark'] .whale-hub-pill {
+  background: linear-gradient(180deg, #182c47 0%, #13243b 100%);
+  border-color: rgba(132, 208, 255, 0.32);
+}
+
+:root[data-style='cute'] .whale-hub-pill:active,
+:root[data-style='cute'] .whale-starter-card:active {
+  transform: scale(0.95);
+}
+
+:root[data-style='cute'] .whale-chat-composer {
+  border-radius: 26px;
+  border: 1.5px solid rgba(146, 212, 255, 0.72);
+  background: linear-gradient(180deg, rgba(255, 254, 252, 0.98) 0%, rgba(245, 251, 255, 0.98) 100%);
+  box-shadow: 0 6px 20px rgba(74, 168, 240, 0.14);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+:root[data-style='cute'] .whale-chat-composer:focus-within {
+  border-color: #6bc3ff;
+  box-shadow: 0 0 0 3px rgba(107, 195, 255, 0.22), 0 8px 24px rgba(74, 168, 240, 0.18);
+}
+
+:root[data-style='cute'][data-theme='dark'] .whale-chat-composer {
+  background: linear-gradient(180deg, rgba(22, 39, 64, 0.95) 0%, rgba(16, 30, 50, 0.98) 100%);
+  border-color: rgba(132, 208, 255, 0.34);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.38);
+}
+
+:root[data-style='cute'] .whale-chat-header {
+  border: 1.5px solid rgba(154, 214, 252, 0.60);
+  background: rgba(255, 254, 251, 0.86);
+  box-shadow: 0 4px 16px rgba(74, 168, 240, 0.14);
+}
+
+:root[data-style='cute'][data-theme='dark'] .whale-chat-header {
+  border-color: rgba(132, 208, 255, 0.30);
+  background: rgba(18, 33, 56, 0.84);
+}
+
+/* Editorial Luxury Simple Mode Chat Surfaces */
+:root[data-style='simple'] .whale-chat-empty h2 {
+  font-size: 1.38rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+:root[data-style='simple'] .whale-hub-pill {
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-style='simple'] .whale-starter-card {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition: border-color 160ms ease, transform 140ms ease;
+}
+
+:root[data-style='simple'] .whale-starter-card:active {
+  transform: scale(0.985);
+}
+
+:root[data-style='simple'] .whale-msg-user .whale-msg-bubble {
+  background: #111318;
+  color: #f8fafc;
+  border-radius: 18px 18px 4px 18px;
+  box-shadow: 0 2px 10px rgba(10, 12, 16, 0.12);
+}
+
+:root[data-style='simple'][data-theme='dark'] .whale-msg-user .whale-msg-bubble {
+  background: #1d222c;
+  color: #f3f4f6;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+:root[data-style='simple'] .whale-chat-composer {
+  border-radius: 22px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-elevated);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+:root[data-style='simple'] .whale-chat-composer:focus-within {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink), var(--shadow-elevated);
+}
+
+:root[data-style='simple'] .whale-send-btn:not(.is-stop) {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+:root[data-style='simple'] .whale-send-btn:disabled {
+  opacity: 0.28;
+}
+
+:root[data-style='simple'] .whale-next-chip {
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+:root[data-style='simple'] .whale-live-plan-bar {
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
