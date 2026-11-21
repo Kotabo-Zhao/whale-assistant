@@ -148,7 +148,7 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
             if (active != null && activePkg != ownPkg) return active
             if (attempt < 2) SystemClock.sleep(160L)
         }
-        return service.rootInActiveWindow
+        return service.rootInActiveWindow?.takeIf { it.packageName?.toString() != ownPkg }
     }
 
     private fun requireSafeRoot(): Pair<AccessibilityNodeInfo, String>? {
@@ -382,14 +382,25 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
         if (target.isPassword || AccessibilityAutomationPolicy.containsSensitiveText(target.viewIdResourceName)) {
             return DeviceCommandResult(false, 1, "密码输入框禁止自动填充", false, "ACCESSIBILITY_SENSITIVE_WINDOW")
         }
+        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val bundle = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, inputText)
         }
-        val ok = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+        var ok = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+        if (!ok) {
+            // Fallback for WebView / custom inputs (e.g. Baicizhan spelling box): clipboard + ACTION_PASTE
+            ok = runCatching {
+                val cm = service.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("whale_input", inputText))
+                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                SystemClock.sleep(80L)
+                target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            }.getOrDefault(false)
+        }
         return DeviceCommandResult(
             ok,
             if (ok) 0 else 1,
-            if (ok) "已输入文本（${inputText.length} 字）" else "输入框拒绝写入文本",
+            if (ok) "已输入文本（${inputText.length} 字）" else "输入框拒绝写入文本（可能是自绘/网页输入框，已尝试剪贴板粘贴）",
             false,
             if (ok) null else "ACCESSIBILITY_ACTION_REJECTED",
         )

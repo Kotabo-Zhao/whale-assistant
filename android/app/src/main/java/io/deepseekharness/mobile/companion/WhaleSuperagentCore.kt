@@ -132,7 +132,7 @@ internal object WhaleSuperagentCore {
         reportState == "blocked" && !hasHumanMessageSinceReport -> TicketStage.PERSON_BLOCKED
         reportState == "failed" && !hasHumanMessageSinceReport -> TicketStage.PERSON_FAILED
         assignmentState == "pending" || assignmentState == "queued" -> TicketStage.WORKING_QUEUED
-        reportState == "waiting" || assignmentState == "ended" || assignmentState == "completed" -> TicketStage.IDLE
+        reportState == "waiting" || assignmentState in setOf("ended", "completed", "done", "cancelled") -> TicketStage.IDLE
         else -> TicketStage.WORKING
     }
 

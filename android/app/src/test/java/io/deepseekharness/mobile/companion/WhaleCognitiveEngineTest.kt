@@ -131,6 +131,7 @@ class WhaleCognitiveEngineTest {
         )
         assertTrue(WhaleSuperagentCore.waitsForPerson("blocked", hasHumanMessageSinceReport = false))
         assertTrue(!WhaleSuperagentCore.waitsForPerson("blocked", hasHumanMessageSinceReport = true))
+        assertEquals(WhaleSuperagentCore.TicketStage.IDLE, WhaleSuperagentCore.computeStage(assignmentState = "cancelled"))
     }
 
     @Test
