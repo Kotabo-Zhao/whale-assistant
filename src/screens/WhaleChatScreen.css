@@ -1451,3 +1451,77 @@
   background: var(--surface);
   box-shadow: var(--shadow-card);
 }
+
+/* ─── Pixel-Perfect Icon & Border Alignment Fixes ───────────────────────── */
+.whale-chat-stream {
+  padding-top: calc(max(8px, env(safe-area-inset-top, 8px)) + 46px);
+}
+
+.whale-icon-chip,
+.whale-slash-btn,
+.whale-img-btn,
+.whale-mic-btn,
+.whale-send-btn,
+.whale-copy-btn,
+:root[data-style='cute'] .whale-plan-mini-btn.is-icon,
+.whale-plan-mini-btn.is-icon {
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+:root[data-style='cute'] .whale-plan-mini-btn.is-icon,
+.whale-plan-mini-btn.is-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+.whale-chat-composer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px 5px 8px;
+}
+
+.whale-chat-composer input {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 34px;
+  line-height: 34px;
+}
+
+.whale-slash-btn,
+.whale-img-btn,
+.whale-mic-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+}
+
+.whale-send-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+}
+
+.whale-copy-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  color: var(--muted, #5d789c);
+  opacity: 0.88;
+}
+
+.whale-copy-btn svg {
+  display: block;
+}
+
+.whale-cute-icon {
+  margin: 0;
+  display: block;
+}

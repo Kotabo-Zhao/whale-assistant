@@ -332,6 +332,14 @@ internal class CompanionBubbleChat(
         return finishReply(history,reply)
     }
 
+    @Volatile private var activeNativeControl: WhaleNativeAgentEngine.RunControl? = null
+    fun steerNative(note: String): Boolean {
+        val c = activeNativeControl ?: return false
+        c.steer(note)
+        return true
+    }
+    fun cancelNative() { activeNativeControl?.cancel() }
+
     fun reply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit = {}): Reply {
         require(history.isNotEmpty() && history.size <= 20 && history.last().role == "user")
         val access = runCatching { RuntimeHost.controllerOrNull()?.openHarnessAccess() }.getOrNull()
@@ -341,19 +349,26 @@ internal class CompanionBubbleChat(
             val userText = history.last().text
             val streamed = StringBuilder()
             val nativeSession = sessionId?.takeIf(String::isNotBlank) ?: "whale-pet"
-            val result = engine.send(
-                userMessage = userText,
-                history = priorPairs,
-                sessionId = nativeSession,
-                listener = object : WhaleNativeAgentEngine.StreamListener {
-                    override fun onDelta(chunk: String) {
-                        streamed.append(chunk)
-                        val raw = streamed.toString()
-                        val idx = raw.indexOf("<!--whale_next")
-                        onPartial(if (idx >= 0) raw.substring(0, idx).trimEnd() else raw)
-                    }
-                },
-            )
+            val control = WhaleNativeAgentEngine.RunControl()
+            activeNativeControl = control
+            val result = try {
+                engine.send(
+                    userMessage = userText,
+                    history = priorPairs,
+                    sessionId = nativeSession,
+                    listener = object : WhaleNativeAgentEngine.StreamListener {
+                        override fun onDelta(chunk: String) {
+                            streamed.append(chunk)
+                            val raw = streamed.toString()
+                            val idx = raw.indexOf("<!--whale_next")
+                            onPartial(if (idx >= 0) raw.substring(0, idx).trimEnd() else raw)
+                        }
+                    },
+                    control = control,
+                )
+            } finally {
+                if (activeNativeControl === control) activeNativeControl = null
+            }
             val reply = Reply(
                 text = result.reply,
                 images = emptyList(),
