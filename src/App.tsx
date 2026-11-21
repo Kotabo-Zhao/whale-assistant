@@ -2750,14 +2750,16 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         {page === 'device-shell' && (
         <>
         <section className="settings-section" aria-labelledby="device-shell-entry">
-          <div className="section-title section-title-action">
+          <div className="section-title">
             <span className="section-icon"><SquareTerminal size={19} /></span>
-            <div><h2 id="device-shell-entry">{t("设备 Shell")}</h2><p>{t("设备上的 Shell：命令以 shell 身份执行，需要下面的 Shizuku 授权")}</p></div>
-            <button className="button button-secondary" type="button" onClick={onOpenShellView} disabled={busy !== null}>
+            <div><h2 id="device-shell-entry">{t("设备 Shell")}</h2><p>{t("在宿主机直接执行 Android Shell 命令（需 Shizuku 授权）")}</p></div>
+          </div>
+          <div className="settings-inline-actions">
+            <button className="button button-primary" type="button" onClick={onOpenShellView} disabled={busy !== null}>
               <ExternalLink size={18} />{t("打开设备 Shell")}</button>
           </div>
           <p className="settings-note">
-            {t("命令直接跑在设备上，不在 Ubuntu 里；Shizuku 没授权时也能打开，只是设备工具不可用，Ubuntu 终端与 Harness 不受影响。")}
+            {t("命令直接跑在设备上，独立于 Ubuntu 终端；未授权时仍可进入查看状态。")}
           </p>
         </section>
         <section className="settings-section" aria-labelledby="shizuku-settings">

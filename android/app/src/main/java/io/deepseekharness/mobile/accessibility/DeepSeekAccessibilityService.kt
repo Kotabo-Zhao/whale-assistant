@@ -109,7 +109,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
                 AccessibilityEvent.TYPE_VIEW_SCROLLED or
-                AccessibilityEvent.TYPE_VIEW_CLICKED
+                AccessibilityEvent.TYPE_VIEW_CLICKED or AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                 AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -132,6 +132,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             val nowMs = SystemClock.elapsedRealtime()
             observeAutomationTaskEvent(event, nowMs)
             handleAutomationEvent(event, nowMs)
+            io.deepseekharness.mobile.companion.WhaleAutoMemoryObserver.onAccessibilityEvent(this, event)
         } catch (_: Throwable) {
             // 任何异常都当作"这次不动作"。
         }

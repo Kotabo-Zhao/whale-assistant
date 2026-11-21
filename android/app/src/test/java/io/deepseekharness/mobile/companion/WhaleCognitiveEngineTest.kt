@@ -164,4 +164,23 @@ class WhaleCognitiveEngineTest {
         assertTrue(!prompt.contains("已读过的补充"))
         assertTrue(prompt.contains("严禁重复已完成的外部动作"))
     }
+
+    @Test
+    fun autoMemoryObserverDetectsFavoritesScreenshotsAndCleansSummary() {
+        assertTrue(WhaleAutoMemoryObserver.isFavoriteSignal("已收藏"))
+        assertTrue(WhaleAutoMemoryObserver.isFavoriteSignal("收藏成功，已加入收藏夹"))
+        assertTrue(WhaleAutoMemoryObserver.isFavoriteSignal("Saved to bookmarks"))
+        assertTrue(!WhaleAutoMemoryObserver.isFavoriteSignal("普通聊天消息"))
+
+        assertTrue(WhaleAutoMemoryObserver.isScreenshotPath("Pictures/Screenshots/Screenshot_20261121.png"))
+        assertTrue(WhaleAutoMemoryObserver.isScreenshotPath("DCIM/截屏/img_01.jpg"))
+        assertTrue(!WhaleAutoMemoryObserver.isScreenshotPath("DCIM/Camera/IMG_2026.jpg"))
+
+        val summary = WhaleAutoMemoryObserver.extractMeaningfulSummary(
+            listOf("返回", "收藏", "DeepSeek Super-agent 架构设计笔记", "DeepSeek Super-agent 架构设计笔记", "核心是用 Router 与 Worker 解耦保护人类注意力"),
+        )
+        assertTrue(summary.contains("DeepSeek Super-agent 架构设计笔记"))
+        assertTrue(summary.contains("核心是用 Router 与 Worker 解耦保护人类注意力"))
+        assertTrue(!summary.contains("返回"))
+    }
 }

@@ -3578,6 +3578,7 @@ html[lang="en"] .screen-heading h1 { overflow-wrap: anywhere; }
 @media (max-width: 560px) {
   .settings-screen .section-title-action { grid-template-columns: 40px minmax(0, 1fr); }
   .settings-screen .section-title-action > .status-chip { grid-column: 2; justify-self: start; white-space: normal; }
+  .settings-screen .section-title-action > .button { grid-column: 1 / -1; justify-self: start; white-space: nowrap; }
   .settings-screen .range-field { flex-wrap: wrap; gap: 12px; }
   .settings-screen .range-field input[type="range"] { width: 100%; }
 }

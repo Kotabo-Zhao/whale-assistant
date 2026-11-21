@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ChevronDown, Cpu, Puzzle, Sparkles } from 'lucide-react'
 import { t } from '../i18n'
 import { runtimeBridge } from '../platform/native'
 
@@ -138,98 +139,140 @@ export function WhalePowerHub() {
       const res = await runtimeBridge.companionDashboard({ operation: 'memoryCompact' })
       const removed = Number(res.removed ?? 0)
       const scanned = Number(res.scanned ?? 0)
-      setMemMsg(removed > 0 ? `体检完成：扫描 ${scanned} 条，已清理 ${removed} 条重复/空记忆` : `体检完成：扫描 ${scanned} 条，记忆库非常干净`)
+      setMemMsg(removed > 0 ? `已扫描 ${scanned} 条，清理 ${removed} 条重复/空记忆` : `已扫描 ${scanned} 条，记忆库非常干净`)
     } catch {
       setMemMsg('记忆体检失败，请在安卓应用中重试')
     }
   }
 
+  const usageSummary = usage
+    ? `${fmtTok(usage.totalTokens)} · ¥${usage.estimatedYuan.toFixed(2)}`
+    : t('按需查看')
+
   return (
-    <div className="whale-voice-box" aria-label={t('扩展、路由与记忆体检')}>
-      <details>
-        <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>
-          {t('MCP 与 Skill 扩展管理')}（{skills.length} Skill · {mcpServers.length} MCP）
+    <div className="whale-power-stack" aria-label={t('扩展、路由与记忆体检')}>
+      <details className="whale-power-card">
+        <summary className="whale-power-summary">
+          <span className="whale-power-title">
+            <Puzzle size={15} aria-hidden="true" />
+            <strong>{t('技能与 MCP 扩展')}</strong>
+          </span>
+          <span className="whale-power-meta">
+            <span className="whale-power-badge">{skills.length} Skill · {mcpServers.length} MCP</span>
+            <ChevronDown size={15} className="whale-power-chevron" aria-hidden="true" />
+          </span>
         </summary>
-        <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-          <div className="whale-voice-row">
-            <input
-              value={skillUrl}
-              placeholder={t('粘贴 GitHub 或 https://.../SKILL.md 地址')}
-              onChange={e => setSkillUrl(e.target.value)}
-            />
-            <button type="button" className="whale-perm-chip" disabled={extBusy || !skillUrl.trim()} onClick={() => { void installSkill() }}>
-              {t('装 Skill')}
-            </button>
-          </div>
-          {skills.map(sk => (
-            <div key={sk.slug} className="whale-voice-row" style={{ justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.8rem', flex: 1 }}>
-                <strong>{sk.name}</strong> {sk.enabled ? '' : '（已停用）'}
-              </span>
-              <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageSkill(sk.slug, sk.enabled ? 'disable' : 'enable') }}>
-                {sk.enabled ? t('停用') : t('启用')}
-              </button>
-              <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageSkill(sk.slug, 'delete') }}>
-                {t('删除')}
+        <div className="whale-power-body">
+          <div className="whale-power-group">
+            <label className="whale-power-label">{t('安装 Skill（支持 GitHub 仓库或 SKILL.md 链接）')}</label>
+            <div className="whale-voice-row">
+              <input
+                value={skillUrl}
+                placeholder={t('粘贴 GitHub 或 SKILL.md 地址')}
+                onChange={e => setSkillUrl(e.target.value)}
+              />
+              <button type="button" className="whale-perm-chip" disabled={extBusy || !skillUrl.trim()} onClick={() => { void installSkill() }}>
+                {t('安装')}
               </button>
             </div>
-          ))}
-          <div className="whale-voice-row">
-            <input value={mcpName} placeholder={t('MCP 名称')} onChange={e => setMcpName(e.target.value)} />
-            <input value={mcpUrl} placeholder={t('MCP 地址 (https://...)')} onChange={e => setMcpUrl(e.target.value)} />
           </div>
-          <div className="whale-voice-row">
-            <input
-              type="password"
-              value={mcpAuth}
-              placeholder={t('可选 Authorization（如 Bearer xxx，本地加密不进聊天）')}
-              onChange={e => setMcpAuth(e.target.value)}
-            />
-            <button type="button" className="whale-perm-chip" disabled={extBusy || !mcpUrl.trim()} onClick={() => { void addMcp() }}>
-              {t('接 MCP')}
-            </button>
-          </div>
-          {mcpServers.map(sv => (
-            <div key={sv.id} className="whale-voice-row" style={{ justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.8rem', flex: 1 }}>
-                <strong>{sv.name}</strong> · {sv.toolCount} 工具{sv.enabled ? '' : '（已停用）'}
-              </span>
-              <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageMcp(sv.id, 'refresh') }}>
-                {t('刷新')}
-              </button>
-              <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageMcp(sv.id, sv.enabled ? 'disable' : 'enable') }}>
-                {sv.enabled ? t('停用') : t('启用')}
-              </button>
-              <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageMcp(sv.id, 'remove') }}>
-                {t('移除')}
+          {skills.length > 0 && (
+            <div className="whale-power-list">
+              {skills.map(sk => (
+                <div key={sk.slug} className="whale-power-item">
+                  <span><strong>{sk.name}</strong>{sk.enabled ? '' : ` · ${t('已停用')}`}</span>
+                  <div className="whale-power-item-actions">
+                    <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageSkill(sk.slug, sk.enabled ? 'disable' : 'enable') }}>
+                      {sk.enabled ? t('停用') : t('启用')}
+                    </button>
+                    <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageSkill(sk.slug, 'delete') }}>
+                      {t('删除')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="whale-power-group">
+            <label className="whale-power-label">{t('接入远程 MCP 服务器')}</label>
+            <div className="whale-power-grid">
+              <input value={mcpName} placeholder={t('服务器名称')} onChange={e => setMcpName(e.target.value)} />
+              <input value={mcpUrl} placeholder={t('HTTPS 地址')} onChange={e => setMcpUrl(e.target.value)} />
+            </div>
+            <div className="whale-voice-row">
+              <input
+                type="password"
+                value={mcpAuth}
+                placeholder={t('可选 Authorization（本地加密，不进聊天）')}
+                onChange={e => setMcpAuth(e.target.value)}
+              />
+              <button type="button" className="whale-perm-chip" disabled={extBusy || !mcpUrl.trim()} onClick={() => { void addMcp() }}>
+                {t('接入')}
               </button>
             </div>
-          ))}
-          {extMsg && <small style={{ color: 'var(--blue)' }}>{extMsg}</small>}
+          </div>
+          {mcpServers.length > 0 && (
+            <div className="whale-power-list">
+              {mcpServers.map(sv => (
+                <div key={sv.id} className="whale-power-item">
+                  <span><strong>{sv.name}</strong> · {sv.toolCount} 工具{sv.enabled ? '' : ` · ${t('已停用')}`}</span>
+                  <div className="whale-power-item-actions">
+                    <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageMcp(sv.id, 'refresh') }}>
+                      {t('刷新')}
+                    </button>
+                    <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageMcp(sv.id, sv.enabled ? 'disable' : 'enable') }}>
+                      {sv.enabled ? t('停用') : t('启用')}
+                    </button>
+                    <button type="button" className="whale-perm-chip" disabled={extBusy} onClick={() => { void manageMcp(sv.id, 'remove') }}>
+                      {t('移除')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {extMsg && <p className="whale-power-feedback">{extMsg}</p>}
         </div>
       </details>
 
-      <details style={{ marginTop: 10 }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>
-          {t('今日消耗透视与分场景模型')}
-          {usage ? `（${fmtTok(usage.totalTokens)} · ¥${usage.estimatedYuan.toFixed(2)}）` : ''}
+      <details className="whale-power-card">
+        <summary className="whale-power-summary">
+          <span className="whale-power-title">
+            <Cpu size={15} aria-hidden="true" />
+            <strong>{t('用量透视与记忆体检')}</strong>
+          </span>
+          <span className="whale-power-meta">
+            <span className="whale-power-badge">{usageSummary}</span>
+            <ChevronDown size={15} className="whale-power-chevron" aria-hidden="true" />
+          </span>
         </summary>
-        <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+        <div className="whale-power-body">
           {usage && (
-            <small style={{ color: 'var(--muted)' }}>
-              对话 {fmtTok(usage.chatTokens)} · 后台任务 {fmtTok(usage.workerTokens)} · 屏控 {fmtTok(usage.phoneTokens)} · 缓存命中 {Math.round(usage.cacheHitRatio * 100)}%
-            </small>
+            <div className="whale-usage-pills">
+              <span>{t('对话')} {fmtTok(usage.chatTokens)}</span>
+              <span>{t('后台')} {fmtTok(usage.workerTokens)}</span>
+              <span>{t('屏控')} {fmtTok(usage.phoneTokens)}</span>
+              <span>{t('缓存命中')} {Math.round(usage.cacheHitRatio * 100)}%</span>
+            </div>
           )}
-          <div className="whale-voice-row">
-            <input value={fastModel} placeholder={t('日常闲聊快模型（留空自动）')} onChange={e => setFastModel(e.target.value)} />
-            <input value={deepModel} placeholder={t('代码/长任务强模型（留空自动）')} onChange={e => setDeepModel(e.target.value)} />
+          <div className="whale-power-group">
+            <label className="whale-power-label">{t('分场景模型（留空则自动路由）')}</label>
+            <div className="whale-power-grid">
+              <input value={fastModel} placeholder={t('日常闲聊快模型')} onChange={e => setFastModel(e.target.value)} />
+              <input value={deepModel} placeholder={t('代码/长任务强模型')} onChange={e => setDeepModel(e.target.value)} />
+            </div>
           </div>
-          <div className="whale-voice-row">
-            <button type="button" className="whale-perm-chip" onClick={() => { void saveRouter() }}>{t('保存分场景模型')}</button>
-            <button type="button" className="whale-perm-chip" onClick={() => { void compactMemory() }}>{t('一键记忆体检去重')}</button>
+          <div className="whale-power-actions">
+            <button type="button" className="whale-perm-chip" onClick={() => { void saveRouter() }}>
+              {t('保存路由')}
+            </button>
+            <button type="button" className="whale-perm-chip" onClick={() => { void compactMemory() }}>
+              <Sparkles size={13} aria-hidden="true" />
+              {t('一键记忆体检去重')}
+            </button>
           </div>
-          {routerMsg && <small style={{ color: 'var(--blue)' }}>{routerMsg}</small>}
-          {memMsg && <small style={{ color: 'var(--blue)' }}>{memMsg}</small>}
+          {routerMsg && <p className="whale-power-feedback">{routerMsg}</p>}
+          {memMsg && <p className="whale-power-feedback">{memMsg}</p>}
         </div>
       </details>
     </div>

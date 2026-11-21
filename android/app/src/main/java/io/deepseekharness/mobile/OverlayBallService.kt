@@ -417,9 +417,15 @@ class OverlayBallService : Service() {
     private var initialX = 0
     private var initialY = 0
     private var longPressFired = false
+    private var pinching = false
+    private var pinchStartSpan = 0f
+    private var pinchStartDp = 88
+    private var pinchCurrentDp = 88
+    private var rightDropDock: View? = null
 
     override fun onCreate() {
         super.onCreate()
+        io.deepseekharness.mobile.companion.WhaleAutoMemoryObserver.startScreenshotObserver(this)
         activeService = this
         WorkerDashboardStore.subscribeAccepted(taskAccepted)
         DeviceControlState.subscribe(controlListener)
@@ -564,6 +570,8 @@ class OverlayBallService : Service() {
     }
 
     override fun onDestroy() {
+        hideRightEdgeDropDock()
+        io.deepseekharness.mobile.companion.WhaleAutoMemoryObserver.stopScreenshotObserver(this)
         WorkerDashboardStore.unsubscribeAccepted(taskAccepted)
         DeviceControlState.unsubscribe(controlListener)
         io.deepseekharness.mobile.companion.WhaleTokenMeter.unsubscribe(tokenListener)
@@ -1030,13 +1038,24 @@ class OverlayBallService : Service() {
             when (event.action) {
                 android.view.DragEvent.ACTION_DRAG_STARTED -> {
                     val accepted = io.deepseekharness.mobile.companion.WhaleDirectCaptureActivity.accepts(event.clipDescription)
-                    if (accepted) { target.text = "拖来收藏"; target.visibility = View.VISIBLE }
+                    if (accepted) {
+                        target.text = "拖来收藏"
+                        target.visibility = View.VISIBLE
+                        showRightEdgeDropDock()
+                    }
                     accepted
                 }
                 android.view.DragEvent.ACTION_DRAG_ENTERED -> { target.text = "松手存入"; true }
                 android.view.DragEvent.ACTION_DRAG_EXITED -> { target.text = "拖来收藏"; true }
-                android.view.DragEvent.ACTION_DROP -> io.deepseekharness.mobile.companion.WhaleDirectCaptureActivity.drop(this, event)
-                android.view.DragEvent.ACTION_DRAG_ENDED -> { target.visibility = View.GONE; true }
+                android.view.DragEvent.ACTION_DROP -> {
+                    hideRightEdgeDropDock()
+                    io.deepseekharness.mobile.companion.WhaleDirectCaptureActivity.drop(this, event)
+                }
+                android.view.DragEvent.ACTION_DRAG_ENDED -> {
+                    target.visibility = View.GONE
+                    hideRightEdgeDropDock()
+                    true
+                }
                 else -> true
             }
         }
@@ -1316,6 +1335,93 @@ class OverlayBallService : Service() {
      *
      * 判定复用 [OverlayBallPolicy]，与单测覆盖的是同一套规则。
      */
+    /** 仿荣耀任意门：全局拖拽文字/图片时，屏幕右侧边缘滑出半透明「鲸鱼记忆 / 鲸鱼分析」停靠接收栏。 */
+    private fun showRightEdgeDropDock() {
+        if (rightDropDock != null || !android.provider.Settings.canDrawOverlays(this)) return
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(dp(8), dp(10), dp(8), dp(10))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.argb(232, 13, 24, 42))
+                setStroke(dp(1), android.graphics.Color.argb(140, 56, 189, 248))
+                cornerRadii = floatArrayOf(dp(20).toFloat(), dp(20).toFloat(), 0f, 0f, 0f, 0f, dp(20).toFloat(), dp(20).toFloat())
+            }
+        }
+        fun makeZone(title: String, subtitle: String, accentColor: Int, openChatAfter: Boolean): android.widget.TextView {
+            val normalBg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.argb(46, 56, 189, 248))
+                cornerRadius = dp(14).toFloat()
+            }
+            val hoverBg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(accentColor)
+                cornerRadius = dp(14).toFloat()
+            }
+            return android.widget.TextView(this).apply {
+                text = "$title\n$subtitle"
+                textSize = 11.5f
+                setTextColor(android.graphics.Color.WHITE)
+                gravity = android.view.Gravity.CENTER
+                setPadding(dp(6), dp(12), dp(6), dp(12))
+                background = normalBg
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f,
+                ).apply { setMargins(0, dp(4), 0, dp(4)) }
+                setOnDragListener { _, ev ->
+                    when (ev.action) {
+                        android.view.DragEvent.ACTION_DRAG_STARTED -> io.deepseekharness.mobile.companion.WhaleDirectCaptureActivity.accepts(ev.clipDescription)
+                        android.view.DragEvent.ACTION_DRAG_ENTERED -> {
+                            background = hoverBg
+                            WhaleMotion.feedback(this)
+                            true
+                        }
+                        android.view.DragEvent.ACTION_DRAG_EXITED -> {
+                            background = normalBg
+                            true
+                        }
+                        android.view.DragEvent.ACTION_DROP -> {
+                            background = normalBg
+                            hideRightEdgeDropDock()
+                            val ok = io.deepseekharness.mobile.companion.WhaleDirectCaptureActivity.drop(this@OverlayBallService, ev)
+                            if (openChatAfter) {
+                                Handler(Looper.getMainLooper()).postDelayed({ runCatching { if (!bubbleChat.visible) bubbleChat.toggle() } }, 220L)
+                            }
+                            ok
+                        }
+                        android.view.DragEvent.ACTION_DRAG_ENDED -> {
+                            hideRightEdgeDropDock()
+                            true
+                        }
+                        else -> true
+                    }
+                }
+            }
+        }
+        container.addView(makeZone("鲸鱼记忆", "松手收藏", android.graphics.Color.argb(220, 14, 165, 233), openChatAfter = false))
+        container.addView(makeZone("鲸鱼分析", "松手解读", android.graphics.Color.argb(220, 99, 102, 241), openChatAfter = true))
+        val dockParams = WindowManager.LayoutParams(
+            dp(78),
+            dp(196),
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            android.graphics.PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+        }
+        runCatching {
+            windowManager.addView(container, dockParams)
+            rightDropDock = container
+        }
+    }
+
+    private fun hideRightEdgeDropDock() {
+        val dock = rightDropDock ?: return
+        rightDropDock = null
+        runCatching { windowManager.removeView(dock) }
+    }
+
     private fun handleTouch(view: View, event: MotionEvent, size: Int): Boolean {
         val slop = ViewConfiguration.get(this).scaledTouchSlop
         when (event.actionMasked) {
@@ -1336,9 +1442,35 @@ class OverlayBallService : Service() {
             MotionEvent.ACTION_MOVE -> {
                 val deltaX = event.rawX - touchStartX
                 val deltaY = event.rawY - touchStartY
-                // 多指手势一律不拖动：rawX/rawY 恒取 pointer 0，第一根手指抬起、剩余手指
-                // 重编号时坐标会跳，按位移算出来的球位会跟着跳一段。
-                if (event.pointerCount > 1) return true
+                // 双指捏合无级缩放桌宠大小（44dp–160dp）
+                if (event.pointerCount >= 2) {
+                    val dx = event.getX(0) - event.getX(1)
+                    val dy = event.getY(0) - event.getY(1)
+                    val span = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(10f)
+                    if (!pinching) {
+                        pinching = true
+                        longPressFired = true
+                        pinchStartSpan = span
+                        pinchStartDp = preferences.readSizeDp()
+                        pinchCurrentDp = pinchStartDp
+                    } else if (pinchStartSpan > 10f) {
+                        val nextDp = (pinchStartDp * (span / pinchStartSpan)).toInt().coerceIn(
+                            io.deepseekharness.mobile.overlay.OverlayBallPreferences.MIN_SIZE_DP,
+                            io.deepseekharness.mobile.overlay.OverlayBallPreferences.MAX_SIZE_DP,
+                        )
+                        if (kotlin.math.abs(nextDp - pinchCurrentDp) >= 2) {
+                            pinchCurrentDp = nextDp
+                            preferences.writeSizeDp(nextDp)
+                            applyCompanionSizePreference()
+                        }
+                        view.findViewById<android.widget.TextView>(R.id.companion_drop_hint)?.let { hint ->
+                            hint.text = "${pinchCurrentDp}dp"
+                            hint.visibility = View.VISIBLE
+                        }
+                    }
+                    return true
+                }
+                if (pinching) return true
                 // 长按已弹出菜单后不再拖动：此时 ACTION_UP 会直接返回，跳过吸附与落盘，
                 // 这样从长按直接松手不会意外移动桌宠。
                 if (!longPressFired && !OverlayBallPolicy.isClick(deltaX, deltaY, slop)) {
@@ -1371,7 +1503,21 @@ class OverlayBallService : Service() {
                 }
                 return true
             }
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (pinching && event.pointerCount <= 2) {
+                    preferences.writeSizeDp(pinchCurrentDp)
+                    applyCompanionSizePreference()
+                    view.findViewById<android.widget.TextView>(R.id.companion_drop_hint)?.visibility = View.GONE
+                    WhaleMotion.feedback(view)
+                }
+                return true
+            }
             MotionEvent.ACTION_UP -> {
+                if (pinching) {
+                    pinching = false
+                    view.findViewById<android.widget.TextView>(R.id.companion_drop_hint)?.visibility = View.GONE
+                    return true
+                }
                 petActing.dragging=false
                 wakePetMotion()
                 val deltaX = event.rawX - touchStartX
