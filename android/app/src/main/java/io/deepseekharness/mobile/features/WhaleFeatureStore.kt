@@ -73,7 +73,7 @@ internal class WhaleFeatureStore(context: Context) {
         val id = input.getString("id")
         val title = input.getString("title").trim()
         val html = input.getString("html").trim()
-        require(title.isNotEmpty() && title.length <= 50 && html.isNotEmpty() && html.toByteArray().size <= 96 * 1024)
+        require(title.isNotEmpty() && title.length <= 50 && html.isNotEmpty() && html.toByteArray().size <= 512 * 1024)
         // Reject double-encoded formatting, not legitimate escapes inside JavaScript or code examples.
         val literalWhitespace = Regex("(?:\\\\[nrt])+")
         val literalContainers = setOf("script","style","pre","code","textarea")
@@ -117,6 +117,34 @@ internal class WhaleFeatureStore(context: Context) {
         }
         summary(row)
     }
+    fun readHtml(id: String): JSONObject? = synchronized(lock) {
+        val row = read(id) ?: return@synchronized null
+        val versions = row.optJSONObject("versions") ?: return@synchronized null
+        val rev = row.optString("latest").ifEmpty { row.optString("active") }
+        val ver = versions.optJSONObject(rev) ?: return@synchronized null
+        JSONObject()
+            .put("id", row.getString("id"))
+            .put("title", ver.optString("title"))
+            .put("revision", rev)
+            .put("active", row.optString("active"))
+            .put("pinned", row.optBoolean("pinned", false))
+            .put("html", ver.optString("html"))
+    }
+
+    fun delete(id: String): Boolean = synchronized(lock) {
+        require(id.matches(Regex("[a-z][a-z0-9-]{0,47}"))) { "功能标识无效" }
+        val mainFile = File(root, "$id.json")
+        val bakFile = File(root, "$id.json.bak")
+        val existed = mainFile.exists() || bakFile.exists()
+        if (mainFile.exists()) mainFile.delete()
+        if (bakFile.exists()) bakFile.delete()
+        if (existed) {
+            cachedTools = null
+            listeners.forEach { listener -> runCatching { listener(id, "") } }
+        }
+        existed
+    }
+
     private fun save(row: JSONObject) {
         check(root.isDirectory || root.mkdirs())
         val target = file(row.getString("id"))

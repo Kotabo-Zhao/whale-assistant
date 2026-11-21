@@ -23,12 +23,67 @@ import android.widget.TextView
 import android.widget.Toast
 import java.util.concurrent.Executors
 
+internal class WhaleMiniAppBridge(private val ctx: Context) {
+    private val app = ctx.applicationContext
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    @android.webkit.JavascriptInterface
+    fun toast(msg: String?) {
+        val text = msg?.trim()?.take(160).orEmpty()
+        if (text.isNotEmpty()) main.post { Toast.makeText(app, text, Toast.LENGTH_SHORT).show() }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun haptic(style: String?) {
+        runCatching {
+            val vibrator = app.getSystemService(android.os.Vibrator::class.java) ?: return
+            val ms = when (style?.lowercase()) { "medium" -> 22L; "success" -> 30L; else -> 12L }
+            val amp = when (style?.lowercase()) { "medium" -> 110; "success" -> 150; else -> 65 }
+            vibrator.vibrate(android.os.VibrationEffect.createOneShot(ms, amp))
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun copy(text: String?): Boolean = runCatching {
+        val clean = text?.take(32_768).orEmpty()
+        val cm = app.getSystemService(android.content.ClipboardManager::class.java) ?: return false
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("whale-mini-app", clean))
+        true
+    }.getOrDefault(false)
+
+    @android.webkit.JavascriptInterface
+    fun share(text: String?, title: String?) {
+        val clean = text?.trim()?.take(32_768).orEmpty()
+        if (clean.isEmpty()) return
+        main.post {
+            runCatching {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, clean)
+                    if (!title.isNullOrBlank()) putExtra(Intent.EXTRA_SUBJECT, title.trim().take(80))
+                }
+                val chooser = Intent.createChooser(intent, title?.takeIf(String::isNotBlank) ?: "分享内容")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                app.startActivity(chooser)
+            }
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun speak(text: String?) {
+        val clean = text?.trim()?.take(300).orEmpty()
+        if (clean.isNotEmpty()) runCatching { io.deepseekharness.mobile.companion.WhaleVoiceEngine.speakText(app, clean) }
+    }
+}
+
 internal fun WebView.loadWhaleTool(id: String, html: String, preview: Boolean = false, ready: (WebView) -> Unit = {}, gone: () -> Unit) {
     settings.apply {
         javaScriptEnabled = true; allowFileAccess = false; allowContentAccess = false
         blockNetworkLoads = true; javaScriptCanOpenWindowsAutomatically = false
         setSupportMultipleWindows(true); domStorageEnabled = true
     }
+    removeJavascriptInterface("__whaleNativeBridge")
+    addJavascriptInterface(WhaleMiniAppBridge(context), "__whaleNativeBridge")
     webViewClient = object : WebViewClient() {
         override fun onPageFinished(view: WebView, url: String?) = ready(view)
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
@@ -37,22 +92,38 @@ internal fun WebView.loadWhaleTool(id: String, html: String, preview: Boolean = 
         override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean { gone(); return true }
     }
     val design = io.deepseekharness.mobile.WhaleDesign.of(context)
-    val storageBridge = "<script>(function(){const p='whale_tool_${id}_';const MAX=262144;window.whaleStorage={" +
+    val styleMode = runCatching { context.getSharedPreferences("whale-interface", 0).getString("style", "cute") ?: "cute" }.getOrDefault("cute")
+    val storageBridge = "<script>(function(){const p='whale_tool_${id}_';const MAX=2097152;const nb=window.__whaleNativeBridge;" +
+        "window.whaleStorage={" +
         "get(k,f){try{const v=localStorage.getItem(p+String(k));return v===null?f:JSON.parse(v);}catch{return f;}}," +
         "set(k,v){const s=JSON.stringify(v);if(s.length>MAX)throw new Error('storage quota exceeded');localStorage.setItem(p+String(k),s);return true;}," +
         "remove(k){localStorage.removeItem(p+String(k));}," +
-        "keys(){const out=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(p))out.push(k.slice(p.length));}return out;}" +
+        "keys(){const out=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(p))out.push(k.slice(p.length));}return out;}," +
+        "exportAll(){const obj={};this.keys().forEach(k=>{obj[k]=this.get(k,null);});return obj;}," +
+        "importAll(obj){if(!obj||typeof obj!=='object')return false;Object.keys(obj).forEach(k=>this.set(k,obj[k]));return true;}" +
+        "};" +
+        "window.whaleApp={" +
+        "id:'$id'," +
+        "theme(){return {dark:${design.dark},style:'$styleMode'};}," +
+        "toast(m){try{nb&&nb.toast(String(m||''));}catch{}}," +
+        "haptic(s){try{nb&&nb.haptic(String(s||'light'));}catch{}}," +
+        "copy(t){try{return !!(nb&&nb.copy(String(t||'')));}catch{return false;}}," +
+        "share(t,title){try{nb&&nb.share(String(t||''),String(title||''));}catch{}}," +
+        "speak(t){try{nb&&nb.speak(String(t||''));}catch{}}" +
         "};})();</script>"
     val themed = storageBridge + "<style>:root{" + design.variables() + "color-scheme:" + (if(design.dark) "dark" else "light") +
-        ";}*{box-sizing:border-box;}html body{background:var(--whale-background);color:var(--whale-text);font-family:system-ui,-apple-system,sans-serif;margin:0;padding:16px;line-height:1.55;-webkit-font-smoothing:antialiased;}"+
+        ";}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}html body{background:var(--whale-background);color:var(--whale-text);font-family:system-ui,-apple-system,sans-serif;margin:0;padding:16px;line-height:1.55;-webkit-font-smoothing:antialiased;}"+
         "body input,body select,body textarea{background:var(--whale-surface);color:var(--whale-text);border:1px solid var(--whale-border);border-radius:var(--whale-radius);padding:10px 12px;font:inherit;outline:none;transition:border-color 140ms ease;}"+
         "body input:focus,body select:focus,body textarea:focus{border-color:var(--whale-accent);}"+
         "body button{background:var(--whale-accent);color:var(--whale-on-accent);border-radius:var(--whale-radius);border:0;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;transition:opacity 120ms ease,transform 100ms ease;}"+
-        "body button:active{transform:scale(.97);}"+
+        "body button:active{transform:scale(.96);}"+
+        ".whale-card{background:var(--whale-surface);border:1px solid var(--whale-border);border-radius:16px;padding:14px;margin-bottom:12px;}"+
+        ".whale-row{display:flex;align-items:center;gap:10px;}.whale-chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:12px;background:color-mix(in srgb,var(--whale-accent) 14%,transparent);color:var(--whale-accent);font-weight:600;}"+
+        ".whale-btn-ghost{background:transparent;color:var(--whale-accent);border:1px solid var(--whale-border);}"+
         "body output{color:var(--whale-accent);}</style>"
-    val policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-src 'none'"
+    val policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; base-uri 'none'; form-action 'none'; frame-src 'none'"
     val origin = if (!preview) "https://$id.features.whale.invalid/" else "https://$id.preview.whale.invalid/"
-    loadDataWithBaseURL(origin, "<meta charset=utf-8><meta http-equiv=\"Content-Security-Policy\" content=\"$policy\"><meta name=viewport content=\"width=device-width,initial-scale=1\">" + html + themed, "text/html", "utf-8", null)
+    loadDataWithBaseURL(origin, "<meta charset=utf-8><meta http-equiv=\"Content-Security-Policy\" content=\"$policy\"><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\">" + html + themed, "text/html", "utf-8", null)
 }
 
 /** Independently authored local tools run outside the Capacitor management WebView. */

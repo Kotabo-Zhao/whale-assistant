@@ -70,7 +70,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         val includePet = expandAll || "settings" in expandedCategories ||
             listOf("桌宠", "悬浮", "尺寸", "大小", "鲸鱼娘", "pet", "resize").any { it in q }
         val includeWorkshop = expandAll || "code" in expandedCategories || "workshop" in expandedCategories ||
-            listOf("工坊", "小工具", "网页", "html", "打卡", "计算器", "workshop").any { it in q }
+            listOf("工坊", "小工具", "小软件", "小程序", "做一个", "做个", "开发", "网页", "html", "打卡", "计算器", "番茄钟", "记账", "倒计时", "背单词", "游戏", "workshop", "mini app").any { it in q }
         val includeCode = expandAll || "code" in expandedCategories ||
             listOf("代码", "文件", "目录", "脚本", "编程", "工程", "写入", "补丁", "code", "file", "patch").any { it in q }
         val includePhone = expandAll || "phone" in expandedCategories ||
@@ -226,16 +226,29 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_secretary_delete", "删除指定编号的秘书事项。", mapOf("id" to "事项 UUID 编号"), listOf("id")))
         }
         if (includeWorkshop) {
-            array.put(schema("whale_workshop_list", "列出鲸鱼功能工坊中已启用的本地离线小工具（置顶优先）。", emptyMap(), emptyList()))
+            array.put(schema("whale_workshop_list", "列出鲸鱼功能工坊中已启用的本地离线小软件（置顶优先）。", emptyMap(), emptyList()))
+            array.put(schema(
+                "whale_workshop_read",
+                "读取某个已有工坊小软件的完整 HTML/CSS/JS 源码与版本号，便于迭代升级或修复 Bug。",
+                mapOf("id" to "功能英文 id"),
+                listOf("id"),
+            ))
             array.put(schema(
                 "whale_workshop_draft",
-                "为鲸鱼功能工坊创作单文件离线 HTML/CSS/JS 可运行软件；支持 window.whaleStorage.get/set/remove 持久化本地数据。",
-                mapOf("id" to "英文小写功能标识", "title" to "短标题(<=50字)", "html" to "完整单文件 HTML/CSS/JS 源码"),
+                "在功能工坊创建或更新单文件离线小软件（支持高达 512KB，100% 离线运行，禁止外链 CDN）。内置 2MB 持久化 window.whaleStorage(get/set/remove/keys/exportAll/importAll) 与原生桥接 window.whaleApp(toast/haptic/copy/share/speak/theme) 及 .whale-card/.whale-chip 样式类；建议直接传 autoActivate=true、autoOpen=true 一步完成创作、发布并打开。",
+                mapOf(
+                    "id" to "英文小写连字符标识(如 habit-tracker)",
+                    "title" to "短标题(<=50字)",
+                    "html" to "完整移动端自适应单文件 HTML/CSS/JS 源码",
+                    "autoActivate" to "可选：true（默认 true）直接发布启用，省去二次调用",
+                    "autoOpen" to "可选：true 发布后立即在屏幕上打开展示",
+                ),
                 listOf("id", "title", "html"),
             ))
-            array.put(schema("whale_workshop_activate", "将刚创建的工坊草稿立即发布并启用为正式小工具。", mapOf("id" to "功能英文 id", "revision" to "草稿返回的 revision 哈希"), listOf("id", "revision")))
-            array.put(schema("whale_workshop_open", "在屏幕上直接打开某个已启用的工坊小工具，或打开工坊总览页。", mapOf("id" to "可选功能英文 id（留空则打开工坊库）"), emptyList()))
-            array.put(schema("whale_workshop_pin", "置顶或取消置顶工坊中某个已启用小工具。", mapOf("id" to "功能英文 id", "pinned" to "true 或 false"), listOf("id", "pinned")))
+            array.put(schema("whale_workshop_activate", "将工坊草稿发布并启用为正式小软件。", mapOf("id" to "功能英文 id", "revision" to "草稿返回的 revision 哈希"), listOf("id", "revision")))
+            array.put(schema("whale_workshop_open", "在屏幕上直接打开某个已启用的工坊小软件，或打开工坊总览页。", mapOf("id" to "可选功能英文 id（留空则打开工坊库）"), emptyList()))
+            array.put(schema("whale_workshop_pin", "置顶或取消置顶工坊中某个小软件。", mapOf("id" to "功能英文 id", "pinned" to "true 或 false"), listOf("id", "pinned")))
+            array.put(schema("whale_workshop_delete", "删除指定的工坊小软件。", mapOf("id" to "功能英文 id"), listOf("id")))
         }
         if (includeCode) {
             array.put(schema("whale_code_projects", "列出本地原生代码工作区中已有的全部项目及其文件数与体积。", emptyMap(), emptyList()))
@@ -476,6 +489,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_workshop_activate",
         "whale_workshop_open",
         "whale_workshop_pin",
+        "whale_workshop_delete",
         "whale_code_write",
         "whale_code_patch",
         "whale_code_delete",
@@ -923,6 +937,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     tools.forEach { arr.put(it.json()) }
                     ToolOutcome(name, "读取功能工坊列表", true, arr.toString())
                 }
+                "whale_workshop_read" -> {
+                    val id = args.str("id", "").trim()
+                    val doc = WhaleFeatureStore(app).readHtml(id)
+                        ?: throw IllegalArgumentException("未找到工坊小软件：$id")
+                    ToolOutcome(name, "读取小软件源码：$id", true, doc.toString())
+                }
                 "whale_workshop_draft" -> {
                     val store = WhaleFeatureStore(app)
                     val id = args.str("id", "").trim()
@@ -930,8 +950,26 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         val latest = store.read(id)?.let { if (it.isNull("latest")) "" else it.optString("latest", "") }.orEmpty()
                         if (latest.isNotEmpty()) args.put("baseRevision", latest)
                     }
-                    val result = store.draft(args)
-                    ToolOutcome(name, "保存工坊软件草稿", true, result.toString(), mutating = true)
+                    var result = store.draft(args)
+                    val autoActivate = if (args.has("autoActivate")) args.optBoolean("autoActivate", true) else true
+                    val autoOpen = args.optBoolean("autoOpen", false)
+                    if (autoActivate) {
+                        val rev = result.optString("latest")
+                        val curActive = result.optString("active")
+                        if (rev.isNotEmpty() && rev != curActive) {
+                            result = store.activate(id, rev, curActive)
+                        }
+                        if (autoOpen && rev.isNotEmpty()) {
+                            WhaleFeatureActivity.openTool(app, id, rev)
+                            result.put("opened", true)
+                        }
+                    }
+                    ToolOutcome(name, if (autoActivate) "发布小软件：${result.optString("title")}" else "保存工坊软件草稿", true, result.toString(), mutating = true)
+                }
+                "whale_workshop_delete" -> {
+                    val id = args.str("id", "").trim()
+                    val removed = WhaleFeatureStore(app).delete(id)
+                    ToolOutcome(name, "删除工坊小软件：$id", removed, JSONObject().put("id", id).put("removed", removed).toString(), mutating = true)
                 }
                 "whale_workshop_activate" -> {
                     val id = args.str("id", "").trim()
