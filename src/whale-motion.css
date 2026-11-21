@@ -298,6 +298,67 @@ body, .app-header, .bottom-navigation, .sidebar-nav {
   transform: scale(1.12) rotate(-6deg);
 }
 
+/* ─── Micro-Detail Animations: Textbox Popup, Focus Lift & Button Morph ── */
+@keyframes whale-composer-rise {
+  0% { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.97); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes whale-header-drop {
+  0% { opacity: 0; transform: translate3d(0, -10px, 0) scale(0.96); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes whale-assist-rise {
+  0% { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.96); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes whale-btn-morph {
+  0% { opacity: 0.6; transform: scale(0.76) rotate(-10deg); }
+  70% { opacity: 1; transform: scale(1.08) rotate(2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+.whale-chat-composer-wrap {
+  animation: whale-composer-rise var(--motion-normal) var(--motion-enter) backwards;
+}
+
+.whale-chat-composer {
+  transition: transform 200ms var(--motion-enter), border-color 180ms ease, box-shadow 200ms ease, background-color 180ms ease;
+}
+
+.whale-chat-composer:focus-within {
+  transform: translate3d(0, -2px, 0);
+}
+
+.whale-chat-header {
+  animation: whale-header-drop var(--motion-normal) var(--motion-enter) backwards;
+}
+
+.whale-composer-assist,
+.whale-image-preview-row,
+.whale-voice-status {
+  animation: whale-assist-rise var(--motion-normal) var(--motion-enter) backwards;
+}
+
+.whale-send-btn.is-stop,
+.whale-send-btn.is-steer {
+  animation: whale-btn-morph 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.whale-receipt-card {
+  animation: whale-assist-rise var(--motion-normal) var(--motion-enter) backwards;
+}
+
+.settings-search {
+  transition: transform 180ms var(--motion-enter), border-color 160ms ease, box-shadow 180ms ease;
+}
+
+.settings-search:focus-within {
+  transform: translate3d(0, -1px, 0);
+}
+
 /* Battery & Accessibility Eco Shutdown: zero animation/GPU wakeups */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

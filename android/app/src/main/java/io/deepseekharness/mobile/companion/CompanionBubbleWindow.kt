@@ -1403,6 +1403,19 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         io.deepseekharness.mobile.WhaleMotion.overlay(params)
         if (runCatching { wm.addView(panel, params) }.isSuccess) {
             root = panel; positionUpdater = updatePosition
+            if (!CompanionStore(context).reduceMotion) {
+                panel.alpha = 0f
+                panel.translationY = dp(26).toFloat()
+                panel.scaleX = 0.94f
+                panel.scaleY = 0.94f
+                panel.pivotX = width * 0.5f
+                panel.pivotY = dp(220).toFloat()
+                panel.animate()
+                    .alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+                    .setDuration(240L)
+                    .setInterpolator(android.view.animation.OvershootInterpolator(1.08f))
+                    .start()
+            }
             selectedTool?.let { presentTool?.invoke(it) }
             showLivePartials = context.getSystemService(android.os.PowerManager::class.java).isInteractive
             if (showLivePartials) flushPartial?.invoke()
@@ -1563,6 +1576,18 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
     }
 
     fun followPet() { positionUpdater?.invoke() }
-    fun hide() { inlineTool?.destroy(); inlineTool = null; presentTool = null; selectedTool = null; showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; renderParallel = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; root?.let { runCatching { wm.removeView(it) } }; root = null; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
+    fun hide() { inlineTool?.destroy(); inlineTool = null; presentTool = null; selectedTool = null; showLivePartials = false; recoveryDialog?.dismiss(); recoveryDialog = null; renderFollowups = null; renderParallel = null; if (!busy && followups.isEmpty()) sendNext = null; captureDialog?.dismiss(); captureDialog = null; renderLive = null; renderWorkerReport = null; workerPanel.detach(); questionDialog?.dismiss(); questionDialog = null; previewDialog?.dismiss(); previewDialog = null; if (!busy) onState("idle"); positionUpdater = null; val closing = root; root = null; closing?.let { v ->
+            if (!CompanionStore(context).reduceMotion && v.isAttachedToWindow) {
+                v.animate().cancel()
+                v.animate()
+                    .alpha(0f).translationY(dp(20).toFloat()).scaleX(0.95f).scaleY(0.95f)
+                    .setDuration(150L)
+                    .setInterpolator(android.view.animation.AccelerateInterpolator(1.2f))
+                    .withEndAction { runCatching { if (v.isAttachedToWindow) wm.removeView(v) } }
+                    .start()
+            } else {
+                runCatching { wm.removeView(v) }
+            }
+        }; richViews.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }; richViews.clear() }
     fun destroy() { inlineTool?.destroy(); activeReply?.cancel(); activeReply=null; closed = true; handler.removeCallbacks(checkBacklog); followups.forEach { it.classification.cancel(); it.replyOperation.cancel() }; flushPartial = null; WorkerReportInbox.unsubscribe(workerReportListener); request++; busy = false; deliveryWatcher?.stop(); deliveryWatcher = null; hide(); workerPanel.destroy(); intake.shutdownNow(); replyExecutor.shutdownNow(); executor.shutdownNow() }
 }
