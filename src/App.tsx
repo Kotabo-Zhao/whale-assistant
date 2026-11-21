@@ -220,10 +220,9 @@ function isSettingsView(view: AppView): boolean {
 type SettingsHomeGroup = 'daily' | 'assistant' | 'workspace' | 'device' | 'models' | 'appearance' | 'notifications'
 
 const SETTINGS_HOME_GROUPS: { id: SettingsHomeGroup; label: string }[] = [
-  { id: 'daily', label: '日常' },
-  { id: 'models', label: '模型连接' },
-  { id: 'assistant', label: '桌宠与主动跟进' },
-  { id: 'notifications', label: '通知与免打扰' },
+  { id: 'daily', label: '常用' },
+  { id: 'models', label: 'AI 模型' },
+  { id: 'assistant', label: '人格与陪伴' },
   { id: 'appearance', label: '外观与语言' },
   { id: 'device', label: '设备控制' },
   { id: 'workspace', label: '运行与数据' },
@@ -389,8 +388,6 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
     keywords: ['助手', '记忆', '通知', '提醒', 'memory', 'notifications'], icon: <Bell size={20}/>, target: { kind: 'preference', key: 'assistant' } },
   { id: 'app-language', group: 'appearance', title: '界面语言', hint: '选择应用显示语言',
     keywords: ['语言', '中文', '英语', 'language', 'english'], icon: <Languages size={20}/>, target: { kind: 'preference', key: 'language' } },
-  { id: 'notification-preference', group: 'notifications', title: '通知与免打扰', hint: '通知摘要、提醒与安静时段',
-    keywords: ['通知', '提醒', '免打扰', 'notification', 'quiet'], icon: <Bell size={20}/>, target: { kind: 'preference', key: 'notifications' } },
 ]
 
 /**
@@ -1384,7 +1381,7 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
               <span className="management-icon">{entry.icon}</span><span className="management-copy"><strong>{t(entry.title)}</strong>
               <small>{t(entry.hint)}</small></span><ChevronRight size={18}/></button>
             {preference === entry.id && (entry.target.key === 'language' ? <LanguageSettings /> :
-              <CompanionSettingsButton disabled={busy !== null} section={entry.target.key === 'notifications' ? 'notifications' : 'information'} openMemory={entry.target.key === 'assistant' ? () => onOpenView('assistant-memory') : undefined} />)}
+              <CompanionSettingsButton disabled={busy !== null} section="all" openMemory={entry.target.key === 'assistant' ? () => onOpenView('assistant-memory') : undefined} />)}
           </div> : (
             <button className="management-row" key={entry.id} type="button" onClick={() => openEntry(entry)}>
               <span className="management-icon">{entry.icon}</span>

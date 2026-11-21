@@ -233,84 +233,79 @@ export function WhaleAutonomyCard({
         ))}
       </div>
 
-      <div className="whale-voice-box">
-        <div className="whale-voice-head">
-          <strong>{t('桌宠大小无级调节')}</strong>
-          <span>{petSizeDp} dp</span>
+      <details className="whale-voice-box whale-collapsible">
+        <summary className="whale-voice-head" style={{ cursor: 'pointer', listStyle: 'none' }}>
+          <strong>{t('桌宠尺寸与拟人语音')}</strong>
+          <span>{petSizeDp}dp · {voiceStatus || (voiceCfg.configured ? t('语音已配') : t('语音未配'))}</span>
+        </summary>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+          <div className="whale-size-slider-row">
+            <small>44</small>
+            <input
+              type="range"
+              min={44}
+              max={160}
+              step={1}
+              value={petSizeDp}
+              aria-label={t('桌宠大小无级调节')}
+              onChange={e => {
+                const next = Number(e.target.value)
+                setPetSizeDp(next)
+                void runtimeBridge.setPetSize?.(next).catch(() => undefined)
+              }}
+            />
+            <small>160</small>
+          </div>
+          <div className="whale-voice-row">
+            <input
+              type="password"
+              value={voiceKeyInput}
+              placeholder={t('硅基流动 API Key（免费听 + 拟人说）')}
+              onChange={e => setVoiceKeyInput(e.target.value)}
+            />
+            <button
+              type="button"
+              className="whale-perm-chip"
+              disabled={!voiceKeyInput.trim()}
+              onClick={() => { void saveVoice({ apiKey: voiceKeyInput.trim() }) }}
+            >
+              {t('保存语音 Key')}
+            </button>
+          </div>
+          <div className="whale-voice-row">
+            <select
+              aria-label={t('选择桌宠音色')}
+              value={voiceCfg.voice}
+              onChange={e => { void saveVoice({ voice: e.target.value }) }}
+            >
+              {VOICE_OPTIONS.map(opt => (
+                <option key={opt.id} value={opt.id}>{opt.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="whale-perm-chip"
+              disabled={!voiceCfg.configured}
+              onClick={() => { void runtimeBridge.testVoiceSpeak?.() }}
+            >
+              <Volume2 size={13} aria-hidden="true" />
+              {t('试听一声')}
+            </button>
+            <button
+              type="button"
+              className="whale-perm-chip"
+              onClick={() => {
+                void runtimeBridge.requestRecordAudioPermission?.().then(res => {
+                  if (res?.granted) setVoiceCfg(prev => ({ ...prev, hasRecordPermission: true }))
+                })
+              }}
+            >
+              <Mic size={13} aria-hidden="true" />
+              {voiceCfg.hasRecordPermission ? t('麦克风已授权') : t('授予麦克风权限')}
+            </button>
+          </div>
         </div>
-        <div className="whale-size-slider-row">
-          <small>44</small>
-          <input
-            type="range"
-            min={44}
-            max={160}
-            step={1}
-            value={petSizeDp}
-            aria-label={t('桌宠大小无级调节')}
-            onChange={e => {
-              const next = Number(e.target.value)
-              setPetSizeDp(next)
-              void runtimeBridge.setPetSize?.(next).catch(() => undefined)
-            }}
-          />
-          <small>160</small>
-        </div>
-      </div>
-
-      <div className="whale-voice-box">
-        <div className="whale-voice-head">
-          <strong>{t('桌宠拟人语音（硅基流动 1 Key）')}</strong>
-          <span>{voiceStatus || (voiceCfg.configured ? t('已配置') : t('未配置'))}</span>
-        </div>
-        <div className="whale-voice-row">
-          <input
-            type="password"
-            value={voiceKeyInput}
-            placeholder={t('硅基流动 API Key（免费听 + 拟人说）')}
-            onChange={e => setVoiceKeyInput(e.target.value)}
-          />
-          <button
-            type="button"
-            className="whale-perm-chip"
-            disabled={!voiceKeyInput.trim()}
-            onClick={() => { void saveVoice({ apiKey: voiceKeyInput.trim() }) }}
-          >
-            {t('保存语音 Key')}
-          </button>
-        </div>
-        <div className="whale-voice-row">
-          <select
-            aria-label={t('选择桌宠音色')}
-            value={voiceCfg.voice}
-            onChange={e => { void saveVoice({ voice: e.target.value }) }}
-          >
-            {VOICE_OPTIONS.map(opt => (
-              <option key={opt.id} value={opt.id}>{opt.label}</option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="whale-perm-chip"
-            disabled={!voiceCfg.configured}
-            onClick={() => { void runtimeBridge.testVoiceSpeak?.() }}
-          >
-            <Volume2 size={13} aria-hidden="true" />
-            {t('试听一声')}
-          </button>
-          <button
-            type="button"
-            className="whale-perm-chip"
-            onClick={() => {
-              void runtimeBridge.requestRecordAudioPermission?.().then(res => {
-                if (res?.granted) setVoiceCfg(prev => ({ ...prev, hasRecordPermission: true }))
-              })
-            }}
-          >
-            <Mic size={13} aria-hidden="true" />
-            {voiceCfg.hasRecordPermission ? t('麦克风已授权') : t('授予麦克风权限')}
-          </button>
-        </div>
-      </div>
+      </details>
 
       <WhalePowerHub />
 
