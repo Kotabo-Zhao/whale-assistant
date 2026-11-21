@@ -254,6 +254,17 @@ internal object WhaleSkillStore {
         return JSONObject().put("removed", ok).put("slug", dir.name)
     }
 
+    fun hasEnabledSkills(context: Context): Boolean {
+        val root = File(context.applicationContext.filesDir, DIR_NAME)
+        val dirs = root.listFiles { f -> f.isDirectory } ?: return false
+        for (dir in dirs) {
+            if (!File(dir, "SKILL.md").isFile) continue
+            val meta = runCatching { JSONObject(File(dir, "meta.json").readText(Charsets.UTF_8)) }.getOrNull()
+            if (meta?.optBoolean("enabled", true) != false) return true
+        }
+        return false
+    }
+
     fun catalogPrompt(context: Context): String {
         val items = list(context)
         val lines = mutableListOf<String>()

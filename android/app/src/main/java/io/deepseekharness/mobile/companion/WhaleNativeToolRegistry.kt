@@ -77,6 +77,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             listOf("手机", "打开", "点击", "截屏", "截图", "屏幕", "滑动", "返回", "桌面", "应用", "app", "副屏", "微信", "抖音", "淘宝", "支付宝", "地图", "美团", "小红书", "哔哩", "b站", "screen", "click", "launch").any { it in q }
         val includeDevice = expandAll || "device" in expandedCategories || "settings" in expandedCategories ||
             listOf("电量", "电池", "媒体", "音量", "播放", "暂停", "剪贴板", "粘贴", "复制", "通知", "定时", "每天", "提醒我", "后台", "状态", "链接", "分享", "battery", "media", "clipboard", "schedule", "status").any { it in q }
+        val includeExtensions = expandAll || "extensions" in expandedCategories || "mcp" in expandedCategories || "skill" in expandedCategories ||
+            listOf("skill", "技能", "mcp", "安装", "扩展", "插件", "服务器", "github.com", "skill.md").any { it in q }
 
         if (includeAppControl) {
             array.put(schema(
@@ -344,8 +346,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         }
         array.put(schema(
             "whale_tools_expand",
-            "当本轮需要尚未展开的专域工具时调用，立即在下一轮热加载对应工具组。可选分类：phone(手机屏控/截屏/副屏)、code(代码文件/功能工坊)、settings(应用设置/主题/桌宠/人设)、device(设备电量/通知/剪贴板/定时任务)、all(全部工具)。",
-            mapOf("category" to "分类：phone / code / settings / device / all"),
+            "当本轮需要尚未展开的专域工具时调用，立即在下一轮热加载对应工具组。可选分类：phone(手机屏控/截屏/副屏)、code(代码文件/功能工坊)、settings(应用设置/主题/桌宠/人设)、device(设备电量/通知/剪贴板/定时任务)、extensions(MCP服务器与Skill技能安装管理)、all(全部工具)。",
+            mapOf("category" to "分类：phone / code / settings / device / extensions / all"),
             listOf("category"),
         ))
         array.put(schema(
@@ -363,64 +365,59 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         ))
         array.put(schema("whale_tool_list", "列出 Agent 已创建保存的全部自定义工具（custom_*）。", emptyMap(), emptyList()))
         array.put(schema("whale_tool_delete", "删除指定的 Agent 自造自定义工具。", mapOf("name" to "要删除的 custom_* 工具名"), listOf("name")))
-        array.put(schema("whale_skill_list", "列出已安装的所有 SKILL.md 技能及其启用状态、简介和来源。", emptyMap(), emptyList()))
-        array.put(schema(
-            "whale_skill_read",
-            "读取指定已安装 Skill 的完整 SKILL.md 执行规范。任务命中已安装技能时必须先调用此工具。",
-            mapOf("name" to "Skill 名称或 slug"),
-            listOf("name"),
-        ))
-        array.put(schema(
-            "whale_skill_install",
-            "自主安装或创建一个标准 SKILL.md 技能：传入 url（支持 GitHub 仓库/文件链接或任意 https SKILL.md 直链）即可自动下载安装；或传入 name + description + content 由 Agent 自己撰写并持久化本地技能。",
-            mapOf(
-                "url" to "可选：GitHub 仓库/blob/tree 链接或 https://.../SKILL.md 直链",
-                "name" to "本地创建时必填（从 URL 安装时可选覆盖名）",
-                "description" to "本地创建时的技能简介",
-                "content" to "本地创建时的 Markdown 技能指令正文",
-            ),
-            emptyList(),
-        ))
-        array.put(schema(
-            "whale_skill_manage",
-            "启用、停用或删除已安装的 Skill。",
-            mapOf(
-                "action" to "enable / disable / delete",
-                "name" to "Skill 名称或 slug",
-            ),
-            listOf("action", "name"),
-        ))
-        array.put(schema("whale_mcp_list", "列出已配置的 MCP（Model Context Protocol）服务器及其已发现的工具列表。", emptyMap(), emptyList()))
-        array.put(schema(
-            "whale_mcp_add",
-            "添加并立即握手连接一个标准 MCP（Streamable HTTP / JSON-RPC 2.0）服务器，自动拉取其 tools/list 并动态注入本轮可用工具。",
-            mapOf(
-                "url" to "MCP 服务器地址（https://...，或本机/局域网 http://127.0.0.1:...）",
-                "name" to "可选：服务器显示名称",
-                "id" to "可选：英文短标识（如 github / notion）",
-                "authHeader" to "可选：完整 Authorization 请求头（如 Bearer xxx）",
-            ),
-            listOf("url"),
-        ))
-        array.put(schema(
-            "whale_mcp_call",
-            "直接调用指定 MCP 服务器上的某个工具。",
-            mapOf(
-                "server" to "MCP 服务器 id 或名称",
-                "tool" to "远端工具名",
-                "argumentsJson" to "可选：JSON 对象字符串格式的调用参数",
-            ),
-            listOf("server", "tool"),
-        ))
-        array.put(schema(
-            "whale_mcp_manage",
-            "刷新工具列表、启停或移除一个 MCP 服务器。",
-            mapOf(
-                "action" to "refresh / enable / disable / remove",
-                "id" to "MCP 服务器 id 或名称",
-            ),
-            listOf("action", "id"),
-        ))
+        // 仅在已有已启用 Skill 或按需展开 extensions 时才注入 Skill/MCP Schema，日常对话零额外 Token 消耗
+        if (includeExtensions || WhaleSkillStore.hasEnabledSkills(app)) {
+            array.put(schema(
+                "whale_skill_read",
+                "读取已安装 Skill 的完整 SKILL.md 规范。",
+                mapOf("name" to "Skill 名称或 slug"),
+                listOf("name"),
+            ))
+        }
+        if (includeExtensions) {
+            array.put(schema("whale_skill_list", "列出已安装的 Skill。", emptyMap(), emptyList()))
+            array.put(schema(
+                "whale_skill_install",
+                "安装或创建标准 SKILL.md 技能（支持 GitHub/HTTPS URL 自动下载，或传入 name+description+content 本地创建）。",
+                mapOf(
+                    "url" to "可选：GitHub 或 https SKILL.md 地址",
+                    "name" to "技能名",
+                    "description" to "技能简介",
+                    "content" to "Markdown 技能正文",
+                ),
+                emptyList(),
+            ))
+            array.put(schema(
+                "whale_skill_manage",
+                "启停或删除已安装 Skill。",
+                mapOf("action" to "enable / disable / delete", "name" to "Skill 名称或 slug"),
+                listOf("action", "name"),
+            ))
+            array.put(schema("whale_mcp_list", "列出已配置 MCP 服务器及工具。", emptyMap(), emptyList()))
+            array.put(schema(
+                "whale_mcp_add",
+                "接入标准 HTTP/JSON-RPC MCP 服务器并自动拉取工具。",
+                mapOf(
+                    "url" to "MCP 地址（https:// 或局域网 http://）",
+                    "name" to "可选显示名",
+                    "id" to "可选英文标识",
+                    "authHeader" to "可选 Authorization 头",
+                ),
+                listOf("url"),
+            ))
+            array.put(schema(
+                "whale_mcp_call",
+                "调用指定 MCP 服务器的工具。",
+                mapOf("server" to "服务器 id 或名", "tool" to "工具名", "argumentsJson" to "可选 JSON 参数"),
+                listOf("server", "tool"),
+            ))
+            array.put(schema(
+                "whale_mcp_manage",
+                "刷新、启停或移除 MCP 服务器。",
+                mapOf("action" to "refresh / enable / disable / remove", "id" to "服务器 id 或名"),
+                listOf("action", "id"),
+            ))
+        }
         for (customSchema in WhaleCustomToolEngine.customToolSchemas(app)) {
             array.put(customSchema)
         }
