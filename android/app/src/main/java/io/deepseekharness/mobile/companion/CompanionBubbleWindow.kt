@@ -873,7 +873,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val endWait = ui.text("结束等待", 13f, accent).apply {
             minHeight=dp(44); gravity=Gravity.CENTER
             contentDescription="结束等待并保留原消息；已提交的后台任务不会取消"
-            visibility=if (busy && activeReply != null) android.view.View.VISIBLE else android.view.View.GONE
+            visibility=android.view.View.GONE
             background=ui.action(ui.soft,12)
             setOnClickListener {
                 activeReply?.cancel()
@@ -991,19 +991,17 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         panel.addView(sendState)
         panel.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(10), dp(4), dp(10), dp(9)) })
         // Message bubbles always precede the input, regardless of the pet's screen position.
-        status.text = if (busy) "正在回复…" else lastError.orEmpty()
-        status.visibility = if (busy || lastError != null) android.view.View.VISIBLE else android.view.View.GONE
+        status.text = lastError.orEmpty()
+        status.visibility = if (lastError != null) android.view.View.VISIBLE else android.view.View.GONE
         fun sendLabel() {
-            send.text = if (busy && inFlightUser != null) {
-                "继续发送"
-            } else ui.string(R.string.pet_ui_send)
+            send.text = ui.string(R.string.pet_ui_send)
         }
         sendLabel()
         if (busy) {
-            status.text = when {
-                pendingQuestion != null -> "需要你回答；回答后会继续原任务。"
-                mainQuestion != null -> "需要你回答，请点“主对话”继续。"
-                else -> "正在回复…"
+            when {
+                pendingQuestion != null -> { status.text = "需要你回答；回答后会继续原任务。"; status.visibility = android.view.View.VISIBLE }
+                mainQuestion != null -> { status.text = "需要你回答，请点“主对话”继续。"; status.visibility = android.view.View.VISIBLE }
+                else -> { status.text = ""; status.visibility = android.view.View.GONE }
             }
             input.isEnabled = inFlightUser != null
         }
@@ -1064,6 +1062,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (busy || (newInput && (pendingTurn != null || followups.isNotEmpty()))) {
                 if (busy && inFlightUser == null) return@setOnClickListener
                 val next = runCatching { CompanionBubbleChatPolicy.validateMessage(input.text.toString()) }.getOrNull() ?: return@setOnClickListener
+                // 无感中途补充：直接注入正在运行的原生会话，无需弹出额外排队或状态提醒。
+                if (busy && chat.steerNative(next)) {
+                    if (root === panel) bubble(next, true).also { renderCompleted(it, next, true) }
+                    input.text.clear()
+                    sendLabel()
+                    return@setOnClickListener
+                }
                 val id = runCatching { journal.accept(next,followups.lastOrNull()?.text ?: pendingTurn.orEmpty(),chat.presentationSessionId()) }.getOrElse {
                     android.widget.Toast.makeText(context,it.message?.takeIf { note -> note.startsWith("待处理消息已满") } ?: "无法保存待处理消息，输入已保留",android.widget.Toast.LENGTH_LONG).show()
                     return@setOnClickListener
@@ -1121,7 +1126,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             liveText = ""
             if (root === panel) renderLive = { text -> streamingBubble.text = text; panel.post { positionUpdater?.invoke() } }
             mainQuestion = null
-            busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = chat.handoffSessionId() != null; sendLabel(); status.text = "正在回复…"; status.visibility = android.view.View.VISIBLE; panel.post { positionUpdater?.invoke() }
+            busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = chat.handoffSessionId() != null; sendLabel(); status.text = ""; status.visibility = android.view.View.GONE; panel.post { positionUpdater?.invoke() }
             val generation = ++request
             chat.onInteractionNeeded = { question -> handler.post {
                 if (!closed && busy && request == generation) {
@@ -1161,7 +1166,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     liveText = partial
                     renderLive?.invoke(partial)
                     if (root === panel) {
-                        if (pendingQuestion == null) status.text = "正在流式输出…"
+                        if (pendingQuestion == null) { status.text = ""; status.visibility = android.view.View.GONE }
                         if (atBottom()) scroll.fullScroll(android.view.View.FOCUS_DOWN)
                     }
                 }
@@ -1177,7 +1182,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             activeReply = operation
             lastProgressAt = android.os.SystemClock.uptimeMillis()
             armBacklog()
-            endWait.visibility=android.view.View.VISIBLE; endWait.isEnabled=true; endWait.text="结束等待"
+            endWait.visibility=android.view.View.GONE
             operation.submit(replyExecutor, {
                     val settings = CompanionStore(context)
                     val memoryStore = CompanionMemoryStore(context)

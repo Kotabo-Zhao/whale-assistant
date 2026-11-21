@@ -874,78 +874,14 @@ class OverlayBallService : Service() {
         }
     }
 
-    private fun showCompanionHint(message: String, reminder: Boolean = false, notificationStyle: Boolean = false, onTap: (() -> Unit)? = null): Boolean {
-        if (CompanionStore(this).inQuietHours()) return false
-        if (!ballAttached || ballView == null || stopIfOverlayPermissionRevoked()) return false
-        if (getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked != false) return false
-        if (getSystemService(android.os.PowerManager::class.java)?.isInteractive != true) return false
-        val now = SystemClock.elapsedRealtime()
-        if (reminder && reminderHintVisible) {
-            reminderHints.offer(QueuedReminderHint(message, onTap), now)
-            return false // Queued is not evidence that a bubble was displayed.
-        }
-        if (!io.deepseekharness.mobile.companion.CompanionHintPolicy.mayShow(reminder, reminderHintVisible, now, lastHintAt)) return false
-        val metrics = resources.displayMetrics
-        val density = metrics.density
-        val screenWidth = metrics.widthPixels.coerceAtLeast(1)
-        val screenHeight = metrics.heightPixels.coerceAtLeast(1)
-        val width = ((if (notificationStyle) 232 else 220) * density).toInt().coerceIn(1, screenWidth)
-        val margin = (24 * density).toInt().coerceAtLeast(0)
-        val bubble: View = if (notificationStyle) {
-            io.deepseekharness.mobile.companion.CompanionNotificationBubble.create(this, message).apply {
-                setOnClickListener { removeCompanionHint(); onTap?.invoke() }
-            }
-        } else TextView(overlayPalette()).apply {
-            text = message
-            textSize = 14f
-            setTextColor(overlayColor(R.color.overlay_panel_foreground))
-            setPadding((14 * density).toInt(), (10 * density).toInt(), (14 * density).toInt(), (10 * density).toInt())
-            minHeight = (48 * density).toInt().coerceAtMost(screenHeight)
-            gravity = Gravity.CENTER_VERTICAL
-            contentDescription = message + if (onTap == null) "，点击关闭" else "，点击查看"
-            background = overlayPalette().getDrawable(R.drawable.bg_overlay_action)
-            setOnClickListener { removeCompanionHint(); onTap?.invoke() }
-        }
-        bubble.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(screenHeight, View.MeasureSpec.AT_MOST))
-        val position = io.deepseekharness.mobile.overlay.CompanionHintLayout.place(screenWidth, screenHeight,
-            layoutParams.x, layoutParams.y, layoutParams.width, layoutParams.height,
-            width, bubble.measuredHeight.coerceIn(1, screenHeight), margin, (8 * density).toInt().coerceAtLeast(0))
-        if (notificationStyle) {
-            val belowPet = position.y >= layoutParams.y + layoutParams.height
-            val petOnRight = layoutParams.x + layoutParams.width / 2 >= position.x + width / 2
-            bubble.background = io.deepseekharness.mobile.companion.SpeechBubbleDrawable(
-                android.graphics.Color.rgb(255, 250, 253), density, belowPet, petOnRight)
-        }
-        val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = position.x
-            y = position.y
-        }
+    private fun showCompanionHint(
+        @Suppress("UNUSED_PARAMETER") message: String,
+        @Suppress("UNUSED_PARAMETER") reminder: Boolean = false,
+        @Suppress("UNUSED_PARAMETER") notificationStyle: Boolean = false,
+        @Suppress("UNUSED_PARAMETER") onTap: (() -> Unit)? = null,
+    ): Boolean {
+        // 已移除桌宠旁大号新消息/提醒气泡，保持桌面清爽无打扰。
         removeCompanionHint()
-        if(!notificationStyle) WhaleMotion.overlay(params)
-        if (runCatching { windowManager.addView(bubble, params) }.isSuccess) {
-            hintView = bubble
-            petActing.react(PetAction.NOTICE,SystemClock.uptimeMillis())
-            wakePetMotion()
-            if (notificationStyle && android.animation.ValueAnimator.areAnimatorsEnabled()) {
-                bubble.alpha = 0f; bubble.scaleX = 0.94f; bubble.scaleY = 0.94f
-                bubble.translationY = (if (position.y < layoutParams.y) 5 else -5) * density
-                bubble.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setDuration(220)
-                    .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
-            }
-            reminderHintVisible = reminder
-            lastHintAt = now
-            val accessibility = getSystemService(android.view.accessibility.AccessibilityManager::class.java)
-            val timeout = if (android.os.Build.VERSION.SDK_INT >= 29 && accessibility != null)
-                accessibility.getRecommendedTimeoutMillis(7000, android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT or android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS).toLong()
-            else 7000L
-            hintHandler.postDelayed({ if (hintView === bubble) removeCompanionHint() }, timeout.coerceAtLeast(7000L))
-            return true
-        }
         return false
     }
 

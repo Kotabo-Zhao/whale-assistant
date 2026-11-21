@@ -831,7 +831,6 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                         ))}
                       </div>
                     )}
-                    {msg.steered && <span className="whale-steered-tag" title={t('中途补充')} aria-label={t('中途补充')}>{style === 'cute' ? '🫧' : t('中途补充')}</span>}
                     {msg.text}
                     {msg.error && (
                       <div className="whale-receipt-btns" style={{ marginTop: 8 }}>
@@ -939,40 +938,22 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         )}
         {sending && (
           <div className="whale-msg whale-msg-assistant" role="status">
-            <div className="whale-live-plan-bar">
-              <div className="whale-live-plan-visual" title={phaseLabel}>
-                <span className="whale-plan-whale-dot" aria-hidden="true">🐳</span>
-                {streamingSteps.length > 0 && (
-                  <span className="whale-step-dots" aria-label={t('已执行 {0} 步', streamingSteps.length)}>
-                    {streamingSteps.slice(-6).map((st, idx) => (
-                      <span key={`dot-${idx}`} className={`whale-step-dot${st.ok ? ' is-ok' : ' is-warn'}`} title={st.label} />
-                    ))}
-                  </span>
-                )}
-                <span className="whale-typing-dots" aria-hidden="true"><i /><i /><i /></span>
-                {style !== 'cute' && <span className="whale-live-plan-status">{phaseLabel}</span>}
+            {(streamingSteps.length > 0 || style !== 'cute') && (
+              <div className="whale-live-plan-bar">
+                <div className="whale-live-plan-visual" title={phaseLabel}>
+                  <span className="whale-plan-whale-dot" aria-hidden="true">🐳</span>
+                  {streamingSteps.length > 0 && (
+                    <span className="whale-step-dots" aria-label={t('已执行 {0} 步', streamingSteps.length)}>
+                      {streamingSteps.slice(-6).map((st, idx) => (
+                        <span key={`dot-${idx}`} className={`whale-step-dot${st.ok ? ' is-ok' : ' is-warn'}`} title={st.label} />
+                      ))}
+                    </span>
+                  )}
+                  <span className="whale-typing-dots" aria-hidden="true"><i /><i /><i /></span>
+                  {style !== 'cute' && <span className="whale-live-plan-status">{phaseLabel}</span>}
+                </div>
               </div>
-              <div className="whale-live-plan-actions">
-                <button
-                  type="button"
-                  className="whale-plan-mini-btn is-icon"
-                  aria-label={t('中途插话')}
-                  title={t('中途插话')}
-                  onClick={() => inputRef.current?.focus()}
-                >
-                  {style === 'cute' ? <CuteIcon name="chat" size={16} /> : <Pencil size={13} />}
-                </button>
-                <button
-                  type="button"
-                  className="whale-plan-mini-btn is-danger is-icon"
-                  aria-label={t('停止生成')}
-                  title={t('停止生成')}
-                  onClick={() => { void cancelCurrentTurn() }}
-                >
-                  <Square size={11} />
-                </button>
-              </div>
-            </div>
+            )}
             {streamingSteps.length > 0 && (
               <div className="whale-msg-steps">
                 <ul>
@@ -1104,7 +1085,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           ref={inputRef}
           type="text"
           value={input}
-          placeholder={sending ? t('随时插话或补充…') : t('和鲸鱼娘聊聊…')}
+          placeholder={t('和鲸鱼娘聊聊…')}
           aria-label={t('输入消息')}
           onChange={event => {
             const val = event.target.value
@@ -1138,8 +1119,8 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             type="submit"
             className={`whale-send-btn${sending ? ' is-steer' : ''}`}
             disabled={input.trim() === '' && pendingImages.length === 0}
-            aria-label={sending ? t('中途补充并调整') : t('发送')}
-            title={sending ? t('中途补充并调整') : t('发送')}
+            aria-label={t('发送')}
+            title={t('发送')}
           >
             {style === 'cute' ? <CuteIcon name="send" size={21} /> : <ArrowUp size={18} />}
           </button>
