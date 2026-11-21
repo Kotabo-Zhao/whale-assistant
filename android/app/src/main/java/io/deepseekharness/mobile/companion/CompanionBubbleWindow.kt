@@ -1580,7 +1580,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (!CompanionStore(context).reduceMotion && v.isAttachedToWindow) {
                 v.animate().cancel()
                 v.animate()
-                    .alpha(0f).translationY(dp(20).toFloat()).scaleX(0.95f).scaleY(0.95f)
+                    .alpha(0f).translationY(20f * context.resources.displayMetrics.density).scaleX(0.95f).scaleY(0.95f)
                     .setDuration(150L)
                     .setInterpolator(android.view.animation.AccelerateInterpolator(1.2f))
                     .withEndAction { runCatching { if (v.isAttachedToWindow) wm.removeView(v) } }
