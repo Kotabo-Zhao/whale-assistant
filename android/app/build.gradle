@@ -155,7 +155,10 @@ def downloadBgeBaseAssets = tasks.register('downloadBgeBaseAssets') {
 
 def lightAssets = layout.buildDirectory.dir('generated/assets/whaleLight')
 def collectLightAssets = tasks.register('collectLightAssets', Sync) {
-    from('src/main/assets') { exclude 'runtime/rootfs.bundle' }
+    from('src/main/assets') {
+        exclude 'runtime/rootfs.bundle'
+        exclude 'legal/ubuntu-packages/**'
+    }
     into(lightAssets)
 }
 
@@ -218,7 +221,7 @@ android {
         main {
             if (separateRuntime) assets.setSrcDirs([lightAssets])
             assets.srcDir(generatedLegalAssetsDirectory)
-            assets.srcDir(generatedBgeAssetsDirectory)
+            if (!separateRuntime) assets.srcDir(generatedBgeAssetsDirectory)
             assets.srcDir(generatedRichChatAssets)
         }
     }
@@ -289,7 +292,7 @@ kotlin {
 tasks.named('preBuild').configure {
     if (separateRuntime) dependsOn(collectLightAssets)
     dependsOn(generateLegalAssets)
-    dependsOn(downloadBgeBaseAssets)
+    if (!separateRuntime) dependsOn(downloadBgeBaseAssets)
     dependsOn(generateRichChatAssets)
 }
 

@@ -38,6 +38,15 @@ internal class SemanticEmbeddings(context: Context) {
                 old?.session?.close()
             }, delay, java.util.concurrent.TimeUnit.SECONDS)
         }
+        @Volatile private var bundledCache: Boolean? = null
+        fun isBundled(context: Context): Boolean {
+            bundledCache?.let { return it }
+            val present = runCatching {
+                context.applicationContext.assets.list("models")?.contains("bge-base-zh-v1.5-int8.onnx") == true
+            }.getOrDefault(false)
+            bundledCache = present
+            return present
+        }
         fun releaseWhenIdle() = synchronized(lock) {
             if (runtime != null) {
                 releaseRequested = true
