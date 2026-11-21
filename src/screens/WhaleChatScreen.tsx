@@ -833,15 +833,30 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                     )}
                     {msg.steered && <span className="whale-steered-tag" title={t('中途补充')} aria-label={t('中途补充')}>{style === 'cute' ? '🫧' : t('中途补充')}</span>}
                     {msg.text}
-                    {msg.error && (msg.text.includes('API Key') || msg.text.includes('模型与密钥')) && (
-                      <div style={{ marginTop: 8 }}>
-                        <button
-                          type="button"
-                          className="whale-receipt-btn is-primary"
-                          onClick={() => onNavigate('settings-models')}
-                        >
-                          {t('前往配置模型与密钥')}
-                        </button>
+                    {msg.error && (
+                      <div className="whale-receipt-btns" style={{ marginTop: 8 }}>
+                        {(msg.text.includes('API Key') || msg.text.includes('模型与密钥')) && (
+                          <button
+                            type="button"
+                            className="whale-receipt-btn is-primary"
+                            onClick={() => onNavigate('settings-models')}
+                          >
+                            {t('前往配置模型与密钥')}
+                          </button>
+                        )}
+                        {(() => {
+                          const lastUser = [...messages].reverse().find(m => m.role === 'user')
+                          return lastUser ? (
+                            <button
+                              type="button"
+                              className="whale-receipt-btn"
+                              disabled={sending}
+                              onClick={() => { void sendText(lastUser.text) }}
+                            >
+                              {t('重新发送')}
+                            </button>
+                          ) : null
+                        })()}
                       </div>
                     )}
                   </div>

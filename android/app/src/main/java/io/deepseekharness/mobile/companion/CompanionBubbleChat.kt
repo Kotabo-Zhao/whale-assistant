@@ -111,7 +111,7 @@ internal class CompanionBubbleChat(
 ) {
     data class Citation(val id: String, val revision: String, val displayName: String, val documentId: String?, val originalId: String?, val chunkIndex: Int, val chunkCount: Int, val parsingCoverage: String)
     data class Message(val role: String, val text: String, val images: List<String> = emptyList(), val citations: List<Citation> = emptyList(), val atMs: Long = System.currentTimeMillis())
-    data class Reply(val text: String, val images: List<String>, val citations: List<Citation>, val tools: Set<String> = emptySet(), val turn: Int? = null, val atMs: Long = System.currentTimeMillis()) {
+    data class Reply(val text: String, val images: List<String>, val citations: List<Citation>, val tools: Set<String> = emptySet(), val turn: Int? = null, val atMs: Long = System.currentTimeMillis(), val suggestions: List<String> = emptyList()) {
         fun message() = Message("assistant",text,images,citations,atMs)
     }
     @Volatile private var sessionId: String? = restored?.sessionId
@@ -374,6 +374,7 @@ internal class CompanionBubbleChat(
                 images = emptyList(),
                 citations = emptyList(),
                 tools = result.steps.map { it.tool }.toSet(),
+                suggestions = result.suggestions,
             )
             return finishReply(history, reply)
         }

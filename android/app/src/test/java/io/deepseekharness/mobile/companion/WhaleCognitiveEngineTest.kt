@@ -29,4 +29,16 @@ class WhaleCognitiveEngineTest {
         assertEquals(listOf("顺手设个8点闹钟", "查看本周其他日程", "导出成待办清单"), chips)
         assertTrue(!clean.contains("whale_next"))
     }
+
+    @Test
+    fun inferFallbackSuggestionsGeneratesChoiceAndYesNoQuickReplies() {
+        val ab = WhaleNativeAgentEngine.inferFallbackSuggestions("美团那单吃饭的事，你还没说今晚吃还是改明天？")
+        assertEquals(listOf("今晚吃", "改明天", "先不急"), ab)
+
+        val yn = WhaleNativeAgentEngine.inferFallbackSuggestions("刚给你建的习惯打卡小工具，要不要现在先塞两条习惯进去试试？")
+        assertEquals(listOf("好呀，直接做", "先不用了", "我有补充"), yn)
+
+        val plain = WhaleNativeAgentEngine.inferFallbackSuggestions("已经帮你把桌宠尺寸调到 160dp 了。")
+        assertTrue(plain.isEmpty())
+    }
 }

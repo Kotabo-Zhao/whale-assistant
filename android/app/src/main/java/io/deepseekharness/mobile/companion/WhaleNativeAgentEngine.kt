@@ -408,7 +408,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 else -> "刚才模型没有返回文字内容，再发一次试试看～"
             }
         }
-        val (cleanReply, suggestions) = extractSuggestions(finalReply)
+        val (cleanReply, parsedSuggestions) = extractSuggestions(finalReply)
+        val suggestions = if (parsedSuggestions.isNotEmpty() || wasCancelled) parsedSuggestions else inferFallbackSuggestions(cleanReply)
         return ChatResult(
             reply = cleanReply,
             steps = steps,
@@ -454,7 +455,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         append("风格：简洁、自然、直接、有温度，像靠谱的私人助理，不堆砌术语或多余确认。\n")
         append("精确原则：不确定的新信息先调用 whale_web_search 查证，绝不编造；若需要手机屏控、代码工坊、应用设置或设备定时等专域工具而当前列表未展开，先调用 whale_tools_expand 热加载即可立即使用。\n")
         append("工具效率：多个互不依赖的只读查询尽量在同一轮并行发出 tool_calls，避免重复调用相同参数；屏控遇到无文字关闭按钮的广告/领券弹窗时，优先发返回键或用视觉识别定位关闭坐标，绝不死循环重复点同一无效节点。\n")
-        append("下一步行动提案：在每次最终回复的最末尾，另起一行输出 <!--whale_next:[\"简短建议1\",\"简短建议2\",\"简短建议3\"]-->，给出 2~3 条贴合本轮上下文、用户点一下就能直接执行的中文短建议（每条不超过 16 字，绝不写空泛废话）。")
+        append("快捷回复选项（强制）：每次最终回复最末尾必须另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（每条≤14字）。若你的回复向用户提了问题、确认事项或给了多个方案（如「要不要…」「A还是B」），选项必须是用户可直接点选的简短回答（如「好呀，现在试试」「先不用」「选方案A」），让用户无需打字即可一键回应。")
         runCatching {
             val persona = CompanionPersonaStore(app).active()
             val personaPrompt = CompanionBubbleChatPolicy.personaContext(persona)
@@ -720,6 +721,33 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
             }
             return clean to list
+        }
+
+        private val CHOICE_REGEX = Regex("([\u4e00-\u9fa5A-Za-z0-9]{2,8})还是([\u4e00-\u9fa5A-Za-z0-9]{2,8})")
+
+        /** 当快速模型漏吐 <!--whale_next--> 但回复里向用户提了问题时，本地零成本兜底生成一键回答胶囊。 */
+        internal fun inferFallbackSuggestions(reply: String): List<String> {
+            val text = reply.trim()
+            if (text.isEmpty()) return emptyList()
+            val tail = text.takeLast(160)
+            val asksUser = tail.contains('？') || tail.contains('?') ||
+                listOf("要不要", "是否", "试试", "好不好", "需要吗", "继续吗", "告诉我").any { it in tail }
+            if (!asksUser) return emptyList()
+            val choice = CHOICE_REGEX.find(tail)
+            if (choice != null) {
+                val a = choice.groupValues[1].trim()
+                val b = choice.groupValues[2].trim()
+                if (a.isNotEmpty() && b.isNotEmpty() && a != b) {
+                    return listOf(a, b, "先不急")
+                }
+            }
+            return when {
+                listOf("要不要", "试试", "需要吗", "好不好", "是否", "帮我", "帮你", "先塞", "先加").any { it in tail } ->
+                    listOf("好呀，直接做", "先不用了", "我有补充")
+                listOf("继续", "哪一步", "怎么处理", "接下来").any { it in tail } ->
+                    listOf("继续下一步", "先停在这里", "换个方式")
+                else -> listOf("好的，按你建议做", "再详细说说", "先这样")
+            }
         }
         private const val MAX_TOOL_ROUNDS = 20
         private val parallelToolPool = Executors.newFixedThreadPool(4)

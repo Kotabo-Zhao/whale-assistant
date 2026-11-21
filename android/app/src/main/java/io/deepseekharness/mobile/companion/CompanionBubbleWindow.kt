@@ -1235,7 +1235,39 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                         // 本轮调用过 mobile_workers、或这个会话名下有未结束的任务：父会话里还会有一轮
                         // 由 Worker 回执触发的新回复，那不是用户的请求，气泡的流折叠看不到它 —— 交给投递监察器推回来。
                         if (answer.tools.contains("mobile_workers") || hasActiveWorkers()) armDeliveryWatcher(answer.turn)
-                        if (samePanel) { streamingBubble.text = CompanionRichText.render(answer.text, ui); renderCompleted(streamingBubble, answer.text, false); answer.images.forEach(::imageBubble); answer.citations.take(2).forEach(::citationCard) }
+                        if (samePanel) {
+                            streamingBubble.text = CompanionRichText.render(answer.text, ui)
+                            renderCompleted(streamingBubble, answer.text, false)
+                            answer.images.forEach(::imageBubble)
+                            answer.citations.take(2).forEach(::citationCard)
+                            if (answer.suggestions.isNotEmpty()) {
+                                val row = android.widget.HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false }
+                                val strip = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                                answer.suggestions.take(3).forEach { opt ->
+                                    val chip = TextView(context).apply {
+                                        text = "✦ $opt"
+                                        textSize = 12.5f
+                                        setTextColor(ui.accent)
+                                        setPadding(dp(11), dp(6), dp(11), dp(6))
+                                        background = android.graphics.drawable.GradientDrawable().apply {
+                                            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                                            cornerRadius = 999f
+                                            setColor(Color.argb(24, Color.red(ui.accent), Color.green(ui.accent), Color.blue(ui.accent)))
+                                            setStroke(dp(1).coerceAtLeast(1), Color.argb(96, Color.red(ui.accent), Color.green(ui.accent), Color.blue(ui.accent)))
+                                        }
+                                        setOnClickListener {
+                                            content.removeView(row)
+                                            input.setText(opt)
+                                            send.performClick()
+                                        }
+                                    }
+                                    strip.addView(chip, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6) })
+                                }
+                                row.addView(strip)
+                                content.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4); bottomMargin = dp(6) })
+                                scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
+                            }
+                        }
                         status.text = ""; status.visibility = android.view.View.GONE
                     }.onFailure { error ->
                         // Detach the old runner from UI state even if native cancellation has
