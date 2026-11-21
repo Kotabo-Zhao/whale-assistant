@@ -770,7 +770,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (!asksUser) return emptyList()
             val choice = CHOICE_REGEX.find(tail)
             if (choice != null) {
-                val a = choice.groupValues[1].trim()
+                val rawA = choice.groupValues[1].trim()
+                val a = rawA.replace(Regex("^(?:你还没说|还没说|你是想|你想|你要|你打算|打算|准备|需要|应该|请问|先|是|选|要)"), "").ifEmpty { rawA }
                 val b = choice.groupValues[2].trim()
                 if (a.isNotEmpty() && b.isNotEmpty() && a != b) {
                     return listOf(a, b, "先不急")
