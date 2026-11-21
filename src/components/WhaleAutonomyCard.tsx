@@ -236,7 +236,7 @@ export function WhaleAutonomyCard({
       <details className="whale-voice-box whale-collapsible">
         <summary className="whale-voice-head" style={{ cursor: 'pointer', listStyle: 'none' }}>
           <strong>{t('桌宠尺寸与拟人语音')}</strong>
-          <span>{petSizeDp}dp · {voiceStatus || (voiceCfg.configured ? t('语音已配') : t('语音未配'))}</span>
+          <span>{petSizeDp}dp · {voiceStatus || (voiceCfg.configured ? t('本地/云端就绪') : t('本地离线就绪'))}</span>
         </summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
           <div className="whale-size-slider-row">
@@ -285,7 +285,7 @@ export function WhaleAutonomyCard({
             <button
               type="button"
               className="whale-perm-chip"
-              disabled={!voiceCfg.configured}
+              disabled={false}
               onClick={() => { void runtimeBridge.testVoiceSpeak?.() }}
             >
               <Volume2 size={13} aria-hidden="true" />

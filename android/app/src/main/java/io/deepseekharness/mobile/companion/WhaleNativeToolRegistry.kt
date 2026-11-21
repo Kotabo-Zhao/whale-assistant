@@ -269,6 +269,17 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_code_patch", "在本地源码文件中精准替换唯一匹配的代码片段（比整文件重写更省 token）。", mapOf("project" to "项目名", "path" to "文件相对路径", "oldText" to "原始唯一代码片段", "newText" to "替换后的代码片段"), listOf("project", "path", "oldText", "newText")))
             array.put(schema("whale_code_delete", "安全删除本地代码项目中的单个文件。", mapOf("project" to "项目名", "path" to "文件相对路径"), listOf("project", "path")))
             array.put(schema("whale_code_search", "在本地原生代码项目中跨文件检索代码片段。", mapOf("project" to "项目名", "query" to "搜索词"), listOf("project", "query")))
+            array.put(schema(
+                "whale_code_run",
+                "在手机本地直接运行 Python 3.11 代码（内嵌原生 CPython，无需 Linux/联网）或本地 Shell 命令，返回真实 stdout/stderr 供调试自修复。",
+                mapOf(
+                    "project" to "项目名（运行工作目录，不存在则自动创建）",
+                    "lang" to "运行语言：python（默认，内嵌 CPython 3.11）或 sh（本地沙箱 Shell）",
+                    "code" to "直接执行的代码或命令（与 file 二选一）",
+                    "file" to "可选：运行项目内已有相对路径脚本文件（如 main.py）",
+                ),
+                listOf("project"),
+            ))
         }
         if (includePhone) {
             array.put(schema("whale_phone_apps", "按名称或拼音检索手机已安装应用及包名。", mapOf("query" to "应用名或关键词"), listOf("query")))
@@ -524,6 +535,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_code_write",
         "whale_code_patch",
         "whale_code_delete",
+        "whale_code_run",
         "whale_phone_launch",
         "whale_phone_action",
         "whale_phone_batch",
@@ -1071,6 +1083,30 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_code_search" -> {
                     val res = codeWorkspace.searchCode(args.str("project", ""), args.str("query", ""))
                     ToolOutcome(name, "检索本地代码", true, res.toString())
+                }
+                "whale_code_run" -> {
+                    val project = args.str("project").trim().ifBlank { "scratch" }
+                    val lang = args.str("lang", "python").trim().lowercase()
+                    val relFile = args.str("file").trim()
+                    val rawCode = args.str("code")
+                    val safeProj = project.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(48).ifBlank { "scratch" }
+                    val projectDir = File(File(app.filesDir, "whale-projects"), safeProj).apply { mkdirs() }
+                    val scriptCode = if (relFile.isNotEmpty()) {
+                        val target = File(projectDir, relFile).canonicalFile
+                        require(target.path.startsWith(projectDir.canonicalPath)) { "文件路径越界" }
+                        require(target.isFile) { "未找到脚本文件：$relFile" }
+                        target.readText(Charsets.UTF_8)
+                    } else {
+                        rawCode
+                    }
+                    require(scriptCode.isNotBlank()) { "请提供 code 或 file 参数" }
+                    val result = if (lang == "sh" || lang == "shell") {
+                        WhaleCodeRunner.runShell(projectDir, scriptCode)
+                    } else {
+                        WhaleCodeRunner.runPython(app, projectDir, scriptCode)
+                    }
+                    val ok = result.optBoolean("ok", false)
+                    ToolOutcome(name, if (lang == "sh" || lang == "shell") "运行 Shell：$safeProj" else "运行 Python：$safeProj", ok, result.toString(), mutating = true)
                 }
                 "whale_phone_apps" -> {
                     val res = InstalledApplications.list(app, args.str("query", "").trim(), 0)

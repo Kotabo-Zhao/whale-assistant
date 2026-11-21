@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'com.chaquo.python'
 }
 
 def envBuildValue = { String name ->
@@ -118,6 +119,12 @@ def collectLightAssets = tasks.register('collectLightAssets', Sync) {
         exclude 'legal/ubuntu-packages/**'
     }
     into(lightAssets)
+}
+
+chaquopy {
+    defaultConfig {
+        version = "3.11"
+    }
 }
 
 android {

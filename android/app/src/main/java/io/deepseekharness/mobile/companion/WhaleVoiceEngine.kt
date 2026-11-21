@@ -2,11 +2,19 @@ package io.deepseekharness.mobile.companion
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
 import androidx.core.content.ContextCompat
 import io.deepseekharness.mobile.runtime.RuntimeStore
 import org.json.JSONObject
@@ -17,16 +25,22 @@ import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
- * 硅基流动（SiliconFlow）单 Key 原生语音引擎（零外部依赖）。
+ * 鲸鱼原生双模语音引擎（本地零配置离线优先 + 云端拟人可选）：
  *
- * - 听（ASR）：`FunAudioLLM/SenseVoiceSmall`（免费、高精度中文识别，`/v1/audio/transcriptions`）
- * - 说（TTS）：`FunAudioLLM/CosyVoice2-0.5B`（拟人情绪起伏，`/v1/audio/speech`，按句切分流水线播报）
- * - 支持自动复用自定义供应商里已填的 SiliconFlow Key，或使用专属语音 Key；支持随时一键打断播报。
+ * - **默认零配置本地离线模式（0 API Key、0 费用、0 体积增量）**：
+ *   - 说（TTS）：直接调用 Android 系统原生 [TextToSpeech]（自动优先中文女声，荣耀/小米自带高清系统音色离线秒播）；
+ *   - 听（ASR）：直接调用 Android 系统原生 [SpeechRecognizer]（`EXTRA_PREFER_OFFLINE = true`，离线按住说话即出字）；
+ * - **可选云端拟人模式（填硅基流动 Key 后自动升级）**：
+ *   - 听：`FunAudioLLM/SenseVoiceSmall`；说：`FunAudioLLM/CosyVoice2-0.5B`，云端失败自动降级回本地离线 TTS，永不哑巴。
  */
 internal object WhaleVoiceEngine {
     private const val PREFS = "whale_voice_v1"
@@ -51,6 +65,7 @@ internal object WhaleVoiceEngine {
         val autoSpeakPet: Boolean,
     )
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val ttsFetchExecutor = Executors.newSingleThreadExecutor { r ->
         Thread(r, "whale-tts-fetch").apply { isDaemon = true }
     }
@@ -60,8 +75,14 @@ internal object WhaleVoiceEngine {
     private val generation = AtomicLong(0L)
 
     @Volatile private var activePlayer: MediaPlayer? = null
+    @Volatile private var localTts: TextToSpeech? = null
+    @Volatile private var localTtsReady: Boolean = false
     @Volatile private var recorder: MediaRecorder? = null
     @Volatile private var recordFile: File? = null
+    @Volatile private var localRecognizer: SpeechRecognizer? = null
+    @Volatile private var localSttLatch: CountDownLatch? = null
+    private val localSttResult = AtomicReference<Result<String>?>(null)
+    @Volatile private var usingLocalStt: Boolean = false
     @Volatile var isRecording: Boolean = false
         private set
 
@@ -74,7 +95,6 @@ internal object WhaleVoiceEngine {
         var key = prefs.getString(KEY_API_KEY, "")?.trim().orEmpty()
         var baseUrl = prefs.getString(KEY_BASE_URL, DEFAULT_BASE_URL)?.trim().orEmpty().ifBlank { DEFAULT_BASE_URL }
 
-        // 若未单独填语音 Key，自动复用自定义供应商中已配置的 SiliconFlow Key
         if (key.isEmpty()) {
             runCatching {
                 val store = RuntimeStore(app)
@@ -117,15 +137,18 @@ internal object WhaleVoiceEngine {
 
     fun snapshotJson(context: Context): JSONObject {
         val cfg = readConfig(context)
+        val cloudConfigured = cfg.apiKey.isNotBlank()
         return JSONObject()
-            .put("configured", cfg.apiKey.isNotBlank())
+            .put("configured", true)
+            .put("cloudConfigured", cloudConfigured)
+            .put("engine", if (cloudConfigured) "siliconflow_cloud" else "android_local_offline")
             .put("baseUrl", cfg.baseUrl)
             .put("voice", cfg.voice)
             .put("speed", cfg.speed.toDouble())
             .put("autoSpeakPet", cfg.autoSpeakPet)
             .put("hasRecordPermission", hasRecordPermission(context))
-            .put("asrModel", DEFAULT_ASR_MODEL)
-            .put("ttsModel", DEFAULT_TTS_MODEL)
+            .put("asrModel", if (cloudConfigured) DEFAULT_ASR_MODEL else "Android 系统离线语音识别")
+            .put("ttsModel", if (cloudConfigured) DEFAULT_TTS_MODEL else "Android 系统离线朗读")
     }
 
     /** 清理 Markdown 符号与 URL，避免朗读时念出“星号/井号/链接”。 */
@@ -180,23 +203,72 @@ internal object WhaleVoiceEngine {
             p?.stop()
             p?.release()
         }
+        runCatching { localTts?.stop() }
     }
 
-    /** 异步按句流式合成并播报（不阻塞主线程，支持随时打断）。 */
+    /** 使用 Android 系统自带离线 TTS 朗读（0 API Key、0 费用、即刻发声）。 */
+    private fun speakLocalOffline(app: Context, sentences: List<String>, speed: Float, myGen: Long) {
+        val speakNow = { engine: TextToSpeech ->
+            if (generation.get() == myGen) {
+                runCatching {
+                    engine.setSpeechRate(speed)
+                    engine.setPitch(1.06f)
+                    sentences.forEachIndexed { idx, line ->
+                        val mode = if (idx == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+                        engine.speak(line, mode, null, "whale-$myGen-$idx")
+                    }
+                }
+            }
+        }
+        val existing = localTts
+        if (existing != null && localTtsReady) {
+            speakNow(existing)
+            return
+        }
+        mainHandler.post {
+            if (generation.get() != myGen) return@post
+            lateinit var created: TextToSpeech
+            created = TextToSpeech(app) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    runCatching {
+                        val zh = created.setLanguage(Locale.SIMPLIFIED_CHINESE)
+                        if (zh == TextToSpeech.LANG_MISSING_DATA || zh == TextToSpeech.LANG_NOT_SUPPORTED) {
+                            created.setLanguage(Locale.getDefault())
+                        }
+                    }
+                    localTts = created
+                    localTtsReady = true
+                    speakNow(created)
+                }
+            }
+        }
+    }
+
+    /** 异步播报：未配置云端 Key 自动走系统离线 TTS；配置了硅基流动 Key 时走云端拟人语音并自带本地兜底。 */
     fun speakText(context: Context, text: String, voiceOverride: String? = null) {
         val app = context.applicationContext
         val cfg = readConfig(app)
-        if (cfg.apiKey.isBlank()) return
         val sentences = splitSentences(text)
         if (sentences.isEmpty()) return
-        val targetVoice = voiceOverride?.trim()?.takeIf { it.isNotEmpty() } ?: cfg.voice
         val myGen = generation.incrementAndGet()
         runCatching { activePlayer?.stop(); activePlayer?.release(); activePlayer = null }
+        runCatching { localTts?.stop() }
 
+        if (cfg.apiKey.isBlank()) {
+            speakLocalOffline(app, sentences, cfg.speed, myGen)
+            return
+        }
+
+        val targetVoice = voiceOverride?.trim()?.takeIf { it.isNotEmpty() } ?: cfg.voice
         ttsFetchExecutor.execute {
-            for (sentence in sentences) {
+            for ((index, sentence) in sentences.withIndex()) {
                 if (generation.get() != myGen) break
-                val mp3File = runCatching { synthesizeToTempFile(app, cfg, sentence, targetVoice) }.getOrNull() ?: continue
+                val mp3File = runCatching { synthesizeToTempFile(app, cfg, sentence, targetVoice) }.getOrNull()
+                if (mp3File == null) {
+                    // 云端失败时无缝降级为本地离线朗读，绝不哑巴
+                    if (index == 0) speakLocalOffline(app, sentences, cfg.speed, myGen)
+                    break
+                }
                 if (generation.get() != myGen) {
                     mp3File.delete()
                     break
@@ -247,7 +319,7 @@ internal object WhaleVoiceEngine {
     }
 
     private fun playAudioFileBlocking(file: File, myGen: Long) {
-        val latch = java.util.concurrent.CountDownLatch(1)
+        val latch = CountDownLatch(1)
         val player = MediaPlayer()
         try {
             player.setAudioAttributes(
@@ -263,7 +335,7 @@ internal object WhaleVoiceEngine {
             if (generation.get() != myGen) return
             activePlayer = player
             player.start()
-            latch.await(45, java.util.concurrent.TimeUnit.SECONDS)
+            latch.await(45, TimeUnit.SECONDS)
         } catch (_: Throwable) {
             // Ignore playback interruption
         } finally {
@@ -276,11 +348,64 @@ internal object WhaleVoiceEngine {
     @Synchronized
     fun startRecording(context: Context): String? {
         val app = context.applicationContext
-        if (!hasRecordPermission(app)) return "请先在「设置 → 一站式权限与自治」中授予麦克风录音权限"
-        if (readConfig(app).apiKey.isBlank()) return "请先在设置中填写硅基流动（SiliconFlow）API Key"
+        if (!hasRecordPermission(app)) return "请先在「设置 → 桌宠尺寸与拟人语音」中授予麦克风录音权限"
         stopSpeaking()
         cancelRecording()
 
+        val cfg = readConfig(app)
+        if (cfg.apiKey.isBlank()) {
+            // 零配置本地离线语音识别（Android 原生 SpeechRecognizer）
+            if (!SpeechRecognizer.isRecognitionAvailable(app)) {
+                return "当前系统未提供内置语音识别服务，可在设置中填入硅基流动免费 Key 作为云端语音识别。"
+            }
+            val latch = CountDownLatch(1)
+            localSttLatch = latch
+            localSttResult.set(null)
+            usingLocalStt = true
+            isRecording = true
+            mainHandler.post {
+                runCatching {
+                    val sr = SpeechRecognizer.createSpeechRecognizer(app)
+                    sr.setRecognitionListener(object : RecognitionListener {
+                        override fun onReadyForSpeech(params: Bundle?) = Unit
+                        override fun onBeginningOfSpeech() = Unit
+                        override fun onRmsChanged(rmsdB: Float) = Unit
+                        override fun onBufferReceived(buffer: ByteArray?) = Unit
+                        override fun onEndOfSpeech() = Unit
+                        override fun onPartialResults(partialResults: Bundle?) = Unit
+                        override fun onEvent(eventType: Int, params: Bundle?) = Unit
+                        override fun onError(error: Int) {
+                            localSttResult.compareAndSet(null, Result.failure(IllegalStateException("没听清楚（系统识别码 $error），请再试一次")))
+                            latch.countDown()
+                        }
+                        override fun onResults(results: Bundle?) {
+                            val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                            val text = list.firstOrNull()?.trim().orEmpty()
+                            if (text.isNotEmpty()) {
+                                localSttResult.compareAndSet(null, Result.success(text))
+                            } else {
+                                localSttResult.compareAndSet(null, Result.failure(IllegalStateException("没听清楚，请再说一遍")))
+                            }
+                            latch.countDown()
+                        }
+                    })
+                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    }
+                    localRecognizer = sr
+                    sr.startListening(intent)
+                }.onFailure { err ->
+                    localSttResult.compareAndSet(null, Result.failure(err))
+                    latch.countDown()
+                }
+            }
+            return null
+        }
+
+        usingLocalStt = false
         val outFile = File(app.cacheDir, "whale-asr-${System.currentTimeMillis()}.m4a")
         return try {
             val rec = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -312,16 +437,47 @@ internal object WhaleVoiceEngine {
     fun cancelRecording() {
         val rec = recorder
         val file = recordFile
+        val sr = localRecognizer
         recorder = null
         recordFile = null
+        localRecognizer = null
+        usingLocalStt = false
         isRecording = false
+        localSttLatch?.countDown()
+        localSttLatch = null
+        if (sr != null) {
+            mainHandler.post { runCatching { sr.cancel(); sr.destroy() } }
+        }
         runCatching { rec?.stop() }
         runCatching { rec?.release() }
         file?.delete()
     }
 
-    /** 停止录音并上传至硅基流动免费 SenseVoiceSmall 接口，返回识别文字。 */
+    /** 停止录音并返回识别文字（本地离线 SpeechRecognizer 或云端 SenseVoiceSmall）。 */
     fun stopAndTranscribe(context: Context): Result<String> {
+        if (usingLocalStt) {
+            val sr: SpeechRecognizer?
+            val latch: CountDownLatch?
+            synchronized(this) {
+                sr = localRecognizer
+                latch = localSttLatch
+                usingLocalStt = false
+                isRecording = false
+            }
+            if (sr != null) {
+                mainHandler.post { runCatching { sr.stopListening() } }
+            }
+            runCatching { latch?.await(8, TimeUnit.SECONDS) }
+            if (sr != null) {
+                mainHandler.post { runCatching { sr.destroy() } }
+            }
+            synchronized(this) {
+                if (localRecognizer === sr) localRecognizer = null
+                localSttLatch = null
+            }
+            return localSttResult.get() ?: Result.failure(IllegalStateException("没听清楚，请再说一遍"))
+        }
+
         val file: File
         synchronized(this) {
             val rec = recorder
