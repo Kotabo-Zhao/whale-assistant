@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Copy,
   Hammer,
+  ImagePlus,
   ListTodo,
   MessageSquarePlus,
   MessagesSquare,
@@ -21,6 +22,7 @@ import {
   Volume2,
   VolumeX,
   Wrench,
+  X,
 } from 'lucide-react'
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
@@ -41,6 +43,7 @@ export interface WhaleChatMessage {
   error?: boolean
   suggestions?: string[]
   steered?: boolean
+  images?: string[]
 }
 
 export interface WhaleChatSession {
@@ -100,6 +103,33 @@ function stripStreamingMarker(text: string): string {
   return idx >= 0 ? text.slice(0, idx).trimEnd() : text
 }
 
+async function compressImageToDataUrl(file: File, maxEdge = 1024): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('读取图片失败'))
+    reader.onload = () => {
+      const rawUrl = typeof reader.result === 'string' ? reader.result : ''
+      if (!rawUrl) { reject(new Error('图片内容为空')); return }
+      const img = new window.Image()
+      img.onerror = () => resolve(rawUrl)
+      img.onload = () => {
+        const scale = Math.min(1, maxEdge / Math.max(img.width || 1, img.height || 1))
+        const w = Math.max(1, Math.round(img.width * scale))
+        const h = Math.max(1, Math.round(img.height * scale))
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { resolve(rawUrl); return }
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.78))
+      }
+      img.src = rawUrl
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 const LEGACY_STORAGE_KEY = 'whale.nativeChatHistory.v1'
 const SESSIONS_STORAGE_KEY = 'whale.nativeChatSessions.v2'
 const ACTIVE_SESSION_KEY = 'whale.nativeChatActiveSession.v2'
@@ -147,6 +177,24 @@ function extractActionReceipts(steps?: WhaleNativeChatStep[]): ActionReceipt[] {
         key: 'profile-edit',
         kind: 'memory',
         title: step.label || '主人档案已更新',
+        view: 'assistant-memory',
+        actionLabel: '查看记忆',
+      })
+    } else if ((step.tool === 'whale_goal_create' || step.tool === 'whale_goal_update') && !seen.has('goal')) {
+      seen.add('goal')
+      receipts.push({
+        key: 'goal',
+        kind: 'secretary',
+        title: step.label || '已更新持续目标图',
+        view: 'assistant-tasks',
+        actionLabel: '查看事项',
+      })
+    } else if (step.tool === 'whale_playbook_save' && !seen.has('playbook')) {
+      seen.add('playbook')
+      receipts.push({
+        key: 'playbook',
+        kind: 'memory',
+        title: step.label || '已沉淀个人习惯规则',
         view: 'assistant-memory',
         actionLabel: '查看记忆',
       })
@@ -237,6 +285,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [input, setInput] = useState('')
+  const [pendingImages, setPendingImages] = useState<string[]>([])
   const [sending, setSending] = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [streamingSteps, setStreamingSteps] = useState<WhaleNativeChatStep[]>([])
@@ -256,6 +305,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const pendingFollowUpRef = useRef<string[]>([])
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const md = useMemo(() => new MarkdownIt({ html: false, linkify: true, breaks: true }), [])
 
   const currentSession = useMemo(
@@ -362,8 +412,25 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     }
   }
 
-  const sendText = async (raw: string): Promise<void> => {
-    const text = raw.trim()
+  const handleImagePick = async (files: FileList | null): Promise<void> => {
+    if (!files || files.length === 0) return
+    const picked: string[] = []
+    for (const file of Array.from(files).slice(0, 3)) {
+      try {
+        const dataUrl = await compressImageToDataUrl(file)
+        if (dataUrl) picked.push(dataUrl)
+      } catch {
+        // Ignore single broken file.
+      }
+    }
+    if (picked.length > 0) {
+      setPendingImages(prev => [...prev, ...picked].slice(0, 3))
+    }
+  }
+
+  const sendText = async (raw: string, overrideImages?: string[]): Promise<void> => {
+    const attachedImages = overrideImages ?? pendingImages
+    const text = raw.trim() || (attachedImages.length > 0 ? t('请帮我看看这张图并给出实用建议。') : '')
     if (!text) return
     const targetSessionId = currentSession.id
 
@@ -400,10 +467,12 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       id: `u-${Date.now()}`,
       role: 'user',
       text,
+      images: attachedImages.length > 0 ? attachedImages : undefined,
     }
     const nextHistory = [...messages, userMsg]
     updateSessionMessages(targetSessionId, prev => [...prev, userMsg], text)
     setInput('')
+    setPendingImages([])
     setSlashOpen(false)
     setSending(true)
     setStreamingText('')
@@ -417,6 +486,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         history: historyPayload.slice(0, -1),
         sessionId: targetSessionId,
         requestId,
+        images: attachedImages.length > 0 ? attachedImages : undefined,
       })
       updateSessionMessages(targetSessionId, prev => [
         ...prev,
@@ -726,6 +796,13 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                   </div>
                 ) : (
                   <div className="whale-msg-bubble">
+                    {msg.images && msg.images.length > 0 && (
+                      <div className="whale-msg-images">
+                        {msg.images.map((src, i) => (
+                          <img key={`${msg.id}-img-${i}`} src={src} alt="" className="whale-msg-thumb" />
+                        ))}
+                      </div>
+                    )}
                     {msg.steered && <span className="whale-steered-tag">{t('中途补充')}</span>}
                     {msg.text}
                     {msg.error && (msg.text.includes('API Key') || msg.text.includes('模型与密钥')) && (
@@ -819,6 +896,29 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         )}
         {sending && (
           <div className="whale-msg whale-msg-assistant" role="status">
+            <div className="whale-live-plan-bar">
+              <span className="whale-live-plan-status">
+                {streamingSteps.length > 0
+                  ? t('已执行 {0} 步 · {1}', streamingSteps.length, phaseLabel)
+                  : phaseLabel}
+              </span>
+              <div className="whale-live-plan-actions">
+                <button
+                  type="button"
+                  className="whale-plan-mini-btn"
+                  onClick={() => inputRef.current?.focus()}
+                >
+                  {t('插话')}
+                </button>
+                <button
+                  type="button"
+                  className="whale-plan-mini-btn is-danger"
+                  onClick={() => { void cancelCurrentTurn() }}
+                >
+                  {t('停止')}
+                </button>
+              </div>
+            </div>
             {streamingSteps.length > 0 && (
               <div className="whale-msg-steps">
                 <ul>
@@ -886,6 +986,24 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         </div>
       )}
 
+      {pendingImages.length > 0 && (
+        <div className="whale-image-preview-row" aria-label={t('待发送图片')}>
+          {pendingImages.map((src, idx) => (
+            <div key={`pending-img-${idx}`} className="whale-image-preview-item">
+              <img src={src} alt="" />
+              <button
+                type="button"
+                className="whale-image-remove-btn"
+                aria-label={t('移除图片')}
+                onClick={() => setPendingImages(prev => prev.filter((_, i) => i !== idx))}
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="whale-chat-composer-wrap"><form
         className="whale-chat-composer"
         onSubmit={event => {
@@ -893,6 +1011,17 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           void sendText(input)
         }}
       >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={event => {
+            void handleImagePick(event.target.files)
+            event.target.value = ''
+          }}
+        />
         <button
           type="button"
           className={`whale-slash-btn${slashOpen ? ' is-active' : ''}`}
@@ -903,6 +1032,15 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           onClick={() => setSlashOpen(open => !open)}
         >
           {style === 'cute' ? <CuteIcon name="slash" size={20} /> : <Slash size={15} />}
+        </button>
+        <button
+          type="button"
+          className="whale-img-btn"
+          aria-label={t('添加图片')}
+          title={t('添加图片')}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <ImagePlus size={16} />
         </button>
         <input
           ref={inputRef}
@@ -927,7 +1065,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         >
           {recording ? <Square size={14} /> : (style === 'cute' ? <CuteIcon name="mic" size={21} /> : <Mic size={16} />)}
         </button>
-        {sending && input.trim() === '' ? (
+        {sending && input.trim() === '' && pendingImages.length === 0 ? (
           <button
             type="button"
             className="whale-send-btn is-stop"
@@ -941,7 +1079,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           <button
             type="submit"
             className={`whale-send-btn${sending ? ' is-steer' : ''}`}
-            disabled={input.trim() === ''}
+            disabled={input.trim() === '' && pendingImages.length === 0}
             aria-label={sending ? t('中途补充并调整') : t('发送')}
             title={sending ? t('中途补充并调整') : t('发送')}
           >

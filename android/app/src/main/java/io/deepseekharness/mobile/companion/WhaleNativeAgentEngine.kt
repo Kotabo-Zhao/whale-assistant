@@ -128,14 +128,18 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         listener: StreamListener? = null,
         onProgress: ((round: Int, step: String, preview: String) -> Unit)? = null,
         control: RunControl? = null,
+        images: List<String> = emptyList(),
     ): ChatResult {
         val startedAt = System.currentTimeMillis()
-        val trimmed = userMessage.trim()
+        val trimmed = userMessage.trim().ifEmpty { if (images.isNotEmpty()) "请帮我看看这张图片并给出实用建议。" else "" }
         require(trimmed.isNotEmpty()) { "请输入内容后再发送" }
 
         val store = RuntimeStore(app)
         val settings = store.settings()
-        val endpoint = resolveEndpoint(store, settings)
+        val rawEndpoint = resolveEndpoint(store, settings)
+        val budgetProgress = runCatching { WhaleTokenMeter.snapshot(app).progress }.getOrDefault(0f)
+        val routeDecision = WhaleModelRouter.route(rawEndpoint.model, trimmed, images.isNotEmpty(), budgetProgress)
+        val endpoint = rawEndpoint.copy(model = routeDecision.model)
         val expandedCategories = mutableSetOf<String>()
         var toolSchemas = tools.toolSchemas(trimmed, expandedCategories)
 
@@ -165,7 +169,22 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         } else {
             trimmed.take(24_000)
         }
-        messages.put(JSONObject().put("role", "user").put("content", userPayload))
+        if (images.isNotEmpty()) {
+            val parts = JSONArray()
+            parts.put(JSONObject().put("type", "text").put("text", userPayload))
+            images.take(3).forEach { dataUrl ->
+                if (dataUrl.startsWith("data:image/") || dataUrl.startsWith("https://")) {
+                    parts.put(
+                        JSONObject()
+                            .put("type", "image_url")
+                            .put("image_url", JSONObject().put("url", dataUrl)),
+                    )
+                }
+            }
+            messages.put(JSONObject().put("role", "user").put("content", parts))
+        } else {
+            messages.put(JSONObject().put("role", "user").put("content", userPayload))
+        }
 
         val steps = ArrayList<StepRecord>()
         val seenCalls = HashSet<String>()
@@ -455,6 +474,12 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (inboxPrompt.isNotBlank()) append(inboxPrompt.take(1600)).append("\n")
             val poolPrompt = WhaleNativeWorkerPool.recentSummaries(3)
             if (poolPrompt.isNotBlank()) append(poolPrompt.take(1200)).append("\n")
+        }
+        runCatching {
+            val goals = WhaleGoalGraphStore.promptSummary(app)
+            if (goals.isNotBlank()) append(goals.take(800)).append("\n")
+            val playbooks = WhalePlaybookStore.promptSummary(app)
+            if (playbooks.isNotBlank()) append(playbooks.take(800)).append("\n")
         }
         runCatching {
             val rag = WhaleNativeRagRetriever.retrieveContext(app, userQuery)

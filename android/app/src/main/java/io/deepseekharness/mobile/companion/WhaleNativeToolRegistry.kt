@@ -158,6 +158,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_owner_profile", "读取用户的主人档案摘要与已记录偏好。", emptyMap(), emptyList()))
             array.put(schema(
                 "whale_owner_profile_edit",
+        "whale_goal_create",
+        "whale_goal_update",
+        "whale_playbook_save",
                 "直接设置、更新或清空用户主人档案中的指定字段（立即生效为 confirmed）。支持字段：preferred_name(称呼)、language(语言)、timezone(时区如Asia/Shanghai)、location(常用城市)、occupation(工作与身份)、communication(沟通偏好)、routine(作息与提醒偏好)、devices(常用设备)、projects(主要项目)、current_focus(近期安排)。",
                 mapOf(
                     "field" to "字段名：preferred_name / language / timezone / location / occupation / communication / routine / devices / projects / current_focus",
@@ -166,6 +169,49 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     "validUntilDays" to "可选，仅 current_focus 使用：有效天数，默认 14",
                 ),
                 listOf("field"),
+            ))
+            array.put(schema(
+                "whale_goal_create",
+                "创建或更新一个跨天持续推进的长期目标（持久化目标图），记录下一步行动和拆分子步骤。",
+                mapOf(
+                    "title" to "目标标题（简洁明确，如「准备下周系统架构面试」）",
+                    "nextAction" to "下一步具体可执行动作",
+                    "subTasks" to "可选：逗号分隔的子步骤清单",
+                    "blockers" to "可选：当前阻塞点",
+                ),
+                listOf("title"),
+            ))
+            array.put(schema(
+                "whale_goal_update",
+                "更新已有长期目标的状态（active/blocked/completed/paused）、下一步动作或阻塞点。",
+                mapOf(
+                    "idOrTitle" to "目标 ID 或标题关键词",
+                    "status" to "可选：active / blocked / completed / paused",
+                    "nextAction" to "可选：更新后的下一步行动",
+                    "blockers" to "可选：更新后的阻塞点",
+                ),
+                listOf("idOrTitle"),
+            ))
+            array.put(schema(
+                "whale_goal_list",
+                "列出用户当前正在推进的持久化长期目标图。",
+                mapOf("includeCompleted" to "可选：true 包含已完成目标，默认 false"),
+                emptyList(),
+            ))
+            array.put(schema(
+                "whale_playbook_save",
+                "把用户认可或反复要求的个人工作流沉淀为可复用习惯规则（程序性记忆）。",
+                mapOf(
+                    "trigger" to "触发场景（如「发文章链接时」「早安问候时」）",
+                    "steps" to "自动执行的步骤（如「提炼3条核心要点并存入资料库」）",
+                ),
+                listOf("trigger", "steps"),
+            ))
+            array.put(schema(
+                "whale_playbook_list",
+                "查看已沉淀的个人习惯工作流规则（Playbooks）。",
+                emptyMap(),
+                emptyList(),
             ))
         }
         if (includeKnowledge) {
@@ -644,6 +690,45 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_owner_profile" -> {
                     val profile = OwnerContext(app).read()
                     ToolOutcome(name, "读取主人档案", true, OwnerContext.prompt(profile))
+                }
+                "whale_goal_create" -> {
+                    val title = args.optString("title", "").trim()
+                    val nextAction = args.optString("nextAction", "").trim()
+                    val subTasks = args.optString("subTasks", "").split(',', '，', ';', '；').map(String::trim).filter(String::isNotEmpty)
+                    val blockers = args.optString("blockers", "").trim()
+                    val g = WhaleGoalGraphStore.create(app, title, nextAction, subTasks, blockers)
+                    ToolOutcome(name, "已建立目标：${g.title}", true, JSONObject().put("ok", true).put("goal", g.json()).toString())
+                }
+                "whale_goal_update" -> {
+                    val idOrTitle = args.optString("idOrTitle", "").trim()
+                    val status = args.optString("status", "").takeIf(String::isNotBlank)
+                    val nextAction = args.optString("nextAction", "").takeIf(String::isNotBlank)
+                    val blockers = if (args.has("blockers")) args.optString("blockers", "") else null
+                    val updated = WhaleGoalGraphStore.update(app, idOrTitle, status = status, nextAction = nextAction, blockers = blockers)
+                    if (updated != null) {
+                        ToolOutcome(name, "已更新目标：${updated.title}", true, JSONObject().put("ok", true).put("goal", updated.json()).toString())
+                    } else {
+                        ToolOutcome(name, "未找到匹配目标", false, JSONObject().put("ok", false).put("error", "未找到目标：$idOrTitle").toString())
+                    }
+                }
+                "whale_goal_list" -> {
+                    val inc = args.optBoolean("includeCompleted", false)
+                    val list = WhaleGoalGraphStore.list(app, includeCompleted = inc)
+                    val arr = JSONArray()
+                    list.forEach { arr.put(it.json()) }
+                    ToolOutcome(name, "读取目标图（${list.size} 项）", true, JSONObject().put("ok", true).put("count", list.size).put("goals", arr).toString())
+                }
+                "whale_playbook_save" -> {
+                    val trigger = args.optString("trigger", "").trim()
+                    val stepsStr = args.optString("steps", "").trim()
+                    val pb = WhalePlaybookStore.save(app, trigger, stepsStr)
+                    ToolOutcome(name, "已记住习惯规则：${pb.trigger}", true, JSONObject().put("ok", true).put("playbook", pb.json()).toString())
+                }
+                "whale_playbook_list" -> {
+                    val list = WhalePlaybookStore.list(app)
+                    val arr = JSONArray()
+                    list.forEach { arr.put(it.json()) }
+                    ToolOutcome(name, "读取习惯规则（${list.size} 条）", true, JSONObject().put("ok", true).put("count", list.size).put("playbooks", arr).toString())
                 }
                 "whale_owner_profile_edit" -> {
                     val field = args.str("field", "").trim()

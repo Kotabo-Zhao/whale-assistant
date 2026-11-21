@@ -2407,6 +2407,7 @@ export interface WhaleNativeChatRequest {
   history?: Array<{ role: 'user' | 'assistant'; text: string }>
   sessionId?: string
   requestId?: string
+  images?: string[]
 }
 
 export interface WhaleAppControlEvent {

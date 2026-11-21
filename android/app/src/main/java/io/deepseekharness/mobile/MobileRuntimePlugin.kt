@@ -4972,8 +4972,16 @@ class MobileRuntimePlugin : Plugin() {
     @PluginMethod
     fun whaleNativeChat(call: PluginCall) {
         val message = call.getString("message")?.trim().orEmpty()
-        if (message.isEmpty()) {
-            call.reject("请输入内容后再发送")
+        val rawImages = call.getArray("images")
+        val images = ArrayList<String>()
+        if (rawImages != null) {
+            for (i in 0 until minOf(3, rawImages.length())) {
+                val img = rawImages.optString(i, "").trim()
+                if (img.startsWith("data:image/") || img.startsWith("https://")) images += img
+            }
+        }
+        if (message.isEmpty() && images.isEmpty()) {
+            call.reject("请输入内容或选择图片后再发送")
             return
         }
         val sessionId = call.getString("sessionId")?.takeIf(String::isNotBlank) ?: "whale-main"
@@ -5026,7 +5034,7 @@ class MobileRuntimePlugin : Plugin() {
                 val control = io.deepseekharness.mobile.companion.WhaleNativeAgentEngine.RunControl()
                 activeNativeChats[requestId] = control
                 try {
-                    val result = engine.send(message, history, sessionId, listener, control = control)
+                    val result = engine.send(message, history, sessionId, listener, control = control, images = images)
                     call.resolve(JSObject.fromJSONObject(result.json()))
                 } finally {
                     activeNativeChats.remove(requestId, control)

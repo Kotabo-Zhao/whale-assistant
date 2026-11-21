@@ -947,3 +947,114 @@
   color: #ffffff;
   border-color: #ef4444;
 }
+
+.whale-live-plan-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-card, #ffffff) 88%, var(--accent, #2e8fd6) 12%);
+  border: 1px solid color-mix(in srgb, var(--accent, #2e8fd6) 24%, transparent);
+  font-size: 12px;
+}
+
+.whale-live-plan-status {
+  color: var(--text-primary, #1e3a5f);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whale-live-plan-actions {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.whale-plan-mini-btn {
+  border: 1px solid color-mix(in srgb, var(--accent, #2e8fd6) 30%, transparent);
+  background: var(--surface-card, #ffffff);
+  color: var(--text-primary, #1e3a5f);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.whale-plan-mini-btn.is-danger {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #dc2626;
+}
+
+.whale-image-preview-row {
+  display: flex;
+  gap: 8px;
+  padding: 6px 14px 2px;
+  overflow-x: auto;
+}
+
+.whale-image-preview-item {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent, #2e8fd6) 28%, transparent);
+  flex-shrink: 0;
+}
+
+.whale-image-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.whale-image-remove-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(15, 23, 42, 0.72);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.whale-msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.whale-msg-thumb {
+  max-width: 150px;
+  max-height: 150px;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
+}
+
+.whale-img-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #64748b);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
