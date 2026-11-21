@@ -2324,4 +2324,5 @@ export const english: Readonly<Record<string, string>> = {
   '停止录音并发送': 'Stop recording and send',
   '语音输入': 'Voice input',
   '停止生成': 'Stop generating',
+  '鲸鱼娘': 'Whale-chan',
 }

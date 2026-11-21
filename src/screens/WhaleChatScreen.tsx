@@ -367,7 +367,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       disposed = true
       if (cleanup) void cleanup()
     }
-  }, [bridge])
+  }, [bridge, activeId])
 
   const updateSessionMessages = (sessionId: string, updater: (prev: WhaleChatMessage[]) => WhaleChatMessage[], autoTitle?: string) => {
     setSessions(prev => prev.map(session => {
@@ -426,25 +426,36 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         const rows = Array.isArray(res?.messages) ? (res.messages as Array<{ id?: string; role?: string; text?: string; source?: string; atMs?: number }>) : []
         const petRows = rows.filter(r => r.source === 'pet' && typeof r.id === 'string' && typeof r.text === 'string' && (r.role === 'user' || r.role === 'assistant'))
         if (petRows.length === 0) return
-        setSessions(prev => prev.map((sess, idx) => {
-          if (idx !== 0) return sess
-          const seen = new Set(sess.messages.map(m => m.id))
-          const additions: WhaleChatMessage[] = petRows
-            .filter(r => !seen.has(r.id!))
-            .map(r => ({ id: r.id!, role: r.role as 'user' | 'assistant', text: r.text!, createdAt: Number(r.atMs ?? Date.now()) }))
-          if (additions.length === 0) return sess
-          return { ...sess, updatedAt: Date.now(), messages: [...sess.messages, ...additions].slice(-MAX_MESSAGES_PER_SESSION) }
-        }))
+        setSessions(prev => {
+          const targetId = prev.some(s => s.id === activeId) ? activeId : prev[0]?.id
+          return prev.map(sess => {
+            if (sess.id !== targetId) return sess
+            const seenIds = new Set(sess.messages.map(m => m.id))
+            const seenContent = new Set(sess.messages.map(m => `${m.role}:${m.text.trim()}`))
+            const additions: WhaleChatMessage[] = petRows
+              .filter(r => !seenIds.has(r.id!) && !seenContent.has(`${r.role}:${r.text!.trim()}`))
+              .map(r => ({ id: r.id!, role: r.role as 'user' | 'assistant', text: r.text!, createdAt: Number(r.atMs ?? Date.now()) }))
+            if (additions.length === 0) return sess
+            return { ...sess, updatedAt: Date.now(), messages: [...sess.messages, ...additions].slice(-MAX_MESSAGES_PER_SESSION) }
+          })
+        })
       } catch { /* ignore in browser */ }
     }
     void pullPetTurns()
     const onVis = () => { if (document.visibilityState === 'visible') void pullPetTurns() }
+    const onFocus = () => { void pullPetTurns() }
+    const pollTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void pullPetTurns()
+    }, 2500)
     document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', onFocus)
     return () => {
+      window.clearInterval(pollTimer)
       window.removeEventListener('whale-miniapp-ask', onMiniAppAsk)
       document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', onFocus)
     }
-  }, [bridge])
+  }, [bridge, activeId])
 
   const cancelCurrentTurn = async (): Promise<void> => {
     const reqId = activeRequestRef.current
@@ -695,6 +706,10 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   return (
     <section className="whale-chat-screen" aria-label={t('鲸鱼助手对话')}>
       <header className="whale-chat-header is-minimal">
+        <div className="whale-chat-brand">
+          <img src={whaleChanAvatar} alt="" className="whale-chat-brand-avatar" />
+          <span className="whale-chat-brand-name">{t('鲸鱼娘')}</span>
+        </div>
         <div className="whale-chat-shortcuts" aria-label={t('常用功能入口')}>
           <button
             type="button"

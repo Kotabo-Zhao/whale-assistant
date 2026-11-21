@@ -121,6 +121,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                                 .put("summary", coordSummary)
                                 .put("next", "任务 ID：$commandId"),
                         )
+                        runCatching { WhaleSharedChatStore.appendTurn(app, "", coordSummary, "pet") }
                     }
                 }
                 runCatching { store.acknowledge(commandId) }

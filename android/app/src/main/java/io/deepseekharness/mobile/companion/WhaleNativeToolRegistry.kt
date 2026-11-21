@@ -51,7 +51,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
     private val codeWorkspace by lazy { WhaleNativeCodeWorkspace(File(app.filesDir, "whale-projects")) }
 
     /** 按本轮用户输入动态选择工具集；同时始终允许全软件控制意图命中。 */
-    fun toolSchemas(userText: String, expandedCategories: Set<String> = emptySet()): JSONArray {
+    fun toolSchemas(userText: String, expandedCategories: Set<String> = emptySet(), isWorker: Boolean = false): JSONArray {
         val text = userText.trim()
         val q = text.lowercase()
         val array = JSONArray()
@@ -321,12 +321,14 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         if (includeDevice) {
             array.put(schema("whale_device_battery", "读取当前手机电池电量百分比与充电状态。", emptyMap(), emptyList()))
             array.put(schema("whale_worker_status", "查询后台 Worker 任务执行状态、完整回传结果与最近简报。", mapOf("id" to "可选：指定某个 Worker 任务 ID 以读取完整结果"), emptyList()))
-            array.put(schema(
-                "whale_worker_submit",
-                "派发一个后台 Worker 异步执行长耗时任务（写代码、整理资料、多步查证或后台手机任务），桌宠与主界面均拥有完全派发权限。",
-                mapOf("task" to "完整清晰的后台任务说明", "title" to "可选简短任务标题", "mode" to "可选模式：create / read / device，默认 create"),
-                listOf("task"),
-            ))
+            if (!isWorker) {
+                array.put(schema(
+                    "whale_worker_submit",
+                    "派发一个独立后台 Worker 异步执行长耗时任务（写代码、整理资料、多步查证或后台手机任务）。派发成功后请直接简短告知用户并等待回传，切勿在主会话重复动手执行。",
+                    mapOf("task" to "完整清晰的后台任务说明（<=1800字）", "title" to "可选简短任务标题", "mode" to "可选模式：create / read / device，默认 create", "inheritContext" to "可选：true 时附带近期父对话摘要，默认 false"),
+                    listOf("task"),
+                ))
+            }
             array.put(schema("whale_worker_cancel", "取消一个正在运行的原生后台 Worker 任务。", mapOf("id" to "Worker 任务 ID"), listOf("id")))
             array.put(schema(
                 "whale_worker_followup",
@@ -1227,9 +1229,14 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         return ToolOutcome(name, "任务标题过长", false, JSONObject().put("error", err).toString())
                     }
                     val mode = args.str("mode", "create").trim().takeIf { it in setOf("read", "device", "create") } ?: "create"
-                    val inheritContext = args.str("inheritContext", "true").trim().lowercase() != "false"
-                    val forkPrefix = if (inheritContext) WhaleHarnessCore.ContextForkHelper.buildForkPrefix(app) else ""
-                    val fullTask = if (forkPrefix.isNotBlank()) "$forkPrefix\n\n[本后台任务目标]\n$task" else task
+                    val inheritContext = args.str("inheritContext", "false").trim().lowercase() == "true"
+                    val forkPrefix = if (inheritContext) WhaleHarnessCore.ContextForkHelper.buildForkPrefix(app, maxTurns = 4, maxChars = 600) else ""
+                    val cleanTask = task.take(1850)
+                    val fullTask = if (forkPrefix.isNotBlank() && forkPrefix.length + cleanTask.length + 24 <= 1980) {
+                        "$forkPrefix\n\n[本后台任务目标]\n$cleanTask"
+                    } else {
+                        cleanTask
+                    }
                     val receipt = WorkerRuntimeWake.submit(
                         context = app,
                         task = fullTask,
@@ -1239,7 +1246,19 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         sourceSession = null,
                     )
                     val workerId = receipt.optString("commandId")
-                    ToolOutcome(name, "已派发后台 Worker：$title", true, receipt.put("id", workerId).put("title", title).put("mode", mode).toString(), mutating = true)
+                    ToolOutcome(
+                        name,
+                        "已派发独立后台 Worker：$title",
+                        true,
+                        receipt
+                            .put("id", workerId)
+                            .put("title", title)
+                            .put("mode", mode)
+                            .put("isolated", true)
+                            .put("hint", "独立后台 Worker 已在专属线程异步启动（任务 ID：$workerId）。请立即简短告知用户已派发并结束本轮回复，切勿在主会话中重复执行该任务！")
+                            .toString(),
+                        mutating = true,
+                    )
                 }
                 "whale_worker_cancel" -> {
                     val id = args.str("id").trim()

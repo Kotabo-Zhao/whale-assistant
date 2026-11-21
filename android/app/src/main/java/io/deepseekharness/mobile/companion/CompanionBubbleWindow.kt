@@ -499,19 +499,19 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val round = dp(16).toFloat()
             val tip = dp(5).toFloat()
             if (isUser) {
-                view.setPadding(dp(12), dp(9), dp(12), dp(9))
-                view.background = ui.shape(ui.accent, 16, null).apply {
+                view.setPadding(dp(13), dp(9), dp(13), dp(9))
+                view.background = ui.shape(Color.parseColor("#2F8AF5"), 16, null).apply {
                     cornerRadii = floatArrayOf(round, round, tip, tip, round, round, round, round)
                 }
                 if (view is TextView) view.setTextColor(Color.WHITE)
             } else {
-                view.setPadding(dp(12), dp(9), dp(12), dp(9))
-                view.background = ui.shape(ui.soft, 16, ui.line).apply {
+                view.setPadding(dp(13), dp(10), dp(13), dp(10))
+                view.background = ui.shape(Color.parseColor("#142136"), 16, Color.parseColor("#283A57")).apply {
                     cornerRadii = floatArrayOf(tip, tip, round, round, round, round, round, round)
                 }
                 if (view is TextView) {
                     view.setTextColor(ui.ink)
-                    view.setLineSpacing(dp(3).toFloat(), 1.1f)
+                    view.setLineSpacing(dp(3).toFloat(), 1.16f)
                 }
             }
         }
@@ -683,7 +683,21 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val display = workerInbox.forConversation(chat.presentationSessionId(),showRecentBriefings,chat.currentSessionId())
         val deliveries = deliveryInbox.load().filter { it.sessionId == chat.currentSessionId() }
         val timeline = mutableListOf<Pair<Long, () -> Unit>>()
-        history.takeLast(8).forEach { message -> timeline.add(message.atMs to { conversationMessage(message) }) }
+        val existingTexts = history.map { "${it.role}:${it.text.trim()}" }.toMutableSet()
+        history.takeLast(10).forEach { message -> timeline.add(message.atMs to { conversationMessage(message) }) }
+        val shared = runCatching { WhaleSharedChatStore.list(context) }.getOrDefault(org.json.JSONArray())
+        val sharedStart = (shared.length() - 12).coerceAtLeast(0)
+        for (si in sharedStart until shared.length()) {
+            val row = shared.optJSONObject(si) ?: continue
+            if (row.optString("source") != "app") continue
+            val role = row.optString("role", "")
+            val text = row.optString("text", "").trim()
+            if (text.isEmpty() || (role != "user" && role != "assistant")) continue
+            if (!existingTexts.add("$role:$text")) continue
+            val atMs = row.optLong("atMs", 0L)
+            val syncedMsg = CompanionBubbleChat.Message(role, text, emptyList(), emptyList(), atMs)
+            timeline.add(atMs to { conversationMessage(syncedMsg) })
+        }
         display.rows.forEach { report -> timeline.add(report.optLong("at") to { workerReport(report); Unit }) }
         deliveries.forEach { item -> timeline.add(item.atMs to {
             val parsed = CompanionBubbleChatPolicy.parseInlineImages(item.text)

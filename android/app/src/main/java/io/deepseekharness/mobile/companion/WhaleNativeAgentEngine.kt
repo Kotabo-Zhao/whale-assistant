@@ -133,7 +133,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         images: List<String> = emptyList(),
     ): ChatResult {
         val startedAt = System.currentTimeMillis()
-        activeScene = if (sessionId.startsWith("whale-worker-")) "worker" else "chat"
+        val isWorkerSession = sessionId.startsWith("whale-worker-")
+        activeScene = if (isWorkerSession) "worker" else "chat"
         val trimmed = userMessage.trim().ifEmpty { if (images.isNotEmpty()) "请帮我看看这张图片并给出实用建议。" else "" }
         require(trimmed.isNotEmpty()) { "请输入内容后再发送" }
 
@@ -144,7 +145,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val routeDecision = WhaleModelRouter.routeWithPrefs(app, rawEndpoint.model, trimmed, images.isNotEmpty(), budgetProgress)
         val endpoint = rawEndpoint.copy(model = routeDecision.model)
         val expandedCategories = mutableSetOf<String>()
-        var toolSchemas = tools.toolSchemas(trimmed, expandedCategories)
+        var toolSchemas = tools.toolSchemas(trimmed, expandedCategories, isWorker = isWorkerSession)
 
         // 1. 滑动历史窗口准备（用于角色世界书关键词触发与历史回放）
         val recentHistory = history.takeLast(12)
@@ -155,7 +156,18 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         messages.put(
             JSONObject()
                 .put("role", "system")
-                .put("content", buildStaticSystemPrompt(activePersona)),
+                .put(
+                    "content",
+                    if (isWorkerSession) {
+                        "你是鲸鱼助手的独立后台执行子代理（Worker，Session=$sessionId），运行在与主对话完全隔离的后台线程中。\n" +
+                            "职责规范：\n" +
+                            "1. 专注独立完成分配的任务，优先使用原生文件/代码/Python PTC/检索工具真实落盘产物并验证结果；\n" +
+                            "2. 不要模仿主会话口吻闲聊，不要声称自己是主会话，也不要再次派发嵌套 Worker；\n" +
+                            "3. 完成后输出简洁清晰的结构化交付报告（含产出文件路径、关键数据与校验结果）。"
+                    } else {
+                        buildStaticSystemPrompt(activePersona)
+                    },
+                ),
         )
         val totalHist = recentHistory.size
         recentHistory.forEachIndexed { idx, (role, text) ->
@@ -167,7 +179,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
 
         // 3. 动态本轮上下文（档案/Worker/RAG）放在最新用户消息前，绝不污染静态 System Prompt 缓存前缀
-        val dynamicCtx = buildDynamicTurnContext(trimmed, activePersona, recentHistory)
+        val dynamicCtx = if (isWorkerSession) "" else buildDynamicTurnContext(trimmed, activePersona, recentHistory)
         val userPayload = if (dynamicCtx.isNotBlank()) {
             "$dynamicCtx\n\n用户消息：${trimmed.take(24_000)}"
         } else {
@@ -451,7 +463,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             toolMsgIndicesByRound.add(roundToolIndices)
             if (needSchemaRefresh) {
-                toolSchemas = tools.toolSchemas(trimmed, expandedCategories)
+                toolSchemas = tools.toolSchemas(trimmed, expandedCategories, isWorker = isWorkerSession)
             }
             if (control?.cancelled?.get() == true) break
             if (control?.hasPendingSteer() == true) {

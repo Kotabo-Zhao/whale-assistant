@@ -1593,3 +1593,60 @@
   padding: 4px 8px 4px !important;
   margin-bottom: 0 !important;
 }
+
+
+/* === 统一 App 与桌宠对话视觉（头部品牌 + 零多余左留白 + 同款深蓝气泡卡片） === */
+.whale-chat-header.is-minimal {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 6px 10px !important;
+  gap: 8px !important;
+}
+.whale-chat-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.whale-chat-brand-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  flex-shrink: 0;
+}
+.whale-chat-brand-name {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--ink, #e5eefc);
+  letter-spacing: 0.01em;
+}
+:root[data-style='cute'] .whale-msg-inline-avatar,
+.whale-msg-inline-avatar {
+  display: none !important;
+}
+.whale-chat-list {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+.whale-msg-assistant {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+.whale-msg-assistant .whale-msg-bubble {
+  background: #142136 !important;
+  border: 1px solid #283a57 !important;
+  border-radius: 5px 16px 16px 16px !important;
+  padding: 10px 13px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.whale-msg-user .whale-msg-bubble {
+  background: #2f8af5 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 16px 5px 16px 16px !important;
+  padding: 9px 13px !important;
+}
