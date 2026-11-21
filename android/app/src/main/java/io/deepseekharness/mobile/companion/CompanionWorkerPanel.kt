@@ -80,9 +80,9 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                     }
                     badge?.apply {
                         val label = when {
-                            counts.second > 0 -> "🔔 ${counts.second}"
-                            counts.first > 0 -> "⚡ ${counts.first}"
-                            else -> "🔔"
+                            counts.second > 0 -> "${counts.second}"
+                            counts.first > 0 -> "${counts.first}"
+                            else -> ""
                         }
                         if (text != label) text = label
                         val description = "后台任务：${counts.first}项运行中，${counts.second}项待处理"
@@ -102,7 +102,7 @@ internal class CompanionWorkerPanel(private val context: Context, private val op
                             }
                         }
                     }
-                }.onFailure { badge?.text = "🔔" }
+                }.onFailure { badge?.text = "" }
                 if (loadAgain) { loadAgain = false; schedule() }
             }
         }

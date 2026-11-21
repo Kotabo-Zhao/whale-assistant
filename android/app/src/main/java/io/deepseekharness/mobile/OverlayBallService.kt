@@ -244,12 +244,15 @@ class OverlayBallService : Service() {
             } else {
                 val dp = resources.displayMetrics.density
                 pill.visibility = View.VISIBLE
-                pill.text = "🐳 ⚡"
-                pill.background = android.graphics.drawable.GradientDrawable().apply {
+                pill.text = "🐳 ✨"
+                pill.setTextColor(android.graphics.Color.rgb(30, 77, 123))
+                pill.background = android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                    intArrayOf(android.graphics.Color.argb(242, 240, 249, 255), android.graphics.Color.argb(242, 255, 236, 245)),
+                ).apply {
                     shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                     cornerRadius = 999f
-                    setColor(android.graphics.Color.argb(232, 30, 98, 148))
-                    setStroke((1f * dp).toInt().coerceAtLeast(1), android.graphics.Color.argb(180, 165, 228, 255))
+                    setStroke((1.2f * dp).toInt().coerceAtLeast(1), android.graphics.Color.argb(220, 148, 210, 252))
                 }
             }
         }

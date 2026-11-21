@@ -351,29 +351,39 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             visibility = android.view.View.GONE
             background = bar(); addView(accessBadge)
         }
-        val workerBadge = ui.text("🔔", 13.5f, accent, true).apply {
-            gravity = Gravity.CENTER; minHeight = dp(34)
+        val workerBadge = ui.text("", 12f, accent, true).apply {
+            gravity = Gravity.CENTER; minWidth = dp(34); minHeight = dp(34)
             maxWidth = minOf((width * 0.40f).toInt(), dp((124 * fontScale.coerceAtLeast(1f)).toInt()))
-            maxLines = if (fontScale >= 1.4f) 2 else 1; ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(dp(11), 0, dp(11), 0); contentDescription = "和小鲸聊聊近况"
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(8), 0, dp(8), 0); contentDescription = "和小鲸聊聊近况"
+            androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_cute_notifications)?.mutate()?.let { d ->
+                val sz = dp(20)
+                d.setBounds(0, 0, sz, sz)
+                setCompoundDrawablesRelative(d, null, null, null)
+                compoundDrawablePadding = dp(3)
+            }
             background = ui.action(ui.soft, 18); setOnClickListener { openTaskInbox() }
         }
-        val expandButton = ui.text(if (heightMode == "large") "⤡" else "⤢", 14.5f, secondary, true).apply {
-            gravity = Gravity.CENTER; minHeight = dp(34)
-            setPadding(dp(9), 0, dp(9), 0)
+        val expandButton = android.widget.ImageView(context).apply {
+            setImageResource(if (heightMode == "large") R.drawable.ic_cute_collapse else R.drawable.ic_cute_expand)
+            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+            val pad = dp(5)
+            setPadding(pad, pad, pad, pad)
+            minimumWidth = dp(34); minimumHeight = dp(34)
             contentDescription = "切换桌宠大窗模式"
             background = ui.action(Color.TRANSPARENT, 12)
+            isFocusable = true; isClickable = true
             setOnClickListener {
                 heightMode = if (heightMode == "large") "auto" else "large"
                 sizeStore.chatHeightMode = heightMode
-                text = if (heightMode == "large") "⤡" else "⤢"
+                setImageResource(if (heightMode == "large") R.drawable.ic_cute_collapse else R.drawable.ic_cute_expand)
                 positionUpdater?.invoke()
             }
         }
         val headingEnd = LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL
             addView(workerBadge)
-            addView(expandButton, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6) })
+            addView(expandButton, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(6) })
             addView(ui.close(::hide))
         }
         val grabber = android.view.View(context).apply {
@@ -431,16 +441,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         fun shortcut(@Suppress("UNUSED_PARAMETER") label: String, icon: Int, description: String, click: () -> Unit) {
             shortcuts.addView(android.widget.ImageView(context).apply {
                 setImageResource(icon)
-                imageTintList = android.content.res.ColorStateList.valueOf(secondary)
                 scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
-                val pad = dp(9)
+                val pad = dp(6)
                 setPadding(pad, pad, pad, pad)
-                minimumHeight = dp(38)
+                minimumHeight = dp(40)
                 contentDescription = description
-                background = ui.action(Color.TRANSPARENT, 12)
+                background = ui.action(Color.TRANSPARENT, 14)
                 isFocusable = true; isClickable = true
                 setOnClickListener { click() }
-            }, LinearLayout.LayoutParams(0, dp(38), 1f))
+            }, LinearLayout.LayoutParams(0, dp(40), 1f))
         }
         sessionActions.addView(ui.text(ui.string(R.string.pet_manual_assign), 14f, accent).apply {
             minHeight = dp(44); gravity = Gravity.CENTER_VERTICAL
@@ -452,8 +461,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 composeTask()
             }
         })
-        shortcut(ui.string(R.string.pet_menu_capture), R.drawable.ic_pet_shell, "存入本地资料库") { openCapture() }
-        shortcut(ui.string(R.string.pet_menu_tools), R.drawable.ic_whale_nav_plugins, ui.string(R.string.pet_menu_tools)) {
+        shortcut(ui.string(R.string.pet_menu_capture), R.drawable.ic_cute_memory, "存入本地资料库") { openCapture() }
+        shortcut(ui.string(R.string.pet_menu_tools), R.drawable.ic_cute_workshop, ui.string(R.string.pet_menu_tools)) {
             sessionActions.visibility = android.view.View.GONE
             if (toolShelf.childCount > 0) toolShelf.removeAllViews()
             else toolShelf.addView(WhalePetToolShelf(context, { panel.post { positionUpdater?.invoke() } }, ::openTool, ::hide))
@@ -725,11 +734,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             })
         }
-        val send = ui.text("➤", 15f, ui.onPrimary, true).apply {
-            gravity = Gravity.CENTER; minWidth = dp(38); minHeight = dp(38)
+        val send = android.widget.ImageView(context).apply {
+            setImageResource(R.drawable.ic_cute_send)
+            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+            val pad = dp(6)
+            setPadding(pad, pad, pad, pad)
             contentDescription = ui.string(R.string.pet_ui_send)
-            setPadding(0, 0, 0, 0)
-            background = ui.action(ui.primary, 19); isEnabled = !busy || inFlightUser != null
+            background = ui.action(ui.soft, 19)
+            isFocusable = true; isClickable = true
+            isEnabled = !busy || inFlightUser != null
         }
         val footer = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
@@ -796,32 +809,42 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 addView(action,LinearLayout.LayoutParams(0,-2,1f))
             }
         })
-        val ttsBtn = ui.text(if (WhaleVoiceEngine.readConfig(context).autoSpeakPet) "🔊" else "🔇", 15f, foreground).apply {
-            gravity = Gravity.CENTER; minWidth = dp(36); minHeight = dp(40)
+        val ttsBtn = android.widget.ImageView(context).apply {
+            setImageResource(if (WhaleVoiceEngine.readConfig(context).autoSpeakPet) R.drawable.ic_cute_voice_on else R.drawable.ic_cute_voice_off)
+            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+            val pad = dp(6)
+            setPadding(pad, pad, pad, pad)
             contentDescription = "切换桌宠自动朗读"
+            background = ui.action(Color.TRANSPARENT, 18)
+            isFocusable = true; isClickable = true
             setOnClickListener {
                 val cur = WhaleVoiceEngine.readConfig(context).autoSpeakPet
                 val next = !cur
                 WhaleVoiceEngine.saveConfig(context, autoSpeakPet = next)
                 if (!next) WhaleVoiceEngine.stopSpeaking()
-                text = if (next) "🔊" else "🔇"
+                setImageResource(if (next) R.drawable.ic_cute_voice_on else R.drawable.ic_cute_voice_off)
             }
         }
-        val micBtn = ui.text("🎙", 15f, foreground).apply {
-            gravity = Gravity.CENTER; minWidth = dp(38); minHeight = dp(40)
+        val micBtn = android.widget.ImageView(context).apply {
+            setImageResource(R.drawable.ic_cute_mic)
+            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+            val pad = dp(6)
+            setPadding(pad, pad, pad, pad)
             contentDescription = "语音输入"
+            background = ui.action(Color.TRANSPARENT, 18)
+            isFocusable = true; isClickable = true
         }
-        footer.addView(micBtn)
+        footer.addView(micBtn, LinearLayout.LayoutParams(dp(38), dp(38)))
         footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        footer.addView(ttsBtn)
-        shortcut(ui.string(R.string.pet_menu_session), R.drawable.ic_whale_nav_chat, ui.string(R.string.pet_menu_session)) {
+        footer.addView(ttsBtn, LinearLayout.LayoutParams(dp(36), dp(36)))
+        shortcut(ui.string(R.string.pet_menu_session), R.drawable.ic_cute_chat, ui.string(R.string.pet_menu_session)) {
             toolShelf.removeAllViews()
             sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
             syncControls()
             controlsScroll.scrollTo(0,0)
             panel.post { positionUpdater?.invoke() }
         }
-        footer.addView(send)
+        footer.addView(send, LinearLayout.LayoutParams(dp(38), dp(38)))
         input.setOnEditorActionListener { _, action, key ->
             val enter = key?.keyCode == android.view.KeyEvent.KEYCODE_ENTER || key?.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
             if (enter && android.view.inputmethod.BaseInputConnection.getComposingSpanStart(input.text) >= 0) return@setOnEditorActionListener false
@@ -841,13 +864,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         stateRow.addView(status,LinearLayout.LayoutParams(0,-2,1f))
         micBtn.setOnClickListener {
             if (WhaleVoiceEngine.isRecording) {
-                micBtn.text = "…"
+                micBtn.alpha = 0.5f
                 micBtn.isEnabled = false
                 status.text = "✨ •••"; status.visibility = android.view.View.VISIBLE
                 executor.execute {
                     val res = WhaleVoiceEngine.stopAndTranscribe(context)
                     handler.post {
-                        micBtn.text = "🎙"
+                        micBtn.setImageResource(R.drawable.ic_cute_mic); micBtn.alpha = 1f
                         micBtn.isEnabled = true
                         res.onSuccess { spoken ->
                             status.visibility = android.view.View.GONE
@@ -866,7 +889,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     status.text = err
                     status.visibility = android.view.View.VISIBLE
                 } else {
-                    micBtn.text = "⏹"
+                    micBtn.setImageResource(R.drawable.ic_cute_stop)
                     status.text = "🔴 •••"
                     status.visibility = android.view.View.VISIBLE
                 }
@@ -996,7 +1019,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         status.text = lastError.orEmpty()
         status.visibility = if (lastError != null) android.view.View.VISIBLE else android.view.View.GONE
         fun sendLabel() {
-            send.text = "➤"
+            send.alpha = if (send.isEnabled) 1f else 0.45f
         }
         sendLabel()
         if (busy) {

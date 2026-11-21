@@ -16,6 +16,7 @@ import {
   MessagesSquare,
   Mic,
   Pencil,
+  RotateCcw,
   Slash,
   Square,
   Trash2,
@@ -852,7 +853,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                               disabled={sending}
                               onClick={() => { void sendText(lastUser.text) }}
                             >
-                              ↻
+                              <RotateCcw size={13} aria-hidden="true" />
                             </button>
                           ) : null
                         })()}
@@ -995,7 +996,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                 void sendText(`帮我把下面内容存入本地资料库并提炼核心要点：\n\n${input.trim()}`)
               }}
             >
-              <BookmarkCheck size={14} aria-hidden="true" />
+              {style === 'cute' ? <CuteIcon name="memory" size={19} /> : <BookmarkCheck size={14} aria-hidden="true" />}
             </button>
           )}
           {slashOpen && QUICK_SLASH_ACTIONS.map(act => (
