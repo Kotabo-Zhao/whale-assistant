@@ -316,7 +316,33 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
                 val t0 = System.currentTimeMillis()
                 if (p.fnName.startsWith("whale_phone_")) activeScene = "phone"
-                val outcome = tools.execute(p.fnName, p.fnArgs)
+                val isForegroundSlowTool = !sessionId.startsWith("whale-worker-") &&
+                    p.fnName in setOf("whale_web_fetch", "whale_mcp_call")
+                val outcome = if (isForegroundSlowTool) {
+                    val future = parallelToolPool.submit(Callable { tools.execute(p.fnName, p.fnArgs) })
+                    try {
+                        future.get(5_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    } catch (_: java.util.concurrent.TimeoutException) {
+                        val jobId = "bg-${UUID.randomUUID().toString().take(8)}"
+                        WhaleNativeWorkerPool.submit(title = "后台执行 ${p.fnName}", id = jobId, priorityBy = "launch") {
+                            runCatching { future.get(180L, java.util.concurrent.TimeUnit.SECONDS).payload }
+                                .getOrElse { err -> "后台工具超时或失败：${err.message ?: err.javaClass.simpleName}" }
+                        }
+                        WhaleNativeToolRegistry.ToolOutcome(
+                            p.fnName,
+                            "超过 5 秒已自动转后台",
+                            true,
+                            JSONObject()
+                                .put("status", "promoted_to_background")
+                                .put("jobId", jobId)
+                                .put("read", "worker/$jobId")
+                                .put("hint", "该耗时操作已自动转入后台异步执行（不阻塞当前对话），稍后可用 whale_read_resource(resource="worker/$jobId") 或 whale_worker_status 查看结果。")
+                                .toString(),
+                        )
+                    }
+                } else {
+                    tools.execute(p.fnName, p.fnArgs)
+                }
                 val dt = (System.currentTimeMillis() - t0).coerceAtLeast(1L)
                 if (p.mutating) {
                     ledger.transition(
@@ -573,18 +599,18 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         control: RunControl? = null,
     ): AssistantTurn {
         var lastError: Throwable? = null
-        for (attempt in 0..1) {
+        for (attempt in 0..3) {
             if (control?.cancelled?.get() == true) throw InterruptedException("cancelled")
             try {
                 return callChatCompletions(endpoint, messages, toolsArray, listener, control = control)
-            } catch (error: TransientHttpException) {
+            } catch (error: Throwable) {
                 if (control?.cancelled?.get() == true || control?.steerInterrupt?.get() == true) throw error
+                val isTransient = error is TransientHttpException ||
+                    WhaleSuperagentCore.isTransientFailure(errorText = "${error.javaClass.simpleName} ${error.message.orEmpty()}")
+                if (!isTransient || attempt >= 3) throw error
                 lastError = error
-                if (attempt == 0) {
-                    runCatching { Thread.sleep(800L) }
-                    continue
-                }
-                throw error
+                val delayMs = WhaleSuperagentCore.backoffMs(attempt, baseMs = 1500L, maxMs = 12_000L)
+                runCatching { Thread.sleep(delayMs) }
             }
         }
         throw lastError ?: IllegalStateException("模型请求失败")
@@ -633,7 +659,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     return callChatCompletions(endpoint, messages, toolsArray, listener, includeUsageOption = false, control = control)
                 }
                 val msg = "模型接口返回 HTTP $code：${errText.take(240)}"
-                if (code == 429 || code in 502..504) throw TransientHttpException(msg)
+                if (WhaleSuperagentCore.isTransientFailure(statusCode = code, errorText = errText)) throw TransientHttpException(msg)
                 throw IllegalStateException(msg)
             }
             val contentType = conn.contentType.orEmpty().lowercase()

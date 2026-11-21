@@ -52,9 +52,13 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
             title: String? = null,
             needs: String = "none",
             sourceSession: String? = null,
+            priorityBy: String = "launch",
+            strength: String = "explicit",
+            ruleName: String = "",
         ): JSONObject {
             val app = context.applicationContext
             val store = WorkerDashboardStore(app)
+            val effects = WhaleSuperagentCore.WhaleEffectsQueue(app)
             BubbleSessionRegistry(app).record("session-whale-task-desk")
             val receipt = store.submit(task, mode, commandId, title, needs, sourceSession)
             val hasRunningHarness = runCatching { RuntimeHost.controllerOrNull()?.openHarnessAccess() }.isSuccess
@@ -65,9 +69,20 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                     }.onFailure { store.dispatchUnavailable(receipt.getString("commandId")) }
                 }
             } else {
-                // 100% 纯原生 Lite 模式：直接通过原生 Kotlin Worker 并发池执行，共享统一 commandId，并在完成/失败时完整回传给 Router 与收件箱
                 val workerTitle = title?.takeIf(String::isNotBlank) ?: task.trim().take(42)
                 val ownerSession = sourceSession?.takeIf { BubbleSessionRegistry.valid(it) } ?: "session-whale-task-desk"
+                // 先在 SQLite 事务型 Effects 队列持久化 launch 记录，抗进程被杀
+                runCatching {
+                    effects.enqueue(
+                        kind = "launch",
+                        key = commandId,
+                        payload = JSONObject()
+                            .put("commandId", commandId)
+                            .put("title", workerTitle)
+                            .put("mode", mode)
+                            .put("ownerSession", ownerSession),
+                    )
+                }
                 fun sha256Hex(raw: String): String {
                     val digest = java.security.MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8))
                     return digest.joinToString("") { "%02x".format(it) }
@@ -91,7 +106,13 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                     }
                     runCatching {
                         val prefix = if (state == "done") "【后台 Worker 已完成】" else "【后台 Worker 执行失败】"
-                        val coordSummary = "$prefix$workerTitle\n\n${cleanSummary.take(4500)}"
+                        val trunc = WhaleSuperagentCore.ResourceTruncator.truncate(cleanSummary, 600, "worker/$commandId")
+                        val bodyLine = if (trunc.has("read")) {
+                            "${trunc.optString("text")}\n（全文 ${trunc.getInt("chars")} 字，可调用 whale_read_resource(resource=\"${trunc.getString("read")}\") 查看）"
+                        } else {
+                            trunc.optString("text")
+                        }
+                        val coordSummary = "$prefix$workerTitle\n\n$bodyLine"
                         val fingerprint = sha256Hex("$commandId:$state:$finishedAt")
                         WorkerReportInbox(app).addCoordination(
                             JSONObject()
@@ -130,6 +151,9 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                     initialStage = 1,
                     initialDigest = "",
                     resumeCount = 0,
+                    priorityBy = priorityBy,
+                    strength = strength,
+                    ruleName = ruleName,
                     publishCallback = ::publishCallback,
                 )
             }
@@ -167,7 +191,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                                 JSONObject()
                                     .put("owner", cp.ownerSession)
                                     .put("fingerprint", sha256Hex("${cp.id}:$state:$finishedAt"))
-                                    .put("summary", "$prefix${cp.title}\n\n${cleanSummary.take(4500)}")
+                                    .put("summary", "$prefix${cp.title}\n\n${cleanSummary.take(800)}")
                                     .put("next", "任务 ID：${cp.id}"),
                             )
                         }
@@ -183,6 +207,11 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                         initialStage = cp.stage,
                         initialDigest = cp.progressDigest,
                         resumeCount = cp.resumeCount + 1,
+                        priorityBy = "wake",
+                        strength = cp.strength,
+                        ruleName = cp.ruleName,
+                        deliveredInputs = cp.deliveredInputs,
+                        readInputIds = cp.readInputIds,
                         publishCallback = ::publishCallback,
                     )
                 }
@@ -200,6 +229,11 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
             initialStage: Int,
             initialDigest: String,
             resumeCount: Int,
+            priorityBy: String,
+            strength: String,
+            ruleName: String,
+            deliveredInputs: List<Pair<String, String>> = emptyList(),
+            readInputIds: Set<String> = emptySet(),
             publishCallback: (String, String) -> Unit,
         ) {
             val maxStages = 3
@@ -215,10 +249,14 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                 resumeCount = resumeCount,
                 state = "running",
                 updatedAt = System.currentTimeMillis(),
+                strength = strength,
+                ruleName = ruleName,
+                deliveredInputs = deliveredInputs,
+                readInputIds = readInputIds,
             )
             WhaleLongTaskStore.save(app, cp)
 
-            WhaleNativeWorkerPool.submit(workerTitle, id = commandId) {
+            WhaleNativeWorkerPool.submit(workerTitle, id = commandId, priorityBy = priorityBy) {
                 val pm = runCatching { app.getSystemService(android.os.PowerManager::class.java) }.getOrNull()
                 val wakeLock = runCatching {
                     pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "whale-assistant:worker-$commandId")?.apply {
@@ -226,11 +264,23 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                         acquire(15 * 60 * 1000L)
                     }
                 }.getOrNull()
+                val effects = WhaleSuperagentCore.WhaleEffectsQueue(app)
+                val control = WhaleNativeAgentEngine.RunControl()
+                WhaleNativeWorkerPool.attachControl(commandId, control)
                 try {
                     val engine = WhaleNativeAgentEngine(app)
                     var finalReply = ""
                     for (stage in initialStage..maxStages) {
-                        if (Thread.currentThread().isInterrupted) throw InterruptedException("cancelled")
+                        if (Thread.currentThread().isInterrupted || control.cancelled.get()) throw InterruptedException("cancelled")
+                        // 合并磁盘最新已投递但未读入的追问，确保本阶段一并读入
+                        val diskLatest = WhaleLongTaskStore.read(app, commandId)
+                        if (diskLatest != null) {
+                            cp = cp.copy(
+                                deliveredInputs = diskLatest.deliveredInputs,
+                                readInputIds = diskLatest.readInputIds,
+                            )
+                        }
+                        val unreadBeforeStage = cp.unreadInputs().map { it.first }
                         cp = cp.copy(stage = stage, updatedAt = System.currentTimeMillis())
                         WhaleLongTaskStore.save(app, cp)
                         val stagePrompt = WhaleLongTaskStore.buildStagePrompt(cp)
@@ -238,9 +288,11 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                             userMessage = stagePrompt,
                             history = emptyList(),
                             sessionId = "whale-worker-$commandId-s$stage",
+                            control = control,
                             onProgress = { round, step, preview ->
                                 val totalRound = (stage - 1) * 20 + round
                                 val stageLabel = if (stage > 1) "阶段 $stage · $step" else step
+                                // 普通 progress 仅写内部状态，不弹桌宠打扰
                                 WhaleNativeWorkerPool.updateProgress(commandId, round = totalRound, step = stageLabel, preview = preview)
                                 if (round % 4 == 0 && preview.isNotBlank()) {
                                     cp = cp.copy(progressDigest = preview.take(1600), updatedAt = System.currentTimeMillis())
@@ -248,6 +300,13 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                                 }
                             },
                         )
+                        // 本阶段已成功完成一轮模型推理：正式将本阶段及中途 steer 消费的追问标记为 inputsRead
+                        val newlyReadPool = WhaleNativeWorkerPool.markInputsRead(commandId)
+                        val allRead = (unreadBeforeStage + newlyReadPool).distinct()
+                        if (allRead.isNotEmpty()) {
+                            WhaleLongTaskStore.markInputsRead(app, commandId, allRead)
+                            cp = cp.copy(readInputIds = cp.readInputIds + allRead)
+                        }
                         finalReply = res.reply
                         if (!res.hitRoundLimit || stage >= maxStages || res.cancelled) break
                         val stepSummary = res.steps.takeLast(8).joinToString("；") { "${it.label}(${if (it.ok) "成功" else "失败"})" }
@@ -260,11 +319,15 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                         WhaleLongTaskStore.save(app, cp)
                     }
                     WhaleLongTaskStore.markTerminal(app, commandId, "done")
+                    runCatching {
+                        effects.listDue("launch", limit = 16).firstOrNull { it.key == commandId }?.let { effects.complete(it) }
+                    }
                     publishCallback("done", finalReply)
+                    // 仅在终态（done）轻触桌宠提示，普通进度绝不打扰
                     runCatching { io.deepseekharness.mobile.OverlayBallService.companionTaskHint() }
                     finalReply
                 } catch (error: Throwable) {
-                    val cancelled = error is InterruptedException
+                    val cancelled = error is InterruptedException || control.cancelled.get()
                     WhaleLongTaskStore.markTerminal(app, commandId, if (cancelled) "cancelled" else "failed")
                     val msg = error.message ?: error.javaClass.simpleName
                     publishCallback(if (cancelled) "cancelled" else "failed", msg)

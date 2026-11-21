@@ -83,4 +83,85 @@ class WhaleCognitiveEngineTest {
         assertTrue(prompt.contains("第 2/3 阶段"))
         assertTrue(prompt.contains("已完成前 3 个项目的指标收集"))
     }
+
+    @Test
+    fun workerSlotsReserveThreeRegularPlusOneHumanPriority() {
+        val active = mutableSetOf<String>()
+        val slots = WhaleSuperagentCore.WorkerSlots(runningProvider = { active }, maxWorkers = { 3 })
+        slots.reserve("t1", "launch")
+        slots.reserve("t2", "launch")
+        slots.reserve("t3", "launch")
+        assertEquals(0, slots.availableLaunches())
+        var launchBlocked = false
+        try {
+            slots.reserve("t4", "launch")
+        } catch (_: WhaleSuperagentCore.LaterException) {
+            launchBlocked = true
+        }
+        assertTrue(launchBlocked)
+        // Human follow-up gets +1 priority slot
+        slots.reserve("human-followup", "person")
+        assertEquals(4, slots.used())
+        slots.free("human-followup")
+        assertEquals(3, slots.used())
+    }
+
+    @Test
+    fun transientFailureDetectionAndTruncatorAndTicketStage() {
+        assertTrue(WhaleSuperagentCore.isTransientFailure(statusCode = 429))
+        assertTrue(WhaleSuperagentCore.isTransientFailure(statusCode = 408))
+        assertTrue(WhaleSuperagentCore.isTransientFailure(statusCode = 503))
+        assertTrue(WhaleSuperagentCore.isTransientFailure(errorText = "java.net.SocketTimeoutException: timed out"))
+        assertTrue(!WhaleSuperagentCore.isTransientFailure(statusCode = 401))
+
+        val longText = "a".repeat(900)
+        val trunc = WhaleSuperagentCore.ResourceTruncator.truncate(longText, 600, "worker/w1")
+        assertEquals("worker/w1", trunc.getString("read"))
+        assertEquals(900, trunc.getInt("chars"))
+        val page1 = WhaleSuperagentCore.ResourceTruncator.readPage(longText, offset = 0, limit = 500)
+        assertEquals(500, page1.getInt("nextOffset"))
+
+        assertEquals(
+            WhaleSuperagentCore.TicketStage.PERSON_DELIVERY,
+            WhaleSuperagentCore.computeStage(deliveryFailed = true, hasAttention = true, reportState = "ready"),
+        )
+        assertEquals(
+            WhaleSuperagentCore.TicketStage.PERSON_ANSWER,
+            WhaleSuperagentCore.computeStage(hasAttention = true, reportState = "blocked"),
+        )
+        assertTrue(WhaleSuperagentCore.waitsForPerson("blocked", hasHumanMessageSinceReport = false))
+        assertTrue(!WhaleSuperagentCore.waitsForPerson("blocked", hasHumanMessageSinceReport = true))
+    }
+
+    @Test
+    fun noticeCoalescerMandateGuardAndUnreadFollowupReplay() {
+        val before = org.json.JSONObject().put("eval", org.json.JSONObject().put("mode", "observe").put("limit", 3))
+        val after = org.json.JSONObject().put("eval", org.json.JSONObject().put("mode", "auto").put("limit", 3))
+        assertEquals(listOf("eval.mode"), WhaleSuperagentCore.NoticeCoalescer.changedPaths(before, after))
+        assertTrue(WhaleSuperagentCore.MandateGuard.validateBriefText("x".repeat(300), "note", 240) != null)
+        assertEquals(null, WhaleSuperagentCore.MandateGuard.validateBriefText("简短备注", "note", 240))
+
+        val cp = WhaleLongTaskStore.Checkpoint(
+            id = "task-2",
+            title = "重构模块",
+            task = "重构设置页",
+            mode = "create",
+            ownerSession = "session-whale-task-desk",
+            stage = 2,
+            maxStages = 3,
+            progressDigest = "阶段1已完成",
+            resumeCount = 1,
+            state = "running",
+            updatedAt = 999L,
+            strength = "inferred",
+            ruleName = "自动整理",
+            deliveredInputs = listOf("in-1" to "已读过的补充", "in-2" to "新增未读补充"),
+            readInputIds = setOf("in-1"),
+        )
+        val prompt = WhaleLongTaskStore.buildStagePrompt(cp)
+        assertTrue(prompt.contains("主动规则受限授权"))
+        assertTrue(prompt.contains("新增未读补充"))
+        assertTrue(!prompt.contains("已读过的补充"))
+        assertTrue(prompt.contains("严禁重复已完成的外部动作"))
+    }
 }

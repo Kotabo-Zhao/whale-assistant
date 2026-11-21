@@ -316,7 +316,27 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 mapOf("task" to "完整清晰的后台任务说明", "title" to "可选简短任务标题", "mode" to "可选模式：create / read / device，默认 create"),
                 listOf("task"),
             ))
-            array.put(schema("whale_worker_cancel", "取消一个正在运行的原生后台 Worker 任务。", mapOf("id" to "Worker 任务 ID"), listOf("id")))
+            array.put(schema("whale_worker_cancel",
+        "whale_worker_followup",
+        "whale_proactive_mode", "取消一个正在运行的原生后台 Worker 任务。", mapOf("id" to "Worker 任务 ID"), listOf("id")))
+            array.put(schema(
+                "whale_worker_followup",
+                "向正在运行的后台 Worker 直接透传用户追问或补充条件（绕过主会话，省 Token，享有 +1 人类优先槽位，并持久化防崩溃丢失）。",
+                mapOf("id" to "目标 Worker 任务 ID", "message" to "用户追问或补充条件（<=240字，简洁直述）"),
+                listOf("id", "message"),
+            ))
+            array.put(schema(
+                "whale_read_resource",
+                "分页按需读取被 600 字截断的完整资源正文（如 worker/<id>、checkpoint/<id>、knowledge/<id>）。",
+                mapOf("resource" to "资源路径，如 worker/<id> 或 checkpoint/<id>", "offset" to "可选起始字符偏移（默认 0）", "limit" to "可选本页字符数（默认 2000，上限 6000）"),
+                listOf("resource"),
+            ))
+            array.put(schema(
+                "whale_proactive_mode",
+                "管理主动智能的影子观察模式（off 关闭 / observe 默认仅出草稿与 would_accept 日志 / auto 全自动执行）以及查看/清理推测执行草稿箱。",
+                mapOf("action" to "status / set_mode / list_drafts / record_draft / dismiss_draft", "mode" to "set_mode 时可选：off / observe / auto", "id" to "dismiss_draft 时的草稿 ID", "title" to "record_draft 时的草稿标题", "draftAction" to "record_draft 时的预备动作/草稿内容", "reason" to "record_draft 时的触发原因"),
+                listOf("action"),
+            ))
             array.put(schema("whale_worker_manage", "管理与清理后台 Worker 历史及桌宠红点徽标（解决界面残余数字与历史记录删不掉的问题）。", mapOf("action" to "clear_completed（清理已完成与残留徽标）/ delete（按 id 删除单条）/ clear_badge（仅清零桌宠待办红点）", "id" to "action=delete 时的 Worker ID"), listOf("action")))
             array.put(schema("whale_ui_refresh", "强制刷新鲸鱼助手主界面与悬浮桌宠状态徽标，同步最新数据视图。", emptyMap(), emptyList()))
             array.put(schema("whale_voice_speak", "用硅基流动 CosyVoice2 拟人语音让桌宠大声说出一句话。", mapOf("text" to "要朗读的自然中文或英文内容", "voice" to "可选音色：diana / claire / bella / anna / alex / benjamin"), listOf("text")))
@@ -1152,6 +1172,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val task = args.str("task").trim()
                     require(task.isNotEmpty()) { "缺少后台任务说明 task" }
                     val title = args.str("title").trim().takeIf { it.isNotEmpty() } ?: task.take(36)
+                    WhaleSuperagentCore.MandateGuard.validateBriefText(title, "title", maxChars = 80)?.let { err ->
+                        return ToolOutcome(name, "任务标题过长", false, JSONObject().put("error", err).toString())
+                    }
                     val mode = args.str("mode", "create").trim().takeIf { it in setOf("read", "device", "create") } ?: "create"
                     val receipt = WorkerRuntimeWake.submit(
                         context = app,
@@ -1170,6 +1193,76 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val cancelled = WhaleNativeWorkerPool.cancel(id)
                     WhaleLongTaskStore.markTerminal(app, id, "cancelled")
                     ToolOutcome(name, if (cancelled) "已取消后台 Worker" else "未找到运行中的后台 Worker", cancelled, JSONObject().put("id", id).put("cancelled", cancelled).toString(), mutating = true)
+                }
+                "whale_worker_followup" -> {
+                    val id = args.str("id").trim()
+                    val msg = args.str("message").trim()
+                    require(id.isNotEmpty()) { "缺少目标 Worker ID" }
+                    WhaleSuperagentCore.MandateGuard.validateBriefText(msg, "message", WhaleSuperagentCore.BRIEF_NOTE_MAX_CHARS)?.let { err ->
+                        return ToolOutcome(name, "追问参数超限", false, JSONObject().put("error", err).toString())
+                    }
+                    val (ok, detail) = WhaleNativeWorkerPool.deliverFollowup(id, msg)
+                    if (ok) {
+                        WhaleLongTaskStore.appendDeliveredInput(app, id, detail, msg)
+                    }
+                    ToolOutcome(
+                        name,
+                        if (ok) "已向 Worker 透传追问" else detail,
+                        ok,
+                        JSONObject().put("id", id).put("delivered", ok).put("inputId", if (ok) detail else "").toString(),
+                        mutating = true,
+                    )
+                }
+                "whale_read_resource" -> {
+                    val resource = args.str("resource").trim()
+                    val offset = args.optInt("offset", 0)
+                    val limit = args.optInt("limit", 2000)
+                    require(resource.isNotEmpty()) { "缺少 resource 参数" }
+                    val fullText: String? = when {
+                        resource.startsWith("worker/") -> WhaleNativeWorkerPool.readFullResult(resource.removePrefix("worker/"))
+                        resource.startsWith("checkpoint/") -> WhaleLongTaskStore.read(app, resource.removePrefix("checkpoint/"))?.progressDigest
+                        resource.startsWith("knowledge/") -> runCatching {
+                            CompanionKnowledgeStore(app).findById(resource.removePrefix("knowledge/"))?.optString("text")
+                        }.getOrNull()
+                        else -> null
+                    }
+                    if (fullText == null) {
+                        ToolOutcome(name, "未找到指定资源", false, JSONObject().put("error", "NOT_FOUND").put("resource", resource).toString())
+                    } else {
+                        val page = WhaleSuperagentCore.ResourceTruncator.readPage(fullText, offset, limit)
+                            .put("resource", resource)
+                        ToolOutcome(name, "分页读取资源 $resource", true, page.toString())
+                    }
+                }
+                "whale_proactive_mode" -> {
+                    when (args.str("action", "status").trim().lowercase()) {
+                        "set_mode" -> {
+                            val mode = WhaleSuperagentCore.ProactiveObserveStore.setMode(app, args.str("mode", "observe").trim().lowercase())
+                            ToolOutcome(name, "已切换主动模式为 $mode", true, JSONObject().put("mode", mode).toString(), mutating = true)
+                        }
+                        "list_drafts" -> {
+                            val drafts = WhaleSuperagentCore.ProactiveObserveStore.listDrafts(app)
+                            ToolOutcome(name, "查看主动观察草稿箱", true, JSONObject().put("mode", WhaleSuperagentCore.ProactiveObserveStore.getMode(app)).put("drafts", drafts).toString())
+                        }
+                        "record_draft" -> {
+                            val title = args.str("title").trim().ifBlank { "主动建议草稿" }
+                            val draftAction = args.str("draftAction").trim()
+                            require(draftAction.isNotEmpty()) { "缺少草稿内容 draftAction" }
+                            val reason = args.str("reason", "规则观察命中").trim()
+                            val entry = WhaleSuperagentCore.ProactiveObserveStore.recordSpeculativeDraft(app, "assistant", title, draftAction, reason)
+                            ToolOutcome(name, "已记录主动观察草稿（未自动执行）", true, entry.toString(), mutating = true)
+                        }
+                        "dismiss_draft" -> {
+                            val id = args.str("id").trim()
+                            val removed = WhaleSuperagentCore.ProactiveObserveStore.dismissDraft(app, id)
+                            ToolOutcome(name, if (removed) "已忽略该观察草稿" else "未找到该草稿", removed, JSONObject().put("id", id).put("removed", removed).toString(), mutating = true)
+                        }
+                        else -> {
+                            val mode = WhaleSuperagentCore.ProactiveObserveStore.getMode(app)
+                            val drafts = WhaleSuperagentCore.ProactiveObserveStore.listDrafts(app, 6)
+                            ToolOutcome(name, "读取主动观察模式状态", true, JSONObject().put("mode", mode).put("draftCount", drafts.length()).put("drafts", drafts).toString())
+                        }
+                    }
                 }
                 "whale_web_search" -> {
                     val q = args.str("query").trim()

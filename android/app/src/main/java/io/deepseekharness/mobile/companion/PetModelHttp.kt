@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit
 /** Call deadline includes headers and SSE heartbeats, unlike an individual socket read timeout. */
 internal object PetModelHttp {
     internal class HttpFailure(val code: Int, val retryAfter: String?, message: String) : IllegalStateException(message) {
-        val temporary get() = code in setOf(500,502,503,504)
+        val temporary get() = WhaleSuperagentCore.isTransientFailure(statusCode = code)
     }
     private val client = okhttp3.OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS)
         .readTimeout(30,TimeUnit.SECONDS).writeTimeout(20,TimeUnit.SECONDS)
@@ -24,24 +24,29 @@ internal object PetModelHttp {
             .header("Authorization","Bearer $key").post(body.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
         return if (retryRejected) inference(request,timeoutMillis,read) else execute(request,timeoutMillis,read)
     }
-    /** Only an inference rejected at the HTTP boundary is eligible. No stream or tool has started. */
+    /** Only an inference rejected at the HTTP boundary is eligible. Up to 3 exponential backoff retries for 408/429/500-504. */
     internal fun <T> inference(request: okhttp3.Request, timeoutMillis: Long, read: (BufferedReader) -> T): T {
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
-        try { return execute(request,timeoutMillis,read) } catch (error: HttpFailure) {
-            if (!error.temporary) throw error
-            val delay = error.retryAfter?.let { value ->
-                val seconds = value.trim().toLongOrNull() ?: throw error
-                if (seconds !in 0L..3L) throw error
-                seconds * 1000L
-            } ?: 750L
-            if (TimeUnit.NANOSECONDS.toMillis(deadline-System.nanoTime()) <= delay + 250) throw error
-            PetReplyOperation.checkpoint()
-            Thread.sleep(delay)
-            PetReplyOperation.checkpoint()
-            val remaining = TimeUnit.NANOSECONDS.toMillis(deadline-System.nanoTime())
-            if (remaining <= 0) throw error
-            return execute(request,remaining,read)
+        var lastError: Throwable? = null
+        for (attempt in 0..3) {
+            val remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime())
+            if (remaining <= 0) throw (lastError ?: IllegalStateException("模型回复等待超时"))
+            try {
+                return execute(request, remaining, read)
+            } catch (error: HttpFailure) {
+                if (!error.temporary || attempt >= 3) throw error
+                lastError = error
+                val delay = error.retryAfter?.let { value ->
+                    val seconds = value.trim().toLongOrNull()
+                    if (seconds != null && seconds in 0L..8L) seconds * 1000L else null
+                } ?: WhaleSuperagentCore.backoffMs(attempt, baseMs = 1000L, maxMs = 8000L)
+                if (TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()) <= delay + 250) throw error
+                PetReplyOperation.checkpoint()
+                Thread.sleep(delay)
+                PetReplyOperation.checkpoint()
+            }
         }
+        throw (lastError ?: IllegalStateException("模型请求失败"))
     }
     internal fun <T> execute(request: okhttp3.Request, timeoutMillis: Long, read: (BufferedReader) -> T): T {
         PetReplyOperation.checkpoint()
