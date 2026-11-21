@@ -1407,9 +1407,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 panel.measure(measureWidth,android.view.View.MeasureSpec.UNSPECIFIED)
             }
             val chrome=mandatory+if(controlsScroll.visibility==android.view.View.GONE) 0 else controlsScroll.measuredHeight
-            val natural = if (toolView.visibility == android.view.View.VISIBLE) dp(390) else content.measuredHeight.takeIf { it > 0 } ?: dp(64)
-            val targetHeight=PetChatHeight.total(available,availableHeight,chrome,natural,heightMode,
-                stableBounds.height()>stableBounds.width(),effectiveKeyboard>0,toolView.visibility==android.view.View.VISIBLE,density)
+            val toolOpen = toolView.visibility == android.view.View.VISIBLE
+            val effectiveAvailHeight = if (toolOpen) available else availableHeight
+            val natural = if (toolOpen) (available * 0.78f).toInt().coerceAtLeast(dp(420)) else content.measuredHeight.takeIf { it > 0 } ?: dp(64)
+            val targetHeight = if (toolOpen) {
+                minOf(available, maxOf(natural + chrome, (available * 0.80f).toInt()))
+            } else {
+                PetChatHeight.total(available, effectiveAvailHeight, chrome, natural, heightMode,
+                    stableBounds.height() > stableBounds.width(), effectiveKeyboard > 0, false, density)
+            }
             val desiredScroll = (targetHeight - chrome).coerceIn(minOf(dp(44), (available - chrome).coerceAtLeast(1)), (available - chrome).coerceAtLeast(1))
             val scrollParams = bodyHost.layoutParams as LinearLayout.LayoutParams
             val heightChanged = scrollParams.height != desiredScroll
@@ -1436,7 +1442,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
             val moved = params.x != point.x || params.y != point.y
             params.x = point.x; params.y = point.y
-            if (root === panel && (moved || resized)) runCatching { wm.updateViewLayout(panel, params) }
+            if (root === panel && (moved || resized || heightChanged)) runCatching { wm.updateViewLayout(panel, params) }
             Unit
         }
         if (android.os.Build.VERSION.SDK_INT >= 30) {

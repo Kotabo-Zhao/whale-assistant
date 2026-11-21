@@ -37,7 +37,12 @@ internal class PetInlineTool(context: Context, private val back: () -> Unit, pri
             gravity = Gravity.CENTER; minHeight = ui.dp(48); setPadding(ui.dp(8),0,ui.dp(8),0)
             isFocusable = true; contentDescription = label; setOnClickListener { run() }
         }
-        bar.addView(action("返回对话", back)); bar.addView(title, LayoutParams(0,-2,1f))
+        bar.addView(action("←", back))
+        bar.addView(title, LayoutParams(0, -2, 1f).apply { marginStart = ui.dp(4) })
+        bar.addView(action("⤢") {
+            val tool = current ?: return@action
+            runCatching { io.deepseekharness.mobile.features.WhaleFeatureActivity.openTool(context, tool.id, tool.revision) }
+        }.apply { contentDescription = "全屏打开小软件" })
         addView(bar)
         addView(pageHost, LayoutParams(-1,0,1f))
         val actions = LinearLayout(context)
@@ -69,10 +74,15 @@ internal class PetInlineTool(context: Context, private val back: () -> Unit, pri
             main.post {
                 if (generation != request || current != tool) return@post
                 loaded.onSuccess { html ->
-                    val page = WebView(context)
+                    val page = WebView(context).apply {
+                        isVerticalScrollBarEnabled = true
+                        overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+                        settings.useWideViewPort = true
+                        settings.loadWithOverviewMode = true
+                    }
                     web = page
-                    pageHost.addView(page, android.widget.FrameLayout.LayoutParams(-1,-1))
-                    page.loadWhaleTool(tool.id,html,gone = { invalidateTool() })
+                    pageHost.addView(page, android.widget.FrameLayout.LayoutParams(-1, -1))
+                    page.loadWhaleTool(tool.id, html, gone = { invalidateTool() })
                 }.onFailure { invalidateTool() }
             }
         }
