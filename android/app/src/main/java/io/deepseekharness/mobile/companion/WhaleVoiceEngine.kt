@@ -266,8 +266,7 @@ internal object WhaleVoiceEngine {
         ttsFetchExecutor.execute {
             for ((index, sentence) in sentences.withIndex()) {
                 if (generation.get() != myGen) break
-                val mp3File = runCatching { synthesizeToTempFile(app, cfg, sentence, targetVoice) }.getOrNull()
-                if (mp3File == null) {
+                val mp3File: File = runCatching { synthesizeToTempFile(app, cfg, sentence, targetVoice) }.getOrNull() ?: run {
                     // 云端失败时无缝降级为本地离线朗读，绝不哑巴
                     if (index == 0) speakLocalOffline(app, sentences, cfg.speed, myGen)
                     break
