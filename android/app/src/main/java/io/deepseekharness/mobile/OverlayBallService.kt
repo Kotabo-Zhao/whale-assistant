@@ -170,17 +170,66 @@ class OverlayBallService : Service() {
             shape = android.graphics.drawable.GradientDrawable.OVAL
             setColor(android.graphics.Color.argb(210, 255, 255, 255))
         }
-        label.text = snap.compactLabel()
+        val nextLabel = snap.compactLabel()
+        val changed = label.text?.toString() != nextLabel
+        label.text = nextLabel
+        if (changed && companionMotionEnabled()) {
+            pill.animate().cancel()
+            pill.animate()
+                .scaleX(1.08f).scaleY(1.08f)
+                .setDuration(120L)
+                .withEndAction {
+                    pill.animate()
+                        .scaleX(1f).scaleY(1f)
+                        .setDuration(220L)
+                        .setInterpolator(android.view.animation.OvershootInterpolator(2.2f))
+                        .start()
+                }
+                .start()
+        }
         track.post {
             val totalW = track.width.takeIf { it > 0 } ?: (54 * dp).toInt()
             val minW = (8 * dp).toInt()
             val targetW = (totalW * snap.progress).toInt().coerceIn(minW, totalW)
             val lp = fill.layoutParams
-            if (lp.width != targetW) {
-                lp.width = targetW
-                fill.layoutParams = lp
+            val startW = lp.width.takeIf { it > 0 } ?: minW
+            if (startW != targetW) {
+                if (companionMotionEnabled()) {
+                    android.animation.ValueAnimator.ofInt(startW, targetW).apply {
+                        duration = 320L
+                        interpolator = android.view.animation.DecelerateInterpolator()
+                        addUpdateListener { anim ->
+                            val w = anim.animatedValue as Int
+                            fill.layoutParams = fill.layoutParams.apply { width = w }
+                        }
+                        start()
+                    }
+                } else {
+                    lp.width = targetW
+                    fill.layoutParams = lp
+                }
             }
         }
+    }
+
+    /** 轻点鲸鱼娘时的果冻弹性按压反馈（仅在开启动效时播放）。 */
+    private fun playPetJellyBounce(root: View) {
+        if (!companionMotionEnabled()) return
+        val avatar = root.findViewById<View>(R.id.companion_avatar) ?: return
+        avatar.pivotX = avatar.width * 0.5f
+        avatar.pivotY = avatar.height * 0.88f
+        avatar.animate().cancel()
+        avatar.animate()
+            .scaleX(1.10f).scaleY(0.90f)
+            .setDuration(85L)
+            .withEndAction {
+                avatar.animate()
+                    .scaleX(1f).scaleY(1f)
+                    .setDuration(240L)
+                    .setInterpolator(android.view.animation.OvershootInterpolator(2.8f))
+                    .start()
+            }
+            .start()
     }
     private var companionTimersStarted = false
     private fun refreshControlPose() {
@@ -1010,7 +1059,7 @@ class OverlayBallService : Service() {
         view.setOnClickListener {
             if (!stopIfOverlayPermissionRevoked()) {
                 if(DeviceControlState.current.phase!="idle") togglePetMenu()
-                else { petActing.react(PetAction.TOUCH, SystemClock.uptimeMillis());wakePetMotion(); dismissPetMenu(); bubbleChat.toggle() }
+                else { playPetJellyBounce(view); petActing.react(PetAction.TOUCH, SystemClock.uptimeMillis());wakePetMotion(); dismissPetMenu(); bubbleChat.toggle() }
             }
         }
         view.setOnLongClickListener {
@@ -1217,7 +1266,16 @@ class OverlayBallService : Service() {
                         if (petDrawable === next && companionSurfaceVisible() && companionMotionEnabled()) wakePetMotion()
                     }
                     if (companionVisible() && !companionMotionEnabled()) next.setPose(petActing.still())
-                    view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.setImageDrawable(next)
+                    view.findViewById<android.widget.ImageView>(R.id.companion_avatar)?.let { iv ->
+                        iv.setImageDrawable(next)
+                        if (old == null && companionMotionEnabled()) {
+                            iv.alpha = 0f; iv.scaleX = 0.86f; iv.scaleY = 0.86f
+                            iv.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                                .setDuration(260L)
+                                .setInterpolator(android.view.animation.OvershootInterpolator(1.6f))
+                                .start()
+                        }
+                    }
                     old?.close()
                     // Replacing a decoded image (initial load/resize) is not a lifecycle resume:
                     // keep an active acceptance/reply cue and its original clock.

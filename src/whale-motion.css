@@ -220,6 +220,84 @@ body, .app-header, .bottom-navigation, .sidebar-nav {
   animation: whale-panel-enter var(--motion-normal) var(--motion-enter) backwards;
 }
 
+/* ─── Living Ambient Aura, Streaming Caret & Shimmer ────────────────────── */
+@keyframes whale-halo-breathe {
+  0%, 100% { transform: scale(0.96); opacity: 0.55; }
+  50% { transform: scale(1.06); opacity: 0.92; }
+}
+
+@keyframes whale-caret-blink {
+  0%, 45% { opacity: 1; transform: scale(1); }
+  55%, 100% { opacity: 0.25; transform: scale(0.82); }
+}
+
+@keyframes whale-shimmer-sweep {
+  0% { transform: translate3d(-120%, 0, 0); }
+  100% { transform: translate3d(220%, 0, 0); }
+}
+
+:root[data-style='cute'] .whale-hero-stage::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(132, 208, 255, 0.34) 0%, rgba(255, 194, 218, 0.16) 52%, transparent 74%);
+  pointer-events: none;
+  z-index: -1;
+  animation: whale-halo-breathe 3.4s ease-in-out infinite;
+}
+
+/* Live SSE Streaming Caret */
+.whale-streaming > :last-child::after {
+  content: '';
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 5px;
+  animation: whale-caret-blink 0.9s ease-in-out infinite;
+}
+
+:root[data-style='cute'] .whale-streaming > :last-child::after {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #5ab8ff 0%, #6ee7c8 100%);
+  box-shadow: 0 0 8px rgba(90, 184, 255, 0.55);
+}
+
+:root[data-style='simple'] .whale-streaming > :last-child::after {
+  width: 2px;
+  height: 1em;
+  border-radius: 1px;
+  background: var(--ink);
+}
+
+/* Sleek Shimmer Sweep on Live Plan Bar */
+.whale-live-plan-bar {
+  position: relative;
+  overflow: hidden;
+}
+
+.whale-live-plan-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 42%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.35) 50%, transparent 100%);
+  animation: whale-shimmer-sweep 2.2s ease-in-out infinite;
+}
+
+:root[data-theme='dark'] .whale-live-plan-bar::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(168, 224, 255, 0.14) 50%, transparent 100%);
+}
+
+/* Cute Icon Playful Hover/Active Tilt */
+:root[data-style='cute'] button:active .whale-cute-icon {
+  transform: scale(1.12) rotate(-6deg);
+}
+
 /* Battery & Accessibility Eco Shutdown: zero animation/GPU wakeups */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
