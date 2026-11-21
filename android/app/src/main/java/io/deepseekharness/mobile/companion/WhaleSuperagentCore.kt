@@ -39,10 +39,7 @@ internal object WhaleSuperagentCore {
         fun used(): Int = (runningProvider().toSet() + starting.keys).size
 
         @Synchronized
-        fun availableLaunches(): Int {
-            val wakes = starting.filterValues { it != "launch" }.keys
-            return (maxWorkers() - (runningProvider().toSet() + wakes).size).coerceAtLeast(0)
-        }
+        fun availableLaunches(): Int = (maxWorkers() - used()).coerceAtLeast(0)
 
         @Synchronized
         fun reserve(ticketId: String, by: String = "launch") {
