@@ -491,12 +491,17 @@ internal object WhaleHarnessCore {
          * 从共享对话记录中提取最近已完成轮次的精简对话前缀，供后台 Worker 继承上下文（Fork 模式）。
          */
         fun buildForkPrefix(context: Context, maxTurns: Int = 8, maxChars: Int = 3_200): String {
-            val recent = runCatching { WhaleSharedChatStore.loadRecent(context, maxTurns) }.getOrDefault(emptyList())
-            if (recent.isEmpty()) return ""
+            val arr = runCatching { WhaleSharedChatStore.list(context) }.getOrDefault(JSONArray())
+            if (arr.length() == 0) return ""
+            val start = (arr.length() - maxTurns).coerceAtLeast(0)
             val sb = StringBuilder("[继承自父会话的近期上下文前缀]\n")
-            for ((role, text) in recent) {
+            for (i in start until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                val role = item.optString("role", "")
+                val text = item.optString("text", "").trim()
+                if (text.isEmpty()) continue
                 val label = if (role == "user") "用户" else "助手"
-                val line = "$label：${text.trim().take(420)}\n"
+                val line = "$label：${text.take(420)}\n"
                 if (sb.length + line.length > maxChars) break
                 sb.append(line)
             }

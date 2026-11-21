@@ -506,7 +506,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 if (view is TextView) view.setTextColor(Color.WHITE)
             } else {
                 view.setPadding(dp(12), dp(9), dp(12), dp(9))
-                view.background = ui.shape(ui.soft, 16, ui.border).apply {
+                view.background = ui.shape(ui.soft, 16, ui.line).apply {
                     cornerRadii = floatArrayOf(tip, tip, round, round, round, round, round, round)
                 }
                 if (view is TextView) {
@@ -849,7 +849,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             setTextColor(ui.ink)
             gravity = Gravity.CENTER
             contentDescription = "发送图片或视频"
-            background = ui.shape(ui.soft, 18, ui.border)
+            background = ui.shape(ui.soft, 18, ui.line)
             setOnClickListener {
                 runCatching {
                     val intent = android.content.Intent(context, WhaleMemoryShareActivity::class.java)

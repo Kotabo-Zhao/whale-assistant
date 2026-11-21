@@ -271,7 +271,6 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_code_search", "在本地原生代码项目中跨文件检索代码片段。", mapOf("project" to "项目名", "query" to "搜索词"), listOf("project", "query")))
             array.put(schema(
                 "whale_code_run",
-        "whale_todo_write",
                 "在手机本地直接运行 Python 3.11 代码（内嵌 CPython，支持编程式工具调用 PTC：代码内可直接调用 `tools.<工具名>(**kwargs)` 串联多个工具并用 `inspect(...)` 输出精炼结果，1 轮完成多步编排）或本地 Shell 命令。",
                 mapOf(
                     "project" to "项目名（运行工作目录，不存在则自动创建）",
@@ -543,6 +542,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_code_patch",
         "whale_code_delete",
         "whale_code_run",
+        "whale_todo_write",
         "whale_phone_launch",
         "whale_phone_action",
         "whale_phone_batch",

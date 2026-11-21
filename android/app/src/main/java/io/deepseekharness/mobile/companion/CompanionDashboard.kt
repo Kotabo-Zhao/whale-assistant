@@ -86,11 +86,11 @@ internal class CompanionDashboard(private val context: Context) {
             }
             "sharedChatRead" -> {
                 val sinceMs = request.optLong("sinceMs", 0L)
-                JSONObject().put("messages", WhaleSharedChatStore.list(app, sinceMs))
+                JSONObject().put("messages", WhaleSharedChatStore.list(context, sinceMs))
             }
             "sharedChatAppend" -> {
                 WhaleSharedChatStore.appendTurn(
-                    app,
+                    context,
                     request.optString("userText", ""),
                     request.optString("assistantText", ""),
                     request.optString("source", "app"),
