@@ -91,7 +91,7 @@ internal class CompanionDashboard(private val context: Context) {
                 for (i in 0 until all.length()) {
                     val row = all.optJSONObject(i) ?: continue
                     val id = row.optString("id").trim()
-                    val norm = row.optString("text").replace(Regex("[\s，。,.!！?？:：;；]+"), "").lowercase()
+                    val norm = row.optString("text").replace(Regex("[\\s，。,.!！?？:：;；]+"), "").lowercase()
                     if (id.isEmpty()) continue
                     if (norm.length < 2 || !seen.add(norm)) {
                         runCatching {

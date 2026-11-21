@@ -81,7 +81,7 @@ internal class WhaleMiniAppBridge(private val ctx: Context) {
         if (clean.isEmpty()) return
         main.post {
             runCatching {
-                io.deepseekharness.mobile.companion.WhaleAppControlBus.dispatch(
+                io.deepseekharness.mobile.companion.WhaleAppControlBus.emit(
                     org.json.JSONObject().put("action", "ask").put("prompt", clean),
                 )
                 val intent = Intent(app, io.deepseekharness.mobile.MainActivity::class.java)

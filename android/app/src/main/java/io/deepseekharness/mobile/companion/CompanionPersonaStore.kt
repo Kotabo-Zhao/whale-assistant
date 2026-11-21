@@ -81,7 +81,7 @@ internal class CompanionPersonaStore(context: Context) {
             val book = runCatching { JSONObject(card.optString("worldBook")) }.getOrElse { JSONObject() }
             val entries = book.optJSONArray("entries") ?: JSONArray()
             val keysArr = JSONArray()
-            wbKey.split(Regex("[,，、\s]+")).map { it.trim() }.filter { it.isNotEmpty() }.forEach { keysArr.put(it) }
+            wbKey.split(Regex("[,，、\\s]+")).map { it.trim() }.filter { it.isNotEmpty() }.forEach { keysArr.put(it) }
             entries.put(JSONObject().put("keys", keysArr).put("content", wbContent.take(1000)).put("enabled", true))
             book.put("entries", entries)
             card.put("worldBook", book.toString().take(256000))

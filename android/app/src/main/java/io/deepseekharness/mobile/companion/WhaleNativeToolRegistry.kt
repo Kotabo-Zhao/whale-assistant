@@ -316,9 +316,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 mapOf("task" to "完整清晰的后台任务说明", "title" to "可选简短任务标题", "mode" to "可选模式：create / read / device，默认 create"),
                 listOf("task"),
             ))
-            array.put(schema("whale_worker_cancel",
-        "whale_worker_followup",
-        "whale_proactive_mode", "取消一个正在运行的原生后台 Worker 任务。", mapOf("id" to "Worker 任务 ID"), listOf("id")))
+            array.put(schema("whale_worker_cancel", "取消一个正在运行的原生后台 Worker 任务。", mapOf("id" to "Worker 任务 ID"), listOf("id")))
             array.put(schema(
                 "whale_worker_followup",
                 "向正在运行的后台 Worker 直接透传用户追问或补充条件（绕过主会话，省 Token，享有 +1 人类优先槽位，并持久化防崩溃丢失）。",
@@ -481,6 +479,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_tool_delete",
         "whale_worker_submit",
         "whale_worker_cancel",
+        "whale_worker_followup",
+        "whale_proactive_mode",
         "whale_memory_delete",
         "whale_clipboard",
         "whale_device_media",

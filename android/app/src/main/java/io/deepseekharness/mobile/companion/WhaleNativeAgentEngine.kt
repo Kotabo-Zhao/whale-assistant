@@ -336,7 +336,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                                 .put("status", "promoted_to_background")
                                 .put("jobId", jobId)
                                 .put("read", "worker/$jobId")
-                                .put("hint", "该耗时操作已自动转入后台异步执行（不阻塞当前对话），稍后可用 whale_read_resource(resource="worker/$jobId") 或 whale_worker_status 查看结果。")
+                                .put("hint", "该耗时操作已自动转入后台异步执行（不阻塞当前对话），稍后可用 whale_read_resource(resource=worker/$jobId) 或 whale_worker_status 查看结果。")
                                 .toString(),
                         )
                     }
