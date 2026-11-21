@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
-import { CuteIcon } from '../components/CuteIcon'
+import { CuteIcon, type CuteIconName } from '../components/CuteIcon'
 import { t } from '../i18n'
 import { useInterfaceStyle } from '../theme'
 import type { RuntimeBridge, WhaleNativeChatStep } from '../platform/types'
@@ -63,12 +63,12 @@ interface ActionReceipt {
   followUpLabel?: string
 }
 
-const STARTER_PROMPTS = [
-  { label: '整理今日待办', text: '帮我梳理一下今天最重要的三件事，按优先级排个顺序。' },
-  { label: '查我的长期记忆', text: '查一下我之前让你记住的偏好和重要信息。' },
-  { label: '做个离线小工具', text: '帮我在功能工坊创建一个极简「每日习惯打卡」离线小工具，支持数据持久化。' },
-  { label: '查看后台状态', text: '帮我看看手机电量和当前有没有后台任务在运行。' },
-] as const
+const STARTER_PROMPTS: ReadonlyArray<{ label: string; text: string; icon: CuteIconName }> = [
+  { label: '今日待办', text: '帮我梳理一下今天最重要的三件事，按优先级排个顺序。', icon: 'tasks' },
+  { label: '查记忆', text: '查一下我之前让你记住的偏好和重要信息。', icon: 'memory' },
+  { label: '造小工具', text: '帮我在功能工坊创建一个极简「每日习惯打卡」离线小工具，支持数据持久化。', icon: 'workshop' },
+  { label: '设备状态', text: '帮我看看手机电量和当前有没有后台任务在运行。', icon: 'device' },
+]
 
 const QUICK_SLASH_ACTIONS = [
   { id: 'remind', label: '设提醒', prefix: '提醒我 ', sendNow: false },
@@ -77,22 +77,22 @@ const QUICK_SLASH_ACTIONS = [
   { id: 'workshop', label: '造小工具', prefix: '帮我在功能工坊创作并立即启用一个离线小工具：', sendNow: false },
 ] as const
 
-function buildTimeAwareStarters(): ReadonlyArray<{ label: string; text: string }> {
+function buildTimeAwareStarters(): ReadonlyArray<{ label: string; text: string; icon: CuteIconName }> {
   const hour = new Date().getHours()
   if (hour >= 5 && hour < 11) {
     return [
-      { label: '早安今日规划', text: '帮我看看今天的日程和未完成待办，按优先级排个上午行动清单。' },
-      { label: '查我的长期记忆', text: '查一下我之前让你记住的偏好和重要信息。' },
-      { label: '做个离线小工具', text: '帮我在功能工坊创建一个极简「每日习惯打卡」离线小工具，支持数据持久化。' },
-      { label: '查看手机与后台', text: '帮我看看手机电量和当前有没有后台任务在运行。' },
+      { label: '早安规划', text: '帮我看看今天的日程和未完成待办，按优先级排个上午行动清单。', icon: 'tasks' },
+      { label: '查记忆', text: '查一下我之前让你记住的偏好和重要信息。', icon: 'memory' },
+      { label: '造小工具', text: '帮我在功能工坊创建一个极简「每日习惯打卡」离线小工具，支持数据持久化。', icon: 'workshop' },
+      { label: '设备状态', text: '帮我看看手机电量和当前有没有后台任务在运行。', icon: 'device' },
     ]
   }
   if (hour >= 19 || hour < 5) {
     return [
-      { label: '晚间进度复盘', text: '帮我复盘一下今天还没完成的待办，顺手把需要明天做的重新排一下。' },
-      { label: '查我的长期记忆', text: '查一下我之前让你记住的偏好和重要信息。' },
-      { label: '设个明日提醒', text: '帮我给明天早上定个闹钟或提醒，先问我几点起。' },
-      { label: '做个离线小工具', text: '帮我在功能工坊创建一个极简「每日习惯打卡」离线小工具，支持数据持久化。' },
+      { label: '晚间复盘', text: '帮我复盘一下今天还没完成的待办，顺手把需要明天做的重新排一下。', icon: 'tasks' },
+      { label: '查记忆', text: '查一下我之前让你记住的偏好和重要信息。', icon: 'memory' },
+      { label: '明日提醒', text: '帮我给明天早上定个闹钟或提醒，先问我几点起。', icon: 'notifications' },
+      { label: '造小工具', text: '帮我在功能工坊创建一个极简「每日习惯打卡」离线小工具，支持数据持久化。', icon: 'workshop' },
     ]
   }
   return STARTER_PROMPTS
@@ -756,6 +756,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                   disabled={sending}
                   onClick={() => { void sendText(item.text) }}
                 >
+                  {style === 'cute' && <CuteIcon name={item.icon} size={28} className="whale-starter-icon" />}
                   <strong>{t(item.label)}</strong>
                   <span>{item.text}</span>
                 </button>
@@ -770,8 +771,8 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                 {msg.steps && msg.steps.length > 0 && (
                   <details className="whale-msg-steps">
                     <summary>
-                      <Wrench size={13} aria-hidden="true" />
-                      {t('已调用 {0} 项原生能力', msg.steps.length)}
+                      {style === 'cute' ? <CuteIcon name="workshop" size={16} /> : <Wrench size={13} aria-hidden="true" />}
+                      {style === 'cute' ? `×${msg.steps.length}` : t('已调用 {0} 项原生能力', msg.steps.length)}
                     </summary>
                     <ul>
                       {msg.steps.map((step, i) => (
@@ -803,7 +804,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                         ))}
                       </div>
                     )}
-                    {msg.steered && <span className="whale-steered-tag">{t('中途补充')}</span>}
+                    {msg.steered && <span className="whale-steered-tag" title={t('中途补充')} aria-label={t('中途补充')}>{style === 'cute' ? '🫧' : t('中途补充')}</span>}
                     {msg.text}
                     {msg.error && (msg.text.includes('API Key') || msg.text.includes('模型与密钥')) && (
                       <div style={{ marginTop: 8 }}>
@@ -897,26 +898,36 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         {sending && (
           <div className="whale-msg whale-msg-assistant" role="status">
             <div className="whale-live-plan-bar">
-              <span className="whale-live-plan-status">
-                {style === 'cute' && <span className="whale-plan-whale-dot" aria-hidden="true">🐳</span>}
-                {streamingSteps.length > 0
-                  ? t('已执行 {0} 步 · {1}', streamingSteps.length, phaseLabel)
-                  : phaseLabel}
-              </span>
+              <div className="whale-live-plan-visual" title={phaseLabel}>
+                <span className="whale-plan-whale-dot" aria-hidden="true">🐳</span>
+                {streamingSteps.length > 0 && (
+                  <span className="whale-step-dots" aria-label={t('已执行 {0} 步', streamingSteps.length)}>
+                    {streamingSteps.slice(-6).map((st, idx) => (
+                      <span key={`dot-${idx}`} className={`whale-step-dot${st.ok ? ' is-ok' : ' is-warn'}`} title={st.label} />
+                    ))}
+                  </span>
+                )}
+                <span className="whale-typing-dots" aria-hidden="true"><i /><i /><i /></span>
+                {style !== 'cute' && <span className="whale-live-plan-status">{phaseLabel}</span>}
+              </div>
               <div className="whale-live-plan-actions">
                 <button
                   type="button"
-                  className="whale-plan-mini-btn"
+                  className="whale-plan-mini-btn is-icon"
+                  aria-label={t('中途插话')}
+                  title={t('中途插话')}
                   onClick={() => inputRef.current?.focus()}
                 >
-                  {t('插话')}
+                  {style === 'cute' ? <CuteIcon name="chat" size={16} /> : <Pencil size={13} />}
                 </button>
                 <button
                   type="button"
-                  className="whale-plan-mini-btn is-danger"
+                  className="whale-plan-mini-btn is-danger is-icon"
+                  aria-label={t('停止生成')}
+                  title={t('停止生成')}
                   onClick={() => { void cancelCurrentTurn() }}
                 >
-                  {t('停止')}
+                  <Square size={11} />
                 </button>
               </div>
             </div>
@@ -939,7 +950,11 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                 dangerouslySetInnerHTML={{ __html: md.render(stripStreamingMarker(streamingText)) }}
               />
             ) : (
-              <div className="whale-msg-bubble whale-thinking">{phaseLabel}</div>
+              <div className="whale-msg-bubble whale-thinking">
+                {style === 'cute'
+                  ? <span className="whale-typing-dots is-large" aria-label={phaseLabel}><i /><i /><i /></span>
+                  : phaseLabel}
+              </div>
             )}
           </div>
         )}
@@ -1047,7 +1062,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           ref={inputRef}
           type="text"
           value={input}
-          placeholder={sending ? t('回复中… 可随时打字插话、补充或修正') : t('发消息、粘贴链接或输入 / 快捷记录…')}
+          placeholder={sending ? t('随时插话或补充…') : t('和鲸鱼娘聊聊…')}
           aria-label={t('输入消息')}
           onChange={event => {
             const val = event.target.value

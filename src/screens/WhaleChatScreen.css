@@ -1177,3 +1177,107 @@
   border: 1.5px solid #ffd0df;
   box-shadow: 0 3px 10px rgba(255, 107, 139, 0.30);
 }
+
+/* ─── Graphical-First Minimal-Text Polish (Cute Mode) ───────────────────── */
+:root[data-style='cute'] .whale-starter-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+:root[data-style='cute'] .whale-starter-card {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  padding: 12px 10px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 254, 251, 0.96) 0%, rgba(238, 248, 255, 0.95) 100%);
+  border: 1.5px solid rgba(154, 214, 252, 0.65);
+  box-shadow: 0 4px 12px rgba(74, 168, 240, 0.12);
+}
+
+:root[data-style='cute'] .whale-starter-card span {
+  display: none;
+}
+
+:root[data-style='cute'] .whale-starter-card strong {
+  font-size: 13px;
+  color: #1e3a5f;
+}
+
+:root[data-style='cute'][data-theme='dark'] .whale-starter-card {
+  background: linear-gradient(180deg, rgba(25, 43, 66, 0.94) 0%, rgba(19, 34, 52, 0.96) 100%);
+  border-color: rgba(132, 208, 255, 0.34);
+}
+
+:root[data-style='cute'][data-theme='dark'] .whale-starter-card strong {
+  color: #e6f4ff;
+}
+
+.whale-live-plan-visual {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.whale-step-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.whale-step-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #6ee7c8;
+  box-shadow: 0 0 6px rgba(110, 231, 200, 0.6);
+}
+
+.whale-step-dot.is-warn {
+  background: #ffb870;
+}
+
+.whale-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.whale-typing-dots i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #5ab8ff;
+  animation: whaleDotBounce 1.2s ease-in-out infinite;
+}
+
+.whale-typing-dots.is-large i {
+  width: 7px;
+  height: 7px;
+}
+
+.whale-typing-dots i:nth-child(2) {
+  animation-delay: 0.18s;
+  background: #6ee7c8;
+}
+
+.whale-typing-dots i:nth-child(3) {
+  animation-delay: 0.36s;
+  background: #ffa8c2;
+}
+
+@keyframes whaleDotBounce {
+  0%, 80%, 100% { transform: translateY(0) scale(0.85); opacity: 0.55; }
+  40% { transform: translateY(-4px) scale(1.1); opacity: 1; }
+}
+
+.whale-plan-mini-btn.is-icon {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
