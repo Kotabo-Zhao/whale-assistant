@@ -420,6 +420,18 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     setRenameDraft('')
   }
 
+  const sendTextRef = useRef<(raw: string) => Promise<void>>(async () => {})
+  useEffect(() => {
+    const onMiniAppAsk = (ev: Event) => {
+      const prompt = (ev as CustomEvent<string>).detail
+      if (typeof prompt === 'string' && prompt.trim()) {
+        void sendTextRef.current(prompt.trim())
+      }
+    }
+    window.addEventListener('whale-miniapp-ask', onMiniAppAsk)
+    return () => window.removeEventListener('whale-miniapp-ask', onMiniAppAsk)
+  }, [])
+
   const cancelCurrentTurn = async (): Promise<void> => {
     const reqId = activeRequestRef.current
     if (!reqId) return
@@ -568,6 +580,8 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       return next
     })
   }
+
+  sendTextRef.current = sendText
 
   const toggleVoiceRecord = async (): Promise<void> => {
     if (transcribing) return

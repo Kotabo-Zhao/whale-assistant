@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Bell, Accessibility, Sparkles, Volume2, Mic } from 'lucide-react'
 import { t } from '../i18n'
+import { WhalePowerHub } from './WhalePowerHub'
 import { runtimeBridge } from '../platform/native'
 import type { CompanionQuickSettings, WhaleVoiceConfig } from '../platform/types'
 import {
@@ -310,6 +311,8 @@ export function WhaleAutonomyCard({
           </button>
         </div>
       </div>
+
+      <WhalePowerHub />
 
       {(onOpenOverlay || onOpenAccessibility || onOpenNotifications) && (
         <div className="whale-perm-shortcuts" aria-label={t('系统权限快捷授权')}>

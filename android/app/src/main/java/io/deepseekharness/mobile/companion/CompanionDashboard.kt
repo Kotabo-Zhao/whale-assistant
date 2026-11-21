@@ -53,6 +53,67 @@ internal class CompanionDashboard(private val context: Context) {
             "personaSave" -> JSONObject().put("ok", true).put("card", CompanionPersonaStore(context).save(request.getJSONObject("card")))
             "personaActivate" -> { CompanionPersonaStore(context).activate(text("id")); JSONObject().put("ok", true) }
             "personaDelete" -> { CompanionPersonaStore(context).delete(text("id")); JSONObject().put("ok", true) }
+            "extensionsList" -> JSONObject()
+                .put("skills", WhaleSkillStore.list(context))
+                .put("mcpServers", WhaleMcpManager.listServers(context))
+            "skillInstall" -> {
+                val url = request.optString("url").trim()
+                val name = request.optString("name").trim()
+                val desc = request.optString("description").trim()
+                val content = request.optString("content").trim()
+                if (url.isNotEmpty()) WhaleSkillStore.installFromUrl(context, url, name)
+                else WhaleSkillStore.saveLocal(context, name, desc, content)
+            }
+            "skillManage" -> when (request.optString("action").lowercase()) {
+                "enable" -> WhaleSkillStore.setEnabled(context, text("name"), true)
+                "disable" -> WhaleSkillStore.setEnabled(context, text("name"), false)
+                "delete", "remove" -> WhaleSkillStore.delete(context, text("name"))
+                else -> throw IllegalArgumentException("不支持的 Skill 操作")
+            }
+            "mcpAdd" -> WhaleMcpManager.addOrUpdateServer(
+                context = context,
+                id = request.optString("id").trim(),
+                name = request.optString("name").trim(),
+                rawUrl = text("url").trim(),
+                authHeader = request.optString("authHeader").trim(),
+            )
+            "mcpManage" -> when (request.optString("action").lowercase()) {
+                "refresh" -> WhaleMcpManager.refreshServer(context, text("id"))
+                "enable" -> WhaleMcpManager.setEnabled(context, text("id"), true)
+                "disable" -> WhaleMcpManager.setEnabled(context, text("id"), false)
+                "remove", "delete" -> WhaleMcpManager.removeServer(context, text("id"))
+                else -> throw IllegalArgumentException("不支持的 MCP 操作")
+            }
+            "memoryCompact" -> {
+                val all = memory.listForUser()
+                val seen = HashSet<String>()
+                var removed = 0
+                for (i in 0 until all.length()) {
+                    val row = all.optJSONObject(i) ?: continue
+                    val id = row.optString("id").trim()
+                    val norm = row.optString("text").replace(Regex("[\s，。,.!！?？:：;；]+"), "").lowercase()
+                    if (id.isEmpty()) continue
+                    if (norm.length < 2 || !seen.add(norm)) {
+                        runCatching {
+                            memory.execute(JSONObject().put("op", "delete").put("id", id).toString())
+                            removed++
+                        }
+                    }
+                }
+                JSONObject().put("ok", true).put("scanned", all.length()).put("removed", removed)
+            }
+            "usageAndRouterGet" -> {
+                val (fast, deep) = WhaleModelRouter.readSceneOverrides(context)
+                JSONObject()
+                    .put("usage", WhaleTokenMeter.breakdownJson(context))
+                    .put("fastModel", fast)
+                    .put("deepModel", deep)
+            }
+            "routerConfigSave" -> WhaleModelRouter.saveSceneOverrides(
+                context,
+                request.optString("fastModel", ""),
+                request.optString("deepModel", ""),
+            ).put("ok", true)
             "overview" -> {
                 val store = CompanionStore(context)
                 val records = store.read()

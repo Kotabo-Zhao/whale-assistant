@@ -1,5 +1,7 @@
 package io.deepseekharness.mobile.companion
 
+import android.content.Context
+import org.json.JSONObject
 import java.util.Locale
 
 /**
@@ -45,5 +47,38 @@ internal object WhaleModelRouter {
             )
         }
         return Decision(model = m, tier = tier, reason = "configured")
+    }
+
+    private const val PREFS = "whale_model_router_v1"
+
+    fun readSceneOverrides(context: Context): Pair<String, String> {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getString("fast_model", "").orEmpty().trim() to prefs.getString("deep_model", "").orEmpty().trim()
+    }
+
+    fun saveSceneOverrides(context: Context, fastModel: String, deepModel: String): JSONObject {
+        val fast = fastModel.trim().take(120)
+        val deep = deepModel.trim().take(120)
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString("fast_model", fast)
+            .putString("deep_model", deep)
+            .apply()
+        return JSONObject().put("fastModel", fast).put("deepModel", deep)
+    }
+
+    fun routeWithPrefs(
+        context: Context,
+        configuredModel: String,
+        query: String,
+        hasImages: Boolean,
+        dailyBudgetProgress: Float,
+    ): Decision {
+        val base = route(configuredModel, query, hasImages, dailyBudgetProgress)
+        val (fastOverride, deepOverride) = runCatching { readSceneOverrides(context) }.getOrDefault("" to "")
+        return when {
+            base.tier == Tier.FAST && fastOverride.isNotEmpty() -> base.copy(model = fastOverride, reason = "user_fast_scene")
+            base.tier == Tier.DEEP && deepOverride.isNotEmpty() -> base.copy(model = deepOverride, reason = "user_deep_scene")
+            else -> base
+        }
     }
 }

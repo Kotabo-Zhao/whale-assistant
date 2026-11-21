@@ -74,6 +74,22 @@ internal class WhaleMiniAppBridge(private val ctx: Context) {
         val clean = text?.trim()?.take(300).orEmpty()
         if (clean.isNotEmpty()) runCatching { io.deepseekharness.mobile.companion.WhaleVoiceEngine.speakText(app, clean) }
     }
+
+    @android.webkit.JavascriptInterface
+    fun ask(prompt: String?) {
+        val clean = prompt?.trim()?.take(2000).orEmpty()
+        if (clean.isEmpty()) return
+        main.post {
+            runCatching {
+                io.deepseekharness.mobile.companion.WhaleAppControlBus.dispatch(
+                    org.json.JSONObject().put("action", "ask").put("prompt", clean),
+                )
+                val intent = Intent(app, io.deepseekharness.mobile.MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                app.startActivity(intent)
+            }.onFailure { Toast.makeText(app, "请回到主对话发送：$clean", Toast.LENGTH_SHORT).show() }
+        }
+    }
 }
 
 internal fun WebView.loadWhaleTool(id: String, html: String, preview: Boolean = false, ready: (WebView) -> Unit = {}, gone: () -> Unit) {
@@ -109,7 +125,8 @@ internal fun WebView.loadWhaleTool(id: String, html: String, preview: Boolean = 
         "haptic(s){try{nb&&nb.haptic(String(s||'light'));}catch{}}," +
         "copy(t){try{return !!(nb&&nb.copy(String(t||'')));}catch{return false;}}," +
         "share(t,title){try{nb&&nb.share(String(t||''),String(title||''));}catch{}}," +
-        "speak(t){try{nb&&nb.speak(String(t||''));}catch{}}" +
+        "speak(t){try{nb&&nb.speak(String(t||''));}catch{}}," +
+        "ask(p){try{nb&&nb.ask(String(p||''));}catch{}}" +
         "};})();</script>"
     val themed = storageBridge + "<style>:root{" + design.variables() + "color-scheme:" + (if(design.dark) "dark" else "light") +
         ";}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}html body{background:var(--whale-background);color:var(--whale-text);font-family:system-ui,-apple-system,sans-serif;margin:0;padding:16px;line-height:1.55;-webkit-font-smoothing:antialiased;}"+
@@ -301,6 +318,7 @@ open class WhaleFeatureActivity : Activity() {
                 if (previous.isNotEmpty() && active != previous) manage.addView(button("恢复上一版") { read({ store.activate(id, previous, active) }) { library() } })
                 val pinned = item.optBoolean("pinned", false)
                 if (active.isNotEmpty()) manage.addView(button(if (pinned) "取消置顶" else "置顶到桌宠") { read({ store.setPinned(id, !pinned) }) { library() } })
+                if (active.isNotEmpty()) manage.addView(button("添加到手机桌面") { pinToHomeScreen(this, id, item.getString("activeTitle").ifBlank { item.getString("title") }, active) })
                 if (active.isNotEmpty()) manage.addView(button("停用") { read({ store.activate(id, "", active) }) { library() } })
             }
             body.addView(WorkspaceCardGrid(this, cards), LinearLayout.LayoutParams(-1, -2))
@@ -513,6 +531,27 @@ open class WhaleFeatureActivity : Activity() {
         private const val EXTRA_ID = "featureId"
         private const val EXTRA_REVISION = "activeRevision"
         private const val MAX_RESULT = 8000
+        fun pinToHomeScreen(context: Context, id: String, title: String, revision: String) {
+            val app = context.applicationContext
+            if (!androidx.core.content.pm.ShortcutManagerCompat.isRequestPinShortcutSupported(app)) {
+                Toast.makeText(app, "当前桌面暂不支持添加快捷方式", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val launch = Intent(app, WhaleFeatureActivity::class.java)
+                .setAction(Intent.ACTION_VIEW)
+                .putExtra(EXTRA_ID, id)
+                .putExtra(EXTRA_REVISION, revision)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val shortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(app, "whale-tool-$id")
+                .setShortLabel(title.take(14))
+                .setLongLabel(title.take(30))
+                .setIcon(androidx.core.graphics.drawable.IconCompat.createWithResource(app, io.deepseekharness.mobile.R.mipmap.ic_launcher))
+                .setIntent(launch)
+                .build()
+            val ok = androidx.core.content.pm.ShortcutManagerCompat.requestPinShortcut(app, shortcut, null)
+            Toast.makeText(app, if (ok) "已请求将「$title」添加到手机桌面" else "未能创建桌面快捷方式", Toast.LENGTH_SHORT).show()
+        }
+
         fun openTool(context: Context, id: String, revision: String, preview: Boolean = false, pet: Boolean = false) {
             require(id.matches(Regex("[a-z][a-z0-9-]{0,47}")) && revision.matches(Regex("[a-f0-9]{64}")))
             val target = if (pet) WhalePetFeatureActivity::class.java else WhaleFeatureActivity::class.java

@@ -2411,7 +2411,8 @@ export interface WhaleNativeChatRequest {
 }
 
 export interface WhaleAppControlEvent {
-  action: 'navigate' | 'appearance' | 'language' | 'autonomy' | 'refresh'
+  action: 'navigate' | 'appearance' | 'language' | 'autonomy' | 'refresh' | 'ask'
+  prompt?: string
   view?: string
   style?: 'simple' | 'cute'
   theme?: 'system' | 'light' | 'dark'

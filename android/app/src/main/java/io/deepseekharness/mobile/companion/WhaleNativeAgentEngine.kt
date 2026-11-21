@@ -121,6 +121,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
     private val app = context.applicationContext
     private val tools = WhaleNativeToolRegistry(app)
     private val ledger = UnifiedExecutionLedger(app)
+    @Volatile private var activeScene = "chat"
 
     fun send(
         userMessage: String,
@@ -132,6 +133,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         images: List<String> = emptyList(),
     ): ChatResult {
         val startedAt = System.currentTimeMillis()
+        activeScene = if (sessionId.startsWith("whale-worker-")) "worker" else "chat"
         val trimmed = userMessage.trim().ifEmpty { if (images.isNotEmpty()) "请帮我看看这张图片并给出实用建议。" else "" }
         require(trimmed.isNotEmpty()) { "请输入内容后再发送" }
 
@@ -139,7 +141,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val settings = store.settings()
         val rawEndpoint = resolveEndpoint(store, settings)
         val budgetProgress = runCatching { WhaleTokenMeter.snapshot(app).progress }.getOrDefault(0f)
-        val routeDecision = WhaleModelRouter.route(rawEndpoint.model, trimmed, images.isNotEmpty(), budgetProgress)
+        val routeDecision = WhaleModelRouter.routeWithPrefs(app, rawEndpoint.model, trimmed, images.isNotEmpty(), budgetProgress)
         val endpoint = rawEndpoint.copy(model = routeDecision.model)
         val expandedCategories = mutableSetOf<String>()
         var toolSchemas = tools.toolSchemas(trimmed, expandedCategories)
@@ -313,6 +315,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     ledger.transition(opId, UnifiedExecutionLedger.State.DISPATCHING)
                 }
                 val t0 = System.currentTimeMillis()
+                if (p.fnName.startsWith("whale_phone_")) activeScene = "phone"
                 val outcome = tools.execute(p.fnName, p.fnArgs)
                 val dt = (System.currentTimeMillis() - t0).coerceAtLeast(1L)
                 if (p.mutating) {
@@ -410,6 +413,15 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     "我已经连续执行了 ${steps.size} 步操作（最近：$recent），目前已先暂停。你可以看看当前页面，告诉我接下来怎么继续～"
                 }
                 else -> "刚才模型没有返回文字内容，再发一次试试看～"
+            }
+        }
+        // 屏控多步成功路径自动沉淀进 Playbook，下次复用更省轮次与 Token
+        val phoneSteps = steps.filter { it.tool.startsWith("whale_phone_") && it.ok }
+        if (phoneSteps.size >= 3 && !wasCancelled) {
+            runCatching {
+                val pbTrigger = "屏控：${trimmed.take(36)}"
+                val pbSteps = phoneSteps.take(8).joinToString(" → ") { it.label }
+                WhalePlaybookStore.save(app, pbTrigger, pbSteps)
             }
         }
         val (cleanReply, parsedSuggestions) = extractSuggestions(finalReply)
@@ -636,10 +648,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val cTok = usageObj.optLong("completion_tokens", 0L)
                 val cacheHit = WhaleTokenMeter.extractCacheHitTokens(usageObj)
                 if (pTok > 0L || cTok > 0L) {
-                    runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, endpoint.model) }
+                    runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, endpoint.model, activeScene) }
                 }
             } else {
-                runCatching { WhaleTokenMeter.record(app, messages.toString().length / 3L, text.length / 4L, 0L, endpoint.model) }
+                runCatching { WhaleTokenMeter.record(app, messages.toString().length / 3L, text.length / 4L, 0L, endpoint.model, activeScene) }
             }
             val choice = response.optJSONArray("choices")?.optJSONObject(0)
                 ?: throw IllegalStateException("模型服务未返回有效内容")
@@ -680,7 +692,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     val cacheHit = WhaleTokenMeter.extractCacheHitTokens(usageObj)
                     if (pTok > 0L || cTok > 0L) {
                         recordedUsage = true
-                        runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, model) }
+                        runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, model, activeScene) }
                     }
                 }
                 val delta = chunk.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: continue
@@ -731,7 +743,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
         }
         if (!recordedUsage) {
-            runCatching { WhaleTokenMeter.record(app, promptCharsHint / 3L, contentBuilder.length.coerceAtLeast(12) / 2L, 0L, model) }
+            runCatching { WhaleTokenMeter.record(app, promptCharsHint / 3L, contentBuilder.length.coerceAtLeast(12) / 2L, 0L, model, activeScene) }
         }
         return AssistantTurn(contentBuilder.toString(), toolCalls)
     }
@@ -782,6 +794,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
             }
             return when {
+                listOf("权限弹窗", "亲手点", "登录", "验证码", "点掉", "处理完", "授权后", "你来点", "确认后告诉我").any { it in tail } ->
+                    listOf("▶ 已处理，继续", "换个方式", "先停这里")
                 listOf("要不要", "试试", "需要吗", "好不好", "是否", "帮我", "帮你", "先塞", "先加").any { it in tail } ->
                     listOf("好呀，直接做", "先不用了", "我有补充")
                 listOf("继续", "哪一步", "怎么处理", "接下来").any { it in tail } ->

@@ -3866,6 +3866,14 @@ export function App() {
         saveLanguage(event.language)
       } else if (event.action === 'autonomy' && event.preset) {
         try { window.localStorage.setItem('whale.autonomyPreset.v1', event.preset) } catch { /* ignore */ }
+      } else if (event.action === 'ask' && typeof event.prompt === 'string') {
+        const prompt = event.prompt.trim()
+        if (prompt) {
+          setActiveView('whale-chat')
+          window.setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('whale-miniapp-ask', { detail: prompt }))
+          }, 80)
+        }
       } else if (event.action === 'refresh') {
         window.dispatchEvent(new CustomEvent('whale:ui-refresh'))
       }

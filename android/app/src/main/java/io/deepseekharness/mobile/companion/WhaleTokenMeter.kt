@@ -24,6 +24,9 @@ internal object WhaleTokenMeter {
     private const val KEY_COMPLETION = "completion_tokens"
     private const val KEY_COST_MICRO_YUAN = "cost_micro_yuan"
     private const val KEY_BUDGET = "daily_budget_tokens"
+    private const val KEY_SCENE_CHAT = "scene_chat_tokens"
+    private const val KEY_SCENE_WORKER = "scene_worker_tokens"
+    private const val KEY_SCENE_PHONE = "scene_phone_tokens"
     private const val DEFAULT_DAILY_BUDGET = 200_000L
     private const val USD_TO_CNY = 7.20
 
@@ -155,6 +158,9 @@ internal object WhaleTokenMeter {
                 .putLong(KEY_CACHE_HIT, 0L)
                 .putLong(KEY_COMPLETION, 0L)
                 .putLong(KEY_COST_MICRO_YUAN, 0L)
+                .putLong(KEY_SCENE_CHAT, 0L)
+                .putLong(KEY_SCENE_WORKER, 0L)
+                .putLong(KEY_SCENE_PHONE, 0L)
                 .apply()
             return Snapshot(today, 0L, 0L, 0L, 0L, budget)
         }
@@ -175,6 +181,7 @@ internal object WhaleTokenMeter {
         completionTokens: Long,
         cacheHitTokens: Long = 0L,
         model: String = "deepseek-chat",
+        scene: String = "chat",
     ): Snapshot {
         val addPrompt = promptTokens.coerceAtLeast(0L)
         val addCompletion = completionTokens.coerceAtLeast(0L)
@@ -188,12 +195,20 @@ internal object WhaleTokenMeter {
             completionTokens = current.completionTokens + addCompletion,
             costMicroYuan = current.costMicroYuan + addMicroYuan,
         )
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val addedTotal = addPrompt + addCompletion
+        val chatBase = prefs.getLong(KEY_SCENE_CHAT, 0L).coerceAtLeast(0L)
+        val workerBase = prefs.getLong(KEY_SCENE_WORKER, 0L).coerceAtLeast(0L)
+        val phoneBase = prefs.getLong(KEY_SCENE_PHONE, 0L).coerceAtLeast(0L)
+        prefs.edit()
             .putString(KEY_DAY, next.day)
             .putLong(KEY_PROMPT, next.promptTokens)
             .putLong(KEY_CACHE_HIT, next.cacheHitTokens)
             .putLong(KEY_COMPLETION, next.completionTokens)
             .putLong(KEY_COST_MICRO_YUAN, next.costMicroYuan)
+            .putLong(KEY_SCENE_CHAT, chatBase + if (scene == "chat") addedTotal else 0L)
+            .putLong(KEY_SCENE_WORKER, workerBase + if (scene == "worker") addedTotal else 0L)
+            .putLong(KEY_SCENE_PHONE, phoneBase + if (scene == "phone") addedTotal else 0L)
             .apply()
         listeners.forEach { runCatching { it(next) } }
         return next
@@ -205,5 +220,22 @@ internal object WhaleTokenMeter {
 
     fun unsubscribe(listener: (Snapshot) -> Unit) {
         listeners.remove(listener)
+    }
+
+    fun breakdownJson(context: Context): JSONObject {
+        val snap = snapshot(context)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return JSONObject()
+            .put("day", snap.day)
+            .put("totalTokens", snap.totalTokens)
+            .put("promptTokens", snap.promptTokens)
+            .put("completionTokens", snap.completionTokens)
+            .put("cacheHitTokens", snap.cacheHitTokens)
+            .put("cacheHitRatio", snap.cacheHitRatio.toDouble())
+            .put("estimatedYuan", snap.estimatedYuan)
+            .put("dailyBudgetTokens", snap.dailyBudgetTokens)
+            .put("chatTokens", prefs.getLong(KEY_SCENE_CHAT, 0L).coerceAtLeast(0L))
+            .put("workerTokens", prefs.getLong(KEY_SCENE_WORKER, 0L).coerceAtLeast(0L))
+            .put("phoneTokens", prefs.getLong(KEY_SCENE_PHONE, 0L).coerceAtLeast(0L))
     }
 }

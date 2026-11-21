@@ -39,6 +39,10 @@ internal class PetInlineTool(context: Context, private val back: () -> Unit, pri
         }
         bar.addView(action("←", back))
         bar.addView(title, LayoutParams(0, -2, 1f).apply { marginStart = ui.dp(4) })
+        bar.addView(action("📌") {
+            val tool = current ?: return@action
+            runCatching { io.deepseekharness.mobile.features.WhaleFeatureActivity.pinToHomeScreen(context, tool.id, tool.title, tool.revision) }
+        }.apply { contentDescription = "添加到手机桌面" })
         bar.addView(action("⤢") {
             val tool = current ?: return@action
             runCatching { io.deepseekharness.mobile.features.WhaleFeatureActivity.openTool(context, tool.id, tool.revision) }
