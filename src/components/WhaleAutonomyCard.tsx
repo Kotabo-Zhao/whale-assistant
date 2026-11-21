@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bell, Accessibility, Sparkles, Volume2, Mic } from 'lucide-react'
+import { Bell, Accessibility, Sparkles, Mic } from 'lucide-react'
 import { t } from '../i18n'
 import { WhalePowerHub } from './WhalePowerHub'
 import { runtimeBridge } from '../platform/native'
@@ -33,14 +33,6 @@ const MASTER_SWITCHES: Array<{ key: MasterSwitchKey; title: string; hint: string
   },
 ]
 
-const VOICE_OPTIONS: Array<{ id: string; label: string }> = [
-  { id: 'diana', label: 'Diana · 欢快女声（推荐）' },
-  { id: 'claire', label: 'Claire · 温柔女声' },
-  { id: 'bella', label: 'Bella · 活力女声' },
-  { id: 'anna', label: 'Anna · 沉稳女声' },
-  { id: 'alex', label: 'Alex · 沉稳男声' },
-  { id: 'benjamin', label: 'Benjamin · 低沉男声' },
-]
 
 const PRESET_MASTER_FLAGS: Record<AutonomyPresetId, Record<MasterSwitchKey, boolean>> = {
   fluent: {
@@ -235,8 +227,8 @@ export function WhaleAutonomyCard({
 
       <details className="whale-voice-box whale-collapsible">
         <summary className="whale-voice-head" style={{ cursor: 'pointer', listStyle: 'none' }}>
-          <strong>{t('桌宠尺寸与拟人语音')}</strong>
-          <span>{petSizeDp}dp · {voiceStatus || (voiceCfg.configured ? t('本地/云端就绪') : t('本地离线就绪'))}</span>
+          <strong>{t('桌宠尺寸与语音输入')}</strong>
+          <span>{petSizeDp}dp · {voiceStatus || (voiceCfg.hasRecordPermission ? t('语音识别就绪') : t('需麦克风权限'))}</span>
         </summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
           <div className="whale-size-slider-row">
@@ -273,24 +265,6 @@ export function WhaleAutonomyCard({
             </button>
           </div>
           <div className="whale-voice-row">
-            <select
-              aria-label={t('选择桌宠音色')}
-              value={voiceCfg.voice}
-              onChange={e => { void saveVoice({ voice: e.target.value }) }}
-            >
-              {VOICE_OPTIONS.map(opt => (
-                <option key={opt.id} value={opt.id}>{opt.label}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="whale-perm-chip"
-              disabled={false}
-              onClick={() => { void runtimeBridge.testVoiceSpeak?.() }}
-            >
-              <Volume2 size={13} aria-hidden="true" />
-              {t('试听一声')}
-            </button>
             <button
               type="button"
               className="whale-perm-chip"

@@ -246,6 +246,9 @@ internal object WhaleVoiceEngine {
 
     /** 异步播报：未配置云端 Key 自动走系统离线 TTS；配置了硅基流动 Key 时走云端拟人语音并自带本地兜底。 */
     fun speakText(context: Context, text: String, voiceOverride: String? = null) {
+        // TTS speaking disabled per user preference (STT-only streamlined voice mode)
+        return
+        @Suppress("UNREACHABLE_CODE")
         val app = context.applicationContext
         val cfg = readConfig(app)
         val sentences = splitSentences(text)
@@ -374,8 +377,27 @@ internal object WhaleVoiceEngine {
                         override fun onEndOfSpeech() = Unit
                         override fun onPartialResults(partialResults: Bundle?) = Unit
                         override fun onEvent(eventType: Int, params: Bundle?) = Unit
+                        private var retriedDefaultLocale = false
                         override fun onError(error: Int) {
-                            localSttResult.compareAndSet(null, Result.failure(IllegalStateException("没听清楚（系统识别码 $error），请再试一次")))
+                            if ((error == 12 || error == 13) && !retriedDefaultLocale) {
+                                retriedDefaultLocale = true
+                                val fallbackIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                                }
+                                runCatching { sr.startListening(fallbackIntent) }.onFailure {
+                                    localSttResult.compareAndSet(null, Result.failure(IllegalStateException("系统语音识别暂不可用，可在设置填入免费硅基流动 Key 使用高精度语音识别")))
+                                    latch.countDown()
+                                }
+                                return
+                            }
+                            val hint = when (error) {
+                                6, 7 -> "没听到清晰语音，请靠近麦克风再试一次"
+                                9 -> "请先授予麦克风权限"
+                                12, 13 -> "当前系统语音包不支持该语种，可在设置填入免费硅基流动 Key 使用高精度识别"
+                                else -> "语音识别失败（码 $error），请再试一次"
+                            }
+                            localSttResult.compareAndSet(null, Result.failure(IllegalStateException(hint)))
                             latch.countDown()
                         }
                         override fun onResults(results: Bundle?) {
@@ -391,8 +413,8 @@ internal object WhaleVoiceEngine {
                     })
                     val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.CHINA.toLanguageTag())
+                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                     }
                     localRecognizer = sr

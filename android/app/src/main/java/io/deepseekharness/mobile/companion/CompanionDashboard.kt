@@ -84,6 +84,19 @@ internal class CompanionDashboard(private val context: Context) {
                 "remove", "delete" -> WhaleMcpManager.removeServer(context, text("id"))
                 else -> throw IllegalArgumentException("不支持的 MCP 操作")
             }
+            "sharedChatRead" -> {
+                val sinceMs = request.optLong("sinceMs", 0L)
+                JSONObject().put("messages", WhaleSharedChatStore.list(app, sinceMs))
+            }
+            "sharedChatAppend" -> {
+                WhaleSharedChatStore.appendTurn(
+                    app,
+                    request.optString("userText", ""),
+                    request.optString("assistantText", ""),
+                    request.optString("source", "app"),
+                )
+                JSONObject().put("ok", true)
+            }
             "memoryCompact" -> {
                 val all = memory.listForUser()
                 val seen = HashSet<String>()

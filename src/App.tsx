@@ -1622,7 +1622,7 @@ interface SettingsScreenProps {
   onShareDiagnostic: () => void
 }
 
-function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loadDiagnosticLog, loadHarnessLog, lastStop, overlayBall, overlayBallReadFailed, onDraftChange, page, runSelfCheck, runtime, settingsReadStatus, shizuku, onAuthorize, onBack, onClearAccessibilityPassword, onClearDiagnostic, onConnect, onDiagnosticSettings, onLaunch, onLaunchConfirmed, onOpenAccessibilitySettings, onOpenExternalHarness, externalBrowsers, onSelectExternalBrowser, onOpenOverlaySettings, onOpenShizuku, onOpenEnvironment, onOpenDeviceShell, onOpenSubpage, onOpenShellView, onReloadSettings, onRequestNotificationPermission, onResetAccessibilityPassword, onSaveAccessibilityPackages, onSaveAccessibilityPassword, onSaveCredentials, settledCredentials, onSetAccessibilityRuntime, onSetAutomationRuleEnabled, onShareDiagnostic }: SettingsScreenProps) {
+function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loadDiagnosticLog, loadHarnessLog, lastStop, overlayBall, overlayBallReadFailed, onDraftChange, page, runSelfCheck, runtime, settingsReadStatus, shizuku, onAuthorize, onBack, onClearAccessibilityPassword, onClearDiagnostic, onConnect, onDiagnosticSettings, onLaunch, onLaunchConfirmed, onOpenAccessibilitySettings, onOpenExternalHarness, externalBrowsers, onSelectExternalBrowser, onOpenOverlaySettings, onOpenShizuku, onOpenDeviceShell, onOpenSubpage, onOpenShellView, onReloadSettings, onRequestNotificationPermission, onResetAccessibilityPassword, onSaveAccessibilityPackages, onSaveAccessibilityPassword, onSaveCredentials, settledCredentials, onSetAccessibilityRuntime, onSetAutomationRuleEnabled, onShareDiagnostic }: SettingsScreenProps) {
   const [accessibilityDraft, setAccessibilityDraft] = useState(accessibility.allowedPackages.join('\n'))
   const [whitelistEnabledDraft, setWhitelistEnabledDraft] = useState(accessibility.whitelistEnabled ?? true)
   const [testingProvider, setTestingProvider] = useState<string | null>(null)
@@ -2562,18 +2562,14 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         {page === 'runtime' && (
         <section className="settings-section" aria-labelledby="download-settings">
           <div className="section-title">
-            <span className="section-icon"><CloudDownload size={19} /></span>
-            <div><h2 id="download-settings">{t("运行时与设备 Shell")}</h2><p>{t("装、启停、重置在「Ubuntu 运行时」；Shizuku 授权在「设备 Shell 设置」。")}</p></div>
+            <span className="section-icon"><SquareTerminal size={19} /></span>
+            <div><h2 id="download-settings">{t("设备 Shell 与原生运行环境")}</h2><p>{t("已内置原生 Python 3.11 引擎，无需再下载 Ubuntu；Shizuku 授权请在设备 Shell 设置中管理。")}</p></div>
           </div>
           <div className="settings-inline-actions">
-            <button className="button button-secondary" type="button" onClick={onOpenEnvironment} disabled={busy !== null}>
-              <CloudDownload size={18} />{t("Ubuntu 运行时")}
-            </button>
-            <button className="button button-secondary" type="button" onClick={onOpenDeviceShell} disabled={busy !== null}>
+            <button className="button button-primary" type="button" onClick={onOpenDeviceShell} disabled={busy !== null}>
               <SquareTerminal size={18} />{t("设备 Shell 设置")}
             </button>
           </div>
-          <p className="settings-note">{t("运行环境使用 APK 内置的受校验版本；需要其它版本时请在 Ubuntu 运行时的版本管理中下载并切换。")}</p>
         </section>
 
         )}

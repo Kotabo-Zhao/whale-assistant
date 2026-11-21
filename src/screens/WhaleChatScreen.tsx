@@ -20,8 +20,6 @@ import {
   Slash,
   Square,
   Trash2,
-  Volume2,
-  VolumeX,
   Wrench,
   X,
 } from 'lucide-react'
@@ -295,13 +293,6 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
   const [voiceNote, setVoiceNote] = useState('')
-  const [autoSpeak, setAutoSpeak] = useState<boolean>(() => {
-    try {
-      return window.localStorage.getItem('whale.mainChatAutoSpeak.v1') === 'true'
-    } catch {
-      return false
-    }
-  })
   const activeRequestRef = useRef<string | null>(null)
   const pendingFollowUpRef = useRef<string[]>([])
   const listRef = useRef<HTMLDivElement>(null)
@@ -429,8 +420,31 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       }
     }
     window.addEventListener('whale-miniapp-ask', onMiniAppAsk)
-    return () => window.removeEventListener('whale-miniapp-ask', onMiniAppAsk)
-  }, [])
+    const pullPetTurns = async () => {
+      try {
+        const res = await bridge.companionDashboard?.({ operation: 'sharedChatRead', sinceMs: 0 })
+        const rows = Array.isArray(res?.messages) ? (res.messages as Array<{ id?: string; role?: string; text?: string; source?: string; atMs?: number }>) : []
+        const petRows = rows.filter(r => r.source === 'pet' && typeof r.id === 'string' && typeof r.text === 'string' && (r.role === 'user' || r.role === 'assistant'))
+        if (petRows.length === 0) return
+        setSessions(prev => prev.map((sess, idx) => {
+          if (idx !== 0) return sess
+          const seen = new Set(sess.messages.map(m => m.id))
+          const additions: WhaleChatMessage[] = petRows
+            .filter(r => !seen.has(r.id!))
+            .map(r => ({ id: r.id!, role: r.role as 'user' | 'assistant', text: r.text!, createdAt: Number(r.atMs ?? Date.now()) }))
+          if (additions.length === 0) return sess
+          return { ...sess, updatedAt: Date.now(), messages: [...sess.messages, ...additions].slice(-MAX_MESSAGES_PER_SESSION) }
+        }))
+      } catch { /* ignore in browser */ }
+    }
+    void pullPetTurns()
+    const onVis = () => { if (document.visibilityState === 'visible') void pullPetTurns() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('whale-miniapp-ask', onMiniAppAsk)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [bridge])
 
   const cancelCurrentTurn = async (): Promise<void> => {
     const reqId = activeRequestRef.current
@@ -444,19 +458,63 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     }
   }
 
+  const extractVideoKeyframes = async (file: File): Promise<{ frames: string[]; durationSec: number }> => {
+    const url = URL.createObjectURL(file)
+    try {
+      const video = document.createElement('video')
+      video.src = url
+      video.muted = true
+      video.playsInline = true
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve()
+        video.onerror = () => reject(new Error('video load failed'))
+      })
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1
+      const points = [0.1, 0.5, 0.85].map(r => Math.min(Math.max(0.05, duration * r), Math.max(0.05, duration - 0.05)))
+      const canvas = document.createElement('canvas')
+      const scale = Math.min(1, 720 / Math.max(video.videoWidth || 720, 1))
+      canvas.width = Math.max(160, Math.round((video.videoWidth || 720) * scale))
+      canvas.height = Math.max(120, Math.round((video.videoHeight || 480) * scale))
+      const ctx = canvas.getContext('2d')
+      const frames: string[] = []
+      for (const sec of points) {
+        video.currentTime = sec
+        await new Promise<void>(resolve => {
+          video.onseeked = () => resolve()
+          setTimeout(resolve, 600)
+        })
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+          frames.push(canvas.toDataURL('image/jpeg', 0.78))
+        }
+      }
+      return { frames, durationSec: Math.round(duration) }
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  }
+
   const handleImagePick = async (files: FileList | null): Promise<void> => {
     if (!files || files.length === 0) return
     const picked: string[] = []
+    let videoHint = ''
     for (const file of Array.from(files).slice(0, 3)) {
       try {
-        const dataUrl = await compressImageToDataUrl(file)
-        if (dataUrl) picked.push(dataUrl)
+        if (file.type.startsWith('video/')) {
+          const { frames, durationSec } = await extractVideoKeyframes(file)
+          picked.push(...frames)
+          videoHint = `请分析这段视频（时长约 ${durationSec} 秒，已自动抽取 3 张关键帧）`
+        } else {
+          const dataUrl = await compressImageToDataUrl(file)
+          if (dataUrl) picked.push(dataUrl)
+        }
       } catch {
         // Ignore single broken file.
       }
     }
     if (picked.length > 0) {
       setPendingImages(prev => [...prev, ...picked].slice(0, 3))
+      if (videoHint && !input.trim()) setInput(videoHint)
     }
   }
 
@@ -533,8 +591,13 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           suggestions: result.suggestions,
         },
       ])
-      if (autoSpeak && !result.cancelled && result.reply.trim() && bridge.testVoiceSpeak) {
-        void bridge.testVoiceSpeak(result.reply).catch(() => {})
+      if (!result.cancelled && result.reply.trim()) {
+        void bridge.companionDashboard?.({
+          operation: 'sharedChatAppend',
+          userText: text,
+          assistantText: result.reply,
+          source: 'app',
+        }).catch(() => {})
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
@@ -568,18 +631,6 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     }).catch(() => {})
   }
 
-  const toggleAutoSpeak = (): void => {
-    setAutoSpeak(prev => {
-      const next = !prev
-      try {
-        window.localStorage.setItem('whale.mainChatAutoSpeak.v1', String(next))
-      } catch {
-        // Ignore storage errors.
-      }
-      if (!next) void bridge.stopVoiceSpeaking?.().catch(() => {})
-      return next
-    })
-  }
 
   sendTextRef.current = sendText
 
@@ -645,16 +696,6 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     <section className="whale-chat-screen" aria-label={t('鲸鱼助手对话')}>
       <header className="whale-chat-header is-minimal">
         <div className="whale-chat-shortcuts" aria-label={t('常用功能入口')}>
-          <button
-            type="button"
-            className={`whale-icon-chip${autoSpeak ? ' is-active' : ''}`}
-            title={autoSpeak ? t('关闭自动朗读') : t('开启自动朗读')}
-            aria-label={t('切换自动朗读')}
-            aria-pressed={autoSpeak}
-            onClick={toggleAutoSpeak}
-          >
-            {style === 'cute' ? <CuteIcon name={autoSpeak ? 'voice-on' : 'voice-off'} size={21} /> : (autoSpeak ? <Volume2 size={17} /> : <VolumeX size={17} />)}
-          </button>
           <button
             type="button"
             className={`whale-icon-chip${sessionsOpen ? ' is-active' : ''}`}
@@ -920,17 +961,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                     >
                       {copiedId === msg.id ? <Check size={13} /> : <Copy size={13} />}
                     </button>
-                    {bridge.testVoiceSpeak && (
-                      <button
-                        type="button"
-                        className="whale-copy-btn"
-                        aria-label={t('朗读回复')}
-                        title={t('朗读回复')}
-                        onClick={() => { void bridge.testVoiceSpeak?.(msg.text).catch(() => {}) }}
-                      >
-                        <Volume2 size={13} />
-                      </button>
-                    )}
+
                   </footer>
                 )}
                 {msg.role === 'assistant' && !msg.error && msg.suggestions && msg.suggestions.length > 0 && msg.id === messages[messages.length - 1]?.id && (
@@ -1079,7 +1110,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           hidden
           onChange={event => {
@@ -1101,8 +1132,8 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         <button
           type="button"
           className="whale-img-btn"
-          aria-label={t('添加图片')}
-          title={t('添加图片')}
+          aria-label={t('发送图片或视频')}
+          title={t('发送图片或视频')}
           onClick={() => fileInputRef.current?.click()}
         >
           {style === 'cute' ? <CuteIcon name="appearance" size={20} /> : <ImagePlus size={16} />}

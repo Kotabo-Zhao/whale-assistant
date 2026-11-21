@@ -1550,3 +1550,46 @@
   0%, 100% { height: 5px; opacity: 0.55; }
   50% { height: 14px; opacity: 1; }
 }
+
+/* compact-chat-layout-v2 */
+.whale-chat-scroll {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  padding-top: max(10px, env(safe-area-inset-top, 10px)) !important;
+}
+.whale-msg-row {
+  gap: 6px !important;
+}
+:root[data-style='cute'] .whale-msg-inline-avatar {
+  width: 24px !important;
+  height: 24px !important;
+}
+.whale-msg-user {
+  max-width: 90% !important;
+}
+.whale-msg-assistant .whale-msg-bubble {
+  padding: 9px 11px !important;
+}
+.whale-msg-user .whale-msg-bubble {
+  padding: 9px 12px !important;
+}
+.whale-chat-composer-wrap {
+  padding: 4px 8px 6px !important;
+}
+
+/* fix-header-overlap-and-clipping */
+.whale-chat-header.is-minimal {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 6 !important;
+  padding: 6px 8px 4px !important;
+  background: transparent !important;
+}
+.whale-chat-scroll {
+  padding-top: 6px !important;
+  padding-bottom: 18px !important;
+}
+.whale-chat-composer-wrap {
+  padding: 4px 8px 4px !important;
+  margin-bottom: 0 !important;
+}

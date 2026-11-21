@@ -60,7 +60,6 @@ describe('WhaleChatScreen', () => {
       <WhaleChatScreen bridge={mockBridge} onNavigate={vi.fn()} />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '切换自动朗读' }))
     fireEvent.click(screen.getByRole('button', { name: '语音输入' }))
     const stopBtn = await screen.findByRole('button', { name: '停止录音并发送' })
     fireEvent.click(stopBtn)
@@ -69,7 +68,7 @@ describe('WhaleChatScreen', () => {
       expect(mockChat).toHaveBeenCalledWith(expect.objectContaining({ message: '明早七点半设个闹钟' }))
     })
     await waitFor(() => {
-      expect(mockBridge.testVoiceSpeak).toHaveBeenCalledWith('已收到，正在为你处理。')
+      expect(mockBridge.testVoiceSpeak).not.toHaveBeenCalled()
     })
   })
 })

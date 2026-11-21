@@ -496,16 +496,23 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (bottom - top != oldBottom - oldTop) panel.post { if (root === panel) positionUpdater?.invoke() }
         }
         fun styleBubble(view: android.view.View, isUser: Boolean) {
+            val round = dp(16).toFloat()
+            val tip = dp(5).toFloat()
             if (isUser) {
-                view.setPadding(dp(12), dp(8), dp(12), dp(8))
-                view.background = ui.shape(ui.soft, 16, null).apply {
-                    val round = dp(16).toFloat(); val tip = dp(4).toFloat()
+                view.setPadding(dp(12), dp(9), dp(12), dp(9))
+                view.background = ui.shape(ui.accent, 16, null).apply {
                     cornerRadii = floatArrayOf(round, round, tip, tip, round, round, round, round)
                 }
+                if (view is TextView) view.setTextColor(Color.WHITE)
             } else {
-                view.setPadding(dp(2), dp(4), dp(2), dp(6))
-                view.background = null
-                if (view is TextView) view.setLineSpacing(dp(3).toFloat(), 1.08f)
+                view.setPadding(dp(12), dp(9), dp(12), dp(9))
+                view.background = ui.shape(ui.soft, 16, ui.border).apply {
+                    cornerRadii = floatArrayOf(tip, tip, round, round, round, round, round, round)
+                }
+                if (view is TextView) {
+                    view.setTextColor(ui.ink)
+                    view.setLineSpacing(dp(3).toFloat(), 1.1f)
+                }
             }
         }
         fun atBottom(): Boolean = scroll.getChildAt(0)?.let { child ->
@@ -836,7 +843,23 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         footer.addView(micBtn, LinearLayout.LayoutParams(dp(38), dp(38)))
         footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        footer.addView(ttsBtn, LinearLayout.LayoutParams(dp(36), dp(36)))
+        val mediaBtn = android.widget.TextView(context).apply {
+            text = "+"
+            textSize = 20f
+            setTextColor(ui.ink)
+            gravity = Gravity.CENTER
+            contentDescription = "发送图片或视频"
+            background = ui.shape(ui.soft, 18, ui.border)
+            setOnClickListener {
+                runCatching {
+                    val intent = android.content.Intent(context, WhaleMemoryShareActivity::class.java)
+                        .setAction(WhaleMemoryShareActivity.PICK)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                }
+            }
+        }
+        footer.addView(mediaBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginEnd = dp(4) })
         shortcut(ui.string(R.string.pet_menu_session), R.drawable.ic_cute_chat, ui.string(R.string.pet_menu_session)) {
             toolShelf.removeAllViews()
             sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE

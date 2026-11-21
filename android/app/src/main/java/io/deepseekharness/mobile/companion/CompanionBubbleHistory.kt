@@ -27,7 +27,12 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
         if (writable != true) { check(!requireWritable) { "对话记录不可写，未交办新任务。" }; return@synchronized }
         val bytes = encode(snapshot)
         PetReplyOperation.whileActive { writer.replace(file.baseFile, bytes) }
-        if (snapshot.pending == null && snapshot.messages.lastOrNull()?.role == "assistant") ContextFollowupEvents.chat(app, "pet")
+        if (snapshot.pending == null && snapshot.messages.lastOrNull()?.role == "assistant") {
+            ContextFollowupEvents.chat(app, "pet")
+            val lastA = snapshot.messages.lastOrNull()?.text.orEmpty()
+            val lastU = snapshot.messages.dropLast(1).lastOrNull()?.text.orEmpty()
+            runCatching { WhaleSharedChatStore.appendTurn(app, lastU, lastA, "pet") }
+        }
     }
     fun exportArchive(): ByteArray? = synchronized(lock) {
         val snapshot = load()
