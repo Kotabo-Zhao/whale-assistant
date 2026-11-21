@@ -379,8 +379,34 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
 
         val wasCancelled = control?.cancelled?.get() == true
+        if (finalReply.isBlank() && !wasCancelled && steps.isNotEmpty()) {
+            // 达到最大工具轮数后，强制补发一轮无 tools 的收尾总结请求，确保模型自然汇报进展而非吐出机械报错
+            listener?.onPhase("synthesizing")
+            messages.put(
+                JSONObject()
+                    .put("role", "user")
+                    .put("content", "已达到单轮连续操作步数上限。请不再调用工具，直接用简洁自然的中文告诉我：刚才已经完成了哪几步、当前屏幕上看到了什么结果，以及接下来需要我做什么或要不要继续。"),
+            )
+            val summaryTurn = runCatching {
+                callChatCompletionsWithRetry(
+                    endpoint = endpoint,
+                    messages = messages,
+                    toolsArray = null,
+                    listener = listener,
+                    control = control,
+                )
+            }.getOrNull()
+            finalReply = summaryTurn?.content?.trim().orEmpty()
+        }
         if (finalReply.isBlank()) {
-            finalReply = if (wasCancelled) "已停止生成。" else "已执行完相关步骤，但模型未生成总结，请再试一次。"
+            finalReply = when {
+                wasCancelled -> "已停止生成。"
+                steps.isNotEmpty() -> {
+                    val recent = steps.takeLast(3).joinToString(" → ") { it.label }
+                    "我已经连续执行了 ${steps.size} 步操作（最近：$recent），目前已先暂停。你可以看看当前页面，告诉我接下来怎么继续～"
+                }
+                else -> "刚才模型没有返回文字内容，再发一次试试看～"
+            }
         }
         val (cleanReply, suggestions) = extractSuggestions(finalReply)
         return ChatResult(
@@ -695,7 +721,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             return clean to list
         }
-        private const val MAX_TOOL_ROUNDS = 14
+        private const val MAX_TOOL_ROUNDS = 20
         private val parallelToolPool = Executors.newFixedThreadPool(4)
     }
 }
