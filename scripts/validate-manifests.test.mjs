@@ -65,7 +65,7 @@ test('校验器自检：同一份 schema 对合法样本通过、对被改坏的
 
 test('校验器自检：解析失败要给出中文原因，不能把坏文件当空对象继续校验', () => {
   assert.throws(
-    () => readJson(resolve(appRoot, 'docs/项目状态.md')),
+    () => readJson(resolve(appRoot, 'README.md')),
     error => /不是合法 JSON/.test(error.message) && /[\u4e00-\u9fa5]/.test(error.message),
   )
   assert.throws(
