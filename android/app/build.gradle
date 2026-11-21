@@ -60,9 +60,6 @@ def legalAssetSources = [
     'legal/licenses/capacitor-android-LICENSE.txt': new File(appSourceRoot, 'node_modules/@capacitor/android/LICENSE'),
     'legal/licenses/xterm-LICENSE.txt'           : new File(appSourceRoot, 'node_modules/@xterm/xterm/LICENSE'),
     'legal/licenses/xterm-addon-fit-LICENSE.txt' : new File(appSourceRoot, 'node_modules/@xterm/addon-fit/LICENSE'),
-    'legal/licenses/bge-base-zh-v1.5-MIT.txt'    : new File(appSourceRoot, 'legal/licenses/bge-base-zh-v1.5-MIT.txt'),
-    'legal/licenses/vosk-LICENSE.txt'            : new File(appSourceRoot, 'legal/licenses/vosk-LICENSE.txt'),
-    'legal/licenses/jna-LICENSE.txt'             : new File(appSourceRoot, 'legal/licenses/jna-LICENSE.txt'),
     'legal/licenses/jsoup-LICENSE.txt'           : new File(appSourceRoot, 'legal/licenses/jsoup-LICENSE.txt'),
     'legal/licenses/lucide-react-LICENSE.txt'    : new File(appSourceRoot, 'node_modules/lucide-react/LICENSE'),
     'legal/licenses/katex-LICENSE.txt'           : new File(appSourceRoot, 'node_modules/katex/LICENSE'),
@@ -104,15 +101,6 @@ def generateLegalAssets = tasks.register('generateLegalAssets', Sync) {
     }
 }
 
-// The local embedding model is intentionally fetched during the build instead of committed to
-// Git: its verified 103 MB binary exceeds normal source-host limits, but it is always embedded
-// in the resulting APK.  The immutable SHA-256 turns the upstream download into a reproducible
-// build input rather than accepting whichever bytes happen to be served by the URL.
-def bgeModelUrl = 'https://huggingface.co/Xenova/bge-base-zh-v1.5/resolve/main/onnx/model_quantized.onnx'
-def bgeModelSha256 = 'b665f3bba56c3119bc76ba131ebcc544d720a7408cb11581bdf354aaa0198d43'
-def bgeVocabUrl = 'https://huggingface.co/Xenova/bge-base-zh-v1.5/resolve/main/vocab.txt'
-def bgeVocabSha256 = '45bbac6b341c319adc98a532532882e91a9cefc0329aa57bac9ae761c27b291c'
-def generatedBgeAssetsDirectory = layout.buildDirectory.dir('generated/assets/bgeBaseZh')
 def generatedRichChatAssets = layout.buildDirectory.dir('generated/assets/richChat')
 def generateRichChatAssets = tasks.register('generateRichChatAssets', Sync) {
     into(generatedRichChatAssets.map { it.dir('rich-chat') })
@@ -121,36 +109,6 @@ def generateRichChatAssets = tasks.register('generateRichChatAssets', Sync) {
     }
     from(new File(appSourceRoot, 'node_modules/markdown-it/dist/markdown-it.min.js'))
     from(new File(appSourceRoot, 'node_modules/markdown-it-texmath/texmath.js'))
-}
-def downloadBgeBaseAssets = tasks.register('downloadBgeBaseAssets') {
-    def outputDirectory = generatedBgeAssetsDirectory
-    outputs.dir(outputDirectory)
-    doLast {
-        def downloadVerified = { String url, String sha256, String name ->
-            def target = new File(outputDirectory.get().asFile, "models/${name}")
-            target.parentFile.mkdirs()
-            def digest = { File candidate -> java.security.MessageDigest.getInstance('SHA-256').digest(candidate.bytes).encodeHex().toString() }
-            if (!target.isFile() || !digest(target).equalsIgnoreCase(sha256)) {
-                def temporary = new File(target.parentFile, "${name}.part")
-                try {
-                    def proxyValue = System.getenv('HTTPS_PROXY') ?: System.getenv('HTTP_PROXY')
-                    def connection = new URL(url).openConnection(proxyValue ? new java.net.Proxy(java.net.Proxy.Type.HTTP, new java.net.InetSocketAddress(new URI(proxyValue).host, new URI(proxyValue).port)) : java.net.Proxy.NO_PROXY)
-                    connection.connectTimeout = 30_000
-                    connection.readTimeout = 120_000
-                    connection.getInputStream().withCloseable { input -> temporary.withOutputStream { output -> output << input } }
-                    if (!digest(temporary).equalsIgnoreCase(sha256)) throw new GradleException("BGE base zh asset digest mismatch: ${name}")
-                    if (target.exists() && !target.delete()) throw new GradleException("Cannot replace BGE base zh asset: ${target}")
-                    if (!temporary.renameTo(target)) throw new GradleException("Cannot publish BGE base zh asset: ${target}")
-                } finally {
-                    if (temporary.exists()) temporary.delete()
-                }
-            }
-        }
-        downloadVerified(bgeModelUrl, bgeModelSha256, 'bge-base-zh-v1.5-int8.onnx')
-        downloadVerified(bgeVocabUrl, bgeVocabSha256, 'bge-base-zh-v1.5-vocab.txt')
-        downloadVerified('https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip',
-            '3af8b0e7e0f835ae9d414ce5df580237a3cfb08d586c9fbbb0f7ff29ad5b14ba', 'vosk-model-small-cn-0.22.zip')
-    }
 }
 
 def lightAssets = layout.buildDirectory.dir('generated/assets/whaleLight')
@@ -221,7 +179,6 @@ android {
         main {
             if (separateRuntime) assets.setSrcDirs([lightAssets])
             assets.srcDir(generatedLegalAssetsDirectory)
-            if (!separateRuntime) assets.srcDir(generatedBgeAssetsDirectory)
             assets.srcDir(generatedRichChatAssets)
         }
     }
@@ -281,7 +238,7 @@ android {
 
     androidResources {
         // The opaque suffix prevents AAPT from transparently expanding and renaming gzip assets.
-        noCompress += ['bundle', 'onnx']
+        noCompress += ['bundle']
     }
 }
 
@@ -292,7 +249,6 @@ kotlin {
 tasks.named('preBuild').configure {
     if (separateRuntime) dependsOn(collectLightAssets)
     dependsOn(generateLegalAssets)
-    if (!separateRuntime) dependsOn(downloadBgeBaseAssets)
     dependsOn(generateRichChatAssets)
 }
 
@@ -334,9 +290,6 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
-    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.31.1'
-    implementation 'com.alphacephei:vosk-android:0.3.75@aar'
-    implementation 'net.java.dev.jna:jna:5.18.1@aar'
     implementation 'com.google.mlkit:text-recognition-chinese:16.0.1'
     implementation 'org.jsoup:jsoup:1.18.3'
 

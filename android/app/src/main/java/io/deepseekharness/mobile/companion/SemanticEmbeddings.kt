@@ -1,176 +1,165 @@
 package io.deepseekharness.mobile.companion
 
 import android.content.Context
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtSession
-import java.io.File
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.Normalizer
 import java.util.Locale
 
-/** Offline BGE-base embeddings. The packaged model never sends memory or queries off-device. */
+/**
+ * 云端向量嵌入接口（已移除 103MB 离线 BGE ONNX 模型与 onnxruntime 原生库）。
+ *
+ * 默认不启用，日常检索走零成本本机 SQLite 词法 + 大模型自主检索；
+ * 如需开启云端语义检索，配置 OpenAI 兼容 /embeddings 接口（如硅基流动 BAAI/bge-base-zh-v1.5）即可无缝接入。
+ */
 internal class SemanticEmbeddings(context: Context) {
     private val app = context.applicationContext
 
-    companion object {
-        const val MODEL = "bge-base-zh-v1.5-int8"
-        const val DIMENSIONS = 768
-        private const val MODEL_ASSET = "models/bge-base-zh-v1.5-int8.onnx"
-        private const val VOCAB_ASSET = "models/bge-base-zh-v1.5-vocab.txt"
-        private const val MODEL_BYTES = 102_868_746L
-        private val environment: OrtEnvironment by lazy { OrtEnvironment.getEnvironment() }
-        private val lock = Any()
-        private var runtime: Runtime? = null
-        private var users = 0
-        private var generation = 0L
-        private var releaseRequested = false
-        private var timer: java.util.concurrent.ScheduledFuture<*>? = null
-        private val evictor = java.util.concurrent.ScheduledThreadPoolExecutor(1) { task ->
-            Thread(task, "whale-semantic-idle").apply { isDaemon = true }
-        }.apply { removeOnCancelPolicy = true }
-        private fun scheduleEviction(delay: Long) {
-            timer?.cancel(false)
-            val token = ++generation
-            timer = evictor.schedule({
-                val old = synchronized(lock) {
-                    if (users != 0 || generation != token) null else runtime.also { runtime = null; timer = null; releaseRequested = false }
-                }
-                old?.session?.close()
-            }, delay, java.util.concurrent.TimeUnit.SECONDS)
-        }
-        @Volatile private var bundledCache: Boolean? = null
-        fun isBundled(context: Context): Boolean {
-            bundledCache?.let { return it }
-            val present = runCatching {
-                context.applicationContext.assets.list("models")?.contains("bge-base-zh-v1.5-int8.onnx") == true
-            }.getOrDefault(false)
-            bundledCache = present
-            return present
-        }
-        fun releaseWhenIdle() = synchronized(lock) {
-            if (runtime != null) {
-                releaseRequested = true
-                if (users == 0) scheduleEviction(0)
-            }
-        }
-    }
+    data class CloudConfig(
+        val url: String,
+        val apiKey: String,
+        val model: String,
+    )
 
-    private data class Runtime(val session: OrtSession, val tokenizer: BgeBaseZhTokenizer)
+    companion object {
+        const val MODEL = "BAAI/bge-base-zh-v1.5"
+        const val DIMENSIONS = 768
+        private const val PREFS = "semantic_search_v1"
+        private const val KEY_CLOUD_URL = "cloud_embedding_url"
+        private const val KEY_CLOUD_KEY = "cloud_embedding_key"
+        private const val KEY_CLOUD_MODEL = "cloud_embedding_model"
+        private const val DEFAULT_CLOUD_URL = "https://api.siliconflow.cn/v1/embeddings"
+
+        fun readCloudConfig(context: Context): CloudConfig? {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val url = prefs.getString(KEY_CLOUD_URL, DEFAULT_CLOUD_URL)?.trim().orEmpty()
+            val key = prefs.getString(KEY_CLOUD_KEY, "")?.trim().orEmpty()
+            val model = prefs.getString(KEY_CLOUD_MODEL, MODEL)?.trim().orEmpty().ifEmpty { MODEL }
+            if (url.isEmpty() || key.isEmpty()) return null
+            return CloudConfig(url, key, model)
+        }
+
+        fun saveCloudConfig(context: Context, url: String = DEFAULT_CLOUD_URL, apiKey: String, model: String = MODEL) {
+            context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_CLOUD_URL, url.trim())
+                .putString(KEY_CLOUD_KEY, apiKey.trim())
+                .putString(KEY_CLOUD_MODEL, model.trim().ifEmpty { MODEL })
+                .apply()
+        }
+
+        fun isCloudConfigured(context: Context): Boolean = readCloudConfig(context) != null
+
+        fun releaseWhenIdle() = Unit
+    }
 
     fun embed(texts: List<String>): List<FloatArray> {
         require(texts.size in 1..16 && texts.all { it.isNotBlank() && it.length <= 1_500 })
-        val active = synchronized(lock) {
-            generation++; timer?.cancel(false); timer = null
-            loadRuntime().also { users++ }
+        val cfg = readCloudConfig(app)
+            ?: throw IllegalStateException("未配置云端向量模型接口，当前默认使用本机词法与大模型检索")
+        val payload = JSONObject()
+            .put("model", cfg.model)
+            .put("input", JSONArray(texts))
+        val conn = (URL(cfg.url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 10_000
+            readTimeout = 20_000
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
         }
-        try { return texts.map { embedOne(active, it) } }
-        finally { synchronized(lock) { users--; if (users == 0) scheduleEviction(if (releaseRequested) 0 else 60) } }
-    }
-
-    private fun embedOne(active: Runtime, text: String): FloatArray {
-        val ids = active.tokenizer.encode(text)
-        val masks = LongArray(ids.size) { 1L }
-        val types = LongArray(ids.size)
-        val tensors = listOf(ids, masks, types).map { values -> OnnxTensor.createTensor(environment, arrayOf(values)) }
-        var result: OrtSession.Result? = null
         try {
-            result = active.session.run(mapOf("input_ids" to tensors[0], "attention_mask" to tensors[1], "token_type_ids" to tensors[2]))
-            @Suppress("UNCHECKED_CAST")
-            val hidden = result[0].value as Array<Array<FloatArray>>
-            val vector = hidden.single().first().copyOf()
-            check(vector.size == DIMENSIONS)
-            val norm = kotlin.math.sqrt(vector.sumOf { value -> value.toDouble() * value.toDouble() })
-            check(norm.isFinite() && norm > 0)
-            for (index in vector.indices) vector[index] = (vector[index] / norm).toFloat()
-            return vector
-        } finally {
-            result?.close()
-            tensors.forEach { it.close() }
-        }
-    }
-
-    private fun loadRuntime(): Runtime = synchronized(lock) {
-        runtime ?: run {
-            val model = File(app.filesDir, "semantic-models/$MODEL.onnx")
-            if (!model.isFile || model.length() != MODEL_BYTES) {
-                model.parentFile?.mkdirs()
-                val temporary = File(model.parentFile, "${model.name}.part")
-                app.assets.open(MODEL_ASSET).use { input -> temporary.outputStream().use { output -> input.copyTo(output) } }
-                check(temporary.length() == MODEL_BYTES)
-                if (model.exists()) check(model.delete())
-                check(temporary.renameTo(model))
+            conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
+            val raw = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
+            if (code !in 200..299) throw IllegalStateException("云端向量接口错误 ($code)：${raw.take(200)}")
+            val data = JSONObject(raw).getJSONArray("data")
+            val vectors = ArrayList<FloatArray>(data.length())
+            for (i in 0 until data.length()) {
+                val arr = data.getJSONObject(i).getJSONArray("embedding")
+                val vec = FloatArray(arr.length()) { idx -> arr.getDouble(idx).toFloat() }
+                vectors.add(vec)
             }
-            val vocab = app.assets.open(VOCAB_ASSET).bufferedReader(Charsets.UTF_8).use { reader -> reader.readLines() }
-            val options = OrtSession.SessionOptions().apply { setIntraOpNumThreads(2) }
-            Runtime(environment.createSession(model.absolutePath, options), BgeBaseZhTokenizer(vocab)).also { runtime = it }
+            require(vectors.size == texts.size) { "云端向量返回数量不匹配" }
+            return vectors
+        } finally {
+            conn.disconnect()
         }
     }
 }
 
-/** BERT WordPiece tokenizer for the vocabulary shipped with BGE-base-zh-v1.5. */
+/** 轻量纯 Kotlin WordPiece 分词工具（保留供单测与本地词法切分使用，零原生依赖）。 */
 internal class BgeBaseZhTokenizer(vocabulary: List<String>) {
-    private val vocab = vocabulary.withIndex().associate { (index, token) -> token to index.toLong() }
-    private val unknown = requireNotNull(vocab["[UNK]"])
-    private val cls = requireNotNull(vocab["[CLS]"])
-    private val sep = requireNotNull(vocab["[SEP]"])
+    private val ids = HashMap<String, Int>(vocabulary.size * 2).apply { vocabulary.forEachIndexed { index, token -> put(token, index) } }
+    private val cls = ids.getValue("[CLS]")
+    private val sep = ids.getValue("[SEP]")
+    private val unk = ids.getValue("[UNK]")
 
-    fun encode(text: String): LongArray {
-        val pieces = basicTokens(text).flatMap(::wordPieces).take(510)
-        return LongArray(pieces.size + 2).also { output ->
-            output[0] = cls
-            pieces.forEachIndexed { index, piece -> output[index + 1] = vocab[piece] ?: unknown }
-            output[output.lastIndex] = sep
+    fun encode(text: String, maxTokens: Int = 512): LongArray {
+        val tokens = ArrayList<Long>(minOf(maxTokens, 64)).apply { add(cls.toLong()) }
+        for (word in basicTokens(text)) {
+            if (tokens.size >= maxTokens - 1) break
+            for (piece in wordPieces(word)) {
+                if (tokens.size >= maxTokens - 1) break
+                tokens.add(piece.toLong())
+            }
         }
+        tokens.add(sep.toLong())
+        return tokens.toLongArray()
     }
 
     private fun basicTokens(text: String): List<String> {
-        val expanded = StringBuilder()
-        text.codePoints().forEach { codePoint ->
+        val normalized = Normalizer.normalize(text, Normalizer.Form.NFC)
+        val out = ArrayList<String>()
+        val current = StringBuilder()
+        fun flush() { if (current.isNotEmpty()) { out.add(current.toString()); current.setLength(0) } }
+        var i = 0
+        while (i < normalized.length) {
+            val cp = normalized.codePointAt(i)
+            val count = Character.charCount(cp)
+            val type = Character.getType(cp)
             when {
-                codePoint == 0 || codePoint == 0xfffd -> Unit
-                Character.isWhitespace(codePoint) -> expanded.append(' ')
-                isChinese(codePoint) -> expanded.append(' ').appendCodePoint(codePoint).append(' ')
-                else -> expanded.appendCodePoint(codePoint)
+                cp == 0 || cp == 0xFFFD || type == Character.CONTROL.toInt() || type == Character.FORMAT.toInt() -> flush()
+                Character.isWhitespace(cp) || type == Character.SPACE_SEPARATOR.toInt() -> flush()
+                isCjk(cp) || isPunctuation(cp, type) -> { flush(); out.add(String(Character.toChars(cp)).lowercase(Locale.ROOT)) }
+                else -> current.append(String(Character.toChars(cp)).lowercase(Locale.ROOT))
             }
+            i += count
         }
-        return expanded.toString().trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.flatMap(::splitPunctuation)
-            .map { Normalizer.normalize(it, Normalizer.Form.NFD).filterNot { character -> Character.getType(character) == Character.NON_SPACING_MARK.toInt() }.lowercase(Locale.ROOT) }
-            .filter { it.isNotEmpty() }
+        flush()
+        return out
     }
 
-    private fun splitPunctuation(value: String): List<String> {
-        val result = mutableListOf<String>(); val current = StringBuilder()
-        value.codePoints().forEach { codePoint ->
-            if (isPunctuation(codePoint)) {
-                if (current.isNotEmpty()) { result.add(current.toString()); current.clear() }
-                result.add(String(Character.toChars(codePoint)))
-            } else current.appendCodePoint(codePoint)
-        }
-        if (current.isNotEmpty()) result.add(current.toString())
-        return result
-    }
-
-    private fun wordPieces(token: String): List<String> {
-        val codePoints = token.codePoints().toArray()
-        if (codePoints.size > 100) return listOf("[UNK]")
-        val result = mutableListOf<String>(); var start = 0
-        while (start < codePoints.size) {
-            var end = codePoints.size; var matched: String? = null
-            while (end > start) {
-                val part = String(codePoints, start, end - start)
-                val candidate = if (start == 0) part else "##$part"
-                if (candidate in vocab) { matched = candidate; break }
+    private fun wordPieces(word: String): List<Int> {
+        if (word.length > 100) return listOf(unk)
+        ids[word]?.let { return listOf(it) }
+        val result = ArrayList<Int>()
+        var start = 0
+        while (start < word.length) {
+            var end = word.length
+            var matched: Int? = null
+            while (start < end) {
+                val piece = if (start > 0) "##${word.substring(start, end)}" else word.substring(start, end)
+                val id = ids[piece]
+                if (id != null) { matched = id; break }
                 end--
             }
-            if (matched == null) return listOf("[UNK]")
-            result.add(matched); start = end
+            if (matched == null) return listOf(unk)
+            result.add(matched)
+            start = end
         }
         return result
     }
 
-    private fun isChinese(codePoint: Int): Boolean = codePoint in 0x4e00..0x9fff || codePoint in 0x3400..0x4dbf || codePoint in 0x20000..0x2a6df || codePoint in 0x2a700..0x2b73f || codePoint in 0x2b740..0x2b81f || codePoint in 0x2b820..0x2ceaf || codePoint in 0xf900..0xfaff
-    private fun isPunctuation(codePoint: Int): Boolean = (codePoint in 33..47 || codePoint in 58..64 || codePoint in 91..96 || codePoint in 123..126) || when (Character.getType(codePoint)) {
-        Character.DASH_PUNCTUATION.toInt(), Character.START_PUNCTUATION.toInt(), Character.END_PUNCTUATION.toInt(), Character.CONNECTOR_PUNCTUATION.toInt(), Character.OTHER_PUNCTUATION.toInt(), Character.INITIAL_QUOTE_PUNCTUATION.toInt(), Character.FINAL_QUOTE_PUNCTUATION.toInt() -> true
-        else -> false
-    }
+    private fun isCjk(cp: Int) = cp in 0x4E00..0x9FFF || cp in 0x3400..0x4DBF || cp in 0x20000..0x2A6DF ||
+        cp in 0x2A700..0x2B73F || cp in 0x2B740..0x2B81F || cp in 0x2B820..0x2CEAF || cp in 0xF900..0xFAFF || cp in 0x2F800..0x2FA1F
+
+    private fun isPunctuation(cp: Int, type: Int) = cp in 33..47 || cp in 58..64 || cp in 91..96 || cp in 123..126 ||
+        type in setOf(Character.CONNECTOR_PUNCTUATION.toInt(), Character.DASH_PUNCTUATION.toInt(), Character.END_PUNCTUATION.toInt(),
+            Character.FINAL_QUOTE_PUNCTUATION.toInt(), Character.INITIAL_QUOTE_PUNCTUATION.toInt(), Character.OTHER_PUNCTUATION.toInt(),
+            Character.START_PUNCTUATION.toInt(), Character.MATH_SYMBOL.toInt(), Character.CURRENCY_SYMBOL.toInt(), Character.OTHER_SYMBOL.toInt())
 }
