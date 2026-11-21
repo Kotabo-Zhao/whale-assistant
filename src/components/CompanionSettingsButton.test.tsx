@@ -3,58 +3,67 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { saveLanguage } from '../i18n'
 
 const bridge = vi.hoisted(() => ({
-  companionDashboard: vi.fn(), getCompanionQuickSettings: vi.fn(), setCompanionQuickSetting: vi.fn(),
+  companionDashboard: vi.fn(),
+  getCompanionQuickSettings: vi.fn(),
+  setCompanionQuickSetting: vi.fn(),
   openCompanionSettings: vi.fn(),
 }))
 vi.mock('../platform/native', () => ({ runtimeBridge: bridge }))
 import { CompanionSettingsButton } from './CompanionSettingsButton'
 
-const defaults = { memoryEnabled: false, bubbleMemoryAccess: false, notificationBubbles: true, candidateNotifications: false, notificationCapture: false, knowledgeModelAccess: false, knowledgeModelWrite: false, contextFollowup: false, notificationMemorySuggestions: false, automaticNotificationMemory: false, automaticUsageMemory: false, automaticAssistantMemory: false, reminders: false, quietHoursEnabled: false }
+const defaults = {
+  memoryEnabled: false,
+  bubbleMemoryAccess: false,
+  notificationBubbles: false,
+  candidateNotifications: false,
+  notificationCapture: false,
+  knowledgeModelAccess: false,
+  knowledgeModelWrite: false,
+  contextFollowup: false,
+  notificationMemorySuggestions: false,
+  automaticNotificationMemory: false,
+  automaticUsageMemory: false,
+  automaticAssistantMemory: false,
+  reminders: false,
+  quietHoursEnabled: false,
+  masterMemoryAndRag: false,
+  masterPetFullAccess: false,
+  masterProactiveAndNotify: false,
+}
+
 beforeEach(() => {
-  saveLanguage('zh-CN'); vi.clearAllMocks()
+  saveLanguage('zh-CN')
+  vi.clearAllMocks()
   bridge.companionDashboard.mockResolvedValue({ items: [], recurring: [] })
   bridge.getCompanionQuickSettings.mockResolvedValue(defaults)
-  bridge.setCompanionQuickSetting.mockResolvedValue({ ...defaults, memoryEnabled: true })
+  bridge.setCompanionQuickSetting.mockResolvedValue({ ...defaults, masterMemoryAndRag: true })
 })
-describe('助手设置', () => {
-  it('读取实际配置并通过原生接口保存', async () => {
+
+describe('助手设置（整合总开关）', () => {
+  it('展示 4 个核心整合开关并通过原生总开关保存', async () => {
     render(<CompanionSettingsButton disabled={false} />)
-    const toggle = screen.getByRole('switch', { name: /允许使用长期记忆/ })
+    const switches = screen.getAllByRole('switch')
+    expect(switches).toHaveLength(4)
+    const toggle = screen.getByRole('switch', { name: /记忆与资料库/ })
     await waitFor(() => expect(toggle).toBeEnabled())
     fireEvent.click(toggle)
-    await waitFor(() => expect(bridge.setCompanionQuickSetting).toHaveBeenCalledWith('memoryEnabled', true))
+    await waitFor(() => expect(bridge.setCompanionQuickSetting).toHaveBeenCalledWith('masterMemoryAndRag', true))
     await waitFor(() => expect(toggle).toBeChecked())
   })
-  it('自动通知记忆需要单独开启，并通过原生设置保存', async () => {
+
+  it('主动陪伴与通知感知开关通过 masterProactiveAndNotify 保存', async () => {
+    bridge.setCompanionQuickSetting.mockResolvedValue({ ...defaults, masterProactiveAndNotify: true })
     render(<CompanionSettingsButton disabled={false} />)
-    const toggle = screen.getByRole('switch', { name: /自动记住其他应用通知/ })
+    const toggle = screen.getByRole('switch', { name: /主动陪伴与通知感知/ })
     await waitFor(() => expect(toggle).toBeEnabled())
-    expect(toggle).not.toBeChecked()
     fireEvent.click(toggle)
-    await waitFor(() => expect(bridge.setCompanionQuickSetting).toHaveBeenCalledWith('automaticNotificationMemory', true))
+    await waitFor(() => expect(bridge.setCompanionQuickSetting).toHaveBeenCalledWith('masterProactiveAndNotify', true))
   })
-  it('全部助手偏好打开原生分组目录', async () => {
+
+  it('点击系统权限与备份打开原生设置页', async () => {
     bridge.openCompanionSettings.mockResolvedValue(undefined)
     render(<CompanionSettingsButton disabled={false} />)
-    fireEvent.click(screen.getByRole('button', { name: '全部助手偏好' }))
+    fireEvent.click(screen.getByRole('button', { name: '系统权限与备份' }))
     await waitFor(() => expect(bridge.openCompanionSettings).toHaveBeenCalledOnce())
   })
-
-})
-
-it('总开关开启不冒充桌宠已授权，允许后保存独立访问开关', async () => {
-  bridge.getCompanionQuickSettings.mockResolvedValue({ ...defaults, memoryEnabled: true })
-  bridge.setCompanionQuickSetting.mockResolvedValue({ ...defaults, memoryEnabled: true, bubbleMemoryAccess: true })
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-  try {
-    render(<CompanionSettingsButton disabled={false} />)
-    await screen.findByText(/长期记忆已开启，但桌宠尚未获准访问/)
-    const toggle = screen.getByRole('switch', { name: /允许桌宠访问长期记忆/ })
-    fireEvent.click(toggle)
-    expect(bridge.setCompanionQuickSetting).not.toHaveBeenCalled()
-    fireEvent.click(toggle)
-    await waitFor(() => expect(bridge.setCompanionQuickSetting).toHaveBeenCalledWith('bubbleMemoryAccess', true))
-    await waitFor(() => expect(toggle).toBeChecked())
-    expect(screen.queryByText(/长期记忆已开启，但桌宠尚未获准访问/)).toBeNull()
-  } finally { confirm.mockRestore() }
 })
