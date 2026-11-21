@@ -573,7 +573,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     if (recording) {
       setRecording(false)
       setTranscribing(true)
-      setVoiceNote(t('正在识别语音…'))
+      setVoiceNote('__transcribing__')
       try {
         const res = await bridge.stopVoiceRecording?.()
         if (res?.ok && res.text?.trim()) {
@@ -598,7 +598,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       const res = await bridge.startVoiceRecording()
       if (res.ok) {
         setRecording(true)
-        setVoiceNote(t('正在听你说话… 再次点击停止并发送'))
+        setVoiceNote('__recording__')
       } else {
         setVoiceNote(res.error || t('无法启动录音，请先授予麦克风权限'))
       }
@@ -852,7 +852,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                               disabled={sending}
                               onClick={() => { void sendText(lastUser.text) }}
                             >
-                              {t('重新发送')}
+                              ↻
                             </button>
                           ) : null
                         })()}
@@ -989,12 +989,13 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             <button
               type="button"
               className="whale-assist-pill is-accent"
+              aria-label={t('顺手存入资料库并总结')}
+              title={t('顺手存入资料库并总结')}
               onClick={() => {
                 void sendText(`帮我把下面内容存入本地资料库并提炼核心要点：\n\n${input.trim()}`)
               }}
             >
-              <BookmarkCheck size={13} aria-hidden="true" />
-              {t('顺手存入资料库并总结')}
+              <BookmarkCheck size={14} aria-hidden="true" />
             </button>
           )}
           {slashOpen && QUICK_SLASH_ACTIONS.map(act => (
@@ -1020,8 +1021,18 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       )}
 
       {voiceNote && (
-        <div className={`whale-voice-status${recording ? ' is-recording' : ''}`} role="status">
-          <span>{voiceNote}</span>
+        <div
+          className={`whale-voice-status${recording ? ' is-recording' : ''}`}
+          role="status"
+          aria-label={voiceNote === '__recording__' ? t('正在听你说话') : voiceNote === '__transcribing__' ? t('正在识别语音') : voiceNote}
+        >
+          {voiceNote === '__recording__' ? (
+            <span className="whale-voice-wave" aria-hidden="true"><i /><i /><i /><i /></span>
+          ) : voiceNote === '__transcribing__' ? (
+            <span className="whale-typing-dots" aria-hidden="true"><i /><i /><i /></span>
+          ) : (
+            <span>{voiceNote}</span>
+          )}
         </div>
       )}
 

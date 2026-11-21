@@ -351,14 +351,14 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             visibility = android.view.View.GONE
             background = bar(); addView(accessBadge)
         }
-        val workerBadge = ui.text("近况", 12f, accent, true).apply {
+        val workerBadge = ui.text("🔔", 13.5f, accent, true).apply {
             gravity = Gravity.CENTER; minHeight = dp(34)
             maxWidth = minOf((width * 0.40f).toInt(), dp((124 * fontScale.coerceAtLeast(1f)).toInt()))
             maxLines = if (fontScale >= 1.4f) 2 else 1; ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(dp(11), 0, dp(11), 0); contentDescription = "和小鲸聊聊近况"
             background = ui.action(ui.soft, 18); setOnClickListener { openTaskInbox() }
         }
-        val expandButton = ui.text(if (heightMode == "large") "收拢" else "大窗", 12f, secondary, true).apply {
+        val expandButton = ui.text(if (heightMode == "large") "⤡" else "⤢", 14.5f, secondary, true).apply {
             gravity = Gravity.CENTER; minHeight = dp(34)
             setPadding(dp(9), 0, dp(9), 0)
             contentDescription = "切换桌宠大窗模式"
@@ -366,7 +366,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             setOnClickListener {
                 heightMode = if (heightMode == "large") "auto" else "large"
                 sizeStore.chatHeightMode = heightMode
-                text = if (heightMode == "large") "收拢" else "大窗"
+                text = if (heightMode == "large") "⤡" else "⤢"
                 positionUpdater?.invoke()
             }
         }
@@ -384,7 +384,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             topMargin = dp(8)
             bottomMargin = dp(2)
         })
-        val subtitle = ui.string(R.string.pet_ui_chat_title).takeIf { fontScale < 1.4f }
+        val subtitle: String? = null
         panel.addView(ui.header(ui.string(R.string.pet_ui_name), subtitle, headingEnd))
         panel.addView(ui.divider())
         val shortcuts = LinearLayout(context).apply {
@@ -428,18 +428,19 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         sizeRow("宽度", listOf("窄", "自动", "宽"), widthMode) { widthMode = it; sizeStore.chatWidthMode = it }
         sizeRow("高度", listOf("低", "自动", "高"), heightMode) { heightMode = it; sizeStore.chatHeightMode = it }
-        fun shortcut(label: String, icon: Int, description: String, click: () -> Unit) {
-            shortcuts.addView(ui.text(label, 12.5f, secondary).apply {
-                gravity = Gravity.CENTER; minHeight = dp(38); contentDescription = description
-                setPadding(dp(6), 0, dp(6), 0); background = ui.action(Color.TRANSPARENT, 10)
-                ui.leadingIcon(this, icon, 15)
-                if(fontScale>=1.4f && metrics.heightPixels>metrics.widthPixels) {
-                    val leading=compoundDrawablesRelative[0]
-                    setCompoundDrawablesRelative(null,leading,null,null)
-                    compoundDrawablePadding=dp(2)
-                }
-                isFocusable = true; setOnClickListener { click() }
-            }, LinearLayout.LayoutParams(0, -2, 1f))
+        fun shortcut(@Suppress("UNUSED_PARAMETER") label: String, icon: Int, description: String, click: () -> Unit) {
+            shortcuts.addView(android.widget.ImageView(context).apply {
+                setImageResource(icon)
+                imageTintList = android.content.res.ColorStateList.valueOf(secondary)
+                scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+                val pad = dp(9)
+                setPadding(pad, pad, pad, pad)
+                minimumHeight = dp(38)
+                contentDescription = description
+                background = ui.action(Color.TRANSPARENT, 12)
+                isFocusable = true; isClickable = true
+                setOnClickListener { click() }
+            }, LinearLayout.LayoutParams(0, dp(38), 1f))
         }
         sessionActions.addView(ui.text(ui.string(R.string.pet_manual_assign), 14f, accent).apply {
             minHeight = dp(44); gravity = Gravity.CENTER_VERTICAL
@@ -696,7 +697,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         liveMotion = true
         if (busy) {
             (inFlightUser ?: chat.pendingUser)?.let { bubble(it, true) }
-            val live = bubble(mainQuestion ?: liveText.ifBlank { "正在回复…" }, false)
+            val live = bubble(mainQuestion ?: liveText.ifBlank { "•••" }, false)
             renderLive = { text -> live.text = text; panel.post { positionUpdater?.invoke() } }
         }
         val input = object : EditText(context) {
@@ -724,9 +725,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             })
         }
-        val send = ui.text(ui.string(R.string.pet_ui_send), 13.5f, ui.onPrimary, true).apply {
-            gravity = Gravity.CENTER; minWidth = dp(54); minHeight = dp(38)
-            setPadding(dp(12), 0, dp(12), 0)
+        val send = ui.text("➤", 15f, ui.onPrimary, true).apply {
+            gravity = Gravity.CENTER; minWidth = dp(38); minHeight = dp(38)
+            contentDescription = ui.string(R.string.pet_ui_send)
+            setPadding(0, 0, 0, 0)
             background = ui.action(ui.primary, 19); isEnabled = !busy || inFlightUser != null
         }
         val footer = LinearLayout(context).apply {
@@ -841,7 +843,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             if (WhaleVoiceEngine.isRecording) {
                 micBtn.text = "…"
                 micBtn.isEnabled = false
-                status.text = "正在识别语音…"; status.visibility = android.view.View.VISIBLE
+                status.text = "✨ •••"; status.visibility = android.view.View.VISIBLE
                 executor.execute {
                     val res = WhaleVoiceEngine.stopAndTranscribe(context)
                     handler.post {
@@ -865,7 +867,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                     status.visibility = android.view.View.VISIBLE
                 } else {
                     micBtn.text = "⏹"
-                    status.text = "正在听你说话… 再次点击停止并发送"
+                    status.text = "🔴 •••"
                     status.visibility = android.view.View.VISIBLE
                 }
             }
@@ -994,7 +996,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         status.text = lastError.orEmpty()
         status.visibility = if (lastError != null) android.view.View.VISIBLE else android.view.View.GONE
         fun sendLabel() {
-            send.text = ui.string(R.string.pet_ui_send)
+            send.text = "➤"
         }
         sendLabel()
         if (busy) {
@@ -1122,7 +1124,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             lastError = null
             val parallelViews = item?.id?.let(parallelBubbles::remove)
             val sentBubble = parallelViews?.first ?: if (root === panel) bubble(message, true).also { renderCompleted(it,message,true) } else TextView(context)
-            val streamingBubble = parallelViews?.second ?: if (root === panel) bubble("正在输入…", false) else TextView(context)
+            val streamingBubble = parallelViews?.second ?: if (root === panel) bubble("•••", false) else TextView(context)
             liveText = ""
             if (root === panel) renderLive = { text -> streamingBubble.text = text; panel.post { positionUpdater?.invoke() } }
             mainQuestion = null
@@ -1288,9 +1290,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                             if (samePanel) { input.setText(message); input.setSelection(input.length()) }
                         }
                         if (samePanel) content.removeView(streamingBubble)
-                        status.text = error.message?.takeIf { it.startsWith("请先") || it.startsWith("本机") || it.startsWith("对话") || it.startsWith("回复") || it.startsWith("模型") }
-                            ?: "发送失败，请检查模型密钥和网络连接；输入已保留。"
-                        status.append(" · 点此重试")
+                        status.text = "⚠️ ↻" 
                         lastError = status.text.toString()
                         status.visibility = android.view.View.VISIBLE
                     }

@@ -244,7 +244,7 @@ class OverlayBallService : Service() {
             } else {
                 val dp = resources.displayMetrics.density
                 pill.visibility = View.VISIBLE
-                pill.text = if (state.action.isNotBlank()) "🐳 ${state.action}" else "🐳 操控中…"
+                pill.text = "🐳 ⚡"
                 pill.background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                     cornerRadius = 999f
@@ -301,6 +301,9 @@ class OverlayBallService : Service() {
         wakePetMotion()
         ballView?.findViewById<android.widget.TextView>(R.id.companion_worker_badge)?.apply {
             val count = if (waiting > 0) waiting else running
+            val dp = resources.displayMetrics.density
+            val badgeSize = (20 * dp).toInt().coerceAtLeast(1)
+            if (count > 0) layoutParams = layoutParams.apply { width = badgeSize; height = badgeSize }
             visibility = if (count > 0) View.VISIBLE else View.GONE
             text = if (count > 99) "99+" else count.toString()
             background = android.graphics.drawable.GradientDrawable().apply {
@@ -880,8 +883,25 @@ class OverlayBallService : Service() {
         @Suppress("UNUSED_PARAMETER") notificationStyle: Boolean = false,
         @Suppress("UNUSED_PARAMETER") onTap: (() -> Unit)? = null,
     ): Boolean {
-        // 已移除桌宠旁大号新消息/提醒气泡，保持桌面清爽无打扰。
+        // 纯图形化提醒：不弹文字气泡，仅触发桌宠轻动效与右上角微型圆点徽标。
         removeCompanionHint()
+        if (!ballAttached || ballView == null || CompanionStore(this).inQuietHours()) return false
+        petActing.react(PetAction.NOTICE, SystemClock.uptimeMillis())
+        wakePetMotion()
+        ballView?.findViewById<android.widget.TextView>(R.id.companion_worker_badge)?.apply {
+            if (visibility != View.VISIBLE || text.isNullOrEmpty()) {
+                val dp = resources.displayMetrics.density
+                val dotSize = (11 * dp).toInt().coerceAtLeast(1)
+                layoutParams = layoutParams.apply { width = dotSize; height = dotSize }
+                text = ""
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(android.graphics.Color.rgb(255, 107, 139))
+                    setStroke((1.5f * dp).toInt().coerceAtLeast(1), android.graphics.Color.WHITE)
+                }
+                visibility = View.VISIBLE
+            }
+        }
         return false
     }
 
