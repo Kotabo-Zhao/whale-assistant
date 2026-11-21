@@ -87,6 +87,7 @@ internal object BackgroundUnderstanding {
         val count = if (prefs.getString("day", null) == day) prefs.getInt("calls", 0) else 0
         if (!BackgroundUnderstandingPolicy.canRequest(count, DAILY_LIMIT)) return@synchronized false
         prefs.edit().putString("day", day).putInt("calls", count + 1).apply()
+        true
     }
 
     fun status(context: Context, value: String, errorCode: String? = null) {
