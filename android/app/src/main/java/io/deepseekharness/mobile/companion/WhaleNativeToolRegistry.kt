@@ -271,10 +271,11 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_code_search", "在本地原生代码项目中跨文件检索代码片段。", mapOf("project" to "项目名", "query" to "搜索词"), listOf("project", "query")))
             array.put(schema(
                 "whale_code_run",
-                "在手机本地直接运行 Python 3.11 代码（内嵌原生 CPython，无需 Linux/联网）或本地 Shell 命令，返回真实 stdout/stderr 供调试自修复。",
+        "whale_todo_write",
+                "在手机本地直接运行 Python 3.11 代码（内嵌 CPython，支持编程式工具调用 PTC：代码内可直接调用 `tools.<工具名>(**kwargs)` 串联多个工具并用 `inspect(...)` 输出精炼结果，1 轮完成多步编排）或本地 Shell 命令。",
                 mapOf(
                     "project" to "项目名（运行工作目录，不存在则自动创建）",
-                    "lang" to "运行语言：python（默认，内嵌 CPython 3.11）或 sh（本地沙箱 Shell）",
+                    "lang" to "运行语言：python（默认，内嵌 CPython 3.11 + PTC 工具桥接）或 sh（本地沙箱 Shell）",
                     "code" to "直接执行的代码或命令（与 file 二选一）",
                     "file" to "可选：运行项目内已有相对路径脚本文件（如 main.py）",
                 ),
@@ -336,9 +337,15 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
             array.put(schema(
                 "whale_read_resource",
-                "分页按需读取被 600 字截断的完整资源正文（如 worker/<id>、checkpoint/<id>、knowledge/<id>）。",
-                mapOf("resource" to "资源路径，如 worker/<id> 或 checkpoint/<id>", "offset" to "可选起始字符偏移（默认 0）", "limit" to "可选本页字符数（默认 2000，上限 6000）"),
+                "分页按需读取被截断或落盘的完整资源正文（支持 spill/<id>、worker/<id>、checkpoint/<id>、knowledge/<id>）。",
+                mapOf("resource" to "资源路径，如 spill/<id>、worker/<id> 或 checkpoint/<id>", "offset" to "可选起始字符偏移（默认 0）", "limit" to "可选本页字符数（默认 2000，上限 6000）"),
                 listOf("resource"),
+            ))
+            array.put(schema(
+                "whale_todo_write",
+                "为复杂多步任务维护结构化整表任务清单（简单单步问答无需调用）；每次传入完整 todos JSON 数组覆盖更新进度。",
+                mapOf("todos" to "JSON 数组字符串，每项包含 content 与 status（pending / in_progress / completed）"),
+                listOf("todos"),
             ))
             array.put(schema(
                 "whale_proactive_mode",
@@ -1103,7 +1110,15 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val result = if (lang == "sh" || lang == "shell") {
                         WhaleCodeRunner.runShell(projectDir, scriptCode)
                     } else {
-                        WhaleCodeRunner.runPython(app, projectDir, scriptCode)
+                        val ptcBridge = WhaleCodeRunner.ToolBridge { subTool, subArgsJson ->
+                            val subOutcome = execute(subTool, subArgsJson)
+                            JSONObject()
+                                .put("ok", subOutcome.ok)
+                                .put("label", subOutcome.label)
+                                .put("payload", runCatching { JSONObject(subOutcome.payload) }.getOrElse { subOutcome.payload })
+                                .toString()
+                        }
+                        WhaleCodeRunner.runPython(app, projectDir, scriptCode, toolBridge = ptcBridge)
                     }
                     val ok = result.optBoolean("ok", false)
                     ToolOutcome(name, if (lang == "sh" || lang == "shell") "运行 Shell：$safeProj" else "运行 Python：$safeProj", ok, result.toString(), mutating = true)
@@ -1212,9 +1227,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         return ToolOutcome(name, "任务标题过长", false, JSONObject().put("error", err).toString())
                     }
                     val mode = args.str("mode", "create").trim().takeIf { it in setOf("read", "device", "create") } ?: "create"
+                    val inheritContext = args.str("inheritContext", "true").trim().lowercase() != "false"
+                    val forkPrefix = if (inheritContext) WhaleHarnessCore.ContextForkHelper.buildForkPrefix(app) else ""
+                    val fullTask = if (forkPrefix.isNotBlank()) "$forkPrefix\n\n[本后台任务目标]\n$task" else task
                     val receipt = WorkerRuntimeWake.submit(
                         context = app,
-                        task = task,
+                        task = fullTask,
                         mode = mode,
                         title = title,
                         needs = "none",
@@ -1255,6 +1273,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val limit = args.optInt("limit", 2000)
                     require(resource.isNotEmpty()) { "缺少 resource 参数" }
                     val fullText: String? = when {
+                        resource.startsWith("spill/") -> WhaleHarnessCore.SpillAndPruneManager.readSpill(app, resource.removePrefix("spill/"))
                         resource.startsWith("worker/") -> WhaleNativeWorkerPool.readFullResult(resource.removePrefix("worker/"))
                         resource.startsWith("checkpoint/") -> WhaleLongTaskStore.read(app, resource.removePrefix("checkpoint/"))?.progressDigest
                         resource.startsWith("knowledge/") -> runCatching {
@@ -1269,6 +1288,16 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             .put("resource", resource)
                         ToolOutcome(name, "分页读取资源 $resource", true, page.toString())
                     }
+                }
+                "whale_todo_write" -> {
+                    val rawTodos = args.opt("todos")
+                    val arr = when (rawTodos) {
+                        is JSONArray -> rawTodos
+                        is String -> JSONArray(rawTodos.trim().ifBlank { "[]" })
+                        else -> JSONArray()
+                    }
+                    val res = WhaleHarnessCore.SessionTodoStore.write("whale-main", arr)
+                    ToolOutcome(name, "更新任务进度清单", true, res.toString(), mutating = true)
                 }
                 "whale_proactive_mode" -> {
                     when (args.str("action", "status").trim().lowercase()) {

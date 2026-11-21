@@ -84,6 +84,7 @@ internal class WhaleNativeCodeWorkspace(private val rootDir: File) {
         val file = resolveSafe(project, path)
         require(file.isFile) { "文件不存在：$path" }
         require(file.length() <= MAX_FILE_BYTES) { "文件超过 512 KiB 读取上限" }
+        WhaleHarnessCore.FsObservationGate.recordObserved(file)
         val lines = file.readLines(Charsets.UTF_8)
         val from = startLine.coerceAtLeast(1)
         val to = endLine.coerceIn(from, (from + 300).coerceAtMost(lines.size.coerceAtLeast(from)))
@@ -115,6 +116,7 @@ internal class WhaleNativeCodeWorkspace(private val rootDir: File) {
             file.writeBytes(bytes)
             tmp.delete()
         }
+        WhaleHarnessCore.FsObservationGate.recordObserved(file)
         return JSONObject()
             .put("ok", true)
             .put("project", project)
@@ -128,12 +130,22 @@ internal class WhaleNativeCodeWorkspace(private val rootDir: File) {
         require(oldText.isNotEmpty()) { "请提供需要替换的原始代码片段" }
         val file = resolveSafe(project, path)
         require(file.isFile) { "文件不存在：$path" }
+        WhaleHarnessCore.FsObservationGate.checkFreshForEdit(file, path)
         require(file.length() <= MAX_FILE_BYTES) { "文件超过 512 KiB 上限" }
         val current = file.readText(Charsets.UTF_8)
         val firstIdx = current.indexOf(oldText)
         require(firstIdx >= 0) { "未在文件中找到完全匹配的原始代码片段" }
         val secondIdx = current.indexOf(oldText, firstIdx + oldText.length)
-        require(secondIdx < 0) { "原始代码片段在文件中出现多次，请补充更多上下文确保唯一匹配" }
+        if (secondIdx >= 0) {
+            val matchLines = ArrayList<Int>()
+            var pos = firstIdx
+            while (pos >= 0 && matchLines.size < 10) {
+                val lineNo = current.substring(0, pos).count { it == '\n' } + 1
+                matchLines.add(lineNo)
+                pos = current.indexOf(oldText, pos + oldText.length)
+            }
+            throw IllegalArgumentException("原始代码片段在文件中出现多次（匹配行号：${matchLines.joinToString(", ")}），请补充更多上下文确保唯一匹配")
+        }
         val updated = current.substring(0, firstIdx) + newText + current.substring(firstIdx + oldText.length)
         return writeFile(project, path, updated).put("patched", true)
     }
@@ -146,7 +158,9 @@ internal class WhaleNativeCodeWorkspace(private val rootDir: File) {
             "仅允许删除项目内部文件"
         }
         require(target.exists() && target.isFile) { "目标文件不存在或不是普通文件：$path" }
+        WhaleHarnessCore.FsObservationGate.checkFreshForEdit(target, path)
         val deleted = target.delete()
+        if (deleted) WhaleHarnessCore.FsObservationGate.forget(target)
         return JSONObject()
             .put("ok", deleted)
             .put("project", project)

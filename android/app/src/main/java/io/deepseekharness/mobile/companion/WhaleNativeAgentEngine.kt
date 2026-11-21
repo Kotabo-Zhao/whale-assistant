@@ -191,19 +191,48 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
 
         val steps = ArrayList<StepRecord>()
-        val seenCalls = HashSet<String>()
+        val repeatGuard = WhaleHarnessCore.RepeatToolGuard()
         val toolMsgIndicesByRound = ArrayList<List<Int>>()
         var finalReply = ""
         var hitRoundLimit = false
+        var compactedOnce = false
 
         for (round in 0 until MAX_TOOL_ROUNDS) {
-            // 4. 滚动折叠两轮以前的冗长工具输出，防止多轮推理时输入 Token 指数级膨胀
+            // 4. 零成本首尾保留裁剪两轮前的冗长工具输出 + 自动卸载最旧截图，保留报错尾行并控制 Token
             if (round >= 2 && round - 2 < toolMsgIndicesByRound.size) {
                 for (msgIdx in toolMsgIndicesByRound[round - 2]) {
                     val m = messages.optJSONObject(msgIdx) ?: continue
                     val raw = m.optString("content", "")
-                    if (raw.length > 520) {
-                        m.put("content", raw.take(460) + "\n…[已折叠历史工具输出，原长 ${raw.length} 字符]")
+                    if (raw.length > 720) {
+                        m.put("content", WhaleHarnessCore.SpillAndPruneManager.pruneOlderToolResult(raw))
+                    }
+                }
+            }
+            WhaleHarnessCore.ImageOffloadPolicy.offloadOldestImages(messages, maxRetainedImages = 4)
+
+            // 4b. KV 缓存友好型结构化压缩（源自 compaction-basic）：仅在上下文超 56k 字符时触发一次
+            if (!compactedOnce && round >= 4 && WhaleHarnessCore.PrefixCacheCompactor.estimateMessagesChars(messages) > WhaleHarnessCore.PrefixCacheCompactor.COMPACTION_CHAR_THRESHOLD) {
+                compactedOnce = true
+                runCatching {
+                    val compactReq = JSONArray()
+                    for (ci in 0 until messages.length()) compactReq.put(messages.get(ci))
+                    compactReq.put(JSONObject().put("role", "user").put("content", WhaleHarnessCore.PrefixCacheCompactor.COMPACTION_INSTRUCTION))
+                    val summaryTurn = callChatCompletionsWithRetry(endpoint = endpoint, messages = compactReq, toolsArray = null, listener = null, control = control)
+                    val summaryText = summaryTurn.content.trim()
+                    if (summaryText.length >= 40) {
+                        val sysMsg = messages.optJSONObject(0)
+                        val rebuilt = JSONArray()
+                        if (sysMsg != null) rebuilt.put(sysMsg)
+                        rebuilt.put(JSONObject().put("role", "user").put("content", WhaleHarnessCore.PrefixCacheCompactor.wrapCheckpoint(summaryText)))
+                        // 保留最近 2 条消息确保衔接自然
+                        val tailStart = (messages.length() - 2).coerceAtLeast(1)
+                        for (ti in tailStart until messages.length()) {
+                            val item = messages.optJSONObject(ti) ?: continue
+                            if (item.optString("role") != "tool") rebuilt.put(item)
+                        }
+                        while (messages.length() > 0) messages.remove(messages.length() - 1)
+                        for (ri in 0 until rebuilt.length()) messages.put(rebuilt.get(ri))
+                        toolMsgIndicesByRound.clear()
                     }
                 }
             }
@@ -252,6 +281,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
                 if (control?.steerInterrupt?.getAndSet(false) == true && control.hasPendingSteer()) {
                     val notes = control.drainSteers()
+                    repeatGuard.resetOnUserInput()
                     messages.put(JSONObject().put("role", "user").put("content", "[用户中途补充/修正] ${notes.joinToString("\n")}"))
                     listener?.onPhase("restarting")
                     continue
@@ -296,17 +326,22 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 planned.add(PlannedCall(callId, fnName, fnArgs, tools.isMutating(fnName)))
             }
 
-            val canParallel = planned.size >= 2 && planned.none { it.mutating }
             val roundToolIndices = ArrayList<Int>(planned.size)
+            val roundReminders = java.util.Collections.synchronizedList(ArrayList<String>())
 
             fun runSingle(p: PlannedCall): Pair<WhaleNativeToolRegistry.ToolOutcome, Long> {
-                val callKey = "${p.fnName}:${p.fnArgs.trim()}"
-                if (!seenCalls.add(callKey)) {
+                val guardDecision = synchronized(repeatGuard) { repeatGuard.observe(p.fnName, p.fnArgs) }
+                guardDecision.reminder?.let { roundReminders.add(it) }
+                if (guardDecision.hardBlock) {
                     return WhaleNativeToolRegistry.ToolOutcome(
                         p.fnName,
-                        "跳过重复调用",
+                        "触发重复调用熔断（×${guardDecision.count}）",
                         false,
-                        JSONObject().put("error", "DUPLICATE_CALL").put("hint", "相同参数的工具刚已调用过，请更换参数、换一种工具或直接汇总回答用户。").toString(),
+                        JSONObject()
+                            .put("error", "REPEAT_LOOP_ABORTED")
+                            .put("consecutiveCalls", guardDecision.count)
+                            .put("hint", "相同参数的工具已连续调用 ${guardDecision.count} 次仍无进展，已触发防死循环熔断。请换一种方案或直接向用户说明卡点。")
+                            .toString(),
                     ) to 1L
                 }
                 val opId = "native-${sessionId.take(16)}-$round-${p.callId}"
@@ -354,26 +389,39 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 return outcome to dt
             }
 
+            // 分段并发调度（源自 core/tools/batch.ts）：连续只读组并行，写操作作为独占屏障，提交严格保持模型原序
+            val groups = WhaleHarnessCore.ToolBatchScheduler.partitionBatches(planned) { it.mutating }
+            val executed = ArrayList<Pair<WhaleNativeToolRegistry.ToolOutcome, Long>>(planned.size)
             control?.setToolPhase(true)
-            val executed: List<Pair<WhaleNativeToolRegistry.ToolOutcome, Long>> = try { if (canParallel) {
-                listener?.onPhase("tool:parallel(${planned.size})")
-                onProgress?.invoke(round + 1, "正在并行执行 ${planned.size} 项只读工具…", finalReply)
-                val futures = parallelToolPool.invokeAll(planned.map { p -> Callable { runSingle(p) } })
-                futures.map { f ->
-                    runCatching { f.get() }.getOrElse { err ->
-                        WhaleNativeToolRegistry.ToolOutcome("parallel", "并行工具异常", false, JSONObject().put("error", err.message ?: "EXECUTION_ERROR").toString()) to 1L
+            try {
+                for (group in groups) {
+                    if (control?.cancelled?.get() == true) break
+                    if (group.parallel) {
+                        listener?.onPhase("tool:parallel(${group.items.size})")
+                        onProgress?.invoke(round + 1, "正在并行执行 ${group.items.size} 项只读工具…", finalReply)
+                        val futures = parallelToolPool.invokeAll(group.items.map { p -> Callable { runSingle(p) } })
+                        futures.forEach { f ->
+                            executed.add(
+                                runCatching { f.get() }.getOrElse { err ->
+                                    WhaleNativeToolRegistry.ToolOutcome("parallel", "并行工具异常", false, JSONObject().put("error", err.message ?: "EXECUTION_ERROR").toString()) to 1L
+                                },
+                            )
+                        }
+                    } else {
+                        for (p in group.items) {
+                            if (control?.cancelled?.get() == true) break
+                            listener?.onPhase("tool:${p.fnName}")
+                            onProgress?.invoke(round + 1, "正在执行工具：${p.fnName}", finalReply)
+                            executed.add(runSingle(p))
+                        }
                     }
                 }
-            } else {
-                planned.map { p ->
-                    listener?.onPhase("tool:${p.fnName}")
-                    onProgress?.invoke(round + 1, "正在执行工具：${p.fnName}", finalReply)
-                    runSingle(p)
-                }
-            } } finally { control?.setToolPhase(false) }
+            } finally {
+                control?.setToolPhase(false)
+            }
 
             var needSchemaRefresh = false
-            for (idx in planned.indices) {
+            for (idx in executed.indices) {
                 val p = planned[idx]
                 val (outcome, dt) = executed[idx]
                 if (outcome.ok) {
@@ -393,8 +441,13 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     JSONObject()
                         .put("role", "tool")
                         .put("tool_call_id", p.callId)
-                        .put("content", outcome.payload.take(8_000)),
+                        .put("content", WhaleHarnessCore.SpillAndPruneManager.boundToolOutput(app, p.fnName, outcome.payload)),
                 )
+            }
+            // 若因中途取消导致尾部 tool_calls 未全部执行，自动补齐协议合法的占位错误结果（源自 session/repair.ts）
+            WhaleHarnessCore.ToolCallRecovery.ensureBalancedToolResults(messages)
+            if (roundReminders.isNotEmpty()) {
+                messages.put(JSONObject().put("role", "user").put("content", roundReminders.distinct().joinToString("\n\n")))
             }
             toolMsgIndicesByRound.add(roundToolIndices)
             if (needSchemaRefresh) {
@@ -404,6 +457,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (control?.hasPendingSteer() == true) {
                 val notes = control.drainSteers()
                 if (notes.isNotEmpty()) {
+                    repeatGuard.resetOnUserInput()
                     messages.put(JSONObject().put("role", "user").put("content", "[用户中途补充/修正] ${notes.joinToString("\n")}"))
                     listener?.onPhase("steering")
                 }

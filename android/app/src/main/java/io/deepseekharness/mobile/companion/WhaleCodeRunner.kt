@@ -11,10 +11,15 @@ import java.util.concurrent.TimeUnit
 /**
  * 原生代码执行引擎：
  * 1. 内嵌原生 CPython 3.11（Chaquopy）：无需 Linux / Ubuntu / 联网，毫秒级真机执行 Python 脚本并读写工作区文件；
- * 2. 轻量本地 Shell（sh）：在项目沙箱目录内执行脚本或文件检查（30 秒超时与 16KB 输出上限）；
- * 3. 支持按文件运行（file）或直接执行代码片段（code）。
+ * 2. 支持 DeepSeek Harness 风格编程式工具调用（PTC）：Python 内可直接通过 `tools.<工具名>(...)` 编排多个原生工具并用 `inspect(...)` 返回精炼结果；
+ * 3. 轻量本地 Shell（sh）：在项目沙箱目录内执行脚本或文件检查（30 秒超时与 16KB 输出上限）。
  */
 internal object WhaleCodeRunner {
+    /** 暴露给 Chaquopy Python 的工具回调接口（方法名 `call` 供 Python 直接调用）。 */
+    fun interface ToolBridge {
+        fun call(toolName: String, argsJson: String): String
+    }
+
     private val runnerPool = Executors.newCachedThreadPool { r ->
         Thread(r, "whale-code-runner").apply { isDaemon = true }
     }
@@ -32,13 +37,18 @@ internal object WhaleCodeRunner {
         projectDir: File,
         code: String,
         timeoutSec: Long = 30L,
+        toolBridge: ToolBridge? = null,
     ): JSONObject {
         projectDir.mkdirs()
         val future = runnerPool.submit<JSONObject> {
             runCatching {
                 val py = ensurePython(context)
                 val mod = py.getModule("whale_runner")
-                val raw = mod.callAttr("run_code", code, projectDir.absolutePath).toString()
+                val raw = if (toolBridge != null) {
+                    mod.callAttr("run_code", code, projectDir.absolutePath, toolBridge).toString()
+                } else {
+                    mod.callAttr("run_code", code, projectDir.absolutePath).toString()
+                }
                 JSONObject(raw)
             }.getOrElse { err ->
                 JSONObject()
