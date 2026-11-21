@@ -66,7 +66,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         val includeAppControl = expandAll || "settings" in expandedCategories ||
             listOf("设置", "主题", "深色", "浅色", "风格", "极简", "可爱", "语言", "页面", "跳转", "刷新", "自治", "权限", "开关", "theme", "style", "setting").any { it in q }
         val includePersona = expandAll || "settings" in expandedCategories ||
-            listOf("人设", "角色", "性格", "语气", "persona").any { it in q }
+            listOf("人设", "角色", "性格", "语气", "口癖", "称呼", "叫我", "说话方式", "世界书", "开场白", "persona").any { it in q }
         val includePet = expandAll || "settings" in expandedCategories ||
             listOf("桌宠", "悬浮", "尺寸", "大小", "鲸鱼娘", "pet", "resize").any { it in q }
         val includeWorkshop = expandAll || "code" in expandedCategories || "workshop" in expandedCategories ||
@@ -120,12 +120,23 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_persona_list", "列出全部助手角色人设卡片及当前激活人设。", emptyMap(), emptyList()))
             array.put(schema(
                 "whale_persona_manage",
-                "新增/修改、切换激活或删除助手角色人设卡片。",
+                "管理角色卡：优先用 action=refine 根据对话增量修正当前角色卡（只合并改动字段，不丢失原有设定）；也支持 save（新建/整卡编辑）、activate（切换）、delete（删除）。",
                 mapOf(
-                    "action" to "save / activate / delete",
-                    "id" to "人设 id（activate/delete 必填，save 可选）",
-                    "name" to "人设名称（save 必填）",
-                    "prompt" to "人设设定与说话风格（save 可选）",
+                    "action" to "refine（推荐：增量修正当前角色卡）/ save / activate / delete",
+                    "id" to "可选角色卡 id（refine 留空默认当前激活角色卡）",
+                    "name" to "角色名",
+                    "description" to "角色简介",
+                    "personality" to "完整性格与说话方式",
+                    "appendPersonality" to "refine 专用：追加一条性格/口癖/称呼偏好而不覆盖原文",
+                    "scenario" to "相处情境",
+                    "examples" to "示例对话",
+                    "appendExample" to "refine 专用：追加一句典型台词示例",
+                    "greeting" to "开场白",
+                    "systemPrompt" to "角色附加指引",
+                    "postHistory" to "对话后持续指引",
+                    "worldBookKey" to "refine 专用：新增世界书触发关键词（逗号分隔）",
+                    "worldBookContent" to "refine 专用：新增世界书设定内容",
+                    "reason" to "本次修正的简短原因说明",
                 ),
                 listOf("action"),
             ))
@@ -634,14 +645,23 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_persona_manage" -> {
                     val store = CompanionPersonaStore(app)
                     when (val action = args.str("action", "").trim().lowercase()) {
+                        "refine" -> {
+                            val id = args.str("id", "").trim()
+                            val refined = store.refineActive(args, id)
+                            ToolOutcome(name, "根据对话修正角色卡：${refined.optString("name")}", true, refined.toString(), mutating = true)
+                        }
                         "save" -> {
                             val card = JSONObject().put("name", args.str("name", "").trim())
                             val id = args.str("id", "").trim()
                             if (id.isNotEmpty()) card.put("id", id)
-                            val prompt = args.str("prompt", "").trim()
-                            if (prompt.isNotEmpty()) card.put("prompt", prompt)
+                            for (f in listOf("description", "personality", "scenario", "examples", "greeting", "systemPrompt", "postHistory", "worldBook")) {
+                                val v = args.str(f, "").trim()
+                                if (v.isNotEmpty()) card.put(f, v)
+                            }
+                            val fallbackPrompt = args.str("prompt", "").trim()
+                            if (fallbackPrompt.isNotEmpty() && !card.has("systemPrompt")) card.put("systemPrompt", fallbackPrompt)
                             val saved = store.save(card)
-                            ToolOutcome(name, "保存角色人设", true, saved.toString(), mutating = true)
+                            ToolOutcome(name, "保存角色卡：${saved.optString("name")}", true, saved.toString(), mutating = true)
                         }
                         "activate" -> {
                             val id = args.str("id", "").trim()

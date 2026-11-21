@@ -39,3 +39,9 @@
 .persona-catalog article small { color: var(--muted); }
 .persona-catalog article p { flex: 1; margin: 0; font-size: .85rem; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 @media (max-width: 480px) { .persona-tabs button { padding: 8px 4px; } .persona-catalog { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); } }
+
+.persona-trait-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.persona-trait-chip { padding: 5px 10px; border-radius: 999px; font-size: 0.78rem; border: 1px solid var(--line); background: var(--surface-muted); color: var(--ink); cursor: pointer; }
+.persona-trait-chip:active { transform: scale(0.96); }
+.persona-wb-quick { display: grid; gap: 8px; padding: 12px; margin: 10px 0; border-radius: 12px; border: 1px dashed var(--line); background: var(--surface-muted); }
+.persona-wb-quick strong { font-size: 0.85rem; }
