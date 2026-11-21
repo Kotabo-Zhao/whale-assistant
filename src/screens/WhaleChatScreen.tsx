@@ -898,6 +898,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           <div className="whale-msg whale-msg-assistant" role="status">
             <div className="whale-live-plan-bar">
               <span className="whale-live-plan-status">
+                {style === 'cute' && <span className="whale-plan-whale-dot" aria-hidden="true">🐳</span>}
                 {streamingSteps.length > 0
                   ? t('已执行 {0} 步 · {1}', streamingSteps.length, phaseLabel)
                   : phaseLabel}
@@ -1040,7 +1041,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           title={t('添加图片')}
           onClick={() => fileInputRef.current?.click()}
         >
-          <ImagePlus size={16} />
+          {style === 'cute' ? <CuteIcon name="appearance" size={20} /> : <ImagePlus size={16} />}
         </button>
         <input
           ref={inputRef}
