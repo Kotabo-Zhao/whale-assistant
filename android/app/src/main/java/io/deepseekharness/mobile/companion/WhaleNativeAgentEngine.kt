@@ -95,6 +95,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val mode: String = "native_direct_sse",
         val suggestions: List<String> = emptyList(),
         val cancelled: Boolean = false,
+        val hitRoundLimit: Boolean = false,
     ) {
         fun json(): JSONObject {
             val stepsArr = JSONArray()
@@ -191,6 +192,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val seenCalls = HashSet<String>()
         val toolMsgIndicesByRound = ArrayList<List<Int>>()
         var finalReply = ""
+        var hitRoundLimit = false
 
         for (round in 0 until MAX_TOOL_ROUNDS) {
             // 4. 滚动折叠两轮以前的冗长工具输出，防止多轮推理时输入 Token 指数级膨胀
@@ -381,6 +383,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
 
         val wasCancelled = control?.cancelled?.get() == true
         if (finalReply.isBlank() && !wasCancelled && steps.isNotEmpty()) {
+            hitRoundLimit = true
             // 达到最大工具轮数后，强制补发一轮无 tools 的收尾总结请求，确保模型自然汇报进展而非吐出机械报错
             listener?.onPhase("synthesizing")
             messages.put(
@@ -418,6 +421,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             elapsedMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(1L),
             suggestions = if (wasCancelled) emptyList() else suggestions,
             cancelled = wasCancelled,
+            hitRoundLimit = hitRoundLimit,
         )
     }
 

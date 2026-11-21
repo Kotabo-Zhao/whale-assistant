@@ -63,6 +63,7 @@ class MainActivity : BridgeActivity() {
         val semantic = io.deepseekharness.mobile.companion.SemanticControl(applicationContext)
         if (semantic.enabled && !semantic.isComplete()) runCatching { io.deepseekharness.mobile.companion.SemanticIndexJobs.schedule(applicationContext, 5_000) }
         io.deepseekharness.mobile.companion.CompanionRecurringReminder.requestRecovery(applicationContext)
+        io.deepseekharness.mobile.companion.WorkerRuntimeWake.resumeInterrupted(applicationContext)
         AppWindowInsets.apply(this)
         handleExternalFileIntent(intent, acceptText = savedInstanceState == null)
         applySystemFontScale()

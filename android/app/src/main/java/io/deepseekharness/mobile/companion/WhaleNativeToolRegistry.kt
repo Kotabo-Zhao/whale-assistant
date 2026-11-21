@@ -1148,6 +1148,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val id = args.str("id").trim()
                     require(id.isNotEmpty()) { "缺少 Worker ID" }
                     val cancelled = WhaleNativeWorkerPool.cancel(id)
+                    WhaleLongTaskStore.markTerminal(app, id, "cancelled")
                     ToolOutcome(name, if (cancelled) "已取消后台 Worker" else "未找到运行中的后台 Worker", cancelled, JSONObject().put("id", id).put("cancelled", cancelled).toString(), mutating = true)
                 }
                 "whale_web_search" -> {

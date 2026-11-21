@@ -61,4 +61,26 @@ class WhaleCognitiveEngineTest {
         assertEquals(2, sse.getInt("id"))
         assertEquals("https://mcp.example.com/sse", WhaleMcpManager.validateUrl("https://mcp.example.com/sse"))
     }
+
+    @Test
+    fun longTaskCheckpointRoundTripAndStagePrompt() {
+        val cp = WhaleLongTaskStore.Checkpoint(
+            id = "task-1",
+            title = "整理周报",
+            task = "汇总本周工作并生成周报",
+            mode = "create",
+            ownerSession = "session-whale-task-desk",
+            stage = 2,
+            maxStages = 3,
+            progressDigest = "已完成前 3 个项目的指标收集",
+            resumeCount = 1,
+            state = "running",
+            updatedAt = 123456L,
+        )
+        val restored = WhaleLongTaskStore.Checkpoint.fromJson(cp.json())
+        assertEquals(cp, restored)
+        val prompt = WhaleLongTaskStore.buildStagePrompt(restored)
+        assertTrue(prompt.contains("第 2/3 阶段"))
+        assertTrue(prompt.contains("已完成前 3 个项目的指标收集"))
+    }
 }
