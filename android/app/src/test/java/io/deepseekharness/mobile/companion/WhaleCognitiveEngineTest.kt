@@ -41,4 +41,24 @@ class WhaleCognitiveEngineTest {
         val plain = WhaleNativeAgentEngine.inferFallbackSuggestions("已经帮你把桌宠尺寸调到 160dp 了。")
         assertTrue(plain.isEmpty())
     }
+
+    @Test
+    fun skillMarkdownAndGithubUrlResolution() {
+        val urls = WhaleSkillStore.resolveCandidateUrls("https://github.com/acme/weather-skill")
+        assertTrue(urls.contains("https://raw.githubusercontent.com/acme/weather-skill/main/SKILL.md"))
+        val parsed = WhaleSkillStore.parseSkillMarkdown(
+            "---\nname: weather-brief\ndescription: 查询天气并给出穿衣建议\n---\n# 步骤\n1. 查询天气",
+        )
+        assertEquals("weather-brief", parsed.slug)
+        assertEquals("查询天气并给出穿衣建议", parsed.description)
+    }
+
+    @Test
+    fun mcpRpcBodyParsesJsonAndSseFrames() {
+        val direct = WhaleMcpManager.parseRpcBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[]}}")
+        assertEquals(1, direct.getInt("id"))
+        val sse = WhaleMcpManager.parseRpcBody("event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"ok\":true}}\n\n")
+        assertEquals(2, sse.getInt("id"))
+        assertEquals("https://mcp.example.com/sse", WhaleMcpManager.validateUrl("https://mcp.example.com/sse"))
+    }
 }

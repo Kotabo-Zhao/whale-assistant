@@ -363,13 +363,79 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         ))
         array.put(schema("whale_tool_list", "列出 Agent 已创建保存的全部自定义工具（custom_*）。", emptyMap(), emptyList()))
         array.put(schema("whale_tool_delete", "删除指定的 Agent 自造自定义工具。", mapOf("name" to "要删除的 custom_* 工具名"), listOf("name")))
+        array.put(schema("whale_skill_list", "列出已安装的所有 SKILL.md 技能及其启用状态、简介和来源。", emptyMap(), emptyList()))
+        array.put(schema(
+            "whale_skill_read",
+            "读取指定已安装 Skill 的完整 SKILL.md 执行规范。任务命中已安装技能时必须先调用此工具。",
+            mapOf("name" to "Skill 名称或 slug"),
+            listOf("name"),
+        ))
+        array.put(schema(
+            "whale_skill_install",
+            "自主安装或创建一个标准 SKILL.md 技能：传入 url（支持 GitHub 仓库/文件链接或任意 https SKILL.md 直链）即可自动下载安装；或传入 name + description + content 由 Agent 自己撰写并持久化本地技能。",
+            mapOf(
+                "url" to "可选：GitHub 仓库/blob/tree 链接或 https://.../SKILL.md 直链",
+                "name" to "本地创建时必填（从 URL 安装时可选覆盖名）",
+                "description" to "本地创建时的技能简介",
+                "content" to "本地创建时的 Markdown 技能指令正文",
+            ),
+            emptyList(),
+        ))
+        array.put(schema(
+            "whale_skill_manage",
+            "启用、停用或删除已安装的 Skill。",
+            mapOf(
+                "action" to "enable / disable / delete",
+                "name" to "Skill 名称或 slug",
+            ),
+            listOf("action", "name"),
+        ))
+        array.put(schema("whale_mcp_list", "列出已配置的 MCP（Model Context Protocol）服务器及其已发现的工具列表。", emptyMap(), emptyList()))
+        array.put(schema(
+            "whale_mcp_add",
+            "添加并立即握手连接一个标准 MCP（Streamable HTTP / JSON-RPC 2.0）服务器，自动拉取其 tools/list 并动态注入本轮可用工具。",
+            mapOf(
+                "url" to "MCP 服务器地址（https://...，或本机/局域网 http://127.0.0.1:...）",
+                "name" to "可选：服务器显示名称",
+                "id" to "可选：英文短标识（如 github / notion）",
+                "authHeader" to "可选：完整 Authorization 请求头（如 Bearer xxx）",
+            ),
+            listOf("url"),
+        ))
+        array.put(schema(
+            "whale_mcp_call",
+            "直接调用指定 MCP 服务器上的某个工具。",
+            mapOf(
+                "server" to "MCP 服务器 id 或名称",
+                "tool" to "远端工具名",
+                "argumentsJson" to "可选：JSON 对象字符串格式的调用参数",
+            ),
+            listOf("server", "tool"),
+        ))
+        array.put(schema(
+            "whale_mcp_manage",
+            "刷新工具列表、启停或移除一个 MCP 服务器。",
+            mapOf(
+                "action" to "refresh / enable / disable / remove",
+                "id" to "MCP 服务器 id 或名称",
+            ),
+            listOf("action", "id"),
+        ))
         for (customSchema in WhaleCustomToolEngine.customToolSchemas(app)) {
             array.put(customSchema)
+        }
+        for (mcpSchema in WhaleMcpManager.mcpToolSchemas(app)) {
+            array.put(mcpSchema)
         }
         return array
     }
 
-    fun isMutating(name: String): Boolean = name.startsWith("custom_") || name in setOf(
+    fun isMutating(name: String): Boolean = name.startsWith("custom_") || name.startsWith("mcp__") || name in setOf(
+        "whale_skill_install",
+        "whale_skill_manage",
+        "whale_mcp_add",
+        "whale_mcp_call",
+        "whale_mcp_manage",
         "whale_tool_create",
         "whale_tool_delete",
         "whale_worker_submit",
@@ -1670,7 +1736,76 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val res = WhaleCustomToolEngine.delete(WhaleCustomToolEngine.storeFile(app), toolName)
                     ToolOutcome(name, "删除自造工具：$toolName", res.optBoolean("removed"), res.toString(), mutating = true)
                 }
+                "whale_skill_list" -> {
+                    val list = WhaleSkillStore.list(app)
+                    ToolOutcome(name, "列出已安装技能", true, JSONObject().put("count", list.length()).put("skills", list).toString())
+                }
+                "whale_skill_read" -> {
+                    val skillName = args.str("name").trim()
+                    val res = WhaleSkillStore.read(app, skillName)
+                    ToolOutcome(name, "读取技能：$skillName", true, res.toString())
+                }
+                "whale_skill_install" -> {
+                    val url = args.str("url").trim()
+                    val skillName = args.str("name").trim()
+                    val desc = args.str("description").trim()
+                    val content = args.str("content").trim()
+                    val res = if (url.isNotEmpty()) {
+                        WhaleSkillStore.installFromUrl(app, url, skillName)
+                    } else {
+                        WhaleSkillStore.saveLocal(app, skillName, desc, content)
+                    }
+                    ToolOutcome(name, "安装技能：${res.optString("name")}", true, res.toString(), mutating = true)
+                }
+                "whale_skill_manage" -> {
+                    val action = args.str("action").trim().lowercase()
+                    val skillName = args.str("name").trim()
+                    val res = when (action) {
+                        "enable" -> WhaleSkillStore.setEnabled(app, skillName, true)
+                        "disable" -> WhaleSkillStore.setEnabled(app, skillName, false)
+                        "delete", "remove" -> WhaleSkillStore.delete(app, skillName)
+                        else -> throw IllegalArgumentException("不支持的 Skill 操作：$action")
+                    }
+                    ToolOutcome(name, "管理技能：$skillName", true, res.toString(), mutating = true)
+                }
+                "whale_mcp_list" -> {
+                    val servers = WhaleMcpManager.listServers(app)
+                    ToolOutcome(name, "列出 MCP 服务器", true, JSONObject().put("count", servers.length()).put("servers", servers).toString())
+                }
+                "whale_mcp_add" -> {
+                    val url = args.str("url").trim()
+                    val id = args.str("id").trim()
+                    val displayName = args.str("name").trim()
+                    val authHeader = args.str("authHeader").trim()
+                    val res = WhaleMcpManager.addOrUpdateServer(app, id, displayName, url, authHeader)
+                    ToolOutcome(name, "接入 MCP：${res.optString("name")}", true, res.toString(), mutating = true)
+                }
+                "whale_mcp_call" -> {
+                    val server = args.str("server").trim()
+                    val tool = args.str("tool").trim()
+                    val toolArgs = when (val raw = args.opt("argumentsJson") ?: args.opt("arguments")) {
+                        is JSONObject -> raw
+                        is String -> if (raw.isBlank()) JSONObject() else JSONObject(raw.trim())
+                        else -> JSONObject()
+                    }
+                    val res = WhaleMcpManager.callTool(app, server, tool, toolArgs)
+                    ToolOutcome(name, "调用 MCP：$server.$tool", res.optBoolean("ok", true), res.toString(), mutating = true)
+                }
+                "whale_mcp_manage" -> {
+                    val action = args.str("action").trim().lowercase()
+                    val id = args.str("id").trim()
+                    val res = when (action) {
+                        "refresh" -> WhaleMcpManager.refreshServer(app, id)
+                        "enable" -> WhaleMcpManager.setEnabled(app, id, true)
+                        "disable" -> WhaleMcpManager.setEnabled(app, id, false)
+                        "remove", "delete" -> WhaleMcpManager.removeServer(app, id)
+                        else -> throw IllegalArgumentException("不支持的 MCP 操作：$action")
+                    }
+                    ToolOutcome(name, "管理 MCP：$id", true, res.toString(), mutating = true)
+                }
                 else -> {
+                    val mcpOutcome = WhaleMcpManager.tryExecuteDynamic(app, name, args)
+                    if (mcpOutcome != null) return mcpOutcome
                     val customOutcome = WhaleCustomToolEngine.execute(app, name, args) { stepTool, stepArgs ->
                         val stepRes = execute(stepTool, stepArgs.toString())
                         stepRes.ok to stepRes.payload

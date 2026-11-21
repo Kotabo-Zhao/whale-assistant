@@ -143,16 +143,17 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val expandedCategories = mutableSetOf<String>()
         var toolSchemas = tools.toolSchemas(trimmed, expandedCategories)
 
-        // 1. 100% 静态 System Prompt：跨轮/跨对话完全稳定，最大化前缀缓存命中率（缓存输入便宜 10~50 倍）
+        // 1. 滑动历史窗口准备（用于角色世界书关键词触发与历史回放）
+        val recentHistory = history.takeLast(12)
+        val activePersona = runCatching { CompanionPersonaStore(app).active() }.getOrNull()
+
+        // 2. System Prompt：优先以当前激活角色人设领衔，完整保留角色设定与工具规则
         val messages = JSONArray()
         messages.put(
             JSONObject()
                 .put("role", "system")
-                .put("content", buildStaticSystemPrompt()),
+                .put("content", buildStaticSystemPrompt(activePersona, recentHistory)),
         )
-
-        // 2. 滑动历史窗口：保留最近 12 条消息，近 4 条保留完整度，更早消息自动压缩，避免上下文雪球
-        val recentHistory = history.takeLast(12)
         val totalHist = recentHistory.size
         recentHistory.forEachIndexed { idx, (role, text) ->
             if (role in setOf("user", "assistant") && text.isNotBlank()) {
@@ -163,7 +164,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
 
         // 3. 动态本轮上下文（档案/Worker/RAG）放在最新用户消息前，绝不污染静态 System Prompt 缓存前缀
-        val dynamicCtx = buildDynamicTurnContext(trimmed)
+        val dynamicCtx = buildDynamicTurnContext(trimmed, activePersona)
         val userPayload = if (dynamicCtx.isNotBlank()) {
             "$dynamicCtx\n\n用户消息：${trimmed.take(24_000)}"
         } else {
@@ -345,7 +346,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val p = planned[idx]
                 val (outcome, dt) = executed[idx]
                 if (outcome.ok) {
-                    if (p.fnName == "whale_tool_create" || p.fnName == "whale_tool_delete") {
+                    if (p.fnName in setOf("whale_tool_create", "whale_tool_delete", "whale_mcp_add", "whale_mcp_manage")) {
                         needSchemaRefresh = true
                     } else if (p.fnName == "whale_tools_expand") {
                         val cat = runCatching { JSONObject(p.fnArgs).optString("category", "all") }.getOrDefault("all").lowercase()
@@ -449,21 +450,27 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         throw IllegalStateException("请先在「我的 → 模型与密钥」中配置 API Key")
     }
 
-    private fun buildStaticSystemPrompt(): String = buildString {
-        append("你是 Whale Assistant（鲸鱼助手），运行在用户手机上的主动式私人幕僚与 100% 原生 Super Agent。简单问答与只读核查立即一步到位执行；复杂长耗时任务主动用 whale_worker_submit 派发给后台 Worker。\n")
-        append("主动幕僚原则：不要被动等待追问。看到用户的目标、待办或日程线索时，主动串联所需只读查询并给出完整建议与下一步落地选项；若收到 [用户中途补充/修正]，立即以最新补充为准调整思路与方案。\n")
-        append("风格：简洁、自然、直接、有温度，像靠谱的私人助理，不堆砌术语或多余确认。\n")
-        append("精确原则：不确定的新信息先调用 whale_web_search 查证，绝不编造；若需要手机屏控、代码工坊、应用设置或设备定时等专域工具而当前列表未展开，先调用 whale_tools_expand 热加载即可立即使用。\n")
-        append("工具效率：多个互不依赖的只读查询尽量在同一轮并行发出 tool_calls，避免重复调用相同参数；屏控遇到无文字关闭按钮的广告/领券弹窗时，优先发返回键或用视觉识别定位关闭坐标，绝不死循环重复点同一无效节点。\n")
-        append("快捷回复选项（强制）：每次最终回复最末尾必须另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（每条≤14字）。若你的回复向用户提了问题、确认事项或给了多个方案（如「要不要…」「A还是B」），选项必须是用户可直接点选的简短回答（如「好呀，现在试试」「先不用」「选方案A」），让用户无需打字即可一键回应。")
-        runCatching {
-            val persona = CompanionPersonaStore(app).active()
-            val personaPrompt = CompanionBubbleChatPolicy.personaContext(persona)
-            if (personaPrompt.isNotBlank()) append("\n").append(personaPrompt.take(1200))
+    private fun buildStaticSystemPrompt(
+        persona: JSONObject? = null,
+        recentHistory: List<Pair<String, String>> = emptyList(),
+    ): String = buildString {
+        val card = persona ?: runCatching { CompanionPersonaStore(app).active() }.getOrNull()
+        val charName = card?.optString("name")?.takeIf(String::isNotBlank) ?: "鲸鱼娘"
+        if (card != null) {
+            val histMsgs = recentHistory.map { (role, text) -> CompanionBubbleChat.Message(role, text) }
+            val personaPrompt = runCatching { PetRoleplayPrompt.character(card, histMsgs) }.getOrDefault("")
+            if (personaPrompt.isNotBlank()) {
+                append(personaPrompt.take(6_000)).append("\n\n")
+            }
         }
+        append("身份与能力：你始终以「$charName」的人设、语气与性格陪伴并回复用户，同时拥有手机 100% 原生 Super Agent 的全部工具能力。处理现实任务或调用工具时，结果必须真实准确，同时保持「$charName」的说话风格，不要切回冷冰冰的客服腔。\n")
+        append("主动幕僚原则：简单问答与只读核查立即一步到位执行；复杂长耗时任务可用 whale_worker_submit 派发给后台 Worker。若收到 [用户中途补充/修正]，立即以最新补充为准调整思路。\n")
+        append("MCP 与 Skill 自主扩展：你原生支持标准 SKILL.md 技能与 Streamable HTTP MCP 服务器。用户要求安装技能或拓展能力时，直接调用 whale_skill_install（支持 GitHub 仓库/文件链接、HTTPS SKILL.md 或自行编写保存）或 whale_mcp_add 接入远端 MCP；命中已安装 Skill 时先调用 whale_skill_read 遵循规范再执行。\n")
+        append("精确与工具效率：不确定的新信息先调用 whale_web_search 查证，绝不编造；需要手机屏控、代码工坊、应用设置或设备定时等专域工具而当前列表未展开时，先调用 whale_tools_expand 热加载；多个互不依赖的只读查询尽量同轮并行调用；屏控遇到无文字关闭按钮的广告/领券弹窗时，优先发返回键或用视觉识别定位关闭坐标。\n")
+        append("快捷回复选项（强制）：每次最终回复最末尾必须另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（每条≤14字）。若你的回复向用户提了问题、确认事项或给了多个方案，选项必须是用户可直接点选的简短回答，让用户无需打字即可一键回应。")
     }
 
-    private fun buildDynamicTurnContext(userQuery: String): String = buildString {
+    private fun buildDynamicTurnContext(userQuery: String, persona: JSONObject? = null): String = buildString {
         runCatching {
             val owner = OwnerContext(app).read()
             val profile = owner.optJSONObject("profile")
@@ -509,8 +516,19 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (playbooks.isNotBlank()) append(playbooks.take(800)).append("\n")
         }
         runCatching {
+            val skillCatalog = WhaleSkillStore.catalogPrompt(app)
+            if (skillCatalog.isNotBlank()) append(skillCatalog.take(1200)).append("\n")
+            val mcpSummary = WhaleMcpManager.promptSummary(app)
+            if (mcpSummary.isNotBlank()) append(mcpSummary.take(600)).append("\n")
+        }
+        runCatching {
             val rag = WhaleNativeRagRetriever.retrieveContext(app, userQuery)
-            if (rag.isNotBlank()) append(rag.take(2400))
+            if (rag.isNotBlank()) append(rag.take(2400)).append("\n")
+        }
+        runCatching {
+            val card = persona ?: CompanionPersonaStore(app).active()
+            val post = PetRoleplayPrompt.afterHistory(card)
+            if (post.isNotBlank()) append("[角色持续指令] ").append(post.take(800))
         }
     }.trim()
 
