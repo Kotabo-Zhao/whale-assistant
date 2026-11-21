@@ -24,7 +24,8 @@ internal class CompanionPetDrawable(
     private var curRot = 0f
     private var curPivotFrac = 0.94f
     private var lastDrawMs = 0L
-    private val liveTick = Runnable { if (!closed && !pose.reduced) invalidateSelf() }
+    @Volatile var ambientTickAllowed = true
+    private val liveTick = Runnable { if (!closed && !pose.reduced && ambientTickAllowed) invalidateSelf() }
     private var decoding = false
     private val failed = mutableSetOf<String>()
     @Volatile private var closed = false
@@ -262,9 +263,12 @@ internal class CompanionPetDrawable(
         canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
         canvas.restore()
 
-        if (!pose.reduced) {
+        if (!pose.reduced && ambientTickAllowed) {
+            val isResting = pose.action == PetAction.IDLE || pose.action == PetAction.WAIT ||
+                pose.action == PetAction.PAUSED || pose.action == PetAction.STOPPED
+            val tickMs = if (isResting) 42L else 16L
             main.removeCallbacks(liveTick)
-            main.postDelayed(liveTick, 16L)
+            main.postDelayed(liveTick, tickMs)
         }
     }
 

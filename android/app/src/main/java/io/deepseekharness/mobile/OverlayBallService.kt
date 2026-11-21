@@ -1200,10 +1200,12 @@ class OverlayBallService : Service() {
         companionFrame = null
         val drawable=petDrawable ?: return
         if (!companionMotionAllowed()) {
+            drawable.ambientTickAllowed = false
             petPlayback.reset()
             updateVisibleStaticPet()
             return
         }
+        drawable.ambientTickAllowed = true
         val resumedAt=SystemClock.uptimeMillis()
         if(!wasRunning && resumeTimeline) {
             petActing.resume(resumedAt,drawable.currentPose)

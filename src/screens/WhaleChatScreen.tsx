@@ -307,6 +307,16 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const md = useMemo(() => new MarkdownIt({ html: false, linkify: true, breaks: true }), [])
+  const renderedHtmlCache = useRef<Map<string, string>>(new Map())
+  const renderCachedMarkdown = (id: string, text: string): string => {
+    const key = `${id}:${text.length}`
+    const hit = renderedHtmlCache.current.get(key)
+    if (hit !== undefined) return hit
+    const html = md.render(text)
+    if (renderedHtmlCache.current.size > 120) renderedHtmlCache.current.clear()
+    renderedHtmlCache.current.set(key, html)
+    return html
+  }
 
   const currentSession = useMemo(
     () => sessions.find(s => s.id === activeId) ?? sessions[0],
@@ -317,16 +327,25 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.slice(0, MAX_SESSIONS)))
+      // 图片 Base64 仅保留在当前内存会话中，避免撑爆 WebView 5MB localStorage 配额导致后续会话丢失
+      const compactSessions = sessions.slice(0, MAX_SESSIONS).map(s => ({
+        ...s,
+        messages: s.messages.map(m => (m.images ? { ...m, images: undefined } : m)),
+      }))
+      window.localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(compactSessions))
       window.localStorage.setItem(ACTIVE_SESSION_KEY, currentSession.id)
     } catch {
       // Ignore storage quota errors.
     }
   }, [sessions, currentSession.id])
 
+  const autoFollowRef = useRef(true)
   useEffect(() => {
     const el = listRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    if (autoFollowRef.current) {
+      el.scrollTop = el.scrollHeight
+    }
   }, [messages, streamingText, streamingSteps])
 
   useEffect(() => {
@@ -470,6 +489,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       images: attachedImages.length > 0 ? attachedImages : undefined,
     }
     const nextHistory = [...messages, userMsg]
+    autoFollowRef.current = true
     updateSessionMessages(targetSessionId, prev => [...prev, userMsg], text)
     setInput('')
     setPendingImages([])
@@ -719,7 +739,14 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         </aside>
       )}
 
-      <div className="whale-chat-stream" ref={listRef}>
+      <div
+        className="whale-chat-stream"
+        ref={listRef}
+        onScroll={event => {
+          const el = event.currentTarget
+          autoFollowRef.current = el.scrollHeight - (el.scrollTop + el.clientHeight) <= 72
+        }}
+      >
         {messages.length === 0 ? (
           <div className="whale-chat-empty">
             <div className="whale-hero-stage">
@@ -791,7 +818,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                     <div className="whale-msg-col">
                       <div
                         className="whale-msg-bubble whale-markdown"
-                        dangerouslySetInnerHTML={{ __html: md.render(msg.text) }}
+                        dangerouslySetInnerHTML={{ __html: renderCachedMarkdown(msg.id, msg.text) }}
                       />
                     </div>
                   </div>

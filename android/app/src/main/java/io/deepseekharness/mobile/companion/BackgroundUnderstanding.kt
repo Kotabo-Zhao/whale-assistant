@@ -86,7 +86,7 @@ internal object BackgroundUnderstanding {
         val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date())
         val count = if (prefs.getString("day", null) == day) prefs.getInt("calls", 0) else 0
         if (!BackgroundUnderstandingPolicy.canRequest(count, DAILY_LIMIT)) return@synchronized false
-        prefs.edit().putString("day", day).putInt("calls", count + 1).commit()
+        prefs.edit().putString("day", day).putInt("calls", count + 1).apply()
     }
 
     fun status(context: Context, value: String, errorCode: String? = null) {

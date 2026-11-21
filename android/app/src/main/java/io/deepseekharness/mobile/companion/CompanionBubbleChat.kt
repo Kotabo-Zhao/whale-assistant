@@ -348,7 +348,9 @@ internal class CompanionBubbleChat(
                 listener = object : WhaleNativeAgentEngine.StreamListener {
                     override fun onDelta(chunk: String) {
                         streamed.append(chunk)
-                        onPartial(streamed.toString())
+                        val raw = streamed.toString()
+                        val idx = raw.indexOf("<!--whale_next")
+                        onPartial(if (idx >= 0) raw.substring(0, idx).trimEnd() else raw)
                     }
                 },
             )

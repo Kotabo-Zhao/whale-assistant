@@ -26,7 +26,7 @@ internal class CompanionDeliveryInbox(context: Context) {
     init {
         if (!seen.getBoolean("initialized", false)) {
             val existing = load().map { displayId(it) }.toSet()
-            seen.edit().putStringSet("ids", existing).putBoolean("initialized", true).commit()
+            seen.edit().putStringSet("ids", existing).putBoolean("initialized", true).apply()
         }
     }
 
@@ -38,7 +38,7 @@ internal class CompanionDeliveryInbox(context: Context) {
     fun markSeen(items: Collection<Item>) {
         val existing = load().map(::displayId).toSet()
         val ids = (seen.getStringSet("ids", emptySet()).orEmpty() + items.map(::displayId)).intersect(existing)
-        seen.edit().putStringSet("ids", ids).commit()
+        seen.edit().putStringSet("ids", ids).apply()
     }
 
     fun load(): List<Item> {
