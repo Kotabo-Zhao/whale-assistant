@@ -23,6 +23,7 @@ import kotlin.math.roundToInt
 /** Shared typography, surfaces and controls for the pet's small windows. */
 internal class PetUi(private val context: Context) {
     val palette = AppThemePreference.palette(AppLanguage.localizedContext(context))
+    val dark: Boolean = (palette.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
     private val simple = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") == "simple"
     val surface = palette.getColor(if (simple) R.color.pet_simple_surface else R.color.pet_surface)
     val canvas = palette.getColor(if (simple) R.color.pet_simple_canvas else R.color.pet_canvas)
