@@ -693,7 +693,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
         runCatching {
             val rag = WhaleNativeRagRetriever.retrieveContext(app, userQuery)
-            if (rag.isNotBlank() && userMessage.trim().length > 10) append(rag.take(1200)).append("\n")
+            if (rag.isNotBlank() && userQuery.trim().length > 10) append(rag.take(1200)).append("\n")
         }
         runCatching {
             val card = persona ?: CompanionPersonaStore(app).active()

@@ -114,7 +114,7 @@ internal object WhaleAutoHealBridge {
             val allowed = AccessibilityAutomationStore.allowedPackages(app)
             if (allowed.isEmpty()) {
                 val relaxed = runCatching {
-                    AccessibilityAutomationStore.setAllowedPackages(app, allowed, null, whitelistEnabled = false)
+                    AccessibilityAutomationStore.setAllowedPackages(app, allowed.toList(), null, whitelistEnabled = false)
                     true
                 }.getOrDefault(false)
                 if (relaxed) {
@@ -199,14 +199,14 @@ internal object WhaleAutoHealBridge {
     /** 副屏增强：支持直接传按钮文字 text，自动读副屏控件树找坐标并点击。 */
     fun smartVirtualScreenTapByText(sessionId: String, targetText: String): DeviceCommandResult {
         val clean = targetText.trim()
-        if (clean.isEmpty()) return DeviceCommandResult(false, "缺少目标文字 text", "VIRTUAL_SCREEN_INVALID_ARGUMENT")
+        if (clean.isEmpty()) return DeviceCommandResult(false, 1, "缺少目标文字 text", false, "VIRTUAL_SCREEN_INVALID_ARGUMENT")
         val treeRes = VirtualScreenCommands.execute(
             "virtualScreenAction",
             JSONObject().put("sessionId", sessionId).put("action", "tree").toString(),
         )
         if (!treeRes.ok) return treeRes
         val bounds = findCenterInTreeJson(treeRes.text, clean)
-            ?: return DeviceCommandResult(false, "副屏当前界面未找到包含「$clean」的控件", "VIRTUAL_SCREEN_NODE_NOT_FOUND")
+            ?: return DeviceCommandResult(false, 1, "副屏当前界面未找到包含「$clean」的控件", false, "VIRTUAL_SCREEN_NODE_NOT_FOUND")
         val tapReq = JSONObject()
             .put("sessionId", sessionId)
             .put("action", "tap")
