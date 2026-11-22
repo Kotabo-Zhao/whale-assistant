@@ -355,6 +355,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
             array.put(schema("whale_phone_vision", "多模态看图识屏：安全截取当前手机屏幕并调用视觉模型分析画面、图标、图片内容及按钮坐标（自动拦截密码/支付/锁屏敏感页面）。", mapOf("question" to "可选：想看懂的内容或想找的图标/按钮描述"), emptyList()))
             array.put(schema("whale_phone_vision_click", "视觉定位并直接点击：截屏让多模态视觉模型定位目标图标或无文字按钮的精确屏幕坐标，并立即执行手势点击（适合游戏、Canvas、自定义图标按钮）。", mapOf("target" to "要点击的目标描述，例如：右上角放大镜图标 / 红色关闭按钮"), listOf("target")))
+            array.put(schema("whale_automation_heal", "一键诊断并自动修复无障碍服务（含僵尸断连自动通过 Shizuku 重连）、空拦截白名单与副屏就绪状态。", mapOf("relaxWhitelist" to "可选：true（默认）当白名单为空时自动关闭拦截限制"), emptyList()))
             array.put(schema("whale_virtual_screen_control", "启动、停止或查询「目标应用副屏」状态（在后台独立虚拟屏幕上运行目标应用，不打扰主屏幕；需已开启 Shizuku）。", mapOf("action" to "state / start / stop", "target" to "action=start 时的目标应用包名（可用 whale_phone_apps 查）或组件名"), listOf("action")))
             array.put(schema("whale_virtual_screen_action", "在已启动的「目标应用副屏」独立虚拟屏幕上执行点击、输入、滑动、读控件树或返回操作。", mapOf("sessionId" to "可选：副屏会话 ID（不填自动取当前活跃副屏）", "action" to "操作类型：tap / swipe / text / tree / key / back / home / follow", "x" to "可选 X 坐标", "y" to "可选 Y 坐标", "text" to "可选输入文本"), listOf("action")))
             array.put(schema("whale_virtual_screen_vision", "多模态看图识别「目标应用副屏」当前画面内容与按钮坐标。", mapOf("sessionId" to "可选：副屏会话 ID（不填自动取当前活跃副屏）", "question" to "可选：想看懂的副屏画面或按钮描述"), emptyList()))
@@ -1381,13 +1382,21 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 }
                 "whale_phone_ui_tree" -> {
                     val service = DeepSeekAccessibilityService.current()
-                        ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
+                        ?: run {
+                            if (WhaleAutoHealBridge.isShizukuReady()) WhaleAutoHealBridge.autoHeal(app, relaxWhitelist = false)
+                            DeepSeekAccessibilityService.current()
+                        }
+                        ?: throw IllegalStateException("无障碍服务未开启或未连上，可调用 whale_automation_heal 或在「我的 → 自动化设置」一键修复")
                     val res = withPhoneControlNotice("正在读取屏幕…") { service.fastControl("fastTree", "") }
                     ToolOutcome(name, "极速读取精简控件树", res.ok, res.text)
                 }
                 "whale_phone_action" -> {
                     val service = DeepSeekAccessibilityService.current()
-                        ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
+                        ?: run {
+                            if (WhaleAutoHealBridge.isShizukuReady()) WhaleAutoHealBridge.autoHeal(app, relaxWhitelist = false)
+                            DeepSeekAccessibilityService.current()
+                        }
+                        ?: throw IllegalStateException("无障碍服务未开启或未连上，可调用 whale_automation_heal 或在「我的 → 自动化设置」一键修复")
                     val action = args.str("action", "操作").trim()
                     val target = args.str("text").ifBlank { args.str("ref") }.take(12)
                     val label = if (target.isNotEmpty()) "操控：$action「$target」" else "操控：$action"
@@ -2023,8 +2032,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                                 val cur = VirtualScreenService.current?.state() ?: JSONObject().put("active", true)
                                 ToolOutcome(name, "目标应用副屏已在运行", true, cur.toString(), mutating = true)
                             } else {
-                                val target = args.str("target").trim()
-                                require(target.isNotEmpty()) { "启动副屏需要传入 target（应用包名或组件名）" }
+                                val rawTarget = args.str("target").trim()
+                                require(rawTarget.isNotEmpty()) { "启动副屏需要传入 target（应用名、包名或组件名）" }
+                                val target = WhaleAutoHealBridge.resolveAppPackage(app, rawTarget)
                                 val component = when (VirtualScreenPreferences.targetKind(target)) {
                                     VirtualScreenTargetKind.COMPONENT -> VirtualScreenPolicy.component(target)
                                     VirtualScreenTargetKind.PACKAGE -> {
@@ -2070,6 +2080,11 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         else -> throw IllegalArgumentException("不支持的副屏操作：$action")
                     }
                 }
+                "whale_automation_heal" -> {
+                    val relax = args.str("relaxWhitelist", "true").trim().lowercase() != "false"
+                    val res = WhaleAutoHealBridge.autoHeal(app, relax)
+                    ToolOutcome(name, "诊断与修复无障碍和副屏", res.optBoolean("ok", true), res.toString(), mutating = true)
+                }
                 "whale_virtual_screen_action" -> {
                     val service = VirtualScreenService.current
                         ?: throw IllegalStateException("目标应用副屏未启动，请先调用 whale_virtual_screen_control(action='start') 启动")
@@ -2077,8 +2092,14 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     require(sessionId.isNotEmpty()) { "副屏会话尚未就绪，请稍候重试" }
                     val verb = args.str("action").trim().ifBlank { args.str("type").trim() }
                     require(verb.isNotEmpty()) { "缺少副屏动作参数 action" }
-                    val req = JSONObject(args.toString()).put("sessionId", sessionId).put("action", verb)
-                    val res = VirtualScreenCommands.execute("virtualScreenAction", req.toString())
+                    val targetText = args.str("text").trim()
+                    val hasCoords = args.has("x") && args.has("y")
+                    val res = if ((verb == "tap" || verb == "click") && targetText.isNotEmpty() && !hasCoords) {
+                        WhaleAutoHealBridge.smartVirtualScreenTapByText(sessionId, targetText)
+                    } else {
+                        val req = JSONObject(args.toString()).put("sessionId", sessionId).put("action", if (verb == "click") "tap" else verb)
+                        VirtualScreenCommands.execute("virtualScreenAction", req.toString())
+                    }
                     ToolOutcome(name, "执行副屏操控：$verb", res.ok, res.text, mutating = verb != "tree")
                 }
                 "whale_virtual_screen_vision" -> {

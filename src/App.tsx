@@ -11,6 +11,7 @@ import { CuteIcon } from './components/CuteIcon'
 import { saveLanguage, t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
 import { CompanionSettingsButton } from './components/CompanionSettingsButton'
+import { AutomationQuickHealCard } from './components/AutomationQuickHealCard'
 import type { AutomationRuleDefaults } from './components/AutomationRuleForm'
 import { AutomationDisclaimer } from './components/AutomationDisclaimer'
 import { AutomationTaskCard } from './components/AutomationTaskCard'
@@ -2813,6 +2814,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         )}
         {page === 'automation' && (
         <>
+          <AutomationQuickHealCard onOpenAccessibilitySettings={onOpenAccessibilitySettings} />
           <div className="settings-subsection" aria-labelledby="automation-subpages">
             <div className="section-title">
               <span className="section-icon"><Bot size={19} /></span>
