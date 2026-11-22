@@ -55,6 +55,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
             priorityBy: String = "launch",
             strength: String = "explicit",
             ruleName: String = "",
+            dependsOn: List<String> = emptyList(),
         ): JSONObject {
             val app = context.applicationContext
             val store = WorkerDashboardStore(app)
@@ -155,6 +156,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                     priorityBy = priorityBy,
                     strength = strength,
                     ruleName = ruleName,
+                    dependsOn = dependsOn,
                     publishCallback = ::publishCallback,
                 )
             }
@@ -165,6 +167,16 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
         fun resumeInterrupted(context: Context) {
             val app = context.applicationContext
             executor.execute {
+                // 清理已完成或过期的持久化 launch 副作用行，避免队列堆积
+                runCatching {
+                    val effects = WhaleSuperagentCore.WhaleEffectsQueue(app)
+                    val active = WhaleNativeWorkerPool.activeIds()
+                    for (row in effects.listDue("launch", limit = 32)) {
+                        if (row.key !in active && WhaleLongTaskStore.read(app, row.key) == null) {
+                            effects.complete(row)
+                        }
+                    }
+                }
                 val resumable = runCatching {
                     WhaleLongTaskStore.listResumable(app, WhaleNativeWorkerPool.activeIds())
                 }.getOrDefault(emptyList())
@@ -213,6 +225,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                         ruleName = cp.ruleName,
                         deliveredInputs = cp.deliveredInputs,
                         readInputIds = cp.readInputIds,
+                        dependsOn = cp.dependsOn,
                         publishCallback = ::publishCallback,
                     )
                 }
@@ -235,6 +248,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
             ruleName: String,
             deliveredInputs: List<Pair<String, String>> = emptyList(),
             readInputIds: Set<String> = emptySet(),
+            dependsOn: List<String> = emptyList(),
             publishCallback: (String, String) -> Unit,
         ) {
             val maxStages = 3
@@ -254,6 +268,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                 ruleName = ruleName,
                 deliveredInputs = deliveredInputs,
                 readInputIds = readInputIds,
+                dependsOn = dependsOn,
             )
             WhaleLongTaskStore.save(app, cp)
 
@@ -268,7 +283,68 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                 val effects = WhaleSuperagentCore.WhaleEffectsQueue(app)
                 val control = WhaleNativeAgentEngine.RunControl()
                 WhaleNativeWorkerPool.attachControl(commandId, control)
+                val runId = "native-${java.util.UUID.randomUUID().toString().take(8)}"
+                val startedAt = System.currentTimeMillis()
+                var seq = 0L
+                fun emitHealth(stepText: String) {
+                    seq += 1L
+                    val now = System.currentTimeMillis()
+                    runCatching {
+                        val health = JSONObject()
+                            .put("runId", runId)
+                            .put("sequence", seq)
+                            .put("startedAt", startedAt)
+                            .put("heartbeatAt", now)
+                            .put("lastProgressAt", now)
+                            .put("retryUntil", 0L)
+                            .put("repeated", 0)
+                            .put("task", task.take(1200))
+                            .put("recent", org.json.JSONArray())
+                        store.put(
+                            JSONObject()
+                                .put("id", commandId)
+                                .put("title", workerTitle)
+                                .put("input", task.take(2000))
+                                .put("mode", mode)
+                                .put("state", "running")
+                                .put("progress", stepText.take(300))
+                                .put("summary", stepText.take(300))
+                                .put("writeSeq", seq + 1L)
+                                .put("createdAt", startedAt)
+                                .put("updatedAt", now)
+                                .put("owner", ownerSession)
+                                .put("health", health),
+                        )
+                        WorkerWatchdog.wake(app)
+                    }
+                }
                 try {
+                    // DAG 依赖等待：等待上游 Worker 完成后自动汇入其交付摘要
+                    var dagPrefix = ""
+                    if (cp.dependsOn.isNotEmpty()) {
+                        WhaleNativeWorkerPool.updateProgress(commandId, step = "等待上游依赖完成（${cp.dependsOn.size} 项）…")
+                        emitHealth("等待上游依赖完成")
+                        val waitDeadline = System.currentTimeMillis() + 10 * 60 * 1000L
+                        while (System.currentTimeMillis() < waitDeadline) {
+                            if (Thread.currentThread().isInterrupted || control.cancelled.get()) throw InterruptedException("cancelled")
+                            val pending = cp.dependsOn.filter { depId ->
+                                val st = WhaleNativeWorkerPool.get(depId)?.optString("state", "") ?: ""
+                                st == "queued" || st == "running"
+                            }
+                            if (pending.isEmpty()) break
+                            Thread.sleep(1000L)
+                        }
+                        val sb = StringBuilder("[上游依赖任务交付结果]\n")
+                        for (depId in cp.dependsOn) {
+                            val depInfo = WhaleNativeWorkerPool.get(depId)
+                            val depTitle = depInfo?.optString("title", depId).orEmpty().ifBlank { depId }
+                            val depState = depInfo?.optString("state", "unknown").orEmpty()
+                            val depBody = WhaleNativeWorkerPool.readFullResult(depId).orEmpty().take(1200)
+                            sb.append("- 《$depTitle》($depId, state=$depState)：$depBody\n")
+                        }
+                        dagPrefix = sb.toString().trim()
+                    }
+                    emitHealth("原生后台 Worker 启动执行")
                     val engine = WhaleNativeAgentEngine(app)
                     var finalReply = ""
                     for (stage in initialStage..maxStages) {
@@ -284,7 +360,8 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                         val unreadBeforeStage = cp.unreadInputs().map { it.first }
                         cp = cp.copy(stage = stage, updatedAt = System.currentTimeMillis())
                         WhaleLongTaskStore.save(app, cp)
-                        val stagePrompt = WhaleLongTaskStore.buildStagePrompt(cp)
+                        val rawStagePrompt = WhaleLongTaskStore.buildStagePrompt(cp)
+                        val stagePrompt = if (dagPrefix.isNotBlank() && stage == initialStage) "$dagPrefix\n\n$rawStagePrompt" else rawStagePrompt
                         val res = engine.send(
                             userMessage = stagePrompt,
                             history = emptyList(),
@@ -295,6 +372,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                                 val stageLabel = if (stage > 1) "阶段 $stage · $step" else step
                                 // 普通 progress 仅写内部状态，不弹桌宠打扰
                                 WhaleNativeWorkerPool.updateProgress(commandId, round = totalRound, step = stageLabel, preview = preview)
+                                emitHealth(stageLabel)
                                 if (round % 4 == 0 && preview.isNotBlank()) {
                                     cp = cp.copy(progressDigest = preview.take(1600), updatedAt = System.currentTimeMillis())
                                     WhaleLongTaskStore.save(app, cp)

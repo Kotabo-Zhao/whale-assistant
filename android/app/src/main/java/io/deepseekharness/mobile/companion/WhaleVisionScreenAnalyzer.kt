@@ -19,7 +19,7 @@ import java.net.URL
  */
 internal object WhaleVisionScreenAnalyzer {
     data class VisionEndpoint(val provider: String, val url: String, val apiKey: String, val model: String)
-    data class VisionResult(val ok: Boolean, val text: String, val model: String, val provider: String, val x: Int? = null, val y: Int? = null)
+    data class VisionResult(val ok: Boolean, val text: String, val model: String, val provider: String, val x: Int? = null, val y: Int? = null, val ref: Int? = null)
 
     fun analyzeScreen(
         context: Context,
@@ -45,7 +45,7 @@ internal object WhaleVisionScreenAnalyzer {
             """你是 Android 手机视觉定位助手。当前应用包名：$packageName，屏幕真实像素尺寸：宽 $screenWidth × 高 $screenHeight（左上角为 (0,0)，右下角为 ($screenWidth,$screenHeight)）。
 请在截图中精准定位用户要点击的目标：「$question」。
 请严格输出一段 JSON（不要 Markdown 代码块，不要多余解释）：
-{"found": true或false, "x": 目标中心X像素整数, "y": 目标中心Y像素整数, "label": "识别到的图标或文字说明", "reason": "简短说明"}"""
+{"found": true或false, "ref": 若画面上标有红色#编号框则填整数编号否则填null, "x": 目标中心X像素整数, "y": 目标中心Y像素整数, "label": "识别到的图标或文字说明", "reason": "简短说明"}"""
         } else {
             """你是 Android 手机多模态看图识屏助手。当前应用包名：$packageName，屏幕真实像素尺寸：宽 $screenWidth × 高 $screenHeight。
 请结合截图回答用户问题或描述关键画面/图标/文字；如果涉及可操作按钮或图标，请顺带给出对应的屏幕中心像素坐标 (x, y) 方便后续直接点击。
@@ -102,10 +102,11 @@ internal object WhaleVisionScreenAnalyzer {
             }
             val parsed = extractJsonObject(text)
             val found = parsed?.optBoolean("found", false) == true
+            val ref = parsed?.optInt("ref", -1)?.takeIf { it > 0 }
             val x = parsed?.optInt("x", -1)?.takeIf { it in 1 until screenWidth }
             val y = parsed?.optInt("y", -1)?.takeIf { it in 1 until screenHeight }
-            if (found && x != null && y != null) {
-                VisionResult(true, parsed.optString("label", question).ifBlank { question }, endpoint.model, endpoint.provider, x, y)
+            if (found && (ref != null || (x != null && y != null))) {
+                VisionResult(true, parsed.optString("label", question).ifBlank { question }, endpoint.model, endpoint.provider, x, y, ref)
             } else {
                 VisionResult(false, parsed?.optString("reason", text)?.ifBlank { text } ?: text, endpoint.model, endpoint.provider)
             }

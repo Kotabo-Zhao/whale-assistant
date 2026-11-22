@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicReference
 internal class WhaleNativeAgentEngine(private val context: Context) {
     interface StreamListener {
         fun onDelta(chunk: String) {}
+        fun onReasoning(chunk: String) {}
         fun onStep(step: StepRecord) {}
         fun onPhase(phase: String) {}
     }
@@ -116,6 +117,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
     private data class AssistantTurn(
         val content: String,
         val toolCalls: JSONArray?,
+        val reasoningContent: String = "",
     )
 
     private val app = context.applicationContext
@@ -140,10 +142,12 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
 
         val store = RuntimeStore(app)
         val settings = store.settings()
-        val rawEndpoint = resolveEndpoint(store, settings)
+        val allEndpoints = resolveEndpoints(store, settings)
+        val rawEndpoint = allEndpoints.first()
         val budgetProgress = runCatching { WhaleTokenMeter.snapshot(app).progress }.getOrDefault(0f)
         val routeDecision = WhaleModelRouter.routeWithPrefs(app, rawEndpoint.model, trimmed, images.isNotEmpty(), budgetProgress)
         val endpoint = rawEndpoint.copy(model = routeDecision.model)
+        val fallbackEndpoints = allEndpoints.drop(1)
         val expandedCategories = mutableSetOf<String>()
         var toolSchemas = tools.toolSchemas(trimmed, expandedCategories, isWorker = isWorkerSession)
 
@@ -179,8 +183,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
         }
 
-        // 3. 动态本轮上下文（档案/Worker/RAG）放在最新用户消息前，绝不污染静态 System Prompt 缓存前缀
-        val dynamicCtx = if (isWorkerSession) "" else buildDynamicTurnContext(trimmed, activePersona, recentHistory)
+        // 3. 动态本轮上下文（档案/Worker/RAG/持久化检查点与任务表）放在最新用户消息前，绝不污染静态 System Prompt 缓存前缀
+        val dynamicCtx = if (isWorkerSession) "" else buildDynamicTurnContext(trimmed, activePersona, recentHistory, sessionId)
         val userPayload = if (dynamicCtx.isNotBlank()) {
             "$dynamicCtx\n\n用户消息：${trimmed.take(24_000)}"
         } else {
@@ -246,6 +250,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         while (messages.length() > 0) messages.remove(messages.length() - 1)
                         for (ri in 0 until rebuilt.length()) messages.put(rebuilt.get(ri))
                         toolMsgIndicesByRound.clear()
+                        WhaleHarnessCore.PrefixCacheCompactor.saveCheckpoint(app, sessionId, summaryText)
                     }
                 }
             }
@@ -264,6 +269,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                             }
                         }
                     }
+                    override fun onReasoning(chunk: String) { listener?.onReasoning(chunk) }
                     override fun onStep(step: StepRecord) { listener?.onStep(step) }
                     override fun onPhase(phase: String) { listener?.onPhase(phase) }
                 }
@@ -282,10 +288,12 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                             partialStream += chunk
                             streamBridge.onDelta(chunk)
                         }
+                        override fun onReasoning(chunk: String) { streamBridge.onReasoning(chunk) }
                         override fun onStep(step: StepRecord) { streamBridge.onStep(step) }
                         override fun onPhase(phase: String) { streamBridge.onPhase(phase) }
                     } else null,
                     control = control,
+                    fallbacks = fallbackEndpoints,
                 )
             } catch (err: Throwable) {
                 if (control?.cancelled?.get() == true) {
@@ -325,6 +333,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 .put("role", "assistant")
                 .put("content", if (content.isEmpty()) JSONObject.NULL else content)
                 .put("tool_calls", toolCalls)
+            if (turn.reasoningContent.isNotBlank()) {
+                assistantMsg.put("reasoning_content", turn.reasoningContent)
+            }
             messages.put(assistantMsg)
 
             // 5. 解析本轮全部工具调用：若全部为只读工具且数量 >= 2，则 4 线程并行执行，速度提升 2~3 倍
@@ -533,10 +544,11 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
 
     private data class Endpoint(val url: String, val apiKey: String, val model: String)
 
-    private fun resolveEndpoint(
+    private fun resolveEndpoints(
         store: RuntimeStore,
         settings: io.deepseekharness.mobile.runtime.RuntimeSettings,
-    ): Endpoint {
+    ): List<Endpoint> {
+        val out = ArrayList<Endpoint>()
         val builtin = listOf(
             Triple(ModelProvider.DEEPSEEK, "https://api.deepseek.com/v1/chat/completions", "deepseek-chat"),
             Triple(ModelProvider.OPENAI, "https://api.openai.com/v1/chat/completions", "gpt-4o-mini"),
@@ -548,16 +560,17 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         for ((provider, url, fallbackModel) in builtin) {
             val key = store.readModelCredential(provider.wireValue)?.takeIf(String::isNotBlank) ?: continue
             val model = settings.defaultModels[provider]?.takeIf(String::isNotBlank) ?: fallbackModel
-            return Endpoint(url, key, model)
+            out.add(Endpoint(url, key, model))
         }
         for (custom in settings.customModelProviders) {
             val key = store.readModelCredential(custom.id)?.takeIf(String::isNotBlank) ?: continue
             val model = custom.models.firstOrNull()?.id?.takeIf(String::isNotBlank) ?: continue
             val base = custom.baseUrl.trimEnd('/')
             val url = if (base.endsWith("/chat/completions")) base else "$base/chat/completions"
-            return Endpoint(url, key, model)
+            out.add(Endpoint(url, key, model))
         }
-        throw IllegalStateException("请先在「我的 → 模型与密钥」中配置 API Key")
+        if (out.isEmpty()) throw IllegalStateException("请先在「我的 → 模型与密钥」中配置 API Key")
+        return out
     }
 
     private fun buildStaticSystemPrompt(persona: JSONObject? = null): String = buildString {
@@ -575,7 +588,15 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         append("快捷回复（强制）：每次最终回复末尾另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（≤14字）；若向用户提问或给选项，必须给出可直接点选的简短回答。")
     }
 
-    private fun buildDynamicTurnContext(userQuery: String, persona: JSONObject? = null, recentHistory: List<Pair<String, String>> = emptyList()): String = buildString {
+    private fun buildDynamicTurnContext(userQuery: String, persona: JSONObject? = null, recentHistory: List<Pair<String, String>> = emptyList(), sessionId: String = "whale-main"): String = buildString {
+        runCatching {
+            val todoSnap = WhaleHarnessCore.SessionTodoStore.snapshotPrompt(sessionId, app)
+            if (todoSnap.isNotBlank()) append(todoSnap.take(900)).append("
+")
+            val cp = WhaleHarnessCore.PrefixCacheCompactor.loadCheckpoint(app, sessionId)
+            if (cp.isNotBlank()) append("[前序压缩检查点] ").append(cp.take(1200)).append("
+")
+        }
         runCatching {
             val owner = OwnerContext(app).read()
             val profile = owner.optJSONObject("profile")
@@ -665,20 +686,32 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         toolsArray: JSONArray?,
         listener: StreamListener?,
         control: RunControl? = null,
+        fallbacks: List<Endpoint> = emptyList(),
     ): AssistantTurn {
+        val candidates = listOf(endpoint) + fallbacks.take(2)
         var lastError: Throwable? = null
-        for (attempt in 0..3) {
-            if (control?.cancelled?.get() == true) throw InterruptedException("cancelled")
-            try {
-                return callChatCompletions(endpoint, messages, toolsArray, listener, control = control)
-            } catch (error: Throwable) {
-                if (control?.cancelled?.get() == true || control?.steerInterrupt?.get() == true) throw error
-                val isTransient = error is TransientHttpException ||
-                    WhaleSuperagentCore.isTransientFailure(errorText = "${error.javaClass.simpleName} ${error.message.orEmpty()}")
-                if (!isTransient || attempt >= 3) throw error
-                lastError = error
-                val delayMs = WhaleSuperagentCore.backoffMs(attempt, baseMs = 1500L, maxMs = 12_000L)
-                runCatching { Thread.sleep(delayMs) }
+        for ((epIdx, target) in candidates.withIndex()) {
+            val maxAttempts = if (epIdx == 0) 3 else 1
+            for (attempt in 0..maxAttempts) {
+                if (control?.cancelled?.get() == true) throw InterruptedException("cancelled")
+                try {
+                    return callChatCompletions(target, messages, toolsArray, listener, control = control)
+                } catch (error: Throwable) {
+                    if (control?.cancelled?.get() == true || control?.steerInterrupt?.get() == true) throw error
+                    val isTransient = error is TransientHttpException ||
+                        WhaleSuperagentCore.isTransientFailure(errorText = "${error.javaClass.simpleName} ${error.message.orEmpty()}")
+                    lastError = error
+                    if (!isTransient) {
+                        if (epIdx < candidates.lastIndex) break
+                        throw error
+                    }
+                    if (attempt >= maxAttempts) {
+                        if (epIdx < candidates.lastIndex) break
+                        throw error
+                    }
+                    val delayMs = WhaleSuperagentCore.backoffMs(attempt, baseMs = 1500L, maxMs = 12_000L)
+                    runCatching { Thread.sleep(delayMs) }
+                }
             }
         }
         throw lastError ?: IllegalStateException("模型请求失败")
@@ -751,11 +784,15 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 ?: throw IllegalStateException("模型服务未返回有效内容")
             val message = choice.optJSONObject("message")
                 ?: throw IllegalStateException("模型响应缺少 message 字段")
+            val reasoning = message.optNonNullString("reasoning_content", "")
+            if (reasoning.isNotEmpty() && listener != null) {
+                listener.onReasoning(reasoning)
+            }
             val content = message.optNonNullString("content", "")
             if (content.isNotEmpty() && listener != null) {
                 listener.onDelta(content)
             }
-            return AssistantTurn(content, message.optJSONArray("tool_calls"))
+            return AssistantTurn(content, message.optJSONArray("tool_calls"), reasoning)
         } finally {
             control?.clearConnection(conn)
             conn.disconnect()
@@ -769,6 +806,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         promptCharsHint: Int,
     ): AssistantTurn {
         val contentBuilder = StringBuilder()
+        val reasoningBuilder = StringBuilder()
         val toolAccumulators = linkedMapOf<Int, MutableToolCall>()
         var recordedUsage = false
 
@@ -791,6 +829,11 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
                 val delta = chunk.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: continue
 
+                val deltaReasoning = delta.optNonNullString("reasoning_content", "")
+                if (deltaReasoning.isNotEmpty()) {
+                    reasoningBuilder.append(deltaReasoning)
+                    listener?.onReasoning(deltaReasoning)
+                }
                 val deltaText = delta.optNonNullString("content", "")
                 if (deltaText.isNotEmpty()) {
                     contentBuilder.append(deltaText)
@@ -839,7 +882,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         if (!recordedUsage) {
             runCatching { WhaleTokenMeter.record(app, promptCharsHint / 3L, contentBuilder.length.coerceAtLeast(12) / 2L, 0L, model, activeScene) }
         }
-        return AssistantTurn(contentBuilder.toString(), toolCalls)
+        return AssistantTurn(contentBuilder.toString(), toolCalls, reasoningBuilder.toString())
     }
 
     private class MutableToolCall {

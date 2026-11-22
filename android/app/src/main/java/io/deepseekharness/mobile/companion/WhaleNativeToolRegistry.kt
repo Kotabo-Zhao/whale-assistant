@@ -28,7 +28,7 @@ import java.util.UUID
 /**
  * Whale 100% 原生全软件控制工具注册与直调层（零 PRoot、零 Node、零 DeepSeek Harness 依赖）。
  *
- * 共注册 37 项进程内原生工具，赋予 Agent 对整个软件与受控手机能力的完全控制权：
+ * 共注册 94 项进程内原生工具，赋予 Agent 对整个软件与受控手机能力的完全控制权：
  * 1. 全软件导航、双套设计风格（极简·类Grok / 鲸鱼娘·可爱）、明暗主题、语言与全部伴侣/自治设置
  * 2. 长期记忆、主人档案、角色人设卡片与多模态本地资料库
  * 3. 秘书待办全生命周期（查询 / 新增 / 完成 / 删除）
@@ -59,7 +59,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             listOf("有哪些工具", "能力清单", "所有工具", "全部工具", "你能做什么", "有什么功能", "all tools").any { it in q }
 
         // 核心能力始终常驻（记忆/档案/资料/待办/联网/日历闹钟/Worker/语音/自造工具）；
-        // 重型专域工具按需自动激活，并随时可通过 whale_tools_expand 一键热展开全部 74 项工具，平均节省 65%~75% Schema Token。
+        // 重型专域工具按需自动激活，并随时可通过 whale_tools_expand 一键热展开全部 94 项工具，平均节省 65%~75% Schema Token。
         val includeMemory = true
         val includeKnowledge = true
         val includeSecretary = true
@@ -1114,15 +1114,48 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val result = if (lang == "sh" || lang == "shell") {
                         WhaleCodeRunner.runShell(projectDir, scriptCode, timeoutSec = timeoutSec.coerceAtMost(120L))
                     } else {
+                        val ptcGuard = WhaleHarnessCore.RepeatToolGuard(thresholds = setOf(3, 5), hardStopThreshold = 6)
+                        val ptcLedger = UnifiedExecutionLedger(app)
                         val ptcBridge = WhaleCodeRunner.ToolBridge { subTool, subArgsJson ->
+                            val decision = ptcGuard.observe(subTool, subArgsJson)
+                            if (decision.hardBlock) {
+                                return@ToolBridge JSONObject()
+                                    .put("ok", false)
+                                    .put("error", "PTC_REPEAT_LOOP_ABORTED")
+                                    .put("hint", "Python PTC 中连续重复调用 $subTool 已达 ${decision.count} 次，已自动熔断。")
+                                    .toString()
+                            }
+                            val mut = isMutating(subTool)
+                            val opId = "ptc-${UUID.randomUUID().toString().take(10)}"
+                            if (mut) {
+                                ptcLedger.recordIntent(opId, "ptc-$safeProj", "python-ptc", 0L, subTool)
+                                ptcLedger.transition(opId, UnifiedExecutionLedger.State.DISPATCHING)
+                            }
                             val subOutcome = execute(subTool, subArgsJson)
+                            if (mut) {
+                                ptcLedger.transition(
+                                    opId,
+                                    if (subOutcome.ok) UnifiedExecutionLedger.State.COMPLETED else UnifiedExecutionLedger.State.FAILED,
+                                    subOutcome.label,
+                                )
+                            }
                             JSONObject()
                                 .put("ok", subOutcome.ok)
                                 .put("label", subOutcome.label)
                                 .put("payload", runCatching { JSONObject(subOutcome.payload) }.getOrElse { subOutcome.payload })
                                 .toString()
                         }
-                        WhaleCodeRunner.runPython(app, projectDir, scriptCode, timeoutSec = timeoutSec, toolBridge = ptcBridge)
+                        val replSession = args.str("sessionId").trim().ifBlank { "proj-$safeProj" }
+                        val resetRepl = args.str("resetSession", "false").trim().lowercase() == "true"
+                        WhaleCodeRunner.runPython(
+                            app,
+                            projectDir,
+                            scriptCode,
+                            timeoutSec = timeoutSec,
+                            toolBridge = ptcBridge,
+                            sessionId = replSession,
+                            resetSession = resetRepl,
+                        )
                     }
                     val ok = result.optBoolean("ok", false)
                     ToolOutcome(name, if (lang == "sh" || lang == "shell") "运行 Shell：$safeProj" else "运行 Python：$safeProj", ok, result.toString(), mutating = true)
@@ -1239,6 +1272,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     } else {
                         cleanTask
                     }
+                    val dependsOn = args.str("dependsOn", "")
+                        .split(',', '，', ';')
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .distinct()
+                        .take(6)
                     val receipt = WorkerRuntimeWake.submit(
                         context = app,
                         task = fullTask,
@@ -1246,6 +1285,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         title = title,
                         needs = "none",
                         sourceSession = null,
+                        dependsOn = dependsOn,
                     )
                     val workerId = receipt.optString("commandId")
                     ToolOutcome(
@@ -1317,7 +1357,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         is String -> JSONArray(rawTodos.trim().ifBlank { "[]" })
                         else -> JSONArray()
                     }
-                    val res = WhaleHarnessCore.SessionTodoStore.write("whale-main", arr)
+                    val res = WhaleHarnessCore.SessionTodoStore.write("whale-main", arr, app)
                     ToolOutcome(name, "更新任务进度清单", true, res.toString(), mutating = true)
                 }
                 "whale_proactive_mode" -> {
@@ -1354,68 +1394,25 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val q = args.str("query").trim()
                     require(q.isNotEmpty()) { "缺少搜索关键词 query" }
                     val limit = args.optInt("limit", 5).coerceIn(1, 8)
-                    val encoded = java.net.URLEncoder.encode(q, "UTF-8")
-                    val url = java.net.URL("https://html.duckduckgo.com/html/?q=$encoded")
-                    val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                        requestMethod = "GET"
-                        connectTimeout = 10_000
-                        readTimeout = 12_000
-                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
-                    }
-                    val html = try {
-                        val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
-                        stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                    } finally {
-                        conn.disconnect()
-                    }
-                    val linkRegex = Regex("""<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                    val snipRegex = Regex("""<a[^>]*class="result__snippet"[^>]*>(.*?)</a>|<div[^>]*class="result__snippet"[^>]*>(.*?)</div>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                    val links = linkRegex.findAll(html).toList()
-                    val snips = snipRegex.findAll(html).toList()
-                    fun cleanHtml(raw: String): String = raw.replace(Regex("<[^>]+>"), " ")
-                        .replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">")
-                        .replace(Regex("\\s+"), " ").trim()
-                    val items = JSONArray()
-                    for (i in 0 until minOf(limit, links.size)) {
-                        val rawHref = links[i].groupValues[1]
-                        val uddg = Regex("""[?&]uddg=([^&]+)""").find(rawHref)?.groupValues?.get(1)
-                        val href = when {
-                            uddg != null -> runCatching { java.net.URLDecoder.decode(uddg, "UTF-8") }.getOrDefault(rawHref)
-                            rawHref.startsWith("//") -> "https:$rawHref"
-                            else -> rawHref
-                        }
-                        val title = cleanHtml(links[i].groupValues[2])
-                        val snippet = snips.getOrNull(i)?.let { cleanHtml(it.groupValues[1].ifBlank { it.groupValues[2] }) }.orEmpty()
-                        items.put(JSONObject().put("title", title).put("url", href).put("snippet", snippet.take(260)))
-                    }
-                    ToolOutcome(name, "联网搜索：$q", true, JSONObject().put("query", q).put("count", items.length()).put("items", items).toString())
+                    val res = WhaleWebFetcher.search(q, limit)
+                    ToolOutcome(name, "联网搜索：$q", res.optInt("count", 0) > 0, res.toString())
                 }
                 "whale_web_fetch" -> {
                     val rawUrl = args.str("url").trim()
-                    require(rawUrl.startsWith("https://") || rawUrl.startsWith("http://")) { "仅支持 http:// 或 https:// 网址" }
                     val maxChars = args.optInt("maxChars", 6000).coerceIn(500, 12_000)
-                    val conn = (java.net.URL(rawUrl).openConnection() as java.net.HttpURLConnection).apply {
-                        requestMethod = "GET"
-                        instanceFollowRedirects = true
-                        connectTimeout = 10_000
-                        readTimeout = 12_000
-                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
-                    }
-                    val (code, rawText) = try {
-                        val c = conn.responseCode
-                        val stream = if (c in 200..299) conn.inputStream else conn.errorStream
-                        c to (stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty())
-                    } finally {
-                        conn.disconnect()
-                    }
-                    val cleaned = rawText
-                        .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), " ")
-                        .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), " ")
-                        .replace(Regex("<[^>]+>"), " ")
-                        .replace(Regex("\\s+"), " ")
-                        .trim()
-                        .take(maxChars)
-                    ToolOutcome(name, "抓取网页内容", code in 200..299, JSONObject().put("url", rawUrl).put("status", code).put("content", cleaned).toString())
+                    val fetched = WhaleWebFetcher.fetch(rawUrl, maxChars)
+                    ToolOutcome(
+                        name,
+                        if (fetched.title.isNotBlank()) "抓取网页：${fetched.title.take(28)}" else "抓取网页内容",
+                        fetched.ok,
+                        JSONObject()
+                            .put("url", fetched.finalUrl)
+                            .put("status", fetched.status)
+                            .put("title", fetched.title)
+                            .put("truncatedBytes", fetched.truncatedBytes)
+                            .put("content", fetched.content)
+                            .toString(),
+                    )
                 }
                 "whale_memory_delete" -> {
                     val id = args.str("id").trim()
@@ -1681,7 +1678,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val service = DeepSeekAccessibilityService.current()
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
                     val question = args.str("question", "").trim()
-                    val cap = withPhoneControlNotice("正在看图识屏…") { service.captureScreenJpeg() }
+                    val cap = withPhoneControlNotice("正在看图识屏…") { service.captureScreenJpeg(annotateRefs = true) }
                     if (!cap.ok || cap.jpeg == null) {
                         ToolOutcome(name, "看图识屏受限", false, JSONObject().put("error", cap.error ?: "截屏失败").toString())
                     } else {
@@ -1714,7 +1711,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
                     val target = args.str("target").trim()
                     require(target.isNotEmpty()) { "缺少要视觉定位点击的目标 target" }
-                    val cap = withPhoneControlNotice("视觉定位「${target.take(10)}」…") { service.captureScreenJpeg() }
+                    val cap = withPhoneControlNotice("视觉定位「${target.take(10)}」…") { service.captureScreenJpeg(annotateRefs = true) }
                     if (!cap.ok || cap.jpeg == null) {
                         ToolOutcome(name, "视觉截屏受限", false, JSONObject().put("error", cap.error ?: "截屏失败").toString(), mutating = true)
                     } else {
@@ -1727,20 +1724,24 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             question = target,
                             locateTarget = true,
                         )
-                        if (!loc.ok || loc.x == null || loc.y == null) {
+                        if (!loc.ok || (loc.ref == null && (loc.x == null || loc.y == null))) {
                             ToolOutcome(name, "未能在画面中找到目标", false, JSONObject().put("error", loc.text).put("provider", loc.provider).put("model", loc.model).toString(), mutating = true)
                         } else {
-                            val tapArgs = JSONObject().put("action", "click").put("x", loc.x).put("y", loc.y).toString()
-                            val tapRes = withPhoneControlNotice("视觉点击「${loc.text.take(10)}」") { service.fastControl("fastAct", tapArgs) }
+                            val tapJson = JSONObject().put("action", "click")
+                            if (loc.ref != null) tapJson.put("ref", loc.ref)
+                            if (loc.x != null && loc.y != null) tapJson.put("x", loc.x).put("y", loc.y)
+                            val tapRes = withPhoneControlNotice("视觉点击「${loc.text.take(10)}」") { service.fastControl("fastAct", tapJson.toString()) }
+                            val posDesc = if (loc.ref != null) "#${loc.ref}" else "(${loc.x},${loc.y})"
                             ToolOutcome(
                                 name,
-                                "视觉点击「${loc.text}」(${loc.x},${loc.y})",
+                                "视觉点击「${loc.text}」$posDesc",
                                 tapRes.ok,
                                 JSONObject()
                                     .put("clicked", tapRes.ok)
                                     .put("label", loc.text)
-                                    .put("x", loc.x)
-                                    .put("y", loc.y)
+                                    .put("ref", loc.ref ?: JSONObject.NULL)
+                                    .put("x", loc.x ?: JSONObject.NULL)
+                                    .put("y", loc.y ?: JSONObject.NULL)
                                     .put("detail", tapRes.text)
                                     .toString(),
                                 mutating = true,

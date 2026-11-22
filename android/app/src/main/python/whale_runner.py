@@ -6,12 +6,16 @@ import sys
 import threading
 import time
 import traceback
+from collections import OrderedDict
 
 MAX_PTC_SUB_CALLS = 16
+MAX_REPL_SESSIONS = 12
 
 _TL = threading.local()
 _STREAM_INSTALL_LOCK = threading.Lock()
 _STREAMS_INSTALLED = False
+_SESSIONS_LOCK = threading.Lock()
+_REPL_SESSIONS: "OrderedDict[str, dict]" = OrderedDict()
 
 
 class _ThreadLocalStream:
@@ -93,8 +97,39 @@ class _WhaleToolsProxy:
         return _invoke
 
 
-def run_code(code: str, work_dir: str = "", tool_bridge=None) -> str:
-    """Execute Python code with strict per-thread stdout/stderr and work_dir isolation."""
+def _acquire_namespace(session_id: str, reset_session: bool):
+    clean_sid = str(session_id or "").strip()
+    if not clean_sid:
+        return {}
+    with _SESSIONS_LOCK:
+        if reset_session and clean_sid in _REPL_SESSIONS:
+            del _REPL_SESSIONS[clean_sid]
+        if clean_sid in _REPL_SESSIONS:
+            _REPL_SESSIONS.move_to_end(clean_sid)
+            return _REPL_SESSIONS[clean_sid]
+        ns = {}
+        _REPL_SESSIONS[clean_sid] = ns
+        while len(_REPL_SESSIONS) > MAX_REPL_SESSIONS:
+            _REPL_SESSIONS.popitem(last=False)
+        return ns
+
+
+def clear_session(session_id: str) -> bool:
+    clean_sid = str(session_id or "").strip()
+    if not clean_sid:
+        return False
+    with _SESSIONS_LOCK:
+        return _REPL_SESSIONS.pop(clean_sid, None) is not None
+
+
+def run_code(
+    code: str,
+    work_dir: str = "",
+    tool_bridge=None,
+    session_id: str = "",
+    reset_session: bool = False,
+) -> str:
+    """Execute Python code with strict per-thread stdout/stderr, work_dir isolation, and optional stateful REPL."""
     _ensure_thread_local_streams()
     t0 = time.monotonic()
     stdout_buf = io.StringIO()
@@ -128,14 +163,17 @@ def run_code(code: str, work_dir: str = "", tool_bridge=None) -> str:
     try:
         if resolved_dir not in sys.path:
             sys.path.insert(0, resolved_dir)
-        namespace = {
-            "__name__": "__main__",
-            "__file__": os.path.join(resolved_dir, "main.py"),
-            "WORK_DIR": resolved_dir,
-            "open": _scoped_open,
-            "tools": proxy,
-            "inspect": _inspect,
-        }
+        namespace = _acquire_namespace(session_id, reset_session)
+        namespace.update(
+            {
+                "__name__": "__main__",
+                "__file__": os.path.join(resolved_dir, "main.py"),
+                "WORK_DIR": resolved_dir,
+                "open": _scoped_open,
+                "tools": proxy,
+                "inspect": _inspect,
+            }
+        )
         exec(compile(code, "<whale_python>", "exec"), namespace, namespace)
     except Exception:
         ok = False
@@ -158,6 +196,7 @@ def run_code(code: str, work_dir: str = "", tool_bridge=None) -> str:
             "error": error_text[:4000],
             "subCalls": proxy.calls,
             "workDir": resolved_dir,
+            "sessionId": str(session_id or "").strip(),
             "elapsedMs": elapsed_ms,
             "pythonVersion": sys.version.split()[0],
         },

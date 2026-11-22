@@ -5010,6 +5010,16 @@ class MobileRuntimePlugin : Plugin() {
                                 .put("text", chunk),
                         )
                     }
+                    override fun onReasoning(chunk: String) {
+                        notifyListeners(
+                            "whaleNativeChatEvent",
+                            JSObject()
+                                .put("requestId", requestId)
+                                .put("sessionId", sessionId)
+                                .put("type", "reasoning")
+                                .put("text", chunk),
+                        )
+                    }
                     override fun onStep(step: io.deepseekharness.mobile.companion.WhaleNativeAgentEngine.StepRecord) {
                         notifyListeners(
                             "whaleNativeChatEvent",

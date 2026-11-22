@@ -34,6 +34,7 @@ internal object WhaleLongTaskStore {
         val ruleName: String = "",
         val deliveredInputs: List<Pair<String, String>> = emptyList(),
         val readInputIds: Set<String> = emptySet(),
+        val dependsOn: List<String> = emptyList(),
     ) {
         fun unreadInputs(): List<Pair<String, String>> = deliveredInputs.filter { it.first !in readInputIds }
 
@@ -60,6 +61,7 @@ internal object WhaleLongTaskStore {
                 .put("ruleName", ruleName)
                 .put("deliveredInputs", delArr)
                 .put("readInputIds", readArr)
+                .put("dependsOn", JSONArray(dependsOn))
         }
 
         companion object {
@@ -82,6 +84,14 @@ internal object WhaleLongTaskStore {
                         if (v.isNotBlank()) readSet.add(v)
                     }
                 }
+                val depList = ArrayList<String>()
+                val depArr = obj.optJSONArray("dependsOn")
+                if (depArr != null) {
+                    for (i in 0 until depArr.length()) {
+                        val d = depArr.optString(i).trim()
+                        if (d.isNotEmpty()) depList.add(d)
+                    }
+                }
                 return Checkpoint(
                     id = obj.getString("id"),
                     title = obj.optString("title"),
@@ -98,6 +108,7 @@ internal object WhaleLongTaskStore {
                     ruleName = obj.optString("ruleName", ""),
                     deliveredInputs = delList,
                     readInputIds = readSet,
+                    dependsOn = depList,
                 )
             }
         }

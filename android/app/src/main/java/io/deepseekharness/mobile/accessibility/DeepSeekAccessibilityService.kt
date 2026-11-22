@@ -64,7 +64,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     private val automationRuleGesture = AutomationRuleGestureTracker()
     private val fastController by lazy { WhaleFastPhoneController(this) }
 
-    internal fun captureScreenJpeg(): WhaleFastPhoneController.ScreenCaptureResult = fastController.captureScreenJpeg()
+    internal fun captureScreenJpeg(annotateRefs: Boolean = false): WhaleFastPhoneController.ScreenCaptureResult = fastController.captureScreenJpeg(annotateRefs)
 
     internal fun fastControl(command: String, param: String): DeviceCommandResult {
         val observed = command == "fastTree"

@@ -8,7 +8,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * 原生端侧自动混合 RAG 检索器（BGE-base-zh-v1.5 向量 + SQLite 词法 + RRF 倒数排名融合）。
+ * 原生自动 RAG 检索器（默认零成本本机 SQLite 词法检索；配置云端 /embeddings 后启用向量 + 词法 RRF 混合融合）。
  *
  * 在原生对话首轮推理前并行检索本地资料库与长期记忆（总预算 <= 600ms，超时自动降级不拖慢首字延迟），
  * 将高相关上下文片段按引用编号注入系统提示词，让 Agent 无需额外往返即可基于个人资料精准作答。

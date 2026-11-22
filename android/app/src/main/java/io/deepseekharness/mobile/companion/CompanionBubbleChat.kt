@@ -299,7 +299,7 @@ internal class CompanionBubbleChat(
     fun fusedReply(history: List<Message>, scope: String, memoryAllowed: Boolean, knowledgeAllowed: Boolean, onPartial: (String) -> Unit): Reply {
         PetReplyOperation.checkpoint()
         if (pending?.optString("kind") == "worker") return sendPendingWorker(history, memoryAllowed, knowledgeAllowed)
-        // 纯原生 Lite 模式（无旧 Harness 运行）：直接走 WhaleNativeAgentEngine，赋予桌宠全部 38 项原生工具 + 自动 RAG + SSE 流式！
+        // 纯原生 Lite 模式（无旧 Harness 运行）：直接走 WhaleNativeAgentEngine，赋予桌宠全部 94 项原生工具 + 自动 RAG + SSE 流式！
         if (runCatching { RuntimeHost.controllerOrNull()?.openHarnessAccess() }.isFailure) {
             return reply(history, scope, memoryAllowed, knowledgeAllowed, onPartial)
         }

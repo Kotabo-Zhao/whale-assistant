@@ -1,56 +1,67 @@
-# Android native runtime
+# Android 原生工程说明
 
-This directory is the Capacitor 7 Android platform for the DeepSeek Harness mobile control surface. It targets API 35, requires Android 8.0 or newer, and packages only `arm64-v8a`.
+本目录是 **Whale Assistant（鲸鱼助手 `0.4.0-whale.1`）** 的 Capacitor 7 + Kotlin + Chaquopy Android 工程。目标 SDK 为 **API 35**，最低支持 **Android 8.0（API 26）**，仅打包 `arm64-v8a`。
 
-## Build
+当前主线发布形态为 **Lite 纯原生版（`-PwhaleSeparateRuntime=true`）**：零 PRoot / Ubuntu `rootfs.bundle` 依赖，内嵌原生 **CPython 3.11（Chaquopy）** 与全部 Kotlin Super Agent 内核，单 APK 约 63 MB。
 
-1. Install the JavaScript dependencies from `app/` with Node.js `^22.19.0 || >=24.0.0` and `pnpm install --frozen-lockfile`.
-2. Import the release-pinned ARM64 PRoot runner and loader as `app/src/main/jniLibs/arm64-v8a/libdsh_proot.so` and `libdsh_proot_loader.so`. Both generated files are intentionally ignored by Git.
-3. For the official self-contained build, generate the ignored `app/src/main/assets/runtime/runtime-manifest.json` and `rootfs.bundle` assets from the same source revision before Gradle runs. Transaction `.bak` and `.part` files must not be present. A remote-only development build may instead set both `DSH_RUNTIME_MANIFEST_URL` and `DSH_RUNTIME_MANIFEST_SHA256` and omit the bundled runtime.
-4. Run `pnpm run android:sync`, then build with Android SDK 35, NDK, CMake 3.22.1, JDK 23, and Gradle 8.11.1.
+## 构建环境与命令
 
-The Gradle wrapper JAR and Capacitor-generated files are not committed. Generate the wrapper with a trusted Gradle 8.11.1 installation when preparing a clean build machine. Do not store signing passwords, download credentials, API keys, database credentials, or tokens in Gradle files or `local.properties`.
+### 工具链要求
+- Node.js `22.19.0`（或 `>=24.0.0`）+ `pnpm`（`11.x`）
+- JDK `21`（`compileOptions` / `kotlin.jvmToolchain(21)`）
+- Gradle `8.11.1`（摘要固定在 `gradle/wrapper/gradle-wrapper.properties`）
+- Android SDK 35、NDK `27.1.12297006`、CMake `3.22.1`
 
-## 团队统一签名（签名一致性）
+### 常用构建命令（在仓库根目录执行）
 
-所有构建变体（debug/release）统一使用团队共享密钥库 `dsh-mobile-team.jks` 签名，包名固定为 `io.deepseekharness.mobile`（`app/build.gradle` 的 `applicationId`）。这样任何开发者或 CI 产出的 APK 都可以互相覆盖安装，不会出现「应用签名与已安装版本不一致」的提示。密钥库与密码**严禁提交 Git**（`.gitignore` 已排除），按以下方式获取：
+```bash
+# 1. 安装前端依赖
+pnpm install --frozen-lockfile
 
-1. **本地开发**：向团队负责人索取 `android/keystore/dsh-mobile-team.jks` 与 `android/keystore.properties`（模板见 `keystore.properties.example`），放入 `android/` 目录后即可直接构建。
-2. **CI 构建**：由 GitHub Secrets 注入环境变量 `DSH_KEYSTORE_BASE64`（密钥库文件的 base64 编码）与 `DSH_KEYSTORE_PASSWORD`，构建时自动解码使用。
-3. **缺失即失败**：两者都缺失时 Gradle 配置阶段直接终止（fail-closed），防止有人用个人 debug 密钥产出签名不一致的 APK。
+# 2. 编译前端并同步到 android/app/src/main/assets/public
+pnpm run android:sync
 
-签名一致性校验：`python3 scripts/verify-apk-signature.py --apk <apk 路径>`，比对 APK 签名证书的 SHA-256 指纹是否与团队证书一致（指纹固定于脚本内，CI 构建后自动执行）。团队成员可先用该脚本校验收到的 APK 再安装。
+# 3. 一键构建 Lite 原生 Debug APK（推荐）
+pnpm run android:build:lite
+```
+
+等价 Gradle 命令（在 `android/` 目录执行）：
+
+```bash
+./gradlew testDebugUnitTest -PwhaleSeparateRuntime=true assembleDebug --no-daemon
+```
+
+- Lite 模式通过 `collectLightAssets` 自动排除 `runtime/rootfs.bundle` 与 `legal/ubuntu-packages/**`，构建产物输出至 `android/build/whale-light-app/outputs/apk/debug/app-debug.apk`。
+- `preBuild` 会自动执行 `generateLegalAssets`（打包应用与前端依赖许可证）和 `generateRichChatAssets`（打包 KaTeX / markdown-it 离线资源）；`packageDebug` / `packageRelease` 前会自动执行 `verifyShellAssets` 校验前端入口完整。
+- 严禁在 Gradle 文件或 `local.properties` 中写入签名密码、API Key 或其他凭据。
+
+## 签名策略（覆盖安装一致性）
+
+包名固定为 `io.deepseekharness.mobile`（`app/build.gradle` 的 `applicationId`）。
+
+1. **每日构建 / Debug（`whaleNightly`）**：未配置团队签名时，`debug` 变体默认使用仓库内置的固定测试密钥库 `android/app/whale-nightly-debug.keystore`，配合递增 `whaleVersionCode`（CI 使用 `146 + GITHUB_RUN_NUMBER`），确保每日 Lite APK 可直接无缝覆盖安装且本地记忆/设置无损。
+2. **正式 Release（团队签名，fail-closed）**：
+   - 本地：在 `android/keystore.properties` 配置团队密钥库（模板见 `keystore.properties.example`，密钥库与密码严禁提交 Git）。
+   - CI：通过环境变量 `DSH_KEYSTORE_BASE64` 与 `DSH_KEYSTORE_PASSWORD` 注入。
+   - 两者均缺失时，执行 `assembleRelease` / `bundleRelease` / `packageRelease` 会在 Gradle 阶段直接中止，防止误用个人密钥签名分发正式版。
+   - 签名指纹校验：`python3 scripts/verify-apk-signature.py --apk <apk 路径>`。
 
 ## 构建策略：发布版不混淆代码
 
-`app/build.gradle` 的 `release` 构建**关闭了 R8 代码混淆**（`minifyEnabled false`）、**关闭了资源裁剪改名**
-（`shrinkResources false`）。这是项目约定，不是遗留配置，不要为了「瘦身」改回去：
+`app/build.gradle` 的 `release` 构建刻意保持 **`minifyEnabled false`** 与 **`shrinkResources false`**，这是项目既定工程约定，切勿为了微小体积收益改回：
 
-1. **收益可以忽略**：APK 体积 98% 来自 rootfs bundle，R8 省下的几百 KB 对安装包大小没有实际意义。
-2. **混淆会打断按名字工作的链路**：Shizuku 的 UserService（`MobileRuntimePlugin` 起服务时按类名反射）、
-   Capacitor 插件注册、以及 `FileProvider` 的 authority 解析都依赖可读的类名/资源名。R8 改写后表现为
-   「连接超时」「文件操作失败」这类与真实原因无关的报错，排查成本高（0.3.5 的 Shizuku 连接超时即走过这条路）。
-3. **崩溃栈可读**：用户上报的堆栈不需要再对照 `mapping.txt` 反混淆，才可能在没有稳定复现步骤时定位问题。
+1. **反射与动态绑定链路敏感**：Shizuku 的 `DeviceShellUserService`、Capacitor 插件注册（`MobileRuntimePlugin`）、`FileProvider` authority 解析以及 Chaquopy Python 桥接均依赖可读的类名与资源名，R8 改写会导致难以定位的连接超时或桥接失效。
+2. **崩溃栈直接可读**：线上真机反馈的堆栈无需对照 `mapping.txt` 反混淆，便于快速排障。
+3. **资源路径稳定**：关闭 `shrinkResources` 可避免资源名被改写导致 `network_security_config.xml` 等配置排查困难。
 
-如果将来确有必须混淆的场景（例如合规要求），需要同时满足：补齐 Shizuku / Capacitor / FileProvider 的
-`proguard-rules.pro` 保留规则；跑一遍 `assembleRelease` 后的真机验证（启动、Shizuku 连接、分享/打开文件、
-插件管理）；并在 `AGENTS.md` 里记录新的取舍。
+若未来确有合规场景必须开启混淆，必须同步补齐 Shizuku / Capacitor / FileProvider / Chaquopy 的 `proguard-rules.pro` 保留规则，并在真机完成冷启动、原生对话、Python PTC、桌宠、无障碍控屏与 Shizuku 连接全链路回归验证。
 
-补充：`shrinkResources false` **不会**阻止 AGP 的资源优化把 `res/xml/network_security_config.xml`
-改成 `res/8G.xml` 这类短名（这是 `android.enableResourceOptimizations` 控制的另一套机制）。当前不打开
-该开关，是因为它属于未经真机验证的构建改动；如果后续确认资源改名会引发问题，再单独评估。
+## 原生运行时与安全边界
 
-## Runtime boundaries
-
-- `MobileRuntimePlugin` is the only JavaScript bridge. Every bridge input is validated again natively.
-- `MainActivity` opens without user login or Android device-credential authentication. Once the runtime is ready it launches the non-exported `HarnessActivity` directly; its native toolbar returns to the management settings surface.
-- `RuntimeInstaller` verifies the embedded archive's declared size and SHA-256. Remote replacements accept only digest-pinned HTTPS manifests and archives. Pinned DNS results reject every private, loopback, link-local, ULA, unspecified, or multicast A/AAAA answer before those same addresses are used for the connection. Remote transfers persist only the matching app-private `rootfs-<sha256>.part` file across restarts and resume with Range. A resume must return HTTP 206 and an exact `Content-Range`; HTTP 200 or 416 triggers a clean download from byte zero. Network, TLS, and timeout failures enter an explicit error state and retain the bounded app-private partial. Installation otherwise uses random app-private staging paths, no-follow/create-new file operations, fixed size limits, and atomic renames.
-- The embedded `.bundle` must remain uncompressed in the APK. It is read through a bounded `AssetFileDescriptor` stream; `python scripts/verify-bundle.py --apk <apk>` checks this packaging contract and the embedded size/SHA-256 before publication. `BundledRuntimeAssetTest` verifies the same read path on an Android device without installing or resetting the runtime.
-- Absolute guest symlinks are rewritten as relative links inside the staged root. Relative links that normalize outside it are rejected. Tar hardlinks are delayed until regular extraction completes and may target only no-follow regular files inside the staged root.
-- `libdsh_proot.so` and `libdsh_proot_loader.so` must come from the pinned runtime toolchain. Either file missing returns `RUNNER_UNAVAILABLE`; startup uses app-private links whose targets remain the APK native libraries, and downloaded executable code is never launched. Before a shell or Harness starts, the app probes the runner, selects the compatible seccomp profile, and adds only validated `/dev`, `/proc`, and resolver bind mounts that the device accepts.
-- Ubuntu entrypoints are allowlisted fixed argument vectors. Harness always binds `127.0.0.1`; a per-start 256-bit credential protects HTTP and WebSocket requests before dispatch, and `HarnessActivity` blocks navigation and HTTP resources outside the same loopback origin.
-- Shizuku is optional. The manifest declares the official `ShizukuProvider`; authorization and UserService connection remain separate visible states. Startup, returning to the launcher, and binder arrival automatically attempt a connection when Shizuku is running and already authorized; Settings retains an explicit reconnect action. Once connected, its UserService starts only `/system/bin/sh` and exposes that process only through a visible terminal session. Binder or UserService death invalidates sessions. The bridge reports `connected=true` only when permission is granted and the UserService binder is live. This is Android shell UID access, not root and not a general-purpose remote ADB client.
-- Reset first stops Harness and all PTY sessions, then removes only the app-private runtime tree without following symbolic links.
-- Audit records are stored under `noBackupFilesDir` with directory mode `0700` and file mode `0600`. UTC daily files retain the 90-day boundary and contain only a timestamp plus fixed event and result enums.
-
-The app does not expose an install-cancel bridge method. Destruction still cancels an active internal download. A digest-matching remote partial is retained for a later installation attempt; unrelated resume files and interrupted random staging workspaces are removed during the next install or reset. Download, verification, and extraction are distinct states, so a network failure cannot be presented as installation progress. Copying an explicitly embedded APK asset uses the `preparing` phase. Android loopback limits reachability but is not treated as authentication; the rootfs-packaged Node preload enforces the app-generated ephemeral credential independently of upstream browser-trust checks.
+- **唯一 JS 桥接**：`MobileRuntimePlugin` 是前端访问原生能力的唯一入口（144 个 `@PluginMethod`），所有入参均在原生层二次校验。
+- **密钥加密存储**：`RuntimeCredentialCipher` 使用不可导出的 Android Keystore `AES/GCM/NoPadding`（256-bit + AAD）加密全部模型供应商密钥。
+- **内嵌 Python 隔离**：`WhaleCodeRunner` + `whale_runner.py` 以线程局部 `stdout`/`stderr` 与项目目录作用域 `open()` 隔离并发 Worker，PTC 子工具调用上限 16 次且禁止递归调用 `whale_code_run`。
+- **无障碍与控屏红线**：`AccessibilityAutomationPolicy` 永久排除系统设置、SystemUI、安装器与权限控制器包名；文本先去除零宽字符与全角空格再拦截密码、验证码、支付及生物识别界面；`WhaleAutoMemoryObserver` 同样跳过敏感包名与密码输入框。
+- **自造工具与外部扩展沙盒**：`WhaleCustomToolEngine` 强制 `http_json` 仅用 HTTPS 并拦截回环/私网 SSRF 地址，`js` 工具运行于无网无文件隔离 WebView（5s 超时）；`WhaleMcpManager` 仅允许 HTTPS（本机/局域网除外）。
+- **Shizuku 与 Root 可选特权**：`ShizukuProvider` 与 `DeviceShellUserService` 仅在用户显式授权后工作；Root 通道受 `RootCommandGuard`（归一化静态拦截 + 无命名空间降级 `STRICT_RULES`）与 `RootSecurityWrapper` 约束。
+- **审计与备份策略**：`AndroidManifest.xml` 明确禁用系统云备份（`allowBackup="false"`），本地审计日志存于 `noBackupFilesDir`（目录 `0700`、文件 `0600`，90 天按 UTC 日轮转）。

@@ -38,7 +38,7 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
         val error: String? = null,
     )
 
-    fun captureScreenJpeg(): ScreenCaptureResult {
+    fun captureScreenJpeg(annotateRefs: Boolean = false): ScreenCaptureResult {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             return ScreenCaptureResult(false, error = "无障碍截屏需要 Android 11（API 30）及以上系统")
         }
@@ -79,9 +79,21 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
                         } else {
                             soft
                         }
+                        val finalBmp = if (annotateRefs) {
+                            val mutableBmp = scaled.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
+                            scaled.recycle()
+                            runCatching {
+                                val elements = lastSnapshot.get()?.takeIf { it.packageName == pkg }?.elements
+                                    ?: WhaleUiTreeCompactor.compact(collectRawNodes(pair.first), metrics.widthPixels, metrics.heightPixels, 60)
+                                drawSetOfMarkOverlay(mutableBmp, elements, metrics.widthPixels, metrics.heightPixels)
+                            }
+                            mutableBmp
+                        } else {
+                            scaled
+                        }
                         val out = java.io.ByteArrayOutputStream()
-                        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, out)
-                        scaled.recycle()
+                        finalBmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, out)
+                        finalBmp.recycle()
                         resultRef.set(
                             ScreenCaptureResult(
                                 ok = true,
@@ -565,6 +577,47 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
             hops += 1
         }
         return null
+    }
+
+    /** Set-of-Mark (SoM)：在截屏上叠加可交互控件的 #ref 红框与高对比编号，大幅降低视觉坐标漂移。 */
+    private fun drawSetOfMarkOverlay(
+        bitmap: android.graphics.Bitmap,
+        elements: List<WhaleUiTreeCompactor.CompactElement>,
+        screenW: Int,
+        screenH: Int,
+    ) {
+        if (elements.isEmpty() || screenW <= 0 || screenH <= 0) return
+        val sx = bitmap.width.toFloat() / screenW.toFloat()
+        val sy = bitmap.height.toFloat() / screenH.toFloat()
+        val canvas = android.graphics.Canvas(bitmap)
+        val boxPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = 2.5f
+            color = android.graphics.Color.argb(210, 239, 68, 68)
+        }
+        val tagBg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.FILL
+            color = android.graphics.Color.argb(230, 220, 38, 38)
+        }
+        val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textSize = 20f
+            isFakeBoldText = true
+        }
+        for (el in elements.take(45)) {
+            if (!el.clickable && !el.editable) continue
+            val l = (el.left * sx).coerceIn(0f, bitmap.width - 1f)
+            val t = (el.top * sy).coerceIn(0f, bitmap.height - 1f)
+            val r = (el.right * sx).coerceIn(l + 4f, bitmap.width.toFloat())
+            val b = (el.bottom * sy).coerceIn(t + 4f, bitmap.height.toFloat())
+            canvas.drawRect(l, t, r, b, boxPaint)
+            val tag = "#${el.ref}"
+            val tw = textPaint.measureText(tag)
+            val bgR = (l + tw + 10f).coerceAtMost(bitmap.width.toFloat())
+            val bgB = (t + 24f).coerceAtMost(bitmap.height.toFloat())
+            canvas.drawRect(l, t, bgR, bgB, tagBg)
+            canvas.drawText(tag, l + 4f, (t + 18f).coerceAtMost(bitmap.height - 2f), textPaint)
+        }
     }
 
     private fun JSONObject.str(key: String, fallback: String = ""): String =

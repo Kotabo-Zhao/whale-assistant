@@ -399,7 +399,7 @@ internal object WhaleHarnessCore {
         private val lists = ConcurrentHashMap<String, List<TodoItem>>()
         private val validStatuses = setOf("pending", "in_progress", "completed")
 
-        fun write(sessionId: String, rawTodos: JSONArray): JSONObject {
+        fun write(sessionId: String, rawTodos: JSONArray, context: Context? = null): JSONObject {
             val parsed = ArrayList<TodoItem>(rawTodos.length())
             val seen = HashSet<String>()
             var pending = 0
@@ -425,6 +425,13 @@ internal object WhaleHarnessCore {
             parsed.forEach { item ->
                 outArr.put(JSONObject().put("content", item.content).put("status", item.status))
             }
+            if (context != null) {
+                runCatching {
+                    val dir = File(context.applicationContext.filesDir, "whale-session-state").apply { mkdirs() }
+                    val safe = sessionId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(64).ifBlank { "default" }
+                    File(dir, "todo_$safe.json").writeText(outArr.toString(), Charsets.UTF_8)
+                }
+            }
             return JSONObject()
                 .put("ok", true)
                 .put("todos", outArr)
@@ -438,8 +445,22 @@ internal object WhaleHarnessCore {
                 )
         }
 
-        fun snapshotPrompt(sessionId: String): String {
-            val items = lists[sessionId].orEmpty()
+        fun snapshotPrompt(sessionId: String, context: Context? = null): String {
+            val items = lists[sessionId] ?: if (context != null) {
+                runCatching {
+                    val safe = sessionId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(64).ifBlank { "default" }
+                    val f = File(File(context.applicationContext.filesDir, "whale-session-state"), "todo_$safe.json")
+                    if (!f.isFile) emptyList() else {
+                        val arr = JSONArray(f.readText(Charsets.UTF_8))
+                        (0 until arr.length()).mapNotNull { i ->
+                            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                            val c = o.optString("content").trim()
+                            val s = o.optString("status", "pending").trim()
+                            if (c.isNotEmpty()) TodoItem(c, s) else null
+                        }.also { if (it.isNotEmpty()) lists[sessionId] = it }
+                    }
+                }.getOrDefault(emptyList())
+            } else emptyList()
             if (items.isEmpty()) return ""
             return buildString {
                 appendLine("[当前任务清单]")
@@ -480,6 +501,22 @@ internal object WhaleHarnessCore {
 
         fun wrapCheckpoint(summaryText: String): String =
             "以下是前序多轮工具执行的自动压缩检查点，请将其视为已确立的背景并直接继续当前任务，无需重复确认：\n\n<compacted-summary>\n${summaryText.trim()}\n</compacted-summary>"
+
+        fun saveCheckpoint(context: Context, sessionId: String, summaryText: String) {
+            runCatching {
+                val dir = File(context.applicationContext.filesDir, "whale-session-state").apply { mkdirs() }
+                val safe = sessionId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(64).ifBlank { "default" }
+                File(dir, "cp_$safe.txt").writeText(summaryText.trim().take(6_000), Charsets.UTF_8)
+            }
+        }
+
+        fun loadCheckpoint(context: Context, sessionId: String): String = runCatching {
+            val safe = sessionId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(64).ifBlank { "default" }
+            val f = File(File(context.applicationContext.filesDir, "whale-session-state"), "cp_$safe.txt")
+            if (f.isFile && System.currentTimeMillis() - f.lastModified() <= 24 * 60 * 60 * 1000L) {
+                f.readText(Charsets.UTF_8).trim()
+            } else ""
+        }.getOrDefault("")
     }
 
     // -------------------------------------------------------------------------
