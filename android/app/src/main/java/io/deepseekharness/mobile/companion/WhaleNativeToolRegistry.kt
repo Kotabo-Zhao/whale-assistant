@@ -1207,7 +1207,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     require(question.isNotEmpty()) { "缺少要向用户确认的问题 question" }
                     val workerId = callerSessionId
                         .removePrefix("whale-worker-")
-                        .replace(Regex("-s\d+$"), "")
+                        .replace(Regex("""-s\d+$"""), "")
                         .ifBlank { callerSessionId }
                     val res = WorkerRuntimeWake.askUserAndPause(app, workerId, question)
                     ToolOutcome(name, "已向用户发起确认并挂起", true, res.toString(), mutating = true)
