@@ -307,48 +307,113 @@ internal object WhaleHarnessCore {
 
     object ToolCallRecovery {
         /**
-         * 确保 messages 中每一个带 `tool_calls` 的 assistant 消息都有成对的 `role=tool` 回复，
-         * 避免因用户中途取消或单工具异常导致孤立 `tool_call_id` 触发下游模型 400 协议报错。
+         * 全链路协议校验与修复：
+         * 1. 确保 messages 中每一条带 `tool_calls` 的 assistant 消息紧随其后都有且仅有匹配的 `role=tool` 回复；
+         * 2. 自动补齐缺失的 `tool_call_id` 占位结果，自动移除悬空/重复/无主的 `role=tool` 消息；
+         * 3. 彻底杜绝因压缩、取消或并发异常触发 OpenAI/DeepSeek HTTP 400 `insufficient tool messages` 报错。
          */
-        fun ensureBalancedToolResults(messages: JSONArray): Int {
-            val answeredIds = HashSet<String>()
-            for (i in 0 until messages.length()) {
-                val m = messages.optJSONObject(i) ?: continue
-                if (m.optString("role") == "tool") {
-                    val cid = m.optString("tool_call_id", "").trim()
-                    if (cid.isNotEmpty()) answeredIds.add(cid)
-                }
-            }
+        fun sanitizeMessageSequence(messages: JSONArray): Int {
+            val cleaned = ArrayList<JSONObject>(messages.length() + 4)
             var patched = 0
-            // 仅检查尾部最后一个 assistant tool_calls 节点（最常见于中途取消/异常）
-            for (i in messages.length() - 1 downTo 0) {
-                val m = messages.optJSONObject(i) ?: continue
-                if (m.optString("role") != "assistant") continue
-                val calls = m.optJSONArray("tool_calls") ?: break
-                for (j in 0 until calls.length()) {
-                    val call = calls.optJSONObject(j) ?: continue
-                    val cid = call.optString("id", "").trim()
-                    if (cid.isNotEmpty() && cid !in answeredIds) {
-                        messages.put(
-                            JSONObject()
-                                .put("role", "tool")
-                                .put("tool_call_id", cid)
-                                .put(
-                                    "content",
+            var i = 0
+            val n = messages.length()
+            while (i < n) {
+                val msg = messages.optJSONObject(i)
+                if (msg == null) {
+                    i += 1
+                    patched += 1
+                    continue
+                }
+                val role = msg.optString("role", "")
+                if (role == "tool") {
+                    // 无前序 assistant(tool_calls) 的悬空 tool 消息直接丢弃
+                    patched += 1
+                    i += 1
+                    continue
+                }
+                if (role == "assistant") {
+                    val rawCalls = msg.optJSONArray("tool_calls")
+                    if (rawCalls != null && rawCalls.length() > 0) {
+                        val validCalls = JSONArray()
+                        val expectedOrder = ArrayList<String>(rawCalls.length())
+                        val expectedSet = HashSet<String>(rawCalls.length())
+                        for (j in 0 until rawCalls.length()) {
+                            val c = rawCalls.optJSONObject(j) ?: continue
+                            var cid = c.optString("id", "").trim()
+                            if (cid.isEmpty()) {
+                                cid = "call_fix_${i}_${j}"
+                                c.put("id", cid)
+                                patched += 1
+                            }
+                            if (expectedSet.add(cid)) {
+                                expectedOrder.add(cid)
+                                validCalls.put(c)
+                            } else {
+                                patched += 1
+                            }
+                        }
+                        if (validCalls.length() == 0) {
+                            msg.remove("tool_calls")
+                            cleaned.add(msg)
+                            i += 1
+                            patched += 1
+                            continue
+                        }
+                        msg.put("tool_calls", validCalls)
+                        cleaned.add(msg)
+                        // 收集紧随其后的连续 role=tool 回复
+                        val matchedTools = LinkedHashMap<String, JSONObject>()
+                        var k = i + 1
+                        while (k < n) {
+                            val next = messages.optJSONObject(k)
+                            if (next == null || next.optString("role", "") != "tool") break
+                            val tid = next.optString("tool_call_id", "").trim()
+                            if (tid in expectedSet && !matchedTools.containsKey(tid)) {
+                                matchedTools[tid] = next
+                            } else {
+                                patched += 1
+                            }
+                            k += 1
+                        }
+                        // 严格按 expectedOrder 输出全部 tool 回复，缺失项立即补齐协议占位
+                        for (cid in expectedOrder) {
+                            val existing = matchedTools[cid]
+                            if (existing != null) {
+                                cleaned.add(existing)
+                            } else {
+                                cleaned.add(
                                     JSONObject()
-                                        .put("error", "TOOL_NOT_STARTED")
-                                        .put("message", "该工具调用因任务中止或前序异常未能完成，请根据需要决定是否重试（非幂等写操作请先核实状态）。")
-                                        .toString(),
-                                ),
-                        )
-                        answeredIds.add(cid)
+                                        .put("role", "tool")
+                                        .put("tool_call_id", cid)
+                                        .put(
+                                            "content",
+                                            JSONObject()
+                                                .put("error", "TOOL_NOT_STARTED")
+                                                .put("message", "该工具调用因任务中止或上下文压缩未能完成，请按当前状态继续。")
+                                                .toString(),
+                                        ),
+                                )
+                                patched += 1
+                            }
+                        }
+                        i = k
+                        continue
+                    } else if (rawCalls != null) {
+                        msg.remove("tool_calls")
                         patched += 1
                     }
                 }
-                break
+                cleaned.add(msg)
+                i += 1
+            }
+            if (patched > 0) {
+                while (messages.length() > 0) messages.remove(messages.length() - 1)
+                for (item in cleaned) messages.put(item)
             }
             return patched
         }
+
+        fun ensureBalancedToolResults(messages: JSONArray): Int = sanitizeMessageSequence(messages)
     }
 
     // -------------------------------------------------------------------------

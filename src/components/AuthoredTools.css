@@ -74,62 +74,113 @@
   margin: 4px 0;
 }
 
-.authored-tools-full .tool-creation-entry {
+/* ── Workshop Studio Hero ── */
+.authored-tools-full {
+  padding: 0 0 18px;
+  overflow: hidden;
+}
+
+.authored-tools-full > .authored-tools-heading,
+.authored-tools-full > .workshop-toolbar,
+.authored-tools-full > .workshop-card-grid,
+.authored-tools-full > .tool-empty,
+.authored-tools-full > .tool-list-error,
+.authored-tools-full > .tool-action-message,
+.authored-tools-full > p[role="status"] {
+  padding-inline: 18px;
+}
+
+.workshop-studio-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
+  gap: 18px;
   align-items: center;
-  margin: -16px -18px 20px;
-  padding: 22px 24px;
-  background: linear-gradient(135deg, var(--blue-soft) 0%, var(--surface-muted) 100%);
-  border-bottom: 1px solid var(--blue-line);
-  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  padding: 20px 20px 18px;
+  margin-bottom: 16px;
+  background: linear-gradient(140deg, var(--blue-soft) 0%, var(--surface-muted) 68%, var(--surface) 100%);
+  border-bottom: 1px solid var(--line);
 }
 
-.tool-creation-label {
+.workshop-hero-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.workshop-studio-hero h2 {
+  margin: 0;
+  font-size: 1.24rem;
+  line-height: 1.28;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.workshop-stat-strip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.workshop-stat-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: var(--blue);
-  font-size: 0.76rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
 }
 
-.tool-creation-entry h2 {
-  margin: 8px 0 6px;
-  font-size: 1.22rem;
-  line-height: 1.4;
-  letter-spacing: -0.02em;
+.workshop-stat-pill.is-active {
+  color: var(--blue);
+  border-color: var(--blue-line, var(--line));
 }
 
-.authored-tools .tool-creation-entry p {
-  max-width: 38em;
-  line-height: 1.65;
+.workshop-stat-pill.is-draft {
+  color: #c88619;
+  border-color: rgba(200, 134, 25, 0.32);
+}
+
+.authored-tools .workshop-studio-hero p {
+  margin: 7px 0 0;
+  max-width: 42em;
+  line-height: 1.55;
+  color: var(--muted);
 }
 
 .tool-template-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px;
   margin-top: 12px;
 }
 
 .tool-template-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 0.8rem;
+  padding: 5px 11px;
+  font-size: 0.79rem;
   font-weight: var(--weight-medium);
   min-height: 32px;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 120ms ease;
 }
 
+.tool-template-chip svg {
+  color: var(--blue);
+  flex-shrink: 0;
+}
+
 .tool-template-chip:hover:not(:disabled) {
   background: var(--blue-soft);
-  border-color: var(--blue-line);
+  border-color: var(--blue-line, var(--blue));
   color: var(--blue);
   transform: translateY(-1px);
 }
@@ -152,39 +203,320 @@
   font-size: 0.75rem;
 }
 
-.authored-tools-full .authored-tool-links {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.authored-tools-full .authored-tool-card {
+/* ── Filter & Search Toolbar ── */
+.workshop-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  text-align: start;
-  padding: 16px;
-  min-height: 64px;
-  color: var(--ink);
+  gap: 10px;
+  margin: 12px 0 14px;
+}
+
+.workshop-filter-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius-inner);
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+}
+
+.workshop-filter-pill {
+  padding: 5px 11px;
+  min-height: 32px;
+  border: 0;
+  border-radius: calc(var(--radius-inner) - 2px);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.workshop-filter-pill.is-selected {
   background: var(--surface);
-  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-.authored-tool-card > span {
+.tool-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 180px;
+  max-width: 280px;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.tool-search:focus-within {
+  border-color: var(--blue);
+  background: var(--surface);
+}
+
+.tool-search input {
+  flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
-  font-weight: var(--weight-medium);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86rem;
 }
 
-.authored-tool-card svg {
-  color: var(--blue);
+.tool-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+}
+
+/* ── Workshop Tool Cards Grid ── */
+.workshop-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.workshop-tool-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-inner);
+  background: var(--surface);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.workshop-tool-card.is-pinned {
+  border-color: var(--blue-line, var(--blue));
+}
+
+.workshop-tool-card.is-draft {
+  border-style: dashed;
+  background: var(--surface-muted);
+}
+
+.workshop-tool-card.is-managed {
+  border-color: var(--blue);
+  box-shadow: var(--shadow-card);
+}
+
+.workshop-tool-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 10px 12px;
+}
+
+.workshop-tool-launch {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 2px 4px 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: start;
+  min-height: 44px;
+}
+
+.workshop-tool-glyph {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+
+.workshop-tool-glyph.tone-a { background: rgba(56, 139, 253, 0.14); color: #3b82f6; border-color: rgba(56, 139, 253, 0.22); }
+.workshop-tool-glyph.tone-b { background: rgba(16, 185, 129, 0.14); color: #10b981; border-color: rgba(16, 185, 129, 0.22); }
+.workshop-tool-glyph.tone-c { background: rgba(245, 158, 11, 0.15); color: #d97706; border-color: rgba(245, 158, 11, 0.25); }
+.workshop-tool-glyph.tone-d { background: rgba(168, 85, 247, 0.14); color: #9333ea; border-color: rgba(168, 85, 247, 0.22); }
+.workshop-tool-glyph.tone-e { background: rgba(236, 72, 153, 0.14); color: #db2777; border-color: rgba(236, 72, 153, 0.22); }
+.workshop-tool-glyph.tone-f { background: rgba(6, 182, 212, 0.14); color: #0891b2; border-color: rgba(6, 182, 212, 0.22); }
+.workshop-tool-glyph.tone-draft { background: var(--surface); color: var(--muted); border-color: var(--line); }
+
+.workshop-tool-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workshop-tool-title {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workshop-tool-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.workshop-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
   flex-shrink: 0;
 }
 
+.workshop-status-dot.is-draft {
+  background: var(--muted);
+}
+
+.workshop-status-dot.is-update {
+  background: #f59e0b;
+}
+
+.workshop-launch-arrow {
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.workshop-tool-launch:hover .workshop-launch-arrow {
+  color: var(--blue);
+  transform: translate(1px, -1px);
+}
+
+.workshop-tool-quick {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.workshop-icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  transition: background-color 130ms ease, color 130ms ease, border-color 130ms ease;
+}
+
+.workshop-icon-btn:hover:not(:disabled) {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+.workshop-icon-btn.is-active {
+  background: var(--blue-soft);
+  color: var(--blue);
+  border-color: var(--blue-line, transparent);
+}
+
+/* ── Expandable Card Management Drawer ── */
+.workshop-tool-drawer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-muted);
+  border-radius: 0 0 calc(var(--radius-inner) - 1px) calc(var(--radius-inner) - 1px);
+}
+
+.workshop-drawer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 500;
+  transition: border-color 130ms ease, background-color 130ms ease, color 130ms ease;
+}
+
+.workshop-drawer-btn:hover:not(:disabled) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.workshop-drawer-btn.is-primary {
+  background: var(--blue);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+.workshop-drawer-btn.is-primary:hover:not(:disabled) {
+  color: var(--on-accent);
+  opacity: 0.92;
+}
+
+.workshop-drawer-btn.is-danger-ghost {
+  color: #dc4c4c;
+  border-color: rgba(220, 76, 76, 0.28);
+}
+
+.workshop-drawer-btn.is-danger-ghost:hover:not(:disabled) {
+  background: rgba(220, 76, 76, 0.1);
+  border-color: #dc4c4c;
+  color: #dc4c4c;
+}
+
+.workshop-drawer-btn.is-danger {
+  background: #dc4c4c;
+  color: #fff;
+  border-color: transparent;
+}
+
+.workshop-delete-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.workshop-empty-filter {
+  grid-column: 1 / -1;
+  padding: 16px 4px;
+  text-align: center;
+  color: var(--muted);
+}
+
 .authored-tools button:disabled {
-  opacity: 0.6;
+  opacity: 0.56;
   cursor: default;
 }
 
@@ -198,59 +530,45 @@
 
 .authored-tools .tool-empty p {
   margin: 0;
-  line-height: 1.75;
+  line-height: 1.6;
 }
 
 .tool-list-error {
-  padding: 14px 0;
-}
-
-.tool-search {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 12px 0;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  color: var(--muted);
-  background: var(--surface-muted);
-}
-
-.tool-search input {
-  min-width: 0;
-  width: 100%;
-  padding: 4px;
-  border: 0;
-  outline: 0;
-  color: var(--ink);
-  background: transparent;
-  font: inherit;
-}
-
-.tool-search:focus-within {
-  border-color: var(--blue);
-  background: var(--surface);
-}
-
-.authored-tools .tool-action-message {
-  padding: 12px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-top: 10px;
   border-radius: var(--radius-inner);
   background: var(--surface-muted);
-  margin-top: 12px;
 }
 
-@media (max-width: 600px) {
-  .authored-tools-full .tool-creation-entry {
+.tool-action-message {
+  margin-top: 12px;
+  color: var(--blue);
+  font-weight: 500;
+}
+
+@media (max-width: 639px) {
+  .workshop-studio-hero {
     grid-template-columns: minmax(0, 1fr);
     gap: 14px;
-    padding: 18px;
+    padding: 16px;
   }
+
   .tool-creation-actions {
     flex-direction: row;
     flex-wrap: wrap;
   }
-  .tool-creation-actions > button {
-    flex: 1 1 auto;
+
+  .tool-creation-actions .button {
+    flex: 1 1 130px;
+  }
+
+  .tool-search {
+    max-width: none;
+    width: 100%;
   }
 }

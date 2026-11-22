@@ -361,10 +361,74 @@ internal class CompanionDashboard(private val context: Context) {
                 })
                 JSONObject().put("ok", true).put("title", article.title)
             }
-            "featureTools" -> JSONObject().put("items", JSONArray(
-                io.deepseekharness.mobile.features.WhaleFeatureStore(context).activeTools().map { it.json() }))
+            "featureTools" -> {
+                val fStore = io.deepseekharness.mobile.features.WhaleFeatureStore(context)
+                val allRows = fStore.list()
+                val byId = allRows.associateBy { it.optString("id") }
+                val activeArr = JSONArray()
+                fStore.activeTools().forEach { tool ->
+                    val meta = byId[tool.id]
+                    val latest = meta?.optString("latest").orEmpty().ifBlank { tool.revision }
+                    val previous = meta?.optString("previous").orEmpty()
+                    activeArr.put(
+                        tool.json()
+                            .put("latest", latest)
+                            .put("previous", previous)
+                            .put("hasUpdate", latest.isNotEmpty() && latest != tool.revision)
+                            .put("activatedAt", tool.activatedAt),
+                    )
+                }
+                val draftsArr = JSONArray()
+                allRows.filter { it.optString("active").isEmpty() }.forEach { row ->
+                    val latest = row.optString("latest")
+                    if (latest.isNotEmpty()) {
+                        draftsArr.put(
+                            JSONObject()
+                                .put("id", row.optString("id"))
+                                .put("title", row.optString("title"))
+                                .put("revision", latest)
+                                .put("latest", latest)
+                                .put("previous", row.optString("previous"))
+                                .put("pinned", row.optBoolean("pinned", false))
+                                .put("activatedAt", row.optLong("activatedAt")),
+                        )
+                    }
+                }
+                JSONObject().put("items", activeArr).put("drafts", draftsArr)
+            }
             "featureOpen" -> {
-                io.deepseekharness.mobile.features.WhaleFeatureActivity.openTool(context, text("id"), text("revision"))
+                io.deepseekharness.mobile.features.WhaleFeatureActivity.openTool(
+                    context,
+                    text("id"),
+                    text("revision"),
+                    preview = request.optBoolean("preview", false),
+                )
+                JSONObject().put("ok", true)
+            }
+            "featureActivate" -> {
+                val updated = io.deepseekharness.mobile.features.WhaleFeatureStore(context)
+                    .activate(text("id"), request.optString("target", ""), request.optString("expectedActive", ""))
+                JSONObject().put("ok", true).put("item", updated)
+            }
+            "featurePin" -> {
+                val updated = io.deepseekharness.mobile.features.WhaleFeatureStore(context)
+                    .setPinned(text("id"), request.optBoolean("pinned", false))
+                JSONObject().put("ok", true).put("item", updated)
+            }
+            "featureDelete" -> {
+                val deleted = io.deepseekharness.mobile.features.WhaleFeatureStore(context).delete(text("id"))
+                JSONObject().put("ok", deleted)
+            }
+            "featurePinHome" -> {
+                val title = text("title")
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    io.deepseekharness.mobile.features.WhaleFeatureActivity.pinToHomeScreen(
+                        context,
+                        text("id"),
+                        title,
+                        text("revision"),
+                    )
+                }
                 JSONObject().put("ok", true)
             }
             "featureLibrary" -> {

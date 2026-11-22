@@ -245,11 +245,13 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         val rebuilt = JSONArray()
                         if (sysMsg != null) rebuilt.put(sysMsg)
                         rebuilt.put(JSONObject().put("role", "user").put("content", WhaleHarnessCore.PrefixCacheCompactor.wrapCheckpoint(summaryText)))
-                        // 保留最近 2 条消息确保衔接自然
+                        // 保留最近 2 条非工具调用的普通消息确保衔接自然，绝不留下无配对 tool 的 assistant(tool_calls)
                         val tailStart = (messages.length() - 2).coerceAtLeast(1)
                         for (ti in tailStart until messages.length()) {
                             val item = messages.optJSONObject(ti) ?: continue
-                            if (item.optString("role") != "tool") rebuilt.put(item)
+                            val itemRole = item.optString("role", "")
+                            val hasToolCalls = (item.optJSONArray("tool_calls")?.length() ?: 0) > 0
+                            if (itemRole != "tool" && !hasToolCalls) rebuilt.put(item)
                         }
                         while (messages.length() > 0) messages.remove(messages.length() - 1)
                         for (ri in 0 until rebuilt.length()) messages.put(rebuilt.get(ri))
@@ -732,6 +734,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         control: RunControl? = null,
         fallbacks: List<Endpoint> = emptyList(),
     ): AssistantTurn {
+        // 每次发起模型请求前执行全链路 tool_calls <-> tool 序列校验，杜绝 HTTP 400 协议错位
+        WhaleHarnessCore.ToolCallRecovery.sanitizeMessageSequence(messages)
         val candidates = listOf(endpoint) + fallbacks.take(2)
         var lastError: Throwable? = null
         for ((epIdx, target) in candidates.withIndex()) {

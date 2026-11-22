@@ -320,6 +320,13 @@ open class WhaleFeatureActivity : Activity() {
                 if (active.isNotEmpty()) manage.addView(button(if (pinned) "取消置顶" else "置顶到桌宠") { read({ store.setPinned(id, !pinned) }) { library() } })
                 if (active.isNotEmpty()) manage.addView(button("添加到手机桌面") { pinToHomeScreen(this, id, item.getString("activeTitle").ifBlank { item.getString("title") }, active) })
                 if (active.isNotEmpty()) manage.addView(button("停用") { read({ store.activate(id, "", active) }) { library() } })
+                val delTitle = item.getString("title")
+                manage.addView(button("删除此功能") {
+                    ui.dialogBuilder("删除功能", "确定要删除「$delTitle」吗？删除后无法恢复。", io.deepseekharness.mobile.R.drawable.ic_pet_assign)
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("删除") { _, _ -> read({ store.delete(id) }) { library() } }
+                        .show()
+                }.apply { setTextColor(0xFFD94A4A.toInt()) })
             }
             body.addView(WorkspaceCardGrid(this, cards), LinearLayout.LayoutParams(-1, -2))
         }

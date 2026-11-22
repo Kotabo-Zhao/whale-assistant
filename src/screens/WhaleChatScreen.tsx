@@ -302,9 +302,10 @@ function loadActiveSessionId(sessions: WhaleChatSession[]): string {
 export interface WhaleChatScreenProps {
   bridge: RuntimeBridge
   onNavigate: (view: AppView) => void
+  isVisible?: boolean
 }
 
-export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
+export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleChatScreenProps) {
   const style = useInterfaceStyle()
   const isUsagi = style === 'usagi'
   const activeAvatar = isUsagi ? usagiAvatar : whaleChanAvatar
@@ -412,7 +413,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       window.cancelAnimationFrame(raf)
       programmaticScrollRef.current = false
     }
-  }, [messages, streamingText, streamingSteps, sending])
+  }, [messages, streamingText, streamingSteps, sending, isVisible])
 
   useEffect(() => {
     if (!bridge.addWhaleChatListener) return
@@ -445,7 +446,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       disposed = true
       if (cleanup) void cleanup()
     }
-  }, [bridge, activeId])
+  }, [bridge])
 
   const updateSessionMessages = (sessionId: string, updater: (prev: WhaleChatMessage[]) => WhaleChatMessage[], autoTitle?: string) => {
     setSessions(prev => prev.map(session => {

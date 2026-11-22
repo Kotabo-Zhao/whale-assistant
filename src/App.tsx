@@ -3422,6 +3422,10 @@ export function App() {
     () => window.innerHeight,
   ), [])
   const [activeView, setActiveViewState] = useState<AppView>(ROOT_VIEW)
+  const [chatEverMounted, setChatEverMounted] = useState<boolean>(() => ROOT_VIEW === 'whale-chat')
+  useEffect(() => {
+    if (activeView === 'whale-chat') setChatEverMounted(true)
+  }, [activeView])
   /**
    * 当前视图的同步真值：导航与历史回退都先改它再改状态。
    * 同一视图重复导航（例如启动成功后再次切到设置）由此判重，不会往历史里堆冗余记录。
@@ -5480,7 +5484,7 @@ export function App() {
       case 'conversation':
         return <ConversationScreen mode="gate" busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; if (canEnterConversation(runtime, settings) && !keepAlive.reconnectRequired) setActiveView('harness'); else launchHarness() }} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
       case 'whale-chat':
-        return <Suspense fallback={null}><WhaleChatScreen bridge={runtimeBridge} onNavigate={view => setActiveView(view)} /></Suspense>
+        return null
       case 'sessions':
         return <Suspense fallback={null}><SessionManager onBack={() => backToView('whale-chat')} onOpenHarness={() => setActiveView('whale-chat')} /></Suspense>
       case 'assistant-memory':
@@ -5574,8 +5578,22 @@ export function App() {
           </div>
         </header>}
 
-        {/* 切换页面后从顶部重新渲染，不保留上一页的滚动位置。 */}
-        <main className={activeView === 'whale-chat' ? 'app-main is-chat-main' : 'app-main'} key={activeView}><Suspense fallback={<div className="terminal-loading" role="status">{t("正在加载页面…")}</div>}>{screen}</Suspense></main>
+        {/* 保持对话页常驻挂载，切换至其他页面再切回时 Agent 流式回复绝不中断或丢失。 */}
+        {chatEverMounted && (
+          <main
+            className="app-main is-chat-main"
+            hidden={activeView !== 'whale-chat'}
+            style={activeView === 'whale-chat' ? undefined : { display: 'none' }}
+          >
+            <Suspense fallback={<div className="terminal-loading" role="status">{t("正在加载页面…")}</div>}>
+              <WhaleChatScreen bridge={runtimeBridge} isVisible={activeView === 'whale-chat'} onNavigate={view => setActiveView(view)} />
+            </Suspense>
+          </main>
+        )}
+        {/* 其余页面切换后从顶部重新渲染，不保留上一页的滚动位置。 */}
+        {activeView !== 'whale-chat' && (
+          <main className="app-main" key={activeView}><Suspense fallback={<div className="terminal-loading" role="status">{t("正在加载页面…")}</div>}>{screen}</Suspense></main>
+        )}
       </div>
       <BottomNavigation activeView={activeView} onNavigate={setActiveView} />
 
