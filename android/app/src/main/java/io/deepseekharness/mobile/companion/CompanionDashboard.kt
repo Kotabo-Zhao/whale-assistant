@@ -84,6 +84,23 @@ internal class CompanionDashboard(private val context: Context) {
                 "remove", "delete" -> WhaleMcpManager.removeServer(context, text("id"))
                 else -> throw IllegalArgumentException("不支持的 MCP 操作")
             }
+            "workspaceList" -> WhaleCodeRunner.listWorkspaceFiles(context, request.optString("project", ""))
+            "workspacePreview" -> WhaleCodeRunner.previewFile(
+                context,
+                request.optString("path", request.optString("fileName", "")),
+                request.optString("project", ""),
+            )
+            "workspaceDelete" -> WhaleCodeRunner.deleteWorkspaceFile(
+                context,
+                request.optString("project", ""),
+                request.optString("path", ""),
+            )
+            "workspaceExport" -> WhaleCodeRunner.exportProjectFile(
+                context,
+                request.optString("project", "scratch"),
+                request.optString("path", ""),
+                request.optBoolean("share", false),
+            )
             "automationHealth" -> WhaleAutoHealBridge.health(context)
             "automationAutoFix" -> WhaleAutoHealBridge.autoHeal(context, request.optBoolean("relaxWhitelist", true))
             "uploadChatFile" -> WhaleCodeRunner.saveUploadedChatFile(

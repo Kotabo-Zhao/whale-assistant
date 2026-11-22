@@ -8,6 +8,7 @@ import {
   ArrowUp,
   ExternalLink,
   FileText,
+  FolderOpen,
   Share2,
   BellRing,
   BookmarkCheck,
@@ -35,6 +36,8 @@ import whaleChanAvatar from '../assets/whale-chan-avatar.png'
 import usagiAvatar from '../assets/usagi-avatar.png'
 import { CuteIcon, type CuteIconName } from '../components/CuteIcon'
 import { AgentStatusIcon } from '../components/AgentStatusIcon'
+import { ChatMediaCard } from '../components/ChatMediaCard'
+import { AiWorkspaceModal } from '../components/AiWorkspaceModal'
 import { t } from '../i18n'
 import { useInterfaceStyle } from '../theme'
 import type { RuntimeBridge, WhaleNativeChatStep } from '../platform/types'
@@ -309,6 +312,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [sessions, setSessions] = useState<WhaleChatSession[]>(loadSessions)
   const [activeId, setActiveId] = useState<string>(() => loadActiveSessionId(loadSessions()))
   const [sessionsOpen, setSessionsOpen] = useState(false)
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [slashOpen, setSlashOpen] = useState(false)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
@@ -895,6 +899,15 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         <div className="whale-chat-shortcuts" aria-label={t('常用功能入口')}>
           <button
             type="button"
+            className={`whale-icon-chip${workspaceOpen ? ' is-active' : ''}`}
+            title={t('AI 工作目录')}
+            aria-label={t('AI 工作目录')}
+            onClick={() => setWorkspaceOpen(true)}
+          >
+            {style !== 'simple' ? <CuteIcon name="workspace" size={20} /> : <FolderOpen size={17} />}
+          </button>
+          <button
+            type="button"
             className={`whale-icon-chip${sessionsOpen ? ' is-active' : ''}`}
             title={t('会话列表')}
             aria-label={t('会话列表')}
@@ -1168,9 +1181,16 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                     )}
                   </div>
                 )}
-                {receipts.length > 0 && (
+                {receipts.some(r => r.kind === 'file' && r.fileName) && (
+                  <div className="whale-wx-media-stack" aria-label={t('文件与图片')}>
+                    {receipts.filter(r => r.kind === 'file' && r.fileName).map(receipt => (
+                      <ChatMediaCard key={receipt.key} bridge={bridge} fileName={receipt.fileName!} />
+                    ))}
+                  </div>
+                )}
+                {receipts.some(r => r.kind !== 'file') && (
                   <div className="whale-receipt-list" aria-label={t('操作回执')}>
-                    {receipts.map(receipt => (
+                    {receipts.filter(r => r.kind !== 'file').map(receipt => (
                       <div key={receipt.key} className="whale-receipt-card">
                         <span className="whale-receipt-title">
                           {renderReceiptIcon(receipt.kind)}
@@ -1500,6 +1520,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           </button>
         )}
       </form></div>
+      {workspaceOpen && <AiWorkspaceModal bridge={bridge} onClose={() => setWorkspaceOpen(false)} />}
     </section>
   )
 }

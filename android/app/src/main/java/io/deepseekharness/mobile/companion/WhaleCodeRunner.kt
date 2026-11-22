@@ -315,4 +315,141 @@ internal object WhaleCodeRunner {
         return JSONObject().put("ok", true).put("fileName", cleanName).put("action", action)
     }
 
+
+    /** 列出 AI 代码工作区（whale-projects/）下的全部项目与产出文件，供软件内工作目录管理器展示。 */
+    fun listWorkspaceFiles(context: Context, projectFilter: String = ""): JSONObject {
+        val app = context.applicationContext
+        val root = File(app.filesDir, "whale-projects").apply { mkdirs() }.canonicalFile
+        val projects = root.listFiles()?.filter { it.isDirectory }?.map { it.name }?.sorted().orEmpty()
+        val filter = projectFilter.trim()
+        val imgExts = setOf("png", "jpg", "jpeg", "webp", "gif")
+        val collected = ArrayList<Triple<Long, String, JSONObject>>()
+        var totalBytes = 0L
+
+        val dirs = if (filter.isNotEmpty()) listOf(File(root, filter)).filter { it.isDirectory } else root.listFiles()?.filter { it.isDirectory }.orEmpty()
+        for (projDir in dirs) {
+            val projName = projDir.name
+            val projCanon = projDir.canonicalFile
+            projCanon.walkTopDown().maxDepth(4).filter { it.isFile }.forEach { f ->
+                val rel = f.canonicalPath.removePrefix(projCanon.path + File.separator).replace('\\', '/')
+                val ext = f.name.substringAfterLast('.', "").lowercase()
+                val sz = f.length()
+                totalBytes += sz
+                val item = JSONObject()
+                    .put("project", projName)
+                    .put("path", rel)
+                    .put("fileName", f.name)
+                    .put("ext", ext)
+                    .put("bytes", sz)
+                    .put("modifiedAt", f.lastModified())
+                    .put("isImage", ext in imgExts)
+                collected.add(Triple(f.lastModified(), f.name, item))
+            }
+        }
+        collected.sortByDescending { it.first }
+        val filesArr = JSONArray()
+        collected.take(200).forEach { filesArr.put(it.third) }
+        return JSONObject()
+            .put("ok", true)
+            .put("projects", JSONArray(projects))
+            .put("totalFiles", collected.size)
+            .put("totalBytes", totalBytes)
+            .put("files", filesArr)
+    }
+
+    /** 为聊天内联卡片与工作区管理器提供应用内预览（图片返回压缩 Base64 DataURL，文本/代码返回内容片段）。 */
+    fun previewFile(context: Context, fileNameOrPath: String, project: String = ""): JSONObject {
+        val app = context.applicationContext
+        val raw = fileNameOrPath.trim().trimStart('/')
+        require(raw.isNotEmpty()) { "缺少文件路径" }
+        val projectsRoot = File(app.filesDir, "whale-projects").canonicalFile
+        var target: File? = null
+
+        if (project.isNotBlank()) {
+            val safeProj = project.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val pDir = File(projectsRoot, safeProj).canonicalFile
+            if (pDir.path.startsWith(projectsRoot.path + File.separator)) {
+                val cand = File(pDir, raw).canonicalFile
+                if (cand.path.startsWith(pDir.path + File.separator) && cand.isFile) target = cand
+            }
+        }
+        val cleanName = raw.substringAfterLast('/').substringAfterLast('\\')
+        if (target == null) {
+            val shareCand = File(File(app.cacheDir, "share"), cleanName)
+            if (shareCand.isFile) target = shareCand
+        }
+        if (target == null) {
+            target = projectsRoot.walkTopDown().maxDepth(4).firstOrNull { it.isFile && it.name == cleanName }
+        }
+        if (target == null) {
+            @Suppress("DEPRECATION")
+            val dlCand = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "WhaleAssistant"), cleanName)
+            if (dlCand.isFile) target = dlCand
+        }
+        val file = target ?: return JSONObject().put("ok", false).put("error", "未找到文件：$cleanName")
+        val ext = file.name.substringAfterLast('.', "").lowercase()
+        val imgExts = setOf("png", "jpg", "jpeg", "webp")
+        val textExts = setOf("txt", "md", "csv", "json", "py", "js", "ts", "tsx", "jsx", "kt", "java", "c", "cpp", "h", "v", "sv", "html", "css", "xml", "yaml", "yml", "sh", "log", "sql")
+
+        val out = JSONObject()
+            .put("ok", true)
+            .put("fileName", file.name)
+            .put("ext", ext)
+            .put("bytes", file.length())
+            .put("modifiedAt", file.lastModified())
+            .put("isImage", ext in imgExts)
+            .put("canTextPreview", ext in textExts)
+
+        if (ext in imgExts && file.length() in 1..16_000_000L) {
+            val dataUrl = runCatching {
+                if (file.length() <= 420_000L) {
+                    val mime = if (ext == "png") "image/png" else if (ext == "webp") "image/webp" else "image/jpeg"
+                    val b64 = android.util.Base64.encodeToString(file.readBytes(), android.util.Base64.NO_WRAP)
+                    "data:$mime;base64,$b64"
+                } else {
+                    val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)
+                    val maxDim = maxOf(opts.outWidth, opts.outHeight).coerceAtLeast(1)
+                    val sample = (maxDim / 1280).coerceAtLeast(1)
+                    val bmp = android.graphics.BitmapFactory.decodeFile(
+                        file.absolutePath,
+                        android.graphics.BitmapFactory.Options().apply { inSampleSize = sample },
+                    )
+                    if (bmp != null) {
+                        val bos = java.io.ByteArrayOutputStream()
+                        bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 84, bos)
+                        bmp.recycle()
+                        "data:image/jpeg;base64," + android.util.Base64.encodeToString(bos.toByteArray(), android.util.Base64.NO_WRAP)
+                    } else ""
+                }
+            }.getOrDefault("")
+            if (dataUrl.isNotEmpty()) out.put("dataUrl", dataUrl)
+        } else if (ext in textExts) {
+            val text = runCatching {
+                file.inputStream().bufferedReader(Charsets.UTF_8).use { reader ->
+                    val buf = CharArray(24_000)
+                    val n = reader.read(buf)
+                    if (n > 0) String(buf, 0, n) else ""
+                }
+            }.getOrDefault("")
+            out.put("textPreview", text)
+            out.put("truncated", file.length() > 24_000L)
+        }
+        return out
+    }
+
+    /** 安全删除 AI 工作区内的单个文件。 */
+    fun deleteWorkspaceFile(context: Context, project: String, relPath: String): JSONObject {
+        val app = context.applicationContext
+        val safeProj = project.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        require(safeProj.isNotEmpty() && relPath.isNotBlank()) { "缺少项目名或文件路径" }
+        val projectsRoot = File(app.filesDir, "whale-projects").canonicalFile
+        val projDir = File(projectsRoot, safeProj).canonicalFile
+        require(projDir.path.startsWith(projectsRoot.path + File.separator)) { "项目路径越界" }
+        val target = File(projDir, relPath.trimStart('/')).canonicalFile
+        require(target.path.startsWith(projDir.path + File.separator) && target.isFile) { "未找到待删除文件" }
+        val deleted = target.delete()
+        return JSONObject().put("ok", deleted).put("project", safeProj).put("path", relPath)
+    }
+
 }
