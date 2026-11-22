@@ -159,7 +159,7 @@ internal object WhaleSkillStore {
 
     /** 若 Skill 来自 GitHub，自动拉取同目录下的 scripts/ 与 references/ 文件，让 Skill 具备真实可执行脚本。 */
     private fun syncGithubBundleFiles(context: Context, slug: String, resolvedRawUrl: String): List<String> {
-        val m = Regex("^https://raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)/(.+)$").find(resolvedRawUrl) ?: return emptyList()
+        val m = Regex("""^https://raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)/(.+)$""").find(resolvedRawUrl) ?: return emptyList()
         val (owner, repo, branch, rawPath) = m.destructured
         val baseDir = rawPath.substringBeforeLast('/', "").trim('/')
         val skillDir = File(rootDir(context), slug).apply { mkdirs() }

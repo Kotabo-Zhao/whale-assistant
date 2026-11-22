@@ -184,7 +184,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
 
         // 3. 动态本轮上下文（档案/Worker/RAG/持久化检查点与任务表）放在最新用户消息前，绝不污染静态 System Prompt 缓存前缀
-        val dynamicCtx = if (isWorkerSession) "" else buildDynamicTurnContext(trimmed, activePersona, recentHistory, sessionId)
+        val dynamicCtx = if (isWorkerSession) buildWorkerDynamicContext() else buildDynamicTurnContext(trimmed, activePersona, recentHistory, sessionId)
         val userPayload = if (dynamicCtx.isNotBlank()) {
             "$dynamicCtx\n\n用户消息：${trimmed.take(24_000)}"
         } else {
@@ -378,7 +378,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val isForegroundSlowTool = !sessionId.startsWith("whale-worker-") &&
                     p.fnName in setOf("whale_web_fetch", "whale_mcp_call")
                 val outcome = if (isForegroundSlowTool) {
-                    val future = parallelToolPool.submit(Callable { tools.execute(p.fnName, p.fnArgs) })
+                    val future = parallelToolPool.submit(Callable { tools.execute(p.fnName, p.fnArgs, sessionId) })
                     try {
                         future.get(5_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
                     } catch (_: java.util.concurrent.TimeoutException) {
@@ -400,7 +400,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         )
                     }
                 } else {
-                    tools.execute(p.fnName, p.fnArgs)
+                    tools.execute(p.fnName, p.fnArgs, sessionId)
                 }
                 val dt = (System.currentTimeMillis() - t0).coerceAtLeast(1L)
                 if (p.mutating) {
@@ -588,6 +588,34 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         append("快捷回复（强制）：每次最终回复末尾另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（≤14字）；若向用户提问或给选项，必须给出可直接点选的简短回答。")
     }
 
+    /** 为独立后台 Worker 注入精简事实上下文（时间/主人核心偏好/已启用 Skill 与 MCP/共享黑板键），不掺闲聊人设与世界书。 */
+    private fun buildWorkerDynamicContext(): String = buildString {
+        runCatching {
+            val nowStr = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.CHINA).format(Date())
+            append("[当前时间] ").append(nowStr).append("\n")
+            val owner = OwnerContext(app).read()
+            val fields = owner.optJSONObject("profile")?.optJSONArray("fields")
+            val confirmed = mutableListOf<String>()
+            if (fields != null) {
+                for (i in 0 until fields.length()) {
+                    val f = fields.optJSONObject(i) ?: continue
+                    if (f.optString("state") == "confirmed") {
+                        confirmed.add("${f.optString("label")}=${f.optString("value")}")
+                    }
+                }
+            }
+            if (confirmed.isNotEmpty()) append("[主人偏好] ").append(confirmed.joinToString("；")).append("\n")
+        }
+        runCatching {
+            val skillCatalog = WhaleSkillStore.catalogPrompt(app)
+            if (skillCatalog.isNotBlank()) append(skillCatalog.take(1200)).append("\n")
+            val mcpSummary = WhaleMcpManager.promptSummary(app)
+            if (mcpSummary.isNotBlank()) append(mcpSummary.take(600)).append("\n")
+            val boardKeys = WhaleWorkerBoard.promptKeysSummary(app)
+            if (boardKeys.isNotBlank()) append(boardKeys).append("\n")
+        }
+    }.trim()
+
     private fun buildDynamicTurnContext(userQuery: String, persona: JSONObject? = null, recentHistory: List<Pair<String, String>> = emptyList(), sessionId: String = "whale-main"): String = buildString {
         runCatching {
             val todoSnap = WhaleHarnessCore.SessionTodoStore.snapshotPrompt(sessionId, app)
@@ -628,10 +656,16 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
         }
         runCatching {
-            val inboxPrompt = WorkerReportInbox(app).prompt()
-            if (inboxPrompt.isNotBlank()) append(inboxPrompt.take(1600)).append("\n")
-            val poolPrompt = WhaleNativeWorkerPool.recentSummaries(3)
-            if (poolPrompt.isNotBlank()) append(poolPrompt.take(1200)).append("\n")
+            // 优先使用结构化 Worker 池摘要（含 7 态、attention 提问与分页指针），仅在内存池为空时回退收件箱摘要，避免重复占 Token
+            val poolPrompt = WhaleNativeWorkerPool.recentSummaries(4)
+            if (poolPrompt.isNotBlank()) {
+                append(poolPrompt.take(1800)).append("\n")
+            } else {
+                val inboxPrompt = WorkerReportInbox(app).prompt()
+                if (inboxPrompt.isNotBlank()) append(inboxPrompt.take(1400)).append("\n")
+            }
+            val boardKeys = WhaleWorkerBoard.promptKeysSummary(app)
+            if (boardKeys.isNotBlank()) append(boardKeys).append("\n")
         }
         runCatching {
             val goals = WhaleGoalGraphStore.promptSummary(app)

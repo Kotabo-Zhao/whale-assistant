@@ -353,7 +353,26 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         }
         if (includeDevice) {
             array.put(schema("whale_device_battery", "读取当前手机电池电量百分比与充电状态。", emptyMap(), emptyList()))
-            array.put(schema("whale_worker_status", "查询后台 Worker 任务执行状态、完整回传结果与最近简报。", mapOf("id" to "可选：指定某个 Worker 任务 ID 以读取完整结果"), emptyList()))
+            if (isWorker) {
+            array.put(schema(
+                "whale_worker_ask",
+                "当后台 Worker 遇到关键信息缺失、需要用户做决定或需要站点授权登录时，主动向用户/Router 发起提问并挂起等待回复（进入 person/answer 状态）。调用后请立即结束本轮输出，等待用户回复自动唤醒。",
+                mapOf("question" to "要向用户确认的具体、简洁问题（≤600字）"),
+                listOf("question"),
+            ))
+        }
+        array.put(schema(
+            "whale_worker_board",
+            "Router 与多个并行后台 Worker 共享的键值黑板：用于实时读写结构化中间产物（文件路径、提炼要点、数据 JSON），无需等整个任务结束即可协同交换。",
+            mapOf(
+                "action" to "put（写入）/ get（读取）/ list（列出已有键）/ remove（删除）",
+                "key" to "黑板键名，例如 research/topic_a 或 ppt/outline",
+                "value" to "action=put 时要写入的内容（≤8000字）",
+                "prefix" to "action=list 时可选前缀过滤",
+            ),
+            listOf("action"),
+        ))
+        array.put(schema("whale_worker_status", "查询后台 Worker 任务执行状态、完整回传结果与最近简报。", mapOf("id" to "可选：指定某个 Worker 任务 ID 以读取完整结果"), emptyList()))
             if (!isWorker) {
                 array.put(schema(
                     "whale_worker_submit",
@@ -392,7 +411,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_voice_speak", "用硅基流动 CosyVoice2 拟人语音让桌宠大声说出一句话。", mapOf("text" to "要朗读的自然中文或英文内容", "voice" to "可选音色：diana / claire / bella / anna / alex / benjamin"), listOf("text")))
             array.put(schema("whale_voice_config", "修改桌宠语音配置（切换音色、语速或开关自动朗读）。", mapOf("autoSpeakPet" to "可选：true 或 false", "voice" to "可选：diana（欢快女声）/ claire（温柔女声）/ bella（活力女声）/ anna（沉稳女声）/ alex（沉稳男声）", "speed" to "可选语速 0.7-1.5"), emptyList()))
             array.put(schema("whale_web_search", "联网实时搜索网页信息，返回标题、摘要与链接。", mapOf("query" to "搜索关键词", "limit" to "可选返回条数（1-8，默认 5）"), listOf("query")))
-            array.put(schema("whale_web_fetch", "联网抓取指定 HTTPS/HTTP 网页或文本接口的正文内容。", mapOf("url" to "完整网页 URL", "maxChars" to "可选最大字符数，默认 6000"), listOf("url")))
+            array.put(schema("whale_site_auth", "管理通用站点登录态凭据库（Android Keystore 加密存储 Cookie，明文永不暴露给模型）：支持拉起内嵌 WebView 供用户自行登录并授权保存站点 Cookie、查看已授权域名列表或撤销授权。", mapOf("action" to "open_login（拉起站点登录页）/ list（查看已授权域名）/ revoke（撤销指定域名授权）", "url" to "open_login 时的目标 https:// 网址（如 https://www.bilibili.com）或 revoke 时的域名", "label" to "可选站点名称备注（如 B站）"), listOf("action")))
+            array.put(schema("whale_web_fetch", "联网抓取指定 HTTPS/HTTP 网页或文本接口的正文内容（已授权站点自动携带加密登录态 Cookie）。", mapOf("url" to "完整网页 URL", "maxChars" to "可选最大字符数，默认 6000"), listOf("url")))
             array.put(schema("whale_memory_delete", "按 ID 删除一条本地长期记忆。", mapOf("id" to "记忆 UUID"), listOf("id")))
             array.put(schema("whale_clipboard", "读取或写入安卓系统剪贴板文本。", mapOf("action" to "get 或 set", "text" to "action=set 时要写入的文本"), listOf("action")))
             array.put(schema("whale_device_media", "控制手机媒体音量或播放状态。", mapOf("action" to "volume_up / volume_down / mute / set_volume / play_pause / next / prev", "percent" to "set_volume 时的音量百分比 0-100"), listOf("action")))
@@ -577,8 +597,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_code_patch",
         "whale_code_delete",
         "whale_code_run",
+        "whale_html_to_pdf",
         "whale_file_export",
         "whale_py_install",
+        "whale_site_auth",
+        "whale_worker_ask",
+        "whale_worker_board",
         "whale_todo_write",
         "whale_phone_launch",
         "whale_phone_action",
@@ -587,7 +611,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_phone_global",
     )
 
-    fun execute(name: String, argsJson: String): ToolOutcome {
+    fun execute(name: String, argsJson: String, callerSessionId: String = "whale-main"): ToolOutcome {
         val args = runCatching { JSONObject(argsJson.ifBlank { "{}" }) }.getOrElse { JSONObject() }
         return try {
             when (name) {
@@ -1128,6 +1152,95 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val res = codeWorkspace.searchCode(args.str("project", ""), args.str("query", ""))
                     ToolOutcome(name, "检索本地代码", true, res.toString())
                 }
+                "whale_html_to_pdf" -> {
+                    val project = args.str("project").trim().ifBlank { "scratch" }
+                    val relFile = args.str("file").trim()
+                    val html = if (relFile.isNotEmpty()) {
+                        val safeProj = project.replace(Regex("[^a-zA-Z0-9._-]"), "_").take(48).ifBlank { "scratch" }
+                        val projectDir = File(File(app.filesDir, "whale-projects"), safeProj).canonicalFile
+                        val target = File(projectDir, relFile.trimStart('/')).canonicalFile
+                        require(target.path.startsWith(projectDir.path + File.separator) && target.isFile) { "未找到 HTML 文件：$relFile" }
+                        target.readText(Charsets.UTF_8)
+                    } else {
+                        args.str("html")
+                    }
+                    require(html.isNotBlank()) { "请提供 html 内容或项目内 file 路径" }
+                    val fileName = args.str("fileName", "document.pdf").trim().ifBlank { "document.pdf" }
+                    val exportDl = args.str("export", "true").trim().lowercase() != "false"
+                    val shareNow = args.str("share", "false").trim().lowercase() == "true"
+                    val res = WhaleHtmlPdfExporter.renderToPdf(app, html, project, fileName, exportDl, shareNow)
+                    ToolOutcome(name, "生成 PDF：${res.optString("path")}（${res.optInt("pages")} 页）", true, res.toString(), mutating = true)
+                }
+                "whale_site_auth" -> {
+                    when (args.str("action", "list").trim().lowercase()) {
+                        "open_login" -> {
+                            val url = args.str("url").trim()
+                            require(url.startsWith("https://", ignoreCase = true)) { "仅支持 https:// 网址登录授权" }
+                            val label = args.str("label").trim()
+                            WhaleSiteLoginActivity.launch(app, url, label)
+                            ToolOutcome(
+                                name,
+                                "已打开站点授权登录页",
+                                true,
+                                JSONObject()
+                                    .put("opened", true)
+                                    .put("url", url)
+                                    .put("hint", "已为用户打开内嵌登录页。请提示用户完成登录后点击右上角「授权保存登录态」，完成后再继续读取私有数据。")
+                                    .toString(),
+                                mutating = true,
+                            )
+                        }
+                        "revoke" -> {
+                            val domain = args.str("url").trim().ifBlank { args.str("domain").trim() }
+                            require(domain.isNotEmpty()) { "缺少要撤销授权的域名" }
+                            val removed = WhaleSiteVault.revoke(app, domain)
+                            ToolOutcome(name, if (removed) "已撤销站点登录态：$domain" else "未找到对应授权：$domain", removed, JSONObject().put("revoked", removed).put("domain", domain).toString(), mutating = true)
+                        }
+                        else -> {
+                            val domains = WhaleSiteVault.listDomains(app)
+                            ToolOutcome(name, "查看已授权站点列表", true, JSONObject().put("count", domains.length()).put("domains", domains).toString())
+                        }
+                    }
+                }
+                "whale_worker_ask" -> {
+                    val question = args.str("question").trim()
+                    require(question.isNotEmpty()) { "缺少要向用户确认的问题 question" }
+                    val workerId = callerSessionId
+                        .removePrefix("whale-worker-")
+                        .replace(Regex("-s\d+$"), "")
+                        .ifBlank { callerSessionId }
+                    val res = WorkerRuntimeWake.askUserAndPause(app, workerId, question)
+                    ToolOutcome(name, "已向用户发起确认并挂起", true, res.toString(), mutating = true)
+                }
+                "whale_worker_board" -> {
+                    when (args.str("action", "list").trim().lowercase()) {
+                        "put" -> {
+                            val key = args.str("key").trim()
+                            val value = args.str("value")
+                            val res = WhaleWorkerBoard.put(app, key, value, callerSessionId)
+                            ToolOutcome(name, "写入共享黑板：$key", true, res.toString(), mutating = true)
+                        }
+                        "get" -> {
+                            val key = args.str("key").trim()
+                            val hit = WhaleWorkerBoard.get(app, key)
+                            if (hit == null) {
+                                ToolOutcome(name, "黑板未找到键：$key", false, JSONObject().put("found", false).put("key", key).toString())
+                            } else {
+                                ToolOutcome(name, "读取共享黑板：$key", true, hit.toString())
+                            }
+                        }
+                        "remove" -> {
+                            val key = args.str("key").trim()
+                            val removed = WhaleWorkerBoard.remove(app, key)
+                            ToolOutcome(name, if (removed) "已删除黑板键：$key" else "未找到黑板键：$key", removed, JSONObject().put("removed", removed).put("key", key).toString(), mutating = true)
+                        }
+                        else -> {
+                            val prefix = args.str("prefix").trim()
+                            val items = WhaleWorkerBoard.list(app, prefix)
+                            ToolOutcome(name, "列出共享黑板键", true, JSONObject().put("count", items.length()).put("items", items).toString())
+                        }
+                    }
+                }
                 "whale_file_export" -> {
                     val project = args.str("project").trim().ifBlank { "scratch" }
                     val relPath = args.str("path").trim()
@@ -1363,20 +1476,14 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val id = args.str("id").trim()
                     val msg = args.str("message").trim()
                     require(id.isNotEmpty()) { "缺少目标 Worker ID" }
-                    WhaleSuperagentCore.MandateGuard.validateBriefText(msg, "message", WhaleSuperagentCore.BRIEF_NOTE_MAX_CHARS)?.let { err ->
+                    WhaleSuperagentCore.MandateGuard.validateBriefText(msg, "message", 2000)?.let { err ->
                         return ToolOutcome(name, "追问参数超限", false, JSONObject().put("error", err).toString())
                     }
-                    val (ok, detail) = WhaleNativeWorkerPool.deliverFollowup(id, msg)
-                    if (ok) {
-                        WhaleLongTaskStore.appendDeliveredInput(app, id, detail, msg)
-                    }
-                    ToolOutcome(
-                        name,
-                        if (ok) "已向 Worker 透传追问" else detail,
-                        ok,
-                        JSONObject().put("id", id).put("delivered", ok).put("inputId", if (ok) detail else "").toString(),
-                        mutating = true,
-                    )
+                    val refs = args.str("refs").trim()
+                    val enriched = if (refs.isNotEmpty()) "$msg\n\n[附带参考资源指针：$refs]" else msg
+                    val res = WorkerRuntimeWake.followupOrResume(app, id, enriched)
+                    val label = if (res.optBoolean("resumed", false)) "已唤醒 Worker 原地续跑" else "已实时透传追问给运行中 Worker"
+                    ToolOutcome(name, label, true, res.toString(), mutating = true)
                 }
                 "whale_read_resource" -> {
                     val resource = args.str("resource").trim()
@@ -1385,7 +1492,11 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     require(resource.isNotEmpty()) { "缺少 resource 参数" }
                     val fullText: String? = when {
                         resource.startsWith("spill/") -> WhaleHarnessCore.SpillAndPruneManager.readSpill(app, resource.removePrefix("spill/"))
-                        resource.startsWith("worker/") -> WhaleNativeWorkerPool.readFullResult(resource.removePrefix("worker/"))
+                        resource.startsWith("worker/") -> {
+                            val wid = resource.removePrefix("worker/")
+                            WhaleNativeWorkerPool.readFullResult(wid)
+                                ?: runCatching { WorkerDashboardStore(app).detail(wid, 0, 12).optString("summary").takeIf(String::isNotBlank) }.getOrNull()
+                        }
                         resource.startsWith("checkpoint/") -> WhaleLongTaskStore.read(app, resource.removePrefix("checkpoint/"))?.progressDigest
                         resource.startsWith("knowledge/") -> runCatching {
                             CompanionKnowledgeStore(app).findById(resource.removePrefix("knowledge/"))?.optString("text")
@@ -1450,7 +1561,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_web_fetch" -> {
                     val rawUrl = args.str("url").trim()
                     val maxChars = args.optInt("maxChars", 6000).coerceIn(500, 12_000)
-                    val fetched = WhaleWebFetcher.fetch(rawUrl, maxChars)
+                    val fetched = WhaleWebFetcher.fetch(rawUrl, maxChars, app)
                     ToolOutcome(
                         name,
                         if (fetched.title.isNotBlank()) "抓取网页：${fetched.title.take(28)}" else "抓取网页内容",

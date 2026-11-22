@@ -163,6 +163,93 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
             return receipt
         }
 
+        /**
+         * 灵活追问/续跑：
+         * - 若目标 Worker 正在运行，直接 steer 实时注入；
+         * - 若目标 Worker 已完成、失败或处于待用户回答（person/answer）挂起态，自动以人类专属 +1 抢占槽原地唤醒续跑，
+         *   彻底解决「对已完成/受阻工单追问石沉大海」的问题。
+         */
+        fun followupOrResume(context: Context, id: String, message: String): JSONObject {
+            val app = context.applicationContext
+            val cleanMsg = message.trim()
+            val existing = WhaleNativeWorkerPool.get(id)
+            val existingState = existing?.optString("state", "").orEmpty()
+            val (delivered, detail) = WhaleNativeWorkerPool.deliverFollowup(id, cleanMsg)
+            if (delivered) {
+                WhaleLongTaskStore.appendDeliveredInput(app, id, detail, cleanMsg)
+            }
+            if (existingState == "running") {
+                return JSONObject()
+                    .put("id", id)
+                    .put("delivered", true)
+                    .put("resumed", false)
+                    .put("mode", "live_steer")
+                    .put("inputId", detail)
+            }
+            // Worker 已结束、挂起或不在内存池中：从检查点或磁盘工单原地拉起续跑（走人类 +1 抢占槽）
+            val cp = WhaleLongTaskStore.read(app, id)
+            val dashRow = runCatching { WorkerDashboardStore(app).detail(id, 0, 4) }.getOrNull()
+            val origTitle = cp?.title?.takeIf(String::isNotBlank)
+                ?: existing?.optString("title")?.takeIf(String::isNotBlank)
+                ?: dashRow?.optString("title")?.takeIf(String::isNotBlank)
+                ?: "续接任务"
+            val origTask = cp?.task?.takeIf(String::isNotBlank)
+                ?: dashRow?.optString("input")?.takeIf(String::isNotBlank)
+                ?: origTitle
+            val priorSummary = WhaleNativeWorkerPool.readFullResult(id)?.takeIf(String::isNotBlank)
+                ?: cp?.progressDigest?.takeIf(String::isNotBlank)
+                ?: dashRow?.optString("summary").orEmpty()
+            val resumedTask = buildString {
+                append(origTask.take(1200))
+                if (priorSummary.isNotBlank()) {
+                    append("\n\n[前序产出摘要]\n").append(priorSummary.take(800))
+                }
+                append("\n\n[用户最新追问/回复（请基于前序产出直接继续或修改）]\n").append(cleanMsg.take(1800))
+            }
+            submit(
+                context = app,
+                task = resumedTask,
+                mode = cp?.mode ?: "create",
+                commandId = id,
+                title = origTitle,
+                needs = "none",
+                sourceSession = cp?.ownerSession,
+                priorityBy = "person",
+            )
+            return JSONObject()
+                .put("id", id)
+                .put("delivered", true)
+                .put("resumed", true)
+                .put("mode", "relaunch_person_slot")
+                .put("inputId", if (delivered) detail else "resume-${System.currentTimeMillis()}")
+        }
+
+        /** Worker 遇到缺参或需用户拍板时主动挂起提问（进入 person/answer 态并即时通知 Router/桌宠）。 */
+        fun askUserAndPause(context: Context, workerId: String, question: String): JSONObject {
+            val app = context.applicationContext
+            val cleanQ = question.trim().take(600)
+            require(cleanQ.isNotEmpty()) { "提问内容不能为空" }
+            WhaleNativeWorkerPool.setAttention(workerId, cleanQ, "blocked")
+            val title = WhaleNativeWorkerPool.get(workerId)?.optString("title", workerId).orEmpty().ifBlank { workerId }
+            val notice = "【后台 Worker 需要你确认】$title\n\n$cleanQ\n\n（直接回复我即可透传给该任务继续执行，任务 ID：$workerId）"
+            runCatching {
+                val now = System.currentTimeMillis()
+                val fp = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest("$workerId:ask:$now".toByteArray(Charsets.UTF_8))
+                    .joinToString("") { "%02x".format(it) }
+                WorkerReportInbox(app).addCoordination(
+                    JSONObject()
+                        .put("owner", "session-whale-task-desk")
+                        .put("fingerprint", fp)
+                        .put("summary", notice)
+                        .put("next", "任务 ID：$workerId"),
+                )
+                WhaleSharedChatStore.appendTurn(app, "", notice, "pet")
+                io.deepseekharness.mobile.OverlayBallService.companionTaskHint()
+            }
+            return JSONObject().put("ok", true).put("workerId", workerId).put("stage", "person/answer").put("question", cleanQ)
+        }
+
         /** 应用启动时扫描未完成的长任务检查点并自动断点续跑。 */
         fun resumeInterrupted(context: Context) {
             val app = context.applicationContext
