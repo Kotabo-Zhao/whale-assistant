@@ -5045,6 +5045,16 @@ class MobileRuntimePlugin : Plugin() {
                 activeNativeChats[requestId] = control
                 try {
                     val result = engine.send(message, history, sessionId, listener, control = control, images = images)
+                    if (!result.cancelled && result.reply.isNotBlank()) {
+                        runCatching {
+                            io.deepseekharness.mobile.companion.WhaleSharedChatStore.appendTurn(
+                                context,
+                                message,
+                                result.reply,
+                                "app",
+                            )
+                        }
+                    }
                     call.resolve(JSObject.fromJSONObject(result.json()))
                 } finally {
                     activeNativeChats.remove(requestId, control)

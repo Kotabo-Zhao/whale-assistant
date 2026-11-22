@@ -255,7 +255,13 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
             }
 
-            listener?.onPhase(if (round == 0) "thinking" else "synthesizing")
+            val roundPhase = if (round == 0) {
+                "thinking|理解你的问题并规划步骤"
+            } else {
+                val lastLabel = steps.lastOrNull()?.label?.take(22).orEmpty()
+                if (lastLabel.isNotEmpty()) "analyzing|分析「$lastLabel」结果，决定下一步" else "analyzing|汇总当前进展，规划下一步"
+            }
+            listener?.onPhase(roundPhase)
             onProgress?.invoke(round + 1, "第 ${round + 1} 轮推理中…", finalReply)
             val streamBridge = if (listener != null || onProgress != null) {
                 object : StreamListener {
@@ -421,7 +427,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 for (group in groups) {
                     if (control?.cancelled?.get() == true) break
                     if (group.parallel) {
-                        listener?.onPhase("tool:parallel(${group.items.size})")
+                        val previewNames = group.items.take(2).joinToString("、") { describeRealAction(it.fnName, it.fnArgs).second }
+                        listener?.onPhase("worker|并行执行 ${group.items.size} 项：$previewNames")
                         onProgress?.invoke(round + 1, "正在并行执行 ${group.items.size} 项只读工具…", finalReply)
                         val futures = parallelToolPool.invokeAll(group.items.map { p -> Callable { runSingle(p) } })
                         futures.forEach { f ->
@@ -434,7 +441,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     } else {
                         for (p in group.items) {
                             if (control?.cancelled?.get() == true) break
-                            listener?.onPhase("tool:${p.fnName}")
+                            val (cat, desc) = describeRealAction(p.fnName, p.fnArgs)
+                            listener?.onPhase("$cat|$desc")
                             onProgress?.invoke(round + 1, "正在执行工具：${p.fnName}", finalReply)
                             executed.add(runSingle(p))
                         }
@@ -921,6 +929,45 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         var id: String = ""
         val name = StringBuilder()
         val arguments = StringBuilder()
+    }
+
+    /** 提取当前工具调用的真实行为类别与具体参数描述，供 App 与桌宠实时展示。 */
+    private fun describeRealAction(fnName: String, rawArgs: String): Pair<String, String> {
+        val args = runCatching { JSONObject(rawArgs.ifBlank { "{}" }) }.getOrElse { JSONObject() }
+        fun arg(k: String) = args.optString(k, "").trim()
+        return when {
+            fnName == "whale_code_run" -> {
+                val proj = arg("project").ifBlank { "scratch" }
+                val f = arg("file")
+                "code" to if (f.isNotEmpty()) "运行脚本 $proj/$f" else "在项目 $proj 运行 Python"
+            }
+            fnName == "whale_py_install" -> "code" to "安装 Python 包 ${arg("package").take(24)}"
+            fnName == "whale_code_write" || fnName == "whale_code_patch" -> "code" to "编辑文件 ${arg("path").take(26)}"
+            fnName == "whale_code_read" || fnName == "whale_code_list" || fnName == "whale_code_search" -> "code" to "读取代码 ${arg("path").ifBlank { arg("project") }.take(24)}"
+            fnName == "whale_file_export" -> "file" to "导出文件 ${arg("path").take(26)}"
+            fnName == "whale_html_to_pdf" -> "file" to "渲染 PDF ${arg("fileName").ifBlank { "document.pdf" }.take(24)}"
+            fnName == "whale_web_search" -> "web" to "联网搜索「${arg("query").take(18)}」"
+            fnName == "whale_web_fetch" -> {
+                val host = runCatching { java.net.URI(arg("url")).host }.getOrNull().orEmpty().ifBlank { arg("url").take(22) }
+                "web" to "抓取网页 $host"
+            }
+            fnName.startsWith("whale_memory") || fnName.startsWith("whale_knowledge") || fnName.startsWith("whale_owner") -> {
+                val q = arg("query").take(16)
+                "memory" to if (q.isNotEmpty()) "检索记忆「$q」" else "读写本地记忆与资料"
+            }
+            fnName.startsWith("whale_phone") || fnName.startsWith("whale_virtual_screen") -> {
+                val act = arg("action").ifBlank { arg("target") }.take(18)
+                "phone" to if (act.isNotEmpty()) "屏控操作：$act" else "读取屏幕状态"
+            }
+            fnName.startsWith("whale_worker") -> {
+                val t = arg("title").ifBlank { arg("key") }.take(18)
+                "worker" to if (t.isNotEmpty()) "调度后台任务「$t」" else "同步后台任务状态"
+            }
+            fnName == "whale_tools_expand" -> "thinking" to "热加载 ${arg("category").ifBlank { "专域" }} 工具组"
+            fnName.startsWith("whale_skill") -> "code" to "处理技能 ${arg("name").ifBlank { arg("url").take(20) }}"
+            fnName.startsWith("whale_mcp") || fnName.startsWith("mcp__") -> "web" to "调用外部 MCP：$fnName"
+            else -> "thinking" to "执行 $fnName"
+        }
     }
 
     private fun JSONObject.optNonNullString(key: String, fallback: String = ""): String =

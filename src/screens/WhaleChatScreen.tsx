@@ -290,7 +290,6 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [streamingSteps, setStreamingSteps] = useState<WhaleNativeChatStep[]>([])
   const [streamingPhase, setStreamingPhase] = useState('')
   const [waitElapsedSec, setWaitElapsedSec] = useState(0)
-  const [waitPhraseIdx, setWaitPhraseIdx] = useState(0)
   const petSyncCursorRef = useRef<number>((() => {
     try {
       const saved = Number(window.localStorage.getItem('whale.petSyncCursor.v1') || '0')
@@ -708,48 +707,97 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   useEffect(() => {
     if (!sending) {
       setWaitElapsedSec(0)
-      setWaitPhraseIdx(0)
       return
     }
     const t0 = Date.now()
     const secTimer = window.setInterval(() => {
       setWaitElapsedSec(Math.floor((Date.now() - t0) / 1000))
     }, 500)
-    const phraseTimer = window.setInterval(() => {
-      setWaitPhraseIdx(idx => idx + 1)
-    }, 2400)
     return () => {
       window.clearInterval(secTimer)
-      window.clearInterval(phraseTimer)
     }
   }, [sending])
 
   const phaseMeta = useMemo(() => {
-    const thinkingPool = [
-      { icon: '🐳', text: t('正在潜入记忆深海翻找线索…') },
-      { icon: '🫧', text: t('正在把零散思路串成小气泡…') },
-      { icon: '✨', text: t('正在认真推敲怎么回答更贴心…') },
-      { icon: '🧭', text: t('正在核对上下文和近期安排…') },
-    ]
-    const p = streamingPhase || 'thinking'
-    if (p === 'steering' || p === 'restarting') return { icon: '💡', text: t('收到你的中途补充，立刻调整方向…') }
-    if (p === 'cancelling') return { icon: '⏹️', text: t('正在收尾停手…') }
-    if (p === 'synthesizing') return { icon: '✍️', text: t('线索齐啦，正在提笔组织回复…') }
-    if (p.startsWith('tool:parallel')) return { icon: '⚡', text: t('正在分身同时核查好几件事…') }
-    if (p.startsWith('tool:')) {
-      const tool = p.slice(5)
-      if (tool.includes('web_search') || tool.includes('web_fetch')) return { icon: '🌐', text: t('正在潜出水面联网冲浪查资料…') }
-      if (tool.includes('code_run') || tool.includes('py_install')) return { icon: '🧪', text: t('正在本地 Python 实验室敲代码验证…') }
-      if (tool.includes('file_export') || tool.includes('html_to_pdf')) return { icon: '📦', text: t('正在把成品文件打包导出…') }
-      if (tool.includes('phone') || tool.includes('virtual_screen')) return { icon: '📱', text: t('正在小心翼翼帮你看屏操作…') }
-      if (tool.includes('memory') || tool.includes('knowledge')) return { icon: '🧠', text: t('正在翻看你的专属记忆小本本…') }
-      if (tool.includes('worker')) return { icon: '🚀', text: t('正在调度后台分身协同干活…') }
-      if (tool.includes('site_auth')) return { icon: '🔐', text: t('正在准备站点授权登录…') }
-      return { icon: '🛠️', text: t('正在调用原生小工具处理中…') }
+    const raw = (streamingPhase || '').trim()
+    if (raw.includes('|')) {
+      const sep = raw.indexOf('|')
+      const category = raw.slice(0, sep) || 'thinking'
+      const text = raw.slice(sep + 1).trim()
+      if (text) return { category, text }
     }
-    return thinkingPool[waitPhraseIdx % thinkingPool.length]
-  }, [streamingPhase, waitPhraseIdx])
+    if (raw === 'steering' || raw === 'restarting') return { category: 'thinking', text: t('收到中途补充，正在调整当前方案') }
+    if (raw === 'cancelling') return { category: 'thinking', text: t('正在中止当前执行') }
+    const lastStep = streamingSteps[streamingSteps.length - 1]
+    if (lastStep) return { category: 'analyzing', text: t('分析「{0}」结果，判断下一步', lastStep.label.slice(0, 22)) }
+    return { category: 'thinking', text: t('理解你的问题并规划步骤') }
+  }, [streamingPhase, streamingSteps])
   const phaseLabel = phaseMeta.text
+
+  const renderActivitySvg = (category: string) => {
+    if (category === 'code') {
+      return (
+        <svg className="whale-svg-anim is-code" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path className="svg-stroke-main" d="M8 7L3 12L8 17" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path className="svg-stroke-main" d="M16 7L21 12L16 17" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <line className="svg-cursor-blink" x1="13.5" y1="6" x2="10.5" y2="18" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      )
+    }
+    if (category === 'web') {
+      return (
+        <svg className="whale-svg-anim is-web" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <circle className="svg-orbit-slow" cx="12" cy="12" r="9" fill="none" strokeWidth="1.8" strokeDasharray="16 8" />
+          <ellipse className="svg-stroke-soft" cx="12" cy="12" rx="4.5" ry="9" fill="none" strokeWidth="1.4" />
+          <line className="svg-stroke-soft" x1="3.5" y1="12" x2="20.5" y2="12" strokeWidth="1.4" />
+          <circle className="svg-core-pulse" cx="12" cy="12" r="2.2" />
+        </svg>
+      )
+    }
+    if (category === 'file') {
+      return (
+        <svg className="whale-svg-anim is-file" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path className="svg-stroke-main" d="M6 3H14L19 8V21H6Z" fill="none" strokeWidth="1.8" strokeLinejoin="round" />
+          <path className="svg-flow-down" d="M12 10V16M9.5 13.8L12 16.5L14.5 13.8" fill="none" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    }
+    if (category === 'memory') {
+      return (
+        <svg className="whale-svg-anim is-memory" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <circle className="svg-ripple-ring" cx="12" cy="12" r="8" fill="none" strokeWidth="1.6" />
+          <circle className="svg-orbit-rev" cx="12" cy="12" r="5" fill="none" strokeWidth="1.6" strokeDasharray="10 6" />
+          <circle className="svg-core-pulse" cx="12" cy="12" r="2.5" />
+        </svg>
+      )
+    }
+    if (category === 'phone') {
+      return (
+        <svg className="whale-svg-anim is-phone" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <rect className="svg-stroke-main" x="6" y="2.5" width="12" height="19" rx="2.5" fill="none" strokeWidth="1.8" />
+          <circle className="svg-ripple-ring" cx="12" cy="12" r="3.2" fill="none" strokeWidth="1.6" />
+          <circle className="svg-core-pulse" cx="12" cy="12" r="1.4" />
+        </svg>
+      )
+    }
+    if (category === 'worker') {
+      return (
+        <svg className="whale-svg-anim is-worker" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <circle className="svg-orbit-slow" cx="12" cy="12" r="8.5" fill="none" strokeWidth="1.8" strokeDasharray="8 6" />
+          <circle className="svg-core-pulse" cx="12" cy="5.5" r="2" />
+          <circle className="svg-core-pulse" cx="6.5" cy="15.5" r="2" />
+          <circle className="svg-core-pulse" cx="17.5" cy="15.5" r="2" />
+        </svg>
+      )
+    }
+    return (
+      <svg className="whale-svg-anim is-thinking" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <circle className="svg-orbit-slow" cx="12" cy="12" r="8.5" fill="none" strokeWidth="2" strokeDasharray="28 16" strokeLinecap="round" />
+        <circle className="svg-orbit-rev" cx="12" cy="12" r="5.2" fill="none" strokeWidth="1.8" strokeDasharray="14 10" strokeLinecap="round" />
+        <circle className="svg-core-pulse" cx="12" cy="12" r="2.2" />
+      </svg>
+    )
+  }
 
   const renderReceiptIcon = (kind: ActionReceipt['kind']) => {
     if (style === 'cute') {
@@ -1059,21 +1107,16 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         )}
         {sending && (
           <div className="whale-msg whale-msg-assistant" role="status">
-            <div className="whale-live-plan-bar whale-kimi-wait-bar">
-              <div className="whale-live-plan-visual" title={phaseLabel}>
-                <span className="whale-plan-whale-dot whale-swim-icon" aria-hidden="true">{phaseMeta.icon}</span>
-                <span className="whale-live-plan-status whale-kimi-status-text">{phaseLabel}</span>
-                {streamingSteps.length > 0 && (
-                  <span className="whale-step-dots" aria-label={t('已执行 {0} 步', streamingSteps.length)}>
-                    {streamingSteps.slice(-6).map((st, idx) => (
-                      <span key={`dot-${idx}`} className={`whale-step-dot${st.ok ? ' is-ok' : ' is-warn'}`} title={st.label} />
-                    ))}
-                  </span>
-                )}
-                <span className="whale-ocean-wave" aria-hidden="true"><i /><i /><i /><i /></span>
-                {waitElapsedSec > 0 && <span className="whale-wait-timer">{waitElapsedSec}s</span>}
+            {!streamingText && (
+              <div className="whale-live-plan-bar whale-kimi-wait-bar">
+                <div className="whale-live-plan-visual" title={phaseLabel}>
+                  <span className="whale-plan-whale-dot" aria-hidden="true">{renderActivitySvg(phaseMeta.category)}</span>
+                  <span className="whale-live-plan-status whale-kimi-status-text">{phaseLabel}</span>
+                  <span className="whale-ocean-wave" aria-hidden="true"><i /><i /><i /><i /></span>
+                  {waitElapsedSec > 0 && <span className="whale-wait-timer">{waitElapsedSec}s</span>}
+                </div>
               </div>
-            </div>
+            )}
             {streamingSteps.length > 0 && (
               <div className="whale-msg-steps">
                 <ul>
@@ -1087,17 +1130,11 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                 </ul>
               </div>
             )}
-            {streamingText ? (
+            {streamingText && (
               <div
                 className="whale-msg-bubble whale-markdown whale-streaming"
                 dangerouslySetInnerHTML={{ __html: md.render(stripStreamingMarker(streamingText)) }}
               />
-            ) : (
-              <div className="whale-msg-bubble whale-thinking">
-                {style === 'cute'
-                  ? <span className="whale-typing-dots is-large" aria-label={phaseLabel}><i /><i /><i /></span>
-                  : phaseLabel}
-              </div>
             )}
           </div>
         )}

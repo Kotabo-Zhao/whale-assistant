@@ -471,7 +471,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setPadding(dp(6), dp(8), dp(6), dp(8))
             gravity = if (showAbove) Gravity.BOTTOM else Gravity.TOP
         }
         val scroll = ScrollView(context).apply { addView(content); isVerticalScrollBarEnabled = false; setBackgroundColor(ui.canvas) }
@@ -505,12 +505,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
                 if (view is TextView) view.setTextColor(Color.WHITE)
             } else {
-                view.setPadding(dp(13), dp(10), dp(13), dp(10))
-                view.background = ui.shape(Color.parseColor("#142136"), 16, Color.parseColor("#283A57")).apply {
+                view.setPadding(dp(11), dp(9), dp(11), dp(9))
+                val bgCol = if (ui.dark) Color.parseColor("#142136") else Color.parseColor("#FFFFFF")
+                val strokeCol = if (ui.dark) Color.parseColor("#283A57") else Color.parseColor("#CBD5E1")
+                val inkCol = if (ui.dark) Color.parseColor("#E6EEFC") else Color.parseColor("#0F172A")
+                view.background = ui.shape(bgCol, 16, strokeCol).apply {
                     cornerRadii = floatArrayOf(tip, tip, round, round, round, round, round, round)
                 }
                 if (view is TextView) {
-                    view.setTextColor(ui.ink)
+                    view.setTextColor(inkCol)
                     view.setLineSpacing(dp(3).toFloat(), 1.16f)
                 }
             }
@@ -686,18 +689,21 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         val existingTexts = history.map { "${it.role}:${it.text.trim()}" }.toMutableSet()
         history.takeLast(10).forEach { message -> timeline.add(message.atMs to { conversationMessage(message) }) }
         val shared = runCatching { WhaleSharedChatStore.list(context) }.getOrDefault(org.json.JSONArray())
-        val sharedStart = (shared.length() - 12).coerceAtLeast(0)
+        val sharedStart = (shared.length() - 16).coerceAtLeast(0)
         for (si in sharedStart until shared.length()) {
             val row = shared.optJSONObject(si) ?: continue
-            if (row.optString("source") != "app") continue
             val role = row.optString("role", "")
             val text = row.optString("text", "").trim()
             if (text.isEmpty() || (role != "user" && role != "assistant")) continue
             if (!existingTexts.add("$role:$text")) continue
             val atMs = row.optLong("atMs", 0L)
             val syncedMsg = CompanionBubbleChat.Message(role, text, emptyList(), emptyList(), atMs)
+            // 同时合入 history，确保桌宠下一次提问完整继承 App 主界面的最新上下文
+            history.add(syncedMsg)
             timeline.add(atMs to { conversationMessage(syncedMsg) })
         }
+        history.sortBy { it.atMs }
+        while (history.size > 20) history.removeAt(0)
         display.rows.forEach { report -> timeline.add(report.optLong("at") to { workerReport(report); Unit }) }
         deliveries.forEach { item -> timeline.add(item.atMs to {
             val parsed = CompanionBubbleChatPolicy.parseInlineImages(item.text)
@@ -1184,66 +1190,57 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             lastError = null
             val parallelViews = item?.id?.let(parallelBubbles::remove)
             val sentBubble = parallelViews?.first ?: if (root === panel) bubble(message, true).also { renderCompleted(it,message,true) } else TextView(context)
-            val streamingBubble = parallelViews?.second ?: if (root === panel) bubble("🐳 正在潜入记忆深海翻找线索…", false) else TextView(context)
+            val waitRow = if (root === panel) LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val bgCol = if (ui.dark) Color.parseColor("#142136") else Color.parseColor("#F8FAFC")
+                val strokeCol = if (ui.dark) Color.parseColor("#2B446B") else Color.parseColor("#CBD5E1")
+                background = ui.shape(bgCol, 14, strokeCol)
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+            } else null
+            val vectorSpinner = if (root === panel) WhaleVectorStatusView(context) else null
+            val waitLabel = if (root === panel) ui.text("理解你的问题并规划步骤", 13f, if (ui.dark) Color.parseColor("#DBEAFE") else Color.parseColor("#17324D")).apply {
+                maxLines = 2
+            } else null
+            if (waitRow != null && vectorSpinner != null && waitLabel != null) {
+                waitRow.addView(vectorSpinner, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(8) })
+                waitRow.addView(waitLabel, LinearLayout.LayoutParams(0, -2, 1f))
+                content.addView(waitRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+            }
+            val streamingBubble = parallelViews?.second ?: if (root === panel) bubble("", false).apply { visibility = android.view.View.GONE } else TextView(context)
             liveText = ""
             val waitStartMs = android.os.SystemClock.uptimeMillis()
-            val petPhaseRef = java.util.concurrent.atomic.AtomicReference("thinking")
-            var waitAnimTick = 0
-            val petThinkingLines = listOf(
-                "🐳 正在潜入记忆深海翻找线索",
-                "🫧 正在把零散思路串成小气泡",
-                "✨ 正在认真推敲怎么回答更贴心",
-                "🧭 正在核对上下文和近期安排",
-            )
-            val petWaves = listOf("·", "··", "···", "〰")
-            fun formatPetWaitText(): String {
-                val p = petPhaseRef.get().orEmpty()
-                val base = when {
-                    p.startsWith("step:") -> "✨ 刚完成：${p.removePrefix("step:").take(18)}"
-                    p == "synthesizing" -> "✍️ 线索齐啦，正在提笔写回复"
-                    p == "steering" || p == "restarting" -> "💡 收到补充，立刻调整方向"
-                    p.startsWith("tool:parallel") -> "⚡ 正在分身同时查好几件事"
-                    p.startsWith("tool:") -> {
-                        val tool = p.removePrefix("tool:")
-                        when {
-                            tool.contains("web_search") || tool.contains("web_fetch") -> "🌐 正在潜出水面联网冲浪"
-                            tool.contains("code_run") || tool.contains("py_install") -> "🧪 正在本地 Python 实验室敲代码"
-                            tool.contains("file_export") || tool.contains("html_to_pdf") -> "📦 正在把成品打包导出"
-                            tool.contains("phone") || tool.contains("virtual_screen") -> "📱 正在小心翼翼帮你看屏操作"
-                            tool.contains("memory") || tool.contains("knowledge") -> "🧠 正在翻看专属记忆小本本"
-                            tool.contains("worker") -> "🚀 正在调度后台分身干活"
-                            else -> "🛠️ 正在调用原生小工具处理"
-                        }
-                    }
-                    else -> petThinkingLines[(waitAnimTick / 5) % petThinkingLines.size]
+            val petPhaseRef = java.util.concurrent.atomic.AtomicReference("thinking|理解你的问题并规划步骤")
+            fun updatePetWaitBar() {
+                if (closed || !busy || liveText.isNotEmpty() || root !== panel) return
+                val raw = petPhaseRef.get().orEmpty()
+                val parts = raw.split('|', limit = 2)
+                val cat = if (parts.size == 2) parts[0] else "thinking"
+                val desc = when {
+                    parts.size == 2 && parts[1].isNotBlank() -> parts[1]
+                    raw.startsWith("step:") -> "已完成：${raw.removePrefix("step:").take(22)}"
+                    else -> "分析当前进展，准备下一步"
                 }
-                val wave = petWaves[waitAnimTick % petWaves.size]
                 val sec = ((android.os.SystemClock.uptimeMillis() - waitStartMs) / 1000L).coerceAtLeast(0L)
-                return if (sec > 0L) "$base $wave  (${sec}s)" else "$base $wave"
+                vectorSpinner?.setCategoryColor(cat)
+                waitLabel?.text = if (sec > 0L) "$desc  ·  ${sec}s" else desc
             }
             val waitTicker = object : Runnable {
                 override fun run() {
                     if (closed || !busy || liveText.isNotEmpty()) return
-                    waitAnimTick += 1
-                    if (root === panel) {
-                        streamingBubble.text = formatPetWaitText()
-                    }
-                    handler.postDelayed(this, 480L)
+                    updatePetWaitBar()
+                    handler.postDelayed(this, 1000L)
                 }
             }
-            if (root === panel) {
-                handler.postDelayed(waitTicker, 480L)
-            }
+            if (root === panel) handler.postDelayed(waitTicker, 1000L)
             chat.onNativePhase = { phase ->
                 petPhaseRef.set(phase)
-                handler.post {
-                    if (!closed && busy && liveText.isEmpty() && root === panel) {
-                        streamingBubble.text = formatPetWaitText()
-                    }
-                }
+                handler.post { updatePetWaitBar() }
             }
             if (root === panel) renderLive = { text ->
                 handler.removeCallbacks(waitTicker)
+                waitRow?.visibility = android.view.View.GONE
+                streamingBubble.visibility = android.view.View.VISIBLE
                 streamingBubble.text = text
                 panel.post { positionUpdater?.invoke() }
             }

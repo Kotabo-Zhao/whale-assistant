@@ -1792,3 +1792,91 @@
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
 }
+
+
+/* === 窄边距全宽对话区 + 精细 SVG 行为动画 === */
+.whale-chat-scroll {
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+}
+.whale-chat-list {
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
+.whale-chat-header.is-minimal {
+  padding: 5px 6px !important;
+}
+.whale-chat-composer-wrap {
+  padding: 4px 6px !important;
+}
+.whale-msg-steps {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.whale-svg-anim {
+  display: block;
+  flex-shrink: 0;
+  color: #38bdf8;
+}
+.whale-svg-anim.is-code { color: #34d399; }
+.whale-svg-anim.is-web { color: #38bdf8; }
+.whale-svg-anim.is-file { color: #f59e0b; }
+.whale-svg-anim.is-memory { color: #a78bfa; }
+.whale-svg-anim.is-phone { color: #fb7185; }
+.whale-svg-anim.is-worker { color: #22d3ee; }
+.whale-svg-anim .svg-stroke-main { stroke: currentColor; }
+.whale-svg-anim .svg-stroke-soft { stroke: currentColor; opacity: 0.45; }
+.whale-svg-anim .svg-core-pulse {
+  fill: currentColor;
+  transform-origin: center;
+  animation: whaleSvgPulse 1.3s ease-in-out infinite;
+}
+.whale-svg-anim .svg-orbit-slow {
+  stroke: currentColor;
+  transform-origin: 12px 12px;
+  animation: whaleSvgSpin 2.2s linear infinite;
+}
+.whale-svg-anim .svg-orbit-rev {
+  stroke: currentColor;
+  opacity: 0.65;
+  transform-origin: 12px 12px;
+  animation: whaleSvgSpinRev 1.6s linear infinite;
+}
+.whale-svg-anim .svg-cursor-blink {
+  stroke: currentColor;
+  animation: whaleSvgBlink 0.9s steps(2, start) infinite;
+}
+.whale-svg-anim .svg-flow-down {
+  stroke: currentColor;
+  animation: whaleSvgFlowDown 1.1s ease-in-out infinite;
+}
+.whale-svg-anim .svg-ripple-ring {
+  stroke: currentColor;
+  transform-origin: 12px 12px;
+  animation: whaleSvgRipple 1.6s ease-out infinite;
+}
+@keyframes whaleSvgSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes whaleSvgSpinRev {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+@keyframes whaleSvgPulse {
+  0%, 100% { transform: scale(0.78); opacity: 0.65; }
+  50% { transform: scale(1.18); opacity: 1; }
+}
+@keyframes whaleSvgBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+@keyframes whaleSvgFlowDown {
+  0%, 100% { transform: translateY(-1.5px); opacity: 0.6; }
+  50% { transform: translateY(1.8px); opacity: 1; }
+}
+@keyframes whaleSvgRipple {
+  0% { transform: scale(0.72); opacity: 0.9; }
+  100% { transform: scale(1.18); opacity: 0.12; }
+}
