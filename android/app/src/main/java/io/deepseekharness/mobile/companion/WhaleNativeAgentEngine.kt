@@ -953,6 +953,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val host = runCatching { java.net.URI(arg("url")).host }.getOrNull().orEmpty().ifBlank { arg("url").take(22) }
                 "web" to "抓取网页 $host"
             }
+            fnName == "whale_web_render" -> {
+                val host = runCatching { java.net.URI(arg("url")).host }.getOrNull().orEmpty().ifBlank { arg("url").take(22) }
+                "web" to "浏览器渲染读取 $host"
+            }
             fnName.startsWith("whale_memory") || fnName.startsWith("whale_knowledge") || fnName.startsWith("whale_owner") -> {
                 val q = arg("query").take(16)
                 "memory" to if (q.isNotEmpty()) "检索记忆「$q」" else "读写本地记忆与资料"

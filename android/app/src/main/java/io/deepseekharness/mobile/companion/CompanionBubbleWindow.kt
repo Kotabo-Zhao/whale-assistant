@@ -688,6 +688,85 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             content.addView(view, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.START; bottomMargin = dp(6) })
             if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
         }
+        fun exportedFileOrImageCard(fileName: String) {
+            val clean = fileName.trim().substringAfterLast('/').substringAfterLast('\\')
+            if (clean.isEmpty() || root !== panel) return
+            val ext = clean.substringAfterLast('.', "").lowercase()
+            val shareDir = java.io.File(context.applicationContext.cacheDir, "share")
+            val cachedFile = java.io.File(shareDir, clean)
+            val isImage = ext in setOf("png", "jpg", "jpeg", "webp")
+            val shouldFollow = atBottom()
+            val card = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                val bgCol = if (ui.dark) Color.parseColor("#142136") else Color.parseColor("#F8FAFC")
+                val strokeCol = if (ui.dark) Color.parseColor("#2B446B") else Color.parseColor("#CBD5E1")
+                background = ui.shape(bgCol, 14, strokeCol)
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+            }
+            if (isImage && cachedFile.isFile && cachedFile.length() in 1..12_000_000L) {
+                val imgView = android.widget.ImageView(context).apply {
+                    adjustViewBounds = true
+                    maxWidth = width - dp(56)
+                    maxHeight = dp(260)
+                    contentDescription = clean
+                    setOnClickListener {
+                        runCatching { WhaleCodeRunner.openOrShareExportedFile(context, clean, "open") }
+                    }
+                }
+                card.addView(imgView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+                executor.execute {
+                    val bmp = runCatching {
+                        val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        android.graphics.BitmapFactory.decodeFile(cachedFile.absolutePath, opts)
+                        val maxDim = maxOf(opts.outWidth, opts.outHeight).coerceAtLeast(1)
+                        val sample = (maxDim / 960).coerceAtLeast(1)
+                        android.graphics.BitmapFactory.decodeFile(
+                            cachedFile.absolutePath,
+                            android.graphics.BitmapFactory.Options().apply { inSampleSize = sample },
+                        )
+                    }.getOrNull()
+                    if (bmp != null) {
+                        handler.post {
+                            if (root === panel) {
+                                imgView.setImageBitmap(bmp)
+                                if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
+                                panel.post { positionUpdater?.invoke() }
+                            } else bmp.recycle()
+                        }
+                    }
+                }
+            }
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val titleView = ui.text("📎 $clean", 13f, if (ui.dark) Color.parseColor("#E6EEFC") else Color.parseColor("#0F172A"), bold = true).apply {
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+            }
+            val openBtn = TextView(context).apply {
+                text = "打开"
+                textSize = 12f
+                setTextColor(Color.WHITE)
+                setPadding(dp(10), dp(4), dp(10), dp(4))
+                background = ui.action(Color.parseColor("#2F8AF5"), 12)
+                setOnClickListener { runCatching { WhaleCodeRunner.openOrShareExportedFile(context, clean, "open") } }
+            }
+            val shareBtn = TextView(context).apply {
+                text = "分享"
+                textSize = 12f
+                setTextColor(if (ui.dark) Color.parseColor("#93C5FD") else Color.parseColor("#0369A1"))
+                setPadding(dp(9), dp(4), dp(9), dp(4))
+                background = ui.action(Color.TRANSPARENT, 12, ui.line)
+                setOnClickListener { runCatching { WhaleCodeRunner.openOrShareExportedFile(context, clean, "share") } }
+            }
+            row.addView(titleView, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(6) })
+            row.addView(shareBtn, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(5) })
+            row.addView(openBtn, LinearLayout.LayoutParams(-2, -2))
+            card.addView(row, LinearLayout.LayoutParams(-1, -2))
+            content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+            if (shouldFollow) scroll.post { scroll.fullScroll(android.view.View.FOCUS_DOWN) }
+        }
         fun conversationMessage(it: CompanionBubbleChat.Message) {
             val parsed = if (it.role == "assistant") CompanionBubbleChatPolicy.parseInlineImages(it.text) else CompanionBubbleChatPolicy.InlineImages(it.text, emptyList())
             val user = it.role == "user"
@@ -1312,7 +1391,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 }
             }
             if (root === panel) handler.postDelayed(waitTicker, 1000L)
+            val turnExportedFiles = java.util.Collections.synchronizedList(mutableListOf<String>())
             chat.onNativePhase = { phase ->
+                if (phase.startsWith("step:导出文件") || phase.startsWith("step:渲染 PDF")) {
+                    val fn = phase.substringAfter("：", "").ifBlank { phase.substringAfterLast(":", "") }.trim()
+                    if (fn.isNotEmpty()) turnExportedFiles.add(fn)
+                }
                 petPhaseRef.set(phase)
                 handler.post { updatePetWaitBar() }
             }
@@ -1442,6 +1526,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                             streamingBubble.text = CompanionRichText.render(answer.text, ui)
                             renderCompleted(streamingBubble, answer.text, false)
                             answer.images.forEach(::imageBubble)
+                            val exportedSnapshot = synchronized(turnExportedFiles) { turnExportedFiles.distinct() }
+                            exportedSnapshot.forEach(::exportedFileOrImageCard)
                             answer.citations.take(2).forEach(::citationCard)
                             if (answer.suggestions.isNotEmpty()) {
                                 val row = android.widget.HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false }

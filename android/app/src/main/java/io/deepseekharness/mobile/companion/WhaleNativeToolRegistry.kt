@@ -431,7 +431,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_ui_refresh", "强制刷新鲸鱼助手主界面与悬浮桌宠状态徽标，同步最新数据视图。", emptyMap(), emptyList()))
             array.put(schema("whale_voice_speak", "用硅基流动 CosyVoice2 拟人语音让桌宠大声说出一句话。", mapOf("text" to "要朗读的自然中文或英文内容", "voice" to "可选音色：diana / claire / bella / anna / alex / benjamin"), listOf("text")))
             array.put(schema("whale_voice_config", "修改桌宠语音配置（切换音色、语速或开关自动朗读）。", mapOf("autoSpeakPet" to "可选：true 或 false", "voice" to "可选：diana（欢快女声）/ claire（温柔女声）/ bella（活力女声）/ anna（沉稳女声）/ alex（沉稳男声）", "speed" to "可选语速 0.7-1.5"), emptyList()))
-            array.put(schema("whale_web_search", "联网实时搜索网页信息，返回标题、摘要与链接。", mapOf("query" to "搜索关键词", "limit" to "可选返回条数（1-8，默认 5）"), listOf("query")))
+            array.put(schema("whale_web_search", "联网实时搜索网页与中文社区内容（支持 B站原生直搜、小红书/知乎/GitHub 定向检索及中文多引擎聚合），返回标题、摘要与链接。", mapOf("query" to "搜索关键词", "platform" to "可选平台定向：auto（自动识别）/ bilibili（B站原生直搜）/ xiaohongshu（小红书）/ zhihu（知乎）/ github", "limit" to "可选返回条数（1-8，默认 5）"), listOf("query")))
+            array.put(schema("whale_web_render", "使用手机原生离屏 WebView 执行 JS 渲染后提取动态网页正文与链接（专治小红书笔记/搜索页、B站动态页、SPA 前端渲染网站，自动复用已授权登录态 Cookie）。", mapOf("url" to "完整 https:// 或 http:// 网址", "waitMs" to "可选等待 JS 渲染毫秒数（1000-8000，默认 2600）", "maxChars" to "可选最大字符数（默认 6000）"), listOf("url")))
             array.put(schema("whale_site_auth", "管理通用站点登录态凭据库（Android Keystore 加密存储 Cookie，明文永不暴露给模型）：支持拉起内嵌 WebView 供用户自行登录并授权保存站点 Cookie、查看已授权域名列表或撤销授权。", mapOf("action" to "open_login（拉起站点登录页）/ list（查看已授权域名）/ revoke（撤销指定域名授权）", "url" to "open_login 时的目标 https:// 网址（如 https://www.bilibili.com）或 revoke 时的域名", "label" to "可选站点名称备注（如 B站）"), listOf("action")))
             array.put(schema("whale_web_fetch", "联网抓取指定 HTTPS/HTTP 网页或文本接口的正文内容（已授权站点自动携带加密登录态 Cookie）。", mapOf("url" to "完整网页 URL", "maxChars" to "可选最大字符数，默认 6000"), listOf("url")))
             array.put(schema("whale_memory_delete", "按 ID 删除一条本地长期记忆。", mapOf("id" to "记忆 UUID"), listOf("id")))
@@ -1597,8 +1598,17 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val q = args.str("query").trim()
                     require(q.isNotEmpty()) { "缺少搜索关键词 query" }
                     val limit = args.optInt("limit", 5).coerceIn(1, 8)
-                    val res = WhaleWebFetcher.search(q, limit)
-                    ToolOutcome(name, "联网搜索：$q", res.optInt("count", 0) > 0, res.toString())
+                    val platform = args.str("platform", "auto").trim()
+                    val res = WhaleWebFetcher.search(q, limit, platform, app)
+                    ToolOutcome(name, "联网搜索：$q", res.optInt("count", 0) > 0 || res.has("xhsSearchUrl"), res.toString())
+                }
+                "whale_web_render" -> {
+                    val rawUrl = args.str("url").trim()
+                    require(rawUrl.isNotEmpty()) { "缺少要渲染的网页 url" }
+                    val waitMs = args.optLong("waitMs", 2600L).coerceIn(1000L, 8000L)
+                    val maxChars = args.optInt("maxChars", 6000).coerceIn(500, 12_000)
+                    val res = WhaleWebRenderer.renderAndExtract(app, rawUrl, waitMs, maxChars)
+                    ToolOutcome(name, "浏览器渲染读取网页", res.optBoolean("ok", false), res.toString())
                 }
                 "whale_web_fetch" -> {
                     val rawUrl = args.str("url").trim()
