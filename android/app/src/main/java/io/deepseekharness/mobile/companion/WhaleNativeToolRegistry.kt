@@ -305,8 +305,6 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
             array.put(schema(
                 "whale_file_export",
-        "whale_remote_exec",
-        "whale_remote_mcp",
                 "将代码工作区生成的任意文件（如 .pptx/.docx/.xlsx/.pdf/.zip/.png/.csv）导出保存到手机「下载/WhaleAssistant」目录，并可选立即调起系统分享面板交给用户。",
                 mapOf(
                     "project" to "项目目录名（默认 scratch）",
@@ -622,6 +620,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_code_run",
         "whale_html_to_pdf",
         "whale_file_export",
+        "whale_remote_exec",
+        "whale_remote_mcp",
         "whale_py_install",
         "whale_site_auth",
         "whale_worker_ask",
