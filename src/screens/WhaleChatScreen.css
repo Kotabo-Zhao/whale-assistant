@@ -1635,13 +1635,70 @@
   max-width: 100% !important;
   width: 100% !important;
 }
+/* 全主题自适应助手气泡（覆盖 light/dark × simple/cute 四种组合，杜绝浅色深底黑字） */
 .whale-msg-assistant .whale-msg-bubble {
-  background: #142136 !important;
-  border: 1px solid #283a57 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(15, 23, 42, 0.11) !important;
   border-radius: 5px 16px 16px 16px !important;
   padding: 10px 13px !important;
   width: 100% !important;
   box-sizing: border-box !important;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05) !important;
+}
+.whale-msg-assistant .whale-msg-bubble strong {
+  color: #0b1324 !important;
+}
+.whale-msg-assistant .whale-msg-bubble code {
+  background: rgba(15, 23, 42, 0.07) !important;
+  color: #1e3a5f !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+.whale-msg-assistant .whale-msg-bubble pre {
+  background: #f4f7fb !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+}
+.whale-msg-assistant .whale-msg-bubble hr {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+:root[data-style='cute']:not([data-theme='dark']) .whale-msg-assistant .whale-msg-bubble {
+  background: linear-gradient(180deg, rgba(255, 253, 250, 0.97) 0%, rgba(240, 248, 255, 0.97) 100%) !important;
+  color: #17324d !important;
+  border: 1px solid rgba(125, 198, 250, 0.52) !important;
+  box-shadow: 0 4px 14px rgba(56, 132, 188, 0.09) !important;
+}
+:root[data-style='cute']:not([data-theme='dark']) .whale-msg-assistant .whale-msg-bubble strong {
+  color: #0f253d !important;
+}
+:root[data-style='cute']:not([data-theme='dark']) .whale-msg-assistant .whale-msg-bubble code {
+  background: rgba(46, 143, 214, 0.12) !important;
+  color: #124878 !important;
+  border-color: rgba(46, 143, 214, 0.18) !important;
+}
+
+:root[data-theme='dark'] .whale-msg-assistant .whale-msg-bubble {
+  background: #142136 !important;
+  color: #e6eefc !important;
+  border: 1px solid #283a57 !important;
+  box-shadow: 0 4px 16px rgba(2, 6, 23, 0.28) !important;
+}
+:root[data-theme='dark'] .whale-msg-assistant .whale-msg-bubble strong {
+  color: #ffffff !important;
+}
+:root[data-theme='dark'] .whale-msg-assistant .whale-msg-bubble code {
+  background: rgba(148, 163, 184, 0.18) !important;
+  color: #dbeafe !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+}
+:root[data-theme='dark'] .whale-msg-assistant .whale-msg-bubble pre {
+  background: #0d1728 !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+}
+:root[data-theme='dark'] .whale-msg-assistant .whale-msg-bubble hr {
+  border-color: rgba(148, 163, 184, 0.24) !important;
 }
 .whale-msg-user .whale-msg-bubble {
   background: #2f8af5 !important;

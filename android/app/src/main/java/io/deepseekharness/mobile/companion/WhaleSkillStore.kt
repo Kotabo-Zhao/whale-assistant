@@ -148,7 +148,93 @@ internal object WhaleSkillStore {
                 .removeSuffix(".md")
         }
         val parsed = parseSkillMarkdown(body, fallback)
-        return saveParsed(context, parsed, resolvedUrl)
+        val saved = saveParsed(context, parsed, resolvedUrl)
+        val bundled = runCatching { syncGithubBundleFiles(context, parsed.slug, resolvedUrl) }.getOrDefault(emptyList())
+        if (bundled.isNotEmpty()) {
+            saved.put("bundledFiles", JSONArray(bundled))
+            saved.put("bundledCount", bundled.size)
+        }
+        return saved
+    }
+
+    /** 若 Skill 来自 GitHub，自动拉取同目录下的 scripts/ 与 references/ 文件，让 Skill 具备真实可执行脚本。 */
+    private fun syncGithubBundleFiles(context: Context, slug: String, resolvedRawUrl: String): List<String> {
+        val m = Regex("^https://raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)/(.+)$").find(resolvedRawUrl) ?: return emptyList()
+        val (owner, repo, branch, rawPath) = m.destructured
+        val baseDir = rawPath.substringBeforeLast('/', "").trim('/')
+        val skillDir = File(rootDir(context), slug).apply { mkdirs() }
+        val allowedExts = setOf("py", "md", "txt", "json", "yaml", "yml", "sh")
+        val downloaded = ArrayList<String>()
+
+        fun fetchDir(subDir: String) {
+            if (downloaded.size >= 16) return
+            val apiPath = if (baseDir.isEmpty()) subDir else "$baseDir/$subDir"
+            val apiUrl = "https://api.github.com/repos/$owner/$repo/contents/$apiPath?ref=$branch"
+            val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 8_000
+                readTimeout = 12_000
+                setRequestProperty("Accept", "application/vnd.github+json")
+                setRequestProperty("User-Agent", "WhaleAssistant/0.4 (Android Native Skill Installer)")
+            }
+            val arr = try {
+                if (conn.responseCode !in 200..299) return
+                val txt = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                runCatching { JSONArray(txt) }.getOrNull() ?: return
+            } finally {
+                conn.disconnect()
+            }
+            val localSub = File(skillDir, subDir).apply { mkdirs() }
+            for (i in 0 until arr.length()) {
+                if (downloaded.size >= 16) break
+                val item = arr.optJSONObject(i) ?: continue
+                if (item.optString("type") != "file") continue
+                val fileName = item.optString("name").trim()
+                val ext = fileName.substringAfterLast('.', "").lowercase()
+                if (fileName.isEmpty() || fileName.contains("..") || fileName.contains('/') || ext !in allowedExts) continue
+                val dlUrl = item.optString("download_url").trim()
+                if (!dlUrl.startsWith("https://")) continue
+                val fileConn = (URL(dlUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8_000
+                    readTimeout = 12_000
+                    setRequestProperty("User-Agent", "WhaleAssistant/0.4 (Android Native Skill Installer)")
+                }
+                runCatching {
+                    try {
+                        if (fileConn.responseCode in 200..299) {
+                            val bytes = fileConn.inputStream.use { it.readBytes() }
+                            if (bytes.size <= MAX_SKILL_BYTES) {
+                                File(localSub, fileName).writeBytes(bytes)
+                                downloaded.add("$subDir/$fileName")
+                            }
+                        }
+                    } finally {
+                        fileConn.disconnect()
+                    }
+                }
+            }
+        }
+
+        fetchDir("scripts")
+        fetchDir("references")
+        return downloaded
+    }
+
+    /** 返回所有已启用 Skill 的 scripts/ 目录绝对路径，供内嵌 Python 自动挂载到 sys.path。 */
+    fun skillScriptDirs(context: Context): List<String> {
+        val root = File(context.applicationContext.filesDir, DIR_NAME)
+        val dirs = root.listFiles { f -> f.isDirectory } ?: return emptyList()
+        val out = ArrayList<String>()
+        for (dir in dirs) {
+            val scripts = File(dir, "scripts")
+            if (!scripts.isDirectory) continue
+            val meta = runCatching { JSONObject(File(dir, "meta.json").readText(Charsets.UTF_8)) }.getOrNull()
+            if (meta?.optBoolean("enabled", true) != false) {
+                out.add(scripts.absolutePath)
+            }
+        }
+        return out
     }
 
     fun saveLocal(
@@ -229,11 +315,19 @@ internal object WhaleSkillStore {
             ?: throw IllegalArgumentException("未找到 Skill：$queryName")
         val md = File(dir, "SKILL.md").readText(Charsets.UTF_8)
         val meta = runCatching { JSONObject(File(dir, "meta.json").readText(Charsets.UTF_8)) }.getOrNull()
+        val bundled = JSONArray()
+        for (sub in listOf("scripts", "references")) {
+            File(dir, sub).listFiles { f -> f.isFile }?.sortedBy { it.name }?.forEach { f ->
+                bundled.put("$sub/${f.name}")
+            }
+        }
         return JSONObject()
             .put("slug", dir.name)
             .put("name", meta?.optString("name")?.takeIf(String::isNotBlank) ?: dir.name)
             .put("description", meta?.optString("description").orEmpty())
             .put("enabled", meta?.optBoolean("enabled", true) ?: true)
+            .put("skillDir", dir.absolutePath)
+            .put("bundledFiles", bundled)
             .put("content", md.take(16_000))
     }
 

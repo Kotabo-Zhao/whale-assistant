@@ -72,7 +72,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         val includeWorkshop = expandAll || "code" in expandedCategories || "workshop" in expandedCategories ||
             listOf("工坊", "小工具", "小软件", "小程序", "做一个", "做个", "开发", "网页", "html", "打卡", "计算器", "番茄钟", "记账", "倒计时", "背单词", "游戏", "workshop", "mini app").any { it in q }
         val includeCode = expandAll || "code" in expandedCategories ||
-            listOf("代码", "文件", "目录", "脚本", "编程", "工程", "写入", "补丁", "code", "file", "patch").any { it in q }
+            listOf("代码", "文件", "目录", "脚本", "编程", "工程", "写入", "补丁", "ppt", "word", "excel", "pdf", "导出", "安装包", "python", "code", "file", "patch").any { it in q }
         val includePhone = expandAll || "phone" in expandedCategories ||
             listOf("手机", "打开", "点击", "截屏", "截图", "屏幕", "滑动", "返回", "桌面", "应用", "app", "副屏", "微信", "抖音", "淘宝", "支付宝", "地图", "美团", "小红书", "哔哩", "b站", "screen", "click", "launch").any { it in q }
         val includeDevice = expandAll || "device" in expandedCategories || "settings" in expandedCategories ||
@@ -269,6 +269,25 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_code_patch", "在本地源码文件中精准替换唯一匹配的代码片段（比整文件重写更省 token）。", mapOf("project" to "项目名", "path" to "文件相对路径", "oldText" to "原始唯一代码片段", "newText" to "替换后的代码片段"), listOf("project", "path", "oldText", "newText")))
             array.put(schema("whale_code_delete", "安全删除本地代码项目中的单个文件。", mapOf("project" to "项目名", "path" to "文件相对路径"), listOf("project", "path")))
             array.put(schema("whale_code_search", "在本地原生代码项目中跨文件检索代码片段。", mapOf("project" to "项目名", "query" to "搜索词"), listOf("project", "query")))
+            array.put(schema(
+                "whale_file_export",
+                "将代码工作区生成的任意文件（如 .pptx/.docx/.xlsx/.pdf/.zip/.png/.csv）导出保存到手机「下载/WhaleAssistant」目录，并可选立即调起系统分享面板交给用户。",
+                mapOf(
+                    "project" to "项目目录名（默认 scratch）",
+                    "path" to "项目内相对文件路径，例如 deck.pptx 或 out/report.pdf",
+                    "share" to "可选：true 导出后立即弹出系统分享/打开面板，默认 false",
+                ),
+                listOf("path"),
+            ))
+            array.put(schema(
+                "whale_py_install",
+                "运行时从国内 PyPI 镜像（清华/阿里/官方回退）动态下载并安装纯 Python Wheel 包（py3-none-any.whl）到私有 site-packages，安装后 whale_code_run 可直接 import 使用。",
+                mapOf(
+                    "package" to "PyPI 包名，例如 qrcode / tabulate / markdown / fpdf2",
+                    "mirrorUrl" to "可选自定义 HTTPS 镜像地址（默认自动优先清华/阿里镜像）",
+                ),
+                listOf("package"),
+            ))
             array.put(schema(
                 "whale_code_run",
                 "在手机本地直接运行 Python 3.11 代码（内嵌 CPython，支持编程式工具调用 PTC：代码内可直接调用 `tools.<工具名>(**kwargs)` 串联多个工具并用 `inspect(...)` 输出精炼结果，1 轮完成多步编排）或本地 Shell 命令。",
@@ -545,6 +564,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_code_patch",
         "whale_code_delete",
         "whale_code_run",
+        "whale_file_export",
+        "whale_py_install",
         "whale_todo_write",
         "whale_phone_launch",
         "whale_phone_action",
@@ -1093,6 +1114,22 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_code_search" -> {
                     val res = codeWorkspace.searchCode(args.str("project", ""), args.str("query", ""))
                     ToolOutcome(name, "检索本地代码", true, res.toString())
+                }
+                "whale_file_export" -> {
+                    val project = args.str("project").trim().ifBlank { "scratch" }
+                    val relPath = args.str("path").trim()
+                    require(relPath.isNotEmpty()) { "缺少待导出文件的相对路径 path" }
+                    val shareNow = args.str("share", "false").trim().lowercase() == "true"
+                    val res = WhaleCodeRunner.exportProjectFile(app, project, relPath, shareNow)
+                    ToolOutcome(name, "导出文件：${res.optString("fileName")}", true, res.toString(), mutating = true)
+                }
+                "whale_py_install" -> {
+                    val pkg = args.str("package").trim()
+                    require(pkg.isNotEmpty()) { "缺少要安装的 Python 包名 package" }
+                    val mirror = args.str("mirrorUrl").trim()
+                    val res = WhaleCodeRunner.installPurePythonPackage(app, pkg, mirror)
+                    val ok = res.optBoolean("ok", false)
+                    ToolOutcome(name, if (ok) "已安装 Python 包：$pkg" else "安装 Python 包失败：$pkg", ok, res.toString(), mutating = true)
                 }
                 "whale_code_run" -> {
                     val project = args.str("project").trim().ifBlank { "scratch" }

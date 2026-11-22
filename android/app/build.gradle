@@ -124,6 +124,16 @@ def collectLightAssets = tasks.register('collectLightAssets', Sync) {
 chaquopy {
     defaultConfig {
         version = "3.11"
+        pip {
+            // 预装高频办公文档、图像处理与网页解析库，离线即可生成真 PPTX / DOCX / XLSX / PDF
+            install("pillow")
+            install("lxml")
+            install("python-pptx")
+            install("python-docx")
+            install("openpyxl")
+            install("pypdf")
+            install("beautifulsoup4")
+        }
     }
 }
 
