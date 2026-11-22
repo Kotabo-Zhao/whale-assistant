@@ -231,9 +231,9 @@ export function clearCustomAccentColor(): void {
  * 而 `meta[name=theme-color]` 只有 Chrome for Android 认、Android WebView 不认。
  * 传模式而非「深/浅」，是为了让原生在 system 模式下自己跟着系统切换。
  */
-export type InterfaceStyle = 'simple' | 'cute'
+export type InterfaceStyle = 'simple' | 'cute' | 'usagi'
 export function readInterfaceStyle(): InterfaceStyle {
-  try { return localStorage.getItem('whale-interface-style') === 'simple' ? 'simple' : 'cute' } catch { return 'cute' }
+  try { const v = localStorage.getItem('whale-interface-style'); return v === 'simple' ? 'simple' : (v === 'usagi' ? 'usagi' : 'cute') } catch { return 'cute' }
 }
 export function saveInterfaceStyle(value: InterfaceStyle) {
   localStorage.setItem('whale-interface-style', value)

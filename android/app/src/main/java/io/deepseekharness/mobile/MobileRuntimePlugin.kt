@@ -473,7 +473,7 @@ class MobileRuntimePlugin : Plugin() {
         val saved = try {
             val style = call.getString("style")
             if (style != null) {
-                require(style == "simple" || style == "cute")
+                require(style == "simple" || style == "cute" || style == "usagi")
                 context.getSharedPreferences("whale-interface", 0).edit().putString("style", style).apply()
             }
             val saved = AppThemePreference.save(context, mode)

@@ -13,6 +13,7 @@ internal class CompanionPetDrawable(
     private val targetSize: Int,
     private val decoder: Executor,
     private val main: Handler = Handler(Looper.getMainLooper()),
+    private val usagiTheme: Boolean = false,
 ) : Drawable(), AutoCloseable {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
@@ -55,9 +56,22 @@ internal class CompanionPetDrawable(
         prewarmHotAtlases()
     }
 
+    private fun usagiAtlasPath(name: String, rows: Int): String {
+        if (rows <= 4) return "pet-cels-usagi/idle_16.webp"
+        val base = name.removeSuffix("_enter").removeSuffix("_return")
+        return when (base) {
+            "writing", "drink" -> "pet-cels-usagi/writing_32.webp"
+            "control", "drag", "touch" -> "pet-cels-usagi/control_32.webp"
+            "celebrate", "accept", "reply", "notice" -> "pet-cels-usagi/celebrate_32.webp"
+            else -> "pet-cels-usagi/reading_32.webp"
+        }
+    }
+
     private fun decode(name: String): Bitmap {
         val cellSize = targetSize.coerceIn(96, PetCels.CELL)
-        val raw = resources.assets.open("pet-cels/$name.webp").use {
+        val rows = PetCels.clips.getValue(name).rows
+        val assetPath = if (usagiTheme) usagiAtlasPath(name, rows) else "pet-cels/$name.webp"
+        val raw = resources.assets.open(assetPath).use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply {
                 // Bake density scaling during the off-main decode. A 264px avatar should
                 // not keep every 320px source cel resident after doubling its frame count.
@@ -65,7 +79,6 @@ internal class CompanionPetDrawable(
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             })
         } ?: error("Missing pet animation: $name")
-        val rows = PetCels.clips.getValue(name).rows
         val expectedW = cellSize * PetCels.COLUMNS
         val expectedH = cellSize * rows
         if (raw.width == expectedW && raw.height == expectedH) return raw

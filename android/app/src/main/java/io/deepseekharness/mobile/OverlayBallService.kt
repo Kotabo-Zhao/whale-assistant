@@ -1231,7 +1231,7 @@ class OverlayBallService : Service() {
         val generation = ++avatarGeneration
         avatarExecutor.execute {
             val next = runCatching {
-                io.deepseekharness.mobile.overlay.CompanionPetDrawable(resources,size,avatarExecutor,hintHandler)
+                io.deepseekharness.mobile.overlay.CompanionPetDrawable(resources,size,avatarExecutor,hintHandler,getSharedPreferences("whale-interface",0).getString("style","cute")=="usagi")
             }.onFailure {
                 android.util.Log.w("WhalePet", "Failed to load companion avatar (size=$size)", it)
             }.getOrNull() ?: return@execute

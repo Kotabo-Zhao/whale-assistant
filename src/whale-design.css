@@ -1268,3 +1268,82 @@ button:active .whale-cute-icon,
   font-size: 0.76rem;
   opacity: 0.88;
 }
+
+/* ============================================================================
+ * 乌萨奇·兔兔主题（全 App 暖奶油蜂蜜浅色 + 焦糖可可深色）
+ * ============================================================================ */
+:root[data-style='usagi'] {
+  --bg: #fffdf4;
+  --surface: #fffef9;
+  --surface-muted: #fef3c7;
+  --ink: #3b2613;
+  --muted: #8a6a47;
+  --line: rgba(217, 151, 38, 0.28);
+  --line-strong: rgba(217, 151, 38, 0.48);
+  --line-faint: rgba(217, 151, 38, 0.16);
+  --blue: #d97706;
+  --blue-hover: #b45309;
+  --blue-soft: rgba(251, 191, 36, 0.22);
+  --blue-line: rgba(245, 158, 11, 0.45);
+  --on-accent: #2b1a08;
+  --shadow-card: 0 5px 16px rgba(180, 115, 24, 0.10);
+  --shadow-elevated: 0 8px 24px rgba(180, 115, 24, 0.14);
+}
+:root[data-style='usagi'][data-theme='dark'] {
+  --bg: #17110b;
+  --surface: #231a12;
+  --surface-muted: #2f2317;
+  --ink: #fef3c7;
+  --muted: #d6b88c;
+  --line: rgba(251, 191, 36, 0.22);
+  --line-strong: rgba(251, 191, 36, 0.38);
+  --line-faint: rgba(251, 191, 36, 0.12);
+  --blue: #fbbf24;
+  --blue-hover: #f59e0b;
+  --blue-soft: rgba(251, 191, 36, 0.16);
+  --blue-line: rgba(251, 191, 36, 0.36);
+  --on-accent: #241506;
+  --shadow-card: 0 6px 20px rgba(0, 0, 0, 0.34);
+  --shadow-elevated: 0 8px 26px rgba(0, 0, 0, 0.44);
+}
+:root[data-style='usagi'] body,
+:root[data-style='usagi'] .app-shell,
+:root[data-style='usagi'] .whale-chat-screen {
+  background: radial-gradient(circle at 50% 12%, rgba(255, 244, 196, 0.85) 0%, rgba(255, 251, 235, 0.96) 54%, #fffdf4 100%) !important;
+}
+:root[data-style='usagi'][data-theme='dark'] body,
+:root[data-style='usagi'][data-theme='dark'] .app-shell,
+:root[data-style='usagi'][data-theme='dark'] .whale-chat-screen {
+  background: radial-gradient(circle at 50% 12%, rgba(78, 53, 24, 0.48) 0%, rgba(26, 19, 13, 0.96) 54%, #150f09 100%) !important;
+}
+:root[data-style='usagi'] .bottom-navigation {
+  border-top: 1.5px solid rgba(245, 158, 11, 0.32) !important;
+  background: rgba(255, 253, 244, 0.92) !important;
+}
+:root[data-style='usagi'][data-theme='dark'] .bottom-navigation {
+  border-top-color: rgba(251, 191, 36, 0.24) !important;
+  background: rgba(28, 20, 13, 0.92) !important;
+}
+:root[data-style='usagi'] .bottom-navigation-item.is-active {
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(253, 224, 71, 0.32) 0%, rgba(251, 191, 36, 0.22) 100%) !important;
+  border: 1px solid rgba(245, 158, 11, 0.46) !important;
+  color: #b45309 !important;
+}
+:root[data-style='usagi'][data-theme='dark'] .bottom-navigation-item.is-active {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22) 0%, rgba(217, 119, 6, 0.18) 100%) !important;
+  border-color: rgba(251, 191, 36, 0.38) !important;
+  color: #fde68a !important;
+}
+:root[data-style='usagi'] .settings-section,
+:root[data-style='usagi'] .management-list,
+:root[data-style='usagi'] .whale-autonomy-card {
+  border: 1.5px solid rgba(245, 158, 11, 0.28);
+  background: linear-gradient(180deg, rgba(255, 254, 248, 0.98) 0%, rgba(255, 249, 226, 0.96) 100%);
+}
+:root[data-style='usagi'][data-theme='dark'] .settings-section,
+:root[data-style='usagi'][data-theme='dark'] .management-list,
+:root[data-style='usagi'][data-theme='dark'] .whale-autonomy-card {
+  border-color: rgba(251, 191, 36, 0.22);
+  background: linear-gradient(180deg, rgba(38, 28, 18, 0.96) 0%, rgba(30, 22, 14, 0.98) 100%);
+}

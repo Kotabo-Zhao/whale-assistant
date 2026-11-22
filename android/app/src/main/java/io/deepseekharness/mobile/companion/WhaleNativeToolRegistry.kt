@@ -91,7 +91,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_app_appearance",
                 "实时修改整个软件的视觉风格、明暗主题、强调色或减少动效开关。",
                 mapOf(
-                    "style" to "可选：simple（极简·类Grok）或 cute（鲸鱼娘·可爱）",
+                    "style" to "可选：simple（极简·类Grok）、cute（鲸鱼娘·可爱）或 usagi（乌萨奇·兔兔）",
                     "theme" to "可选：system / light / dark",
                     "accent" to "可选：ocean / mint / amber / rose",
                     "reduceMotion" to "可选：true 或 false",
@@ -662,7 +662,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val accent = args.str("accent", "").trim().lowercase()
                     val reduceMotionRaw = args.str("reduceMotion", "").trim().lowercase()
                     val payload = JSONObject().put("action", "appearance")
-                    if (style in setOf("simple", "cute")) {
+                    if (style in setOf("simple", "cute", "usagi")) {
                         app.getSharedPreferences("whale-interface", Context.MODE_PRIVATE).edit().putString("style", style).apply()
                         payload.put("style", style)
                     }

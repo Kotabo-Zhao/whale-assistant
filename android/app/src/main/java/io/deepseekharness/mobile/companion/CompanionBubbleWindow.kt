@@ -407,7 +407,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             bottomMargin = dp(2)
         })
         val subtitle: String? = null
-        panel.addView(ui.header(ui.string(R.string.pet_ui_name), subtitle, headingEnd))
+        panel.addView(ui.header(if (ui.usagi) "乌萨奇" else ui.string(R.string.pet_ui_name), subtitle, headingEnd))
         panel.addView(ui.divider())
         val shortcuts = LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(2), dp(8), 0)
@@ -518,9 +518,9 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 if (view is TextView) view.setTextColor(Color.WHITE)
             } else {
                 view.setPadding(dp(11), dp(9), dp(11), dp(9))
-                val bgCol = if (ui.dark) Color.parseColor("#142136") else Color.parseColor("#FFFFFF")
-                val strokeCol = if (ui.dark) Color.parseColor("#283A57") else Color.parseColor("#CBD5E1")
-                val inkCol = if (ui.dark) Color.parseColor("#E6EEFC") else Color.parseColor("#0F172A")
+                val bgCol = if (ui.usagi) Color.parseColor(if (ui.dark) "#281E14" else "#FFFDF4") else Color.parseColor(if (ui.dark) "#142136" else "#FFFFFF")
+                val strokeCol = if (ui.usagi) Color.parseColor(if (ui.dark) "#574028" else "#F2D48B") else Color.parseColor(if (ui.dark) "#283A57" else "#CBD5E1")
+                val inkCol = if (ui.usagi) Color.parseColor(if (ui.dark) "#FEF3C7" else "#3B2613") else Color.parseColor(if (ui.dark) "#E6EEFC" else "#0F172A")
                 view.background = ui.shape(bgCol, 16, strokeCol).apply {
                     cornerRadii = floatArrayOf(tip, tip, round, round, round, round, round, round)
                 }
@@ -1361,7 +1361,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 ellipsize = android.text.TextUtils.TruncateAt.END
             } else null
             if (waitRow != null && vectorSpinner != null && waitLabel != null) {
-                waitRow.addView(vectorSpinner, LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(8) })
+                waitRow.addView(vectorSpinner, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(8) })
                 waitRow.addView(waitLabel, LinearLayout.LayoutParams(0, -2, 1f))
                 content.addView(waitRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
             }

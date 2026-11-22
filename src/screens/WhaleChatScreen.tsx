@@ -32,6 +32,21 @@ import {
 } from 'lucide-react'
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
+import usagiAvatar from '../assets/usagi-avatar.png'
+import animWhaleThinking from '../assets/status-anims/whale_thinking.webp'
+import animWhaleCode from '../assets/status-anims/whale_code.webp'
+import animWhaleWeb from '../assets/status-anims/whale_web.webp'
+import animWhaleFile from '../assets/status-anims/whale_file.webp'
+import animWhaleMemory from '../assets/status-anims/whale_memory.webp'
+import animWhalePhone from '../assets/status-anims/whale_phone.webp'
+import animWhaleWorker from '../assets/status-anims/whale_worker.webp'
+import animUsagiThinking from '../assets/status-anims/usagi_thinking.webp'
+import animUsagiCode from '../assets/status-anims/usagi_code.webp'
+import animUsagiWeb from '../assets/status-anims/usagi_web.webp'
+import animUsagiFile from '../assets/status-anims/usagi_file.webp'
+import animUsagiMemory from '../assets/status-anims/usagi_memory.webp'
+import animUsagiPhone from '../assets/status-anims/usagi_phone.webp'
+import animUsagiWorker from '../assets/status-anims/usagi_worker.webp'
 import { CuteIcon, type CuteIconName } from '../components/CuteIcon'
 import { t } from '../i18n'
 import { useInterfaceStyle } from '../theme'
@@ -301,7 +316,9 @@ export interface WhaleChatScreenProps {
 
 export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const style = useInterfaceStyle()
-  const heroMark = style === 'simple' ? grokMark : whaleChanAvatar
+  const isUsagi = style === 'usagi'
+  const activeAvatar = isUsagi ? usagiAvatar : whaleChanAvatar
+  const heroMark = style === 'simple' ? grokMark : activeAvatar
   const [sessions, setSessions] = useState<WhaleChatSession[]>(loadSessions)
   const [activeId, setActiveId] = useState<string>(() => loadActiveSessionId(loadSessions()))
   const [sessionsOpen, setSessionsOpen] = useState(false)
@@ -868,98 +885,37 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const phaseLabel = phaseMeta.text
 
   const renderActivitySvg = (category: string) => {
-    const accent =
-      category === 'code' ? '#34d399'
-        : category === 'file' ? '#fbbf24'
-          : category === 'memory' ? '#c084fc'
-            : category === 'phone' ? '#fb7185'
-              : category === 'worker' ? '#22d3ee'
-                : '#38bdf8'
+    const key = (category === 'code' || category === 'web' || category === 'file' || category === 'memory' || category === 'phone' || category === 'worker')
+      ? category
+      : 'thinking'
+    const whaleMap: Record<string, string> = {
+      thinking: animWhaleThinking,
+      code: animWhaleCode,
+      web: animWhaleWeb,
+      file: animWhaleFile,
+      memory: animWhaleMemory,
+      phone: animWhalePhone,
+      worker: animWhaleWorker,
+    }
+    const usagiMap: Record<string, string> = {
+      thinking: animUsagiThinking,
+      code: animUsagiCode,
+      web: animUsagiWeb,
+      file: animUsagiFile,
+      memory: animUsagiMemory,
+      phone: animUsagiPhone,
+      worker: animUsagiWorker,
+    }
+    const src = isUsagi ? usagiMap[key] : whaleMap[key]
     return (
-      <svg className={`whale-girl-svg is-${category}`} viewBox="0 0 36 36" width="28" height="28" aria-hidden="true">
-        {/* 顶部按行为定制的鲸鱼娘小道具 */}
-        {category === 'web' && (
-          <g>
-            <circle className="wgirl-spout-1" cx="15" cy="5.5" r="1.7" fill="#38bdf8" />
-            <circle className="wgirl-spout-2" cx="21" cy="5.5" r="1.5" fill="#7dd3fc" />
-            <path className="wgirl-spout-1" d="M18 8.5C18 5.8 15.5 4.2 13.5 5" fill="none" stroke="#38bdf8" strokeWidth="1.2" strokeLinecap="round" />
-            <path className="wgirl-spout-2" d="M18 8.5C18 5.8 20.5 4.2 22.5 5" fill="none" stroke="#7dd3fc" strokeWidth="1.2" strokeLinecap="round" />
-          </g>
-        )}
-        {category === 'worker' && (
-          <g className="wgirl-orbit">
-            <circle cx="18" cy="3.2" r="2.1" fill="#22d3ee" />
-            <circle cx="32.5" cy="21" r="1.8" fill="#60a5fa" />
-          </g>
-        )}
-        {(category === 'thinking' || category === 'analyzing') && (
-          <g>
-            <circle className="wgirl-spout-1" cx="27.5" cy="9" r="1.6" fill="#7dd3fc" />
-            <circle className="wgirl-spout-2" cx="30.5" cy="5.5" r="1.15" fill="#bae6fd" />
-          </g>
-        )}
-        {category === 'memory' && (
-          <path className="wgirl-spark" d="M29 4.5L30.2 7.3L33 8.5L30.2 9.7L29 12.5L27.8 9.7L25 8.5L27.8 7.3Z" fill="#c084fc" />
-        )}
-
-        {/* 鲸鱼娘主体（轻微浮动） */}
-        <g className="wgirl-body">
-          {/* 冰蓝双马尾 */}
-          <path className="wgirl-tail-l" d="M10 17C6.2 18.2 4.5 22.8 6.4 26.8C8.1 25.9 9.5 24 10.6 21.8Z" fill="#38bdf8" />
-          <path className="wgirl-tail-r" d="M26 17C29.8 18.2 31.5 22.8 29.6 26.8C27.9 25.9 26.5 24 25.4 21.8Z" fill="#38bdf8" />
-
-          {/* 头顶小鲸鱼尾鳍发卡 */}
-          <path className="wgirl-fin" d="M18 10.5C17.2 7.4 14.3 5.7 12.6 7C14.1 8.8 15.8 9.9 18 10.5C20.2 9.9 21.9 8.8 23.4 7C21.7 5.7 18.8 7.4 18 10.5Z" fill={accent} />
-
-          {/* 冰蓝头发轮廓 */}
-          <circle cx="18" cy="19" r="9.4" fill="#7dd3fc" />
-
-          {/* 脸蛋 */}
-          <ellipse cx="18" cy="20.6" rx="7.2" ry="6.4" fill="#fff3eb" />
-
-          {/* 空气刘海 */}
-          <path d="M10.4 18.2C11.4 13.6 14.5 11.2 18 11.2C21.5 11.2 24.6 13.6 25.6 18.2C23.8 16.2 22.1 15.6 20.6 17.5C19.6 15.6 18.7 15.3 18 17.3C17.3 15.3 16.4 15.6 15.4 17.5C13.9 15.6 12.2 16.2 10.4 18.2Z" fill="#38bdf8" />
-
-          {/* 灵动眨眼大眼睛 */}
-          <g className="wgirl-eye">
-            <ellipse cx="15" cy="20.8" rx="1.35" ry="1.75" fill="#0f2942" />
-            <circle cx="14.55" cy="20.1" r="0.55" fill="#ffffff" />
-          </g>
-          <g className="wgirl-eye">
-            <ellipse cx="21" cy="20.8" rx="1.35" ry="1.75" fill="#0f2942" />
-            <circle cx="20.55" cy="20.1" r="0.55" fill="#ffffff" />
-          </g>
-
-          {/* 腮红与微笑 */}
-          <ellipse cx="12.7" cy="22.4" rx="1.25" ry="0.7" fill="#fda4af" opacity="0.75" />
-          <ellipse cx="23.3" cy="22.4" rx="1.25" ry="0.7" fill="#fda4af" opacity="0.75" />
-          <path d="M16.7 23.4C17.3 24.15 18.7 24.15 19.3 23.4" fill="none" stroke="#c26378" strokeWidth="1.15" strokeLinecap="round" />
-
-          {/* 蓝色小领结 */}
-          <path d="M14.8 27.6L18 29.2L21.2 27.6L20.5 30.8L18 29.6L15.5 30.8Z" fill="#0284c7" />
-        </g>
-
-        {/* 右下角按行为定制的动态小徽章 */}
-        {category === 'code' && (
-          <g className="wgirl-spark">
-            <rect x="23" y="23" width="11.5" height="9.5" rx="2.8" fill="#0f172a" stroke="#34d399" strokeWidth="1.2" />
-            <path d="M26.5 26L25 27.8L26.5 29.5M31 26L32.5 27.8L31 29.5" fill="none" stroke="#34d399" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
-          </g>
-        )}
-        {category === 'file' && (
-          <g className="wgirl-spark">
-            <rect x="24" y="22.5" width="9.5" height="11" rx="2" fill="#fffbeb" stroke="#f59e0b" strokeWidth="1.2" />
-            <line x1="26.2" y1="26" x2="31.2" y2="26" stroke="#f59e0b" strokeWidth="1.2" strokeLinecap="round" />
-            <line x1="26.2" y1="29" x2="30" y2="29" stroke="#f59e0b" strokeWidth="1.2" strokeLinecap="round" />
-          </g>
-        )}
-        {category === 'phone' && (
-          <g>
-            <circle className="wgirl-ripple" cx="29" cy="27" r="4.5" fill="none" stroke="#fb7185" strokeWidth="1.3" />
-            <circle cx="29" cy="27" r="1.8" fill="#fb7185" />
-          </g>
-        )}
-      </svg>
+      <img
+        className={`whale-status-anim-img is-${key}`}
+        src={src}
+        alt=""
+        width={38}
+        height={38}
+        aria-hidden="true"
+      />
     )
   }
 
@@ -981,8 +937,8 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     <section className="whale-chat-screen" aria-label={t('鲸鱼助手对话')}>
       <header className="whale-chat-header is-minimal">
         <div className="whale-chat-brand">
-          <img src={whaleChanAvatar} alt="" className="whale-chat-brand-avatar" />
-          <span className="whale-chat-brand-name">{t('鲸鱼娘')}</span>
+          <img src={activeAvatar} alt="" className="whale-chat-brand-avatar" />
+          <span className="whale-chat-brand-name">{isUsagi ? t('乌萨奇') : t('鲸鱼娘')}</span>
         </div>
         <div className="whale-chat-shortcuts" aria-label={t('常用功能入口')}>
           <button
@@ -1131,12 +1087,12 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
               <img
                 src={heroMark}
                 alt=""
-                width={style === 'cute' ? 88 : 56}
-                height={style === 'cute' ? 88 : 56}
+                width={style === 'simple' ? 56 : 88}
+                height={style === 'simple' ? 56 : 88}
                 className="whale-chat-hero-mark"
               />
             </div>
-            <span className="whale-cute-greeting">{t('主人，小鲸鱼一直都在哦～')}</span>
+            <span className="whale-cute-greeting">{isUsagi ? t('呀哈！乌萨奇一直都在哦～') : t('主人，小鲸鱼一直都在哦～')}</span>
             <h2>{t('今天想一起做点什么？')}</h2>
             <div className="whale-quick-hub" aria-label={t('快捷空间')}>
               <button type="button" className="whale-hub-pill" onClick={() => onNavigate('assistant-memory')}>
@@ -1192,7 +1148,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                 )}
                 {msg.role === 'assistant' && !msg.error ? (
                   <div className="whale-msg-row">
-                    <img src={whaleChanAvatar} alt="" width={30} height={30} className="whale-msg-inline-avatar" />
+                    <img src={activeAvatar} alt="" width={30} height={30} className="whale-msg-inline-avatar" />
                     <div className="whale-msg-col">
                       {msg.reasoning && (
                         <details className="whale-reasoning-box">
@@ -1554,7 +1510,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           ref={inputRef}
           type="text"
           value={input}
-          placeholder={t('和鲸鱼娘聊聊…')}
+          placeholder={isUsagi ? t('和乌萨奇聊聊…') : t('和鲸鱼娘聊聊…')}
           aria-label={t('输入消息')}
           onChange={event => {
             const val = event.target.value

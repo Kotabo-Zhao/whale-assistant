@@ -3851,7 +3851,7 @@ export function App() {
       if (event.action === 'navigate' && event.view) {
         setActiveView(event.view as AppView)
       } else if (event.action === 'appearance') {
-        if (event.style === 'simple' || event.style === 'cute') saveInterfaceStyle(event.style)
+        if (event.style === 'simple' || event.style === 'cute' || event.style === 'usagi') saveInterfaceStyle(event.style)
         if (event.theme === 'system' || event.theme === 'light' || event.theme === 'dark') saveThemeMode(event.theme)
         if (event.accent === 'ocean' || event.accent === 'mint' || event.accent === 'amber' || event.accent === 'rose') saveAccentMode(event.accent)
         if (typeof event.reduceMotion === 'boolean') {

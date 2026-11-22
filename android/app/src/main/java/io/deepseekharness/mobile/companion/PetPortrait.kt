@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 internal class PetPortrait(context: Context, private val ui: PetUi, icon: Int) : View(context) {
     private val memory = icon == R.drawable.ic_whale_nav_memory
     private val task = icon == R.drawable.ic_pet_assign || icon == R.drawable.ic_whale_nav_tasks
-    private val frame = if (memory) R.drawable.whale_maid_blink_v2 else R.drawable.whale_maid_open_v2
+    private val frame = if (ui.usagi) (if (memory) R.drawable.usagi_pet_blink else R.drawable.usagi_pet_open) else (if (memory) R.drawable.whale_maid_blink_v2 else R.drawable.whale_maid_open_v2)
     private val seal = ui.palette.getDrawable(if (memory) R.drawable.ic_pet_heart else R.drawable.ic_pet_star)?.mutate()
     private val fallback = ui.palette.getDrawable(R.drawable.ic_pet_whale)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)

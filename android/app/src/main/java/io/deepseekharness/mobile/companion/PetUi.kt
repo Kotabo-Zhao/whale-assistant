@@ -24,18 +24,20 @@ import kotlin.math.roundToInt
 internal class PetUi(private val context: Context) {
     val palette = AppThemePreference.palette(AppLanguage.localizedContext(context))
     val dark: Boolean = (palette.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    private val simple = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") == "simple"
-    val surface = palette.getColor(if (simple) R.color.pet_simple_surface else R.color.pet_surface)
-    val canvas = palette.getColor(if (simple) R.color.pet_simple_canvas else R.color.pet_canvas)
-    val ink = palette.getColor(if (simple) R.color.pet_simple_ink else R.color.pet_ink)
-    val muted = palette.getColor(if (simple) R.color.pet_simple_muted else R.color.pet_muted)
-    val accent = palette.getColor(if (simple) R.color.pet_simple_accent else R.color.pet_accent)
+    private val stylePref = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") ?: "cute"
+    private val simple = stylePref == "simple"
+    val usagi = stylePref == "usagi"
+    val surface = if (usagi) Color.parseColor(if (dark) "#231A12" else "#FFFDF2") else palette.getColor(if (simple) R.color.pet_simple_surface else R.color.pet_surface)
+    val canvas = if (usagi) Color.parseColor(if (dark) "#1A130D" else "#FFF9E2") else palette.getColor(if (simple) R.color.pet_simple_canvas else R.color.pet_canvas)
+    val ink = if (usagi) Color.parseColor(if (dark) "#FEF3C7" else "#3B2613") else palette.getColor(if (simple) R.color.pet_simple_ink else R.color.pet_ink)
+    val muted = if (usagi) Color.parseColor(if (dark) "#D6B88C" else "#8A6A47") else palette.getColor(if (simple) R.color.pet_simple_muted else R.color.pet_muted)
+    val accent = if (usagi) Color.parseColor(if (dark) "#FBBF24" else "#D97706") else palette.getColor(if (simple) R.color.pet_simple_accent else R.color.pet_accent)
     val rose = palette.getColor(R.color.pet_rose)
     val honey = palette.getColor(R.color.pet_honey)
-    val soft = palette.getColor(if (simple) R.color.pet_simple_soft else R.color.pet_soft)
-    val primary = palette.getColor(if (simple) R.color.pet_simple_primary else R.color.pet_primary)
-    val onPrimary = palette.getColor(if (simple) R.color.pet_simple_on_primary else R.color.pet_on_primary)
-    val line = palette.getColor(if (simple) R.color.pet_simple_line else R.color.pet_line)
+    val soft = if (usagi) Color.parseColor(if (dark) "#342619" else "#FEF3C7") else palette.getColor(if (simple) R.color.pet_simple_soft else R.color.pet_soft)
+    val primary = if (usagi) Color.parseColor(if (dark) "#F59E0B" else "#F59E0B") else palette.getColor(if (simple) R.color.pet_simple_primary else R.color.pet_primary)
+    val onPrimary = if (usagi) Color.parseColor("#2B1A08") else palette.getColor(if (simple) R.color.pet_simple_on_primary else R.color.pet_on_primary)
+    val line = if (usagi) Color.parseColor(if (dark) "#4D3924" else "#F2D48B") else palette.getColor(if (simple) R.color.pet_simple_line else R.color.pet_line)
     val alert = palette.getColor(R.color.pet_alert)
     val answer = palette.getColor(if (simple) R.color.pet_simple_answer else R.color.pet_answer)
     fun dp(n: Int) = (n * context.resources.displayMetrics.density).roundToInt()

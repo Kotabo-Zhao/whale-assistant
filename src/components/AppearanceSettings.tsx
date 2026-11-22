@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { readInterfaceStyle, saveInterfaceStyle } from '../theme'
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
+import usagiAvatar from '../assets/usagi-avatar.png'
 import { Moon, Palette, Sun, SunMoon, RotateCcw } from 'lucide-react'
 import { t } from '../i18n'
 import { applyTextColor, applyTheme, clearCustomAccentColor, clearCustomTextColor, effectiveAccentColor, readCustomAccentColor, readCustomTextColor, readThemeMode, saveAccentMode, saveAccentSource, saveCustomAccentColor, saveCustomTextColor, saveThemeMode, useAccentMode, useAccentSource, useResolvedTheme, useThemeMode } from '../theme'
@@ -271,6 +272,7 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
             {([
               { value: 'simple' as const, title: '极简·类 Grok', desc: '黑白极简 · 锐利线条 · 纯黑省电', thumb: grokMark },
               { value: 'cute' as const, title: '鲸鱼娘·可爱', desc: '晴海暖白 · 鲸鱼娘头像 · 柔和动效', thumb: whaleChanAvatar },
+              { value: 'usagi' as const, title: '乌萨奇·兔兔', desc: '奶油蜂蜜 · 乌萨奇桌宠与专属动效', thumb: usagiAvatar },
             ]).map(item => (
               <button
                 type="button"
