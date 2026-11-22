@@ -33,20 +33,6 @@ import {
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
 import usagiAvatar from '../assets/usagi-avatar.png'
-import animWhaleThinking from '../assets/status-anims/whale_thinking.webp'
-import animWhaleCode from '../assets/status-anims/whale_code.webp'
-import animWhaleWeb from '../assets/status-anims/whale_web.webp'
-import animWhaleFile from '../assets/status-anims/whale_file.webp'
-import animWhaleMemory from '../assets/status-anims/whale_memory.webp'
-import animWhalePhone from '../assets/status-anims/whale_phone.webp'
-import animWhaleWorker from '../assets/status-anims/whale_worker.webp'
-import animUsagiThinking from '../assets/status-anims/usagi_thinking.webp'
-import animUsagiCode from '../assets/status-anims/usagi_code.webp'
-import animUsagiWeb from '../assets/status-anims/usagi_web.webp'
-import animUsagiFile from '../assets/status-anims/usagi_file.webp'
-import animUsagiMemory from '../assets/status-anims/usagi_memory.webp'
-import animUsagiPhone from '../assets/status-anims/usagi_phone.webp'
-import animUsagiWorker from '../assets/status-anims/usagi_worker.webp'
 import { CuteIcon, type CuteIconName } from '../components/CuteIcon'
 import { t } from '../i18n'
 import { useInterfaceStyle } from '../theme'
@@ -885,42 +871,90 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const phaseLabel = phaseMeta.text
 
   const renderActivitySvg = (category: string) => {
-    const key = (category === 'code' || category === 'web' || category === 'file' || category === 'memory' || category === 'phone' || category === 'worker')
-      ? category
-      : 'thinking'
-    const whaleMap: Record<string, string> = {
-      thinking: animWhaleThinking,
-      code: animWhaleCode,
-      web: animWhaleWeb,
-      file: animWhaleFile,
-      memory: animWhaleMemory,
-      phone: animWhalePhone,
-      worker: animWhaleWorker,
+    if (category === 'code') {
+      return (
+        <svg className="grok-vec-svg is-code" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+          <rect className="gv-soft" x="2.5" y="4" width="19" height="16" rx="3.5" fill="none" strokeWidth="1.65" />
+          <path className="gv-main" d="M7.5 9.2L10.8 12L7.5 14.8" fill="none" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          <line className="gv-blink" x1="12.8" y1="14.8" x2="16.8" y2="14.8" strokeWidth="1.9" strokeLinecap="round" />
+        </svg>
+      )
     }
-    const usagiMap: Record<string, string> = {
-      thinking: animUsagiThinking,
-      code: animUsagiCode,
-      web: animUsagiWeb,
-      file: animUsagiFile,
-      memory: animUsagiMemory,
-      phone: animUsagiPhone,
-      worker: animUsagiWorker,
+    if (category === 'web') {
+      return (
+        <svg className="grok-vec-svg is-web" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+          <circle className="gv-soft" cx="12" cy="12" r="8.5" fill="none" strokeWidth="1.5" />
+          <circle className="gv-soft" cx="12" cy="12" r="4.5" fill="none" strokeWidth="1.35" />
+          <g className="gv-spin">
+            <path className="gv-main" d="M12 3.5A8.5 8.5 0 0 1 20.5 12" fill="none" strokeWidth="2" strokeLinecap="round" />
+            <circle className="gv-fill" cx="20.5" cy="12" r="1.9" />
+          </g>
+        </svg>
+      )
     }
-    const src = isUsagi ? usagiMap[key] : whaleMap[key]
+    if (category === 'file') {
+      return (
+        <svg className="grok-vec-svg is-file" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+          <rect className="gv-soft" x="4.5" y="2.8" width="15" height="18.4" rx="2.8" fill="none" strokeWidth="1.6" />
+          <line className="gv-dash gv-d1" x1="8" y1="8.2" x2="16" y2="8.2" strokeWidth="1.8" strokeLinecap="round" />
+          <line className="gv-dash gv-d2" x1="8" y1="12" x2="16" y2="12" strokeWidth="1.8" strokeLinecap="round" />
+          <line className="gv-dash gv-d3" x1="8" y1="15.8" x2="13.5" y2="15.8" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      )
+    }
+    if (category === 'memory') {
+      return (
+        <svg className="grok-vec-svg is-memory" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+          <g className="gv-spin-slow">
+            <polygon className="gv-soft" points="12,4.5 18.8,16.5 5.2,16.5" fill="none" strokeWidth="1.4" strokeLinejoin="round" />
+            <circle className="gv-fill gv-p1" cx="12" cy="4.5" r="2.1" />
+            <circle className="gv-fill gv-p2" cx="18.8" cy="16.5" r="2.1" />
+            <circle className="gv-fill gv-p3" cx="5.2" cy="16.5" r="2.1" />
+          </g>
+        </svg>
+      )
+    }
+    if (category === 'phone') {
+      return (
+        <svg className="grok-vec-svg is-phone" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+          <circle className="gv-ripple gv-r1" cx="12" cy="12" r="8" fill="none" strokeWidth="1.6" />
+          <circle className="gv-ripple gv-r2" cx="12" cy="12" r="8" fill="none" strokeWidth="1.6" />
+          <circle className="gv-fill" cx="12" cy="12" r="2.4" />
+        </svg>
+      )
+    }
+    if (category === 'worker') {
+      return (
+        <svg className="grok-vec-svg is-worker" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+          <g className="gv-gear-a">
+            <circle className="gv-main" cx="9.2" cy="9.8" r="3.4" fill="none" strokeWidth="1.7" />
+            <path className="gv-main" d="M9.2 4.6V6.2M9.2 13.4V15M4 9.8H5.6M12.8 9.8H14.4" strokeWidth="1.7" strokeLinecap="round" />
+          </g>
+          <g className="gv-gear-b">
+            <circle className="gv-main" cx="15.8" cy="15.4" r="2.7" fill="none" strokeWidth="1.65" />
+            <path className="gv-main" d="M15.8 11.2V12.5M15.8 18.3V19.6M11.6 15.4H12.9M18.7 15.4H20" strokeWidth="1.65" strokeLinecap="round" />
+          </g>
+        </svg>
+      )
+    }
+    // Grok Bot 同款：丝滑旋转呼吸六瓣星花
     return (
-      <img
-        className={`whale-status-anim-img is-${key}`}
-        src={src}
-        alt=""
-        width={38}
-        height={38}
-        aria-hidden="true"
-      />
+      <svg className="grok-vec-svg is-thinking" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+        <g className="gv-spin">
+          <line className="gv-main gv-spoke-1" x1="12" y1="3.2" x2="12" y2="7.8" strokeWidth="2.1" strokeLinecap="round" />
+          <line className="gv-main gv-spoke-2" x1="12" y1="16.2" x2="12" y2="20.8" strokeWidth="2.1" strokeLinecap="round" />
+          <line className="gv-main gv-spoke-3" x1="4.4" y1="7.6" x2="8.4" y2="9.9" strokeWidth="2.1" strokeLinecap="round" />
+          <line className="gv-main gv-spoke-1" x1="15.6" y1="14.1" x2="19.6" y2="16.4" strokeWidth="2.1" strokeLinecap="round" />
+          <line className="gv-main gv-spoke-2" x1="19.6" y1="7.6" x2="15.6" y2="9.9" strokeWidth="2.1" strokeLinecap="round" />
+          <line className="gv-main gv-spoke-3" x1="8.4" y1="14.1" x2="4.4" y2="16.4" strokeWidth="2.1" strokeLinecap="round" />
+        </g>
+        <circle className="gv-fill gv-core" cx="12" cy="12" r="2.1" />
+      </svg>
     )
   }
 
   const renderReceiptIcon = (kind: ActionReceipt['kind']) => {
-    if (style === 'cute') {
+    if (style !== 'simple') {
       if (kind === 'secretary') return <CuteIcon name="notifications" size={18} />
       if (kind === 'knowledge') return <CuteIcon name="memory" size={18} />
       if (kind === 'memory') return <CuteIcon name="assistant" size={18} />
@@ -949,7 +983,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             aria-expanded={sessionsOpen}
             onClick={() => setSessionsOpen(open => !open)}
           >
-            {style === 'cute' ? <CuteIcon name="chat" size={21} /> : <MessagesSquare size={17} />}
+            {style !== 'simple' ? <CuteIcon name="chat" size={21} /> : <MessagesSquare size={17} />}
           </button>
           <button
             type="button"
@@ -958,7 +992,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             aria-label={t('新对话')}
             onClick={startNewSession}
           >
-            {style === 'cute' ? <CuteIcon name="new-chat" size={21} /> : <MessageSquarePlus size={17} />}
+            {style !== 'simple' ? <CuteIcon name="new-chat" size={21} /> : <MessageSquarePlus size={17} />}
           </button>
         </div>
       </header>
@@ -1096,15 +1130,15 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             <h2>{t('今天想一起做点什么？')}</h2>
             <div className="whale-quick-hub" aria-label={t('快捷空间')}>
               <button type="button" className="whale-hub-pill" onClick={() => onNavigate('assistant-memory')}>
-                {style === 'cute' ? <CuteIcon name="memory" size={19} /> : <BookOpen size={14} aria-hidden="true" />}
+                {style !== 'simple' ? <CuteIcon name="memory" size={19} /> : <BookOpen size={14} aria-hidden="true" />}
                 {t('记忆与资料')}
               </button>
               <button type="button" className="whale-hub-pill" onClick={() => onNavigate('assistant-tasks')}>
-                {style === 'cute' ? <CuteIcon name="tasks" size={19} /> : <ListTodo size={14} aria-hidden="true" />}
+                {style !== 'simple' ? <CuteIcon name="tasks" size={19} /> : <ListTodo size={14} aria-hidden="true" />}
                 {t('事项与日程')}
               </button>
               <button type="button" className="whale-hub-pill" onClick={() => onNavigate('tools')}>
-                {style === 'cute' ? <CuteIcon name="workshop" size={19} /> : <Hammer size={14} aria-hidden="true" />}
+                {style !== 'simple' ? <CuteIcon name="workshop" size={19} /> : <Hammer size={14} aria-hidden="true" />}
                 {t('功能工坊')}
               </button>
             </div>
@@ -1117,7 +1151,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                   disabled={sending}
                   onClick={() => { void sendText(item.text) }}
                 >
-                  {style === 'cute' && <CuteIcon name={item.icon} size={28} className="whale-starter-icon" />}
+                  {style !== 'simple' && <CuteIcon name={item.icon} size={28} className="whale-starter-icon" />}
                   <strong>{t(item.label)}</strong>
                   <span>{item.text}</span>
                 </button>
@@ -1132,8 +1166,8 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                 {msg.steps && msg.steps.length > 0 && (
                   <details className="whale-msg-steps">
                     <summary>
-                      {style === 'cute' ? <CuteIcon name="workshop" size={16} /> : <Wrench size={13} aria-hidden="true" />}
-                      {style === 'cute' ? `×${msg.steps.length}` : t('已调用 {0} 项原生能力', msg.steps.length)}
+                      {style !== 'simple' ? <CuteIcon name="workshop" size={16} /> : <Wrench size={13} aria-hidden="true" />}
+                      {style !== 'simple' ? `×${msg.steps.length}` : t('已调用 {0} 项原生能力', msg.steps.length)}
                     </summary>
                     <ul>
                       {msg.steps.map((step, i) => (
@@ -1323,13 +1357,10 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         {sending && (
           <div className="whale-msg whale-msg-assistant" role="status">
             {!streamingText && (
-              <div className="whale-live-plan-bar whale-kimi-wait-bar">
-                <div className="whale-live-plan-visual" title={phaseLabel}>
-                  <span className="whale-plan-whale-dot" aria-hidden="true">{renderActivitySvg(phaseMeta.category)}</span>
-                  <span className="whale-live-plan-status whale-kimi-status-text">{phaseLabel}</span>
-                  <span className="whale-ocean-wave" aria-hidden="true"><i /><i /><i /><i /></span>
-                  {waitElapsedSec > 0 && <span className="whale-wait-timer">{waitElapsedSec}s</span>}
-                </div>
+              <div className="whale-grok-status-row" title={phaseLabel}>
+                <span className="whale-grok-status-icon" aria-hidden="true">{renderActivitySvg(phaseMeta.category)}</span>
+                <span className="whale-grok-status-label">{phaseLabel}</span>
+                {waitElapsedSec > 0 && <span className="whale-grok-status-sec">{waitElapsedSec}s</span>}
               </div>
             )}
             {streamingSteps.length > 0 && (
@@ -1373,7 +1404,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                 void sendText(`帮我把下面内容存入本地资料库并提炼核心要点：\n\n${input.trim()}`)
               }}
             >
-              {style === 'cute' ? <CuteIcon name="memory" size={19} /> : <BookmarkCheck size={14} aria-hidden="true" />}
+              {style !== 'simple' ? <CuteIcon name="memory" size={19} /> : <BookmarkCheck size={14} aria-hidden="true" />}
             </button>
           )}
           {slashOpen && QUICK_SLASH_ACTIONS.map(act => (
@@ -1495,7 +1526,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           disabled={sending}
           onClick={() => setSlashOpen(open => !open)}
         >
-          {style === 'cute' ? <CuteIcon name="slash" size={20} /> : <Slash size={15} />}
+          {style !== 'simple' ? <CuteIcon name="slash" size={20} /> : <Slash size={15} />}
         </button>
         <button
           type="button"
@@ -1504,7 +1535,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           title={t('发送图片或视频')}
           onClick={() => fileInputRef.current?.click()}
         >
-          {style === 'cute' ? <CuteIcon name="appearance" size={20} /> : <ImagePlus size={16} />}
+          {style !== 'simple' ? <CuteIcon name="appearance" size={20} /> : <ImagePlus size={16} />}
         </button>
         <input
           ref={inputRef}
@@ -1527,7 +1558,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           title={recording ? t('停止录音并发送') : t('语音输入')}
           onClick={() => { void toggleVoiceRecord() }}
         >
-          {recording ? <Square size={14} /> : (style === 'cute' ? <CuteIcon name="mic" size={21} /> : <Mic size={16} />)}
+          {recording ? <Square size={14} /> : (style !== 'simple' ? <CuteIcon name="mic" size={21} /> : <Mic size={16} />)}
         </button>
         {sending && input.trim() === '' && pendingImages.length === 0 ? (
           <button
@@ -1547,7 +1578,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             aria-label={t('发送')}
             title={t('发送')}
           >
-            {style === 'cute' ? <CuteIcon name="send" size={21} /> : <ArrowUp size={18} />}
+            {style !== 'simple' ? <CuteIcon name="send" size={21} /> : <ArrowUp size={18} />}
           </button>
         )}
       </form></div>

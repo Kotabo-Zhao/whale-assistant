@@ -2280,3 +2280,139 @@
 :root[data-style='usagi'][data-theme='dark'] .whale-reasoning-box summary {
   color: #fcd34d !important;
 }
+
+/* === Grok Bot 风格极简微光矢量状态条（无冗余外框，60 FPS 丝滑几何动效） === */
+.whale-grok-status-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 5px 4px 6px;
+  box-sizing: border-box;
+}
+.whale-grok-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+}
+.whale-grok-status-label {
+  flex: 1 1 0%;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.38;
+  color: #475569;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+:root[data-theme='dark'] .whale-grok-status-label {
+  color: #cbd5e1;
+}
+:root[data-style='usagi'] .whale-grok-status-label {
+  color: #78350f;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-grok-status-label {
+  color: #fde68a;
+}
+.whale-grok-status-sec {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #94a3b8);
+  opacity: 0.72;
+  flex-shrink: 0;
+}
+.grok-vec-svg {
+  display: block;
+  color: #0d9488;
+  filter: drop-shadow(0 0 4px rgba(45, 212, 191, 0.32));
+}
+:root[data-theme='dark'] .grok-vec-svg {
+  color: #2dd4bf;
+  filter: drop-shadow(0 0 6px rgba(45, 212, 191, 0.45));
+}
+:root[data-style='usagi'] .grok-vec-svg {
+  color: #d97706;
+  filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.38));
+}
+:root[data-style='usagi'][data-theme='dark'] .grok-vec-svg {
+  color: #fbbf24;
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.48));
+}
+.grok-vec-svg .gv-main { stroke: currentColor; }
+.grok-vec-svg .gv-soft { stroke: currentColor; opacity: 0.36; }
+.grok-vec-svg .gv-fill { fill: currentColor; }
+.grok-vec-svg .gv-spin {
+  transform-origin: 12px 12px;
+  animation: gvSpin 2.2s linear infinite;
+}
+.grok-vec-svg .gv-spin-slow {
+  transform-origin: 12px 12px;
+  animation: gvSpin 3.6s linear infinite;
+}
+.grok-vec-svg .gv-core {
+  transform-origin: 12px 12px;
+  animation: gvCorePulse 1.4s ease-in-out infinite;
+}
+.grok-vec-svg .gv-spoke-1 { animation: gvFadePulse 1.2s ease-in-out infinite; }
+.grok-vec-svg .gv-spoke-2 { animation: gvFadePulse 1.2s ease-in-out 0.4s infinite; }
+.grok-vec-svg .gv-spoke-3 { animation: gvFadePulse 1.2s ease-in-out 0.8s infinite; }
+.grok-vec-svg .gv-blink {
+  stroke: currentColor;
+  animation: gvBlink 0.9s ease-in-out infinite;
+}
+.grok-vec-svg .gv-dash {
+  stroke: currentColor;
+  stroke-dasharray: 8;
+  animation: gvDashFlow 1.3s ease-in-out infinite;
+}
+.grok-vec-svg .gv-d2 { animation-delay: 0.25s; }
+.grok-vec-svg .gv-d3 { animation-delay: 0.5s; }
+.grok-vec-svg .gv-p1 { animation: gvFadePulse 1.2s ease-in-out infinite; }
+.grok-vec-svg .gv-p2 { animation: gvFadePulse 1.2s ease-in-out 0.4s infinite; }
+.grok-vec-svg .gv-p3 { animation: gvFadePulse 1.2s ease-in-out 0.8s infinite; }
+.grok-vec-svg .gv-ripple {
+  stroke: currentColor;
+  transform-origin: 12px 12px;
+  animation: gvRipple 1.5s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+}
+.grok-vec-svg .gv-r2 { animation-delay: 0.75s; }
+.grok-vec-svg .gv-gear-a {
+  transform-origin: 9.2px 9.8px;
+  animation: gvSpin 2.4s linear infinite;
+}
+.grok-vec-svg .gv-gear-b {
+  transform-origin: 15.8px 15.4px;
+  animation: gvSpinRev 1.9s linear infinite;
+}
+@keyframes gvSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes gvSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+@keyframes gvCorePulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.7; }
+  50% { transform: scale(1.22); opacity: 1; }
+}
+@keyframes gvFadePulse {
+  0%, 100% { opacity: 0.42; }
+  50% { opacity: 1; }
+}
+@keyframes gvBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+@keyframes gvDashFlow {
+  0% { stroke-dashoffset: 10; opacity: 0.45; }
+  50% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: -10; opacity: 0.45; }
+}
+@keyframes gvRipple {
+  0% { transform: scale(0.32); opacity: 0.95; }
+  100% { transform: scale(1.12); opacity: 0; }
+}

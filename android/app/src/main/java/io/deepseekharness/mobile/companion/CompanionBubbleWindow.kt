@@ -356,7 +356,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             maxWidth = minOf((width * 0.40f).toInt(), dp((124 * fontScale.coerceAtLeast(1f)).toInt()))
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(dp(8), 0, dp(8), 0); contentDescription = "和小鲸聊聊近况"
-            androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_cute_notifications)?.mutate()?.let { d ->
+            androidx.core.content.ContextCompat.getDrawable(context, (if (ui.usagi) R.drawable.ic_usagi_notifications else R.drawable.ic_cute_notifications))?.mutate()?.let { d ->
                 val sz = dp(20)
                 d.setBounds(0, 0, sz, sz)
                 setCompoundDrawablesRelative(d, null, null, null)
@@ -858,7 +858,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             })
         }
         val send = android.widget.ImageView(context).apply {
-            setImageResource(R.drawable.ic_cute_send)
+            setImageResource(if (ui.usagi) R.drawable.ic_usagi_send else R.drawable.ic_cute_send)
             scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
             val pad = dp(6)
             setPadding(pad, pad, pad, pad)
@@ -949,7 +949,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
         }
         val micBtn = android.widget.ImageView(context).apply {
-            setImageResource(R.drawable.ic_cute_mic)
+            setImageResource(if (ui.usagi) R.drawable.ic_usagi_mic else R.drawable.ic_cute_mic)
             scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
             val pad = dp(6)
             setPadding(pad, pad, pad, pad)
@@ -1036,7 +1036,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             }
         }
         footer.addView(mediaBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginEnd = dp(4) })
-        shortcut(ui.string(R.string.pet_menu_session), R.drawable.ic_cute_chat, ui.string(R.string.pet_menu_session)) {
+        shortcut(ui.string(R.string.pet_menu_session), (if (ui.usagi) R.drawable.ic_usagi_chat else R.drawable.ic_cute_chat), ui.string(R.string.pet_menu_session)) {
             toolShelf.removeAllViews()
             sessionActions.visibility = if (sessionActions.visibility == android.view.View.GONE) android.view.View.VISIBLE else android.view.View.GONE
             syncControls()
@@ -1069,7 +1069,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 executor.execute {
                     val res = WhaleVoiceEngine.stopAndTranscribe(context)
                     handler.post {
-                        micBtn.setImageResource(R.drawable.ic_cute_mic); micBtn.alpha = 1f
+                        micBtn.setImageResource(if (ui.usagi) R.drawable.ic_usagi_mic else R.drawable.ic_cute_mic); micBtn.alpha = 1f
                         micBtn.isEnabled = true
                         res.onSuccess { spoken ->
                             status.visibility = android.view.View.GONE
@@ -1350,10 +1350,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val waitRow = if (root === panel) LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                val bgCol = if (ui.dark) Color.parseColor("#142136") else Color.parseColor("#F8FAFC")
-                val strokeCol = if (ui.dark) Color.parseColor("#2B446B") else Color.parseColor("#CBD5E1")
-                background = ui.shape(bgCol, 14, strokeCol)
-                setPadding(dp(10), dp(8), dp(10), dp(8))
+                setPadding(dp(4), dp(6), dp(4), dp(4))
             } else null
             val vectorSpinner = if (root === panel) WhaleVectorStatusView(context) else null
             val waitLabel = if (root === panel) ui.text("理解你的问题并规划步骤", 13f, if (ui.dark) Color.parseColor("#DBEAFE") else Color.parseColor("#17324D")).apply {
@@ -1361,7 +1358,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 ellipsize = android.text.TextUtils.TruncateAt.END
             } else null
             if (waitRow != null && vectorSpinner != null && waitLabel != null) {
-                waitRow.addView(vectorSpinner, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(8) })
+                waitRow.addView(vectorSpinner, LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginEnd = dp(8) })
                 waitRow.addView(waitLabel, LinearLayout.LayoutParams(0, -2, 1f))
                 content.addView(waitRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
             }

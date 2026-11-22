@@ -17,6 +17,26 @@ import voiceOnIcon from '../assets/cute-icons/voice-on.webp'
 import workshopIcon from '../assets/cute-icons/workshop.webp'
 import workspaceIcon from '../assets/cute-icons/workspace.webp'
 
+import usagiAppearanceIcon from '../assets/usagi-icons/appearance.webp'
+import usagiAssistantIcon from '../assets/usagi-icons/assistant.webp'
+import usagiChatIcon from '../assets/usagi-icons/chat.webp'
+import usagiDeviceIcon from '../assets/usagi-icons/device.webp'
+import usagiHistoryIcon from '../assets/usagi-icons/history.webp'
+import usagiMeIcon from '../assets/usagi-icons/me.webp'
+import usagiMemoryIcon from '../assets/usagi-icons/memory.webp'
+import usagiMicIcon from '../assets/usagi-icons/mic.webp'
+import usagiModelsIcon from '../assets/usagi-icons/models.webp'
+import usagiNewChatIcon from '../assets/usagi-icons/new-chat.webp'
+import usagiNotificationsIcon from '../assets/usagi-icons/notifications.webp'
+import usagiSendIcon from '../assets/usagi-icons/send.webp'
+import usagiSlashIcon from '../assets/usagi-icons/slash.webp'
+import usagiTasksIcon from '../assets/usagi-icons/tasks.webp'
+import usagiVoiceOffIcon from '../assets/usagi-icons/voice-off.webp'
+import usagiVoiceOnIcon from '../assets/usagi-icons/voice-on.webp'
+import usagiWorkshopIcon from '../assets/usagi-icons/workshop.webp'
+import usagiWorkspaceIcon from '../assets/usagi-icons/workspace.webp'
+import { useInterfaceStyle } from '../theme'
+
 export type CuteIconName =
   | 'appearance'
   | 'assistant'
@@ -58,10 +78,33 @@ const CUTE_ICONS: Record<CuteIconName, string> = {
   workspace: workspaceIcon,
 }
 
+const USAGI_ICONS: Record<CuteIconName, string> = {
+  appearance: usagiAppearanceIcon,
+  assistant: usagiAssistantIcon,
+  chat: usagiChatIcon,
+  device: usagiDeviceIcon,
+  history: usagiHistoryIcon,
+  me: usagiMeIcon,
+  memory: usagiMemoryIcon,
+  mic: usagiMicIcon,
+  models: usagiModelsIcon,
+  'new-chat': usagiNewChatIcon,
+  notifications: usagiNotificationsIcon,
+  send: usagiSendIcon,
+  slash: usagiSlashIcon,
+  tasks: usagiTasksIcon,
+  'voice-off': usagiVoiceOffIcon,
+  'voice-on': usagiVoiceOnIcon,
+  workshop: usagiWorkshopIcon,
+  workspace: usagiWorkspaceIcon,
+}
+
 export function CuteIcon({ name, size = 20, className = '' }: { name: CuteIconName; size?: number; className?: string }) {
+  const style = useInterfaceStyle()
+  const src = style === 'usagi' ? USAGI_ICONS[name] : CUTE_ICONS[name]
   return (
     <img
-      src={CUTE_ICONS[name]}
+      src={src}
       alt=""
       width={size}
       height={size}
