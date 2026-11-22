@@ -591,11 +591,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
     private fun buildDynamicTurnContext(userQuery: String, persona: JSONObject? = null, recentHistory: List<Pair<String, String>> = emptyList(), sessionId: String = "whale-main"): String = buildString {
         runCatching {
             val todoSnap = WhaleHarnessCore.SessionTodoStore.snapshotPrompt(sessionId, app)
-            if (todoSnap.isNotBlank()) append(todoSnap.take(900)).append("
-")
+            if (todoSnap.isNotBlank()) append(todoSnap.take(900)).append("\n")
             val cp = WhaleHarnessCore.PrefixCacheCompactor.loadCheckpoint(app, sessionId)
-            if (cp.isNotBlank()) append("[前序压缩检查点] ").append(cp.take(1200)).append("
-")
+            if (cp.isNotBlank()) append("[前序压缩检查点] ").append(cp.take(1200)).append("\n")
         }
         runCatching {
             val owner = OwnerContext(app).read()
