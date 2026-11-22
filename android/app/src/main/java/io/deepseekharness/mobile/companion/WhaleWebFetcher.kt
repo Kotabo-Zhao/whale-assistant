@@ -66,7 +66,7 @@ internal object WhaleWebFetcher {
             WhaleCustomToolEngine.isHostBlocked(addr.hostAddress.orEmpty())
 
     /** 安全抓取网页并提取正文与标题（防 SSRF、防大文件 OOM、Jsoup 清洗）。 */
-    fun fetch(rawUrl: String, maxChars: Int = 6_000): FetchResult {
+    fun fetch(rawUrl: String, maxChars: Int = 6_000, context: android.content.Context? = null): FetchResult {
         val safeMaxChars = maxChars.coerceIn(500, 12_000)
         var currentUri = validatePublicUrl(rawUrl)
         var statusCode = 0
@@ -82,6 +82,11 @@ internal object WhaleWebFetcher {
                 readTimeout = READ_TIMEOUT_MS
                 setRequestProperty("User-Agent", USER_AGENT)
                 setRequestProperty("Accept", "text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.8")
+                if (context != null) {
+                    WhaleSiteVault.cookieForUrl(context, currentUri.toString())?.let { cookie ->
+                        setRequestProperty("Cookie", cookie)
+                    }
+                }
             }
             try {
                 statusCode = conn.responseCode

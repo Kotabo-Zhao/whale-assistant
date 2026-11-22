@@ -270,6 +270,19 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_code_delete", "安全删除本地代码项目中的单个文件。", mapOf("project" to "项目名", "path" to "文件相对路径"), listOf("project", "path")))
             array.put(schema("whale_code_search", "在本地原生代码项目中跨文件检索代码片段。", mapOf("project" to "项目名", "query" to "搜索词"), listOf("project", "query")))
             array.put(schema(
+                "whale_html_to_pdf",
+                "使用 Android 原生 WebView 将 HTML/CSS/SVG 直接排版渲染为多页 A4 矢量 PDF（零外部依赖，适合报告/简历/图表/讲义），并可一键导出到手机下载目录或系统分享。",
+                mapOf(
+                    "html" to "完整 HTML 源码（或留空改用 file 参数读取项目内 HTML 文件）",
+                    "file" to "可选：项目内已有 HTML 文件相对路径",
+                    "project" to "项目目录名（默认 scratch）",
+                    "fileName" to "输出 PDF 文件名，例如 report.pdf",
+                    "export" to "可选：true（默认）导出到手机下载目录，false 仅存工作区",
+                    "share" to "可选：true 导出后立即弹出系统分享面板，默认 false",
+                ),
+                emptyList(),
+            ))
+            array.put(schema(
                 "whale_file_export",
                 "将代码工作区生成的任意文件（如 .pptx/.docx/.xlsx/.pdf/.zip/.png/.csv）导出保存到手机「下载/WhaleAssistant」目录，并可选立即调起系统分享面板交给用户。",
                 mapOf(

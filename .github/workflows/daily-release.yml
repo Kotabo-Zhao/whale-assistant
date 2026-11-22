@@ -54,6 +54,11 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Set up Python 3.11 (for Chaquopy pip)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Cache pnpm store
         uses: actions/cache@v4
         with:

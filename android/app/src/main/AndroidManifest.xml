@@ -268,6 +268,7 @@
         </service>
         <!-- 独立目标可供荣耀任意门登记，也可在系统分享面板中直接保存文字。 -->
         <activity android:name=".features.WhaleFeatureActivity" android:exported="false" />
+        <activity android:name=".companion.WhaleSiteLoginActivity" android:exported="false" android:theme="@style/AppTheme.NoActionBar" />
         <activity android:name=".features.WhalePetFeatureActivity" android:exported="false" android:theme="@android:style/Theme.Material.Dialog.NoActionBar" />
         <activity
             android:name=".companion.WhaleMemoryShareActivity"
