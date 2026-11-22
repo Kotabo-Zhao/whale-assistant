@@ -945,6 +945,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             fnName == "whale_code_write" || fnName == "whale_code_patch" -> "code" to "编辑文件 ${arg("path").take(26)}"
             fnName == "whale_code_read" || fnName == "whale_code_list" || fnName == "whale_code_search" -> "code" to "读取代码 ${arg("path").ifBlank { arg("project") }.take(24)}"
             fnName == "whale_file_export" -> "file" to "导出文件 ${arg("path").take(26)}"
+            fnName == "whale_remote_exec" -> "code" to "远程节点执行 ${arg("command").take(22)}"
+            fnName == "whale_remote_mcp" -> "web" to "调用远程 MCP ${arg("server").ifBlank { arg("tool") }.take(22)}"
             fnName == "whale_html_to_pdf" -> "file" to "渲染 PDF ${arg("fileName").ifBlank { "document.pdf" }.take(24)}"
             fnName == "whale_web_search" -> "web" to "联网搜索「${arg("query").take(18)}」"
             fnName == "whale_web_fetch" -> {

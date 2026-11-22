@@ -171,12 +171,13 @@ internal object WhaleCodeRunner {
             savedLocation = dest.absolutePath
         }
 
+        val shareDir = File(app.cacheDir, "share").apply { mkdirs() }
+        val shareCopy = File(shareDir, fileName)
+        runCatching { source.copyTo(shareCopy, overwrite = true) }
+
         var shared = false
         if (shareNow) {
             runCatching {
-                val shareDir = File(app.cacheDir, "share").apply { mkdirs() }
-                val shareCopy = File(shareDir, fileName)
-                source.copyTo(shareCopy, overwrite = true)
                 val uri = FileProvider.getUriForFile(app, "${app.packageName}.diagnostics", shareCopy)
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = mime
@@ -234,4 +235,84 @@ internal object WhaleCodeRunner {
             JSONObject().put("ok", false).put("error", "Shell 执行失败：${err.message ?: err.javaClass.simpleName}")
         }
     }
+
+    /** 将对话中用户选择的文档（PDF/DOCX/XLSX/PPTX/TXT/代码）落盘到工作区 uploads 目录，供 Python 与代码工具直接读取。 */
+    fun saveUploadedChatFile(context: Context, fileName: String, base64Data: String): JSONObject {
+        val app = context.applicationContext
+        val rawBytes = android.util.Base64.decode(base64Data.substringAfter(","), android.util.Base64.DEFAULT)
+        require(rawBytes.isNotEmpty()) { "上传文件内容为空" }
+        require(rawBytes.size <= 15 * 1024 * 1024) { "单个文档附件不能超过 15MB" }
+        val cleanName = fileName.trim()
+            .replace(Regex("[/\\\\:*?\"<>|]"), "_")
+            .take(80)
+            .ifBlank { "upload_${System.currentTimeMillis()}.bin" }
+        val projectsRoot = File(app.filesDir, "whale-projects").canonicalFile
+        val uploadsDir = File(projectsRoot, "uploads").apply { mkdirs() }
+        val target = File(uploadsDir, cleanName).canonicalFile
+        require(target.path.startsWith(uploadsDir.canonicalPath + File.separator)) { "文件路径越界" }
+        target.writeBytes(rawBytes)
+        return JSONObject()
+            .put("ok", true)
+            .put("project", "uploads")
+            .put("path", cleanName)
+            .put("fileName", cleanName)
+            .put("absolutePath", target.absolutePath)
+            .put("bytes", rawBytes.size)
+    }
+
+    /** 打开或分享已导出的产出文件（优先读取 cacheDir/share 副本，其次检索工作区与下载目录）。 */
+    fun openOrShareExportedFile(context: Context, fileName: String, action: String = "open"): JSONObject {
+        val app = context.applicationContext
+        val cleanName = fileName.trim().substringAfterLast('/').substringAfterLast('\\')
+        require(cleanName.isNotEmpty()) { "缺少文件名" }
+        val shareDir = File(app.cacheDir, "share").apply { mkdirs() }
+        var target = File(shareDir, cleanName)
+        if (!target.isFile) {
+            val projectsRoot = File(app.filesDir, "whale-projects")
+            val found = projectsRoot.walkTopDown().maxDepth(4).firstOrNull { it.isFile && it.name == cleanName }
+            if (found != null) {
+                found.copyTo(target, overwrite = true)
+            }
+        }
+        if (!target.isFile) {
+            @Suppress("DEPRECATION")
+            val dlFile = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "WhaleAssistant"), cleanName)
+            if (dlFile.isFile) {
+                dlFile.copyTo(target, overwrite = true)
+            }
+        }
+        require(target.isFile) { "未找到文件：$cleanName" }
+        val ext = cleanName.substringAfterLast('.', "").lowercase()
+        val mime = when (ext) {
+            "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "pdf" -> "application/pdf"
+            "csv" -> "text/csv"
+            "md" -> "text/markdown"
+            "zip" -> "application/zip"
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+        }
+        val uri = FileProvider.getUriForFile(app, "${app.packageName}.diagnostics", target)
+        val intent = if (action == "share") {
+            Intent(Intent.ACTION_SEND).apply {
+                type = mime
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        } else {
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
+        val chooser = Intent.createChooser(intent, if (action == "share") "分享 $cleanName" else "打开 $cleanName").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        app.startActivity(chooser)
+        return JSONObject().put("ok", true).put("fileName", cleanName).put("action", action)
+    }
+
 }

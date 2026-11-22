@@ -2425,7 +2425,7 @@ export interface WhaleAppControlEvent {
 export interface WhaleNativeChatStreamEvent {
   requestId: string
   sessionId: string
-  type: 'delta' | 'step' | 'phase'
+  type: 'delta' | 'step' | 'phase' | 'reasoning'
   text?: string
   step?: WhaleNativeChatStep
   phase?: string

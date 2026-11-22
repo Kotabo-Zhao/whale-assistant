@@ -231,6 +231,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
             require(cleanQ.isNotEmpty()) { "提问内容不能为空" }
             WhaleNativeWorkerPool.setAttention(workerId, cleanQ, "blocked")
             val title = WhaleNativeWorkerPool.get(workerId)?.optString("title", workerId).orEmpty().ifBlank { workerId }
+            WhaleWorkerReplyReceiver.notifyAskUser(app, workerId, title, cleanQ)
             val notice = "【后台 Worker 需要你确认】$title\n\n$cleanQ\n\n（直接回复我即可透传给该任务继续执行，任务 ID：$workerId）"
             runCatching {
                 val now = System.currentTimeMillis()

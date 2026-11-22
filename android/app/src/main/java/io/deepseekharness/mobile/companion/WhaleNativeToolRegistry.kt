@@ -283,7 +283,30 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 emptyList(),
             ))
             array.put(schema(
+                "whale_remote_exec",
+                "通过用户可选配置的远程算力桥接节点（电脑/云服务器）执行 Shell 或 Python 命令（适合 Node.js/uv/FFmpeg/重型编译等手机端无法直接运行的任务）。",
+                mapOf(
+                    "command" to "要在远程节点执行的命令或 Python 脚本",
+                    "language" to "可选：shell（默认）或 python",
+                    "timeoutSec" to "可选：超时秒数（3-180，默认 45）",
+                ),
+                listOf("command"),
+            ))
+            array.put(schema(
+                "whale_remote_mcp",
+                "通过远程桥接节点调用用户电脑上的本地 stdio MCP 服务（如 B站 MCP / uv / npx 工具）。",
+                mapOf(
+                    "action" to "list（列出可用服务或某服务的工具）或 call（调用工具）",
+                    "server" to "MCP 服务名（action=list 时可留空以列出全部已配置服务）",
+                    "tool" to "当 action=call 时必填：要调用的 MCP 工具名",
+                    "arguments" to "当 action=call 时可选：JSON 对象格式的参数",
+                ),
+                listOf("action"),
+            ))
+            array.put(schema(
                 "whale_file_export",
+        "whale_remote_exec",
+        "whale_remote_mcp",
                 "将代码工作区生成的任意文件（如 .pptx/.docx/.xlsx/.pdf/.zip/.png/.csv）导出保存到手机「下载/WhaleAssistant」目录，并可选立即调起系统分享面板交给用户。",
                 mapOf(
                     "project" to "项目目录名（默认 scratch）",
@@ -1240,6 +1263,25 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             ToolOutcome(name, "列出共享黑板键", true, JSONObject().put("count", items.length()).put("items", items).toString())
                         }
                     }
+                }
+                "whale_remote_exec" -> {
+                    val cmd = args.str("command").trim()
+                    val lang = args.str("language", "shell").trim()
+                    val timeout = args.str("timeoutSec", "45").toIntOrNull() ?: 45
+                    val res = WhaleRemoteBridge.execRemote(app, cmd, lang, timeout)
+                    ToolOutcome(name, "远程节点执行（$lang）", res.optBoolean("ok", false), res.toString(), mutating = true)
+                }
+                "whale_remote_mcp" -> {
+                    val act = args.str("action", "list").trim().lowercase()
+                    val server = args.str("server").trim()
+                    val res = if (act == "call") {
+                        val tool = args.str("tool").trim()
+                        val argObj = args.optJSONObject("arguments") ?: runCatching { JSONObject(args.str("arguments", "{}")) }.getOrElse { JSONObject() }
+                        WhaleRemoteBridge.callMcp(app, server, tool, argObj)
+                    } else {
+                        WhaleRemoteBridge.listMcp(app, server)
+                    }
+                    ToolOutcome(name, if (act == "call") "调用远程 MCP：$server" else "查询远程 MCP", res.optBoolean("ok", false), res.toString(), mutating = act == "call")
                 }
                 "whale_file_export" -> {
                     val project = args.str("project").trim().ifBlank { "scratch" }

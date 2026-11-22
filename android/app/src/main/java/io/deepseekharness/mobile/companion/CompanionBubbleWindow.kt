@@ -380,10 +380,22 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 positionUpdater?.invoke()
             }
         }
+        var quickNewChatAction: (() -> Unit)? = null
+        val newChatHeaderBtn = TextView(context).apply {
+            text = "+"
+            textSize = 19f
+            setTextColor(ui.ink)
+            gravity = Gravity.CENTER
+            contentDescription = "新建对话"
+            background = ui.action(Color.TRANSPARENT, 12)
+            isFocusable = true; isClickable = true
+            setOnClickListener { quickNewChatAction?.invoke() }
+        }
         val headingEnd = LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL
             addView(workerBadge)
-            addView(expandButton, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(6) })
+            addView(newChatHeaderBtn, LinearLayout.LayoutParams(dp(32), dp(34)).apply { marginStart = dp(4) })
+            addView(expandButton, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(4) })
             addView(ui.close(::hide))
         }
         val grabber = android.view.View(context).apply {
@@ -537,7 +549,12 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         fun renderCompleted(view: TextView, message: String, isUser: Boolean) {
             // Ordinary short bubbles remain lightweight native text. Formulae and tables need
             // a proper offline renderer; streaming continues in the native TextView until done.
-            if (!CompanionRichText.requiresRichRenderer(message)) return
+            if (!CompanionRichText.requiresRichRenderer(message)) {
+                if (!isUser) {
+                    view.text = CompanionRichText.render(message)
+                }
+                return
+            }
             val web = android.webkit.WebView(context).apply {
                 setBackgroundColor(Color.TRANSPARENT)
                 isVerticalScrollBarEnabled = false; isHorizontalScrollBarEnabled = false
@@ -861,7 +878,67 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             background = ui.action(Color.TRANSPARENT, 18)
             isFocusable = true; isClickable = true
         }
-        footer.addView(micBtn, LinearLayout.LayoutParams(dp(38), dp(38)))
+        quickNewChatAction = {
+            if (!busy) {
+                if (history.isNotEmpty() || lastError != null || renderedReports.isNotEmpty()) {
+                    newTopic.performClick()
+                } else {
+                    android.widget.Toast.makeText(context, "当前已经是新对话啦", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        val quickSlashBar = android.widget.HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            visibility = android.view.View.GONE
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), dp(2), dp(10), dp(2))
+            }
+            val presets = listOf(
+                "总结当前屏幕" to "帮我看看当前手机屏幕上的内容并提炼重点。",
+                "记一条待办" to "帮我记一条待办：",
+                "查记忆" to "查一下我之前让你记住的偏好和近期重要事项。",
+                "查后台任务" to "帮我看看当前有哪些后台任务在跑、各自进度如何。",
+            )
+            presets.forEach { (label, promptText) ->
+                val chip = TextView(context).apply {
+                    text = label
+                    textSize = 12f
+                    setTextColor(if (ui.dark) Color.parseColor("#DBEAFE") else Color.parseColor("#17324D"))
+                    setPadding(dp(10), dp(5), dp(10), dp(5))
+                    background = ui.action(if (ui.dark) Color.parseColor("#1D324C") else Color.parseColor("#EAF6FF"), 14, ui.line)
+                    setOnClickListener {
+                        visibility = android.view.View.GONE
+                        input.setText(promptText)
+                        input.setSelection(promptText.length)
+                        if (!promptText.endsWith("：")) {
+                            send.performClick()
+                        } else {
+                            input.requestFocus()
+                        }
+                    }
+                }
+                row.addView(chip, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6) })
+            }
+            addView(row)
+        }
+        val slashBtn = TextView(context).apply {
+            text = "/"
+            textSize = 15f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(ui.muted)
+            gravity = Gravity.CENTER
+            contentDescription = "快捷指令"
+            background = ui.action(Color.TRANSPARENT, 16)
+            isFocusable = true; isClickable = true
+            setOnClickListener {
+                quickSlashBar.visibility = if (quickSlashBar.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE
+                panel.post { positionUpdater?.invoke() }
+            }
+        }
+        footer.addView(slashBtn, LinearLayout.LayoutParams(dp(30), dp(38)))
+                footer.addView(micBtn, LinearLayout.LayoutParams(dp(38), dp(38)))
         footer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
         val mediaBtn = android.widget.TextView(context).apply {
             text = "+"
@@ -1057,6 +1134,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
         }
         stateRow.addView(answerQuestion)
         panel.addView(sendState)
+        panel.addView(quickSlashBar, LinearLayout.LayoutParams(-1, -2))
         panel.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(10), dp(4), dp(10), dp(9)) })
         // Message bubbles always precede the input, regardless of the pet's screen position.
         status.text = lastError.orEmpty()

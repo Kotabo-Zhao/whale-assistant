@@ -84,6 +84,34 @@ internal class CompanionDashboard(private val context: Context) {
                 "remove", "delete" -> WhaleMcpManager.removeServer(context, text("id"))
                 else -> throw IllegalArgumentException("不支持的 MCP 操作")
             }
+            "uploadChatFile" -> WhaleCodeRunner.saveUploadedChatFile(
+                context,
+                request.optString("fileName", ""),
+                request.optString("base64", ""),
+            )
+            "openExportedFile" -> WhaleCodeRunner.openOrShareExportedFile(
+                context,
+                request.optString("fileName", ""),
+                "open",
+            )
+            "shareExportedFile" -> WhaleCodeRunner.openOrShareExportedFile(
+                context,
+                request.optString("fileName", ""),
+                "share",
+            )
+            "remoteBridgeGet" -> WhaleRemoteBridge.getConfig(context)
+            "remoteBridgeSave" -> WhaleRemoteBridge.saveConfig(
+                context,
+                request.optString("url", ""),
+                request.optString("token", ""),
+                request.optBoolean("enabled", true),
+            )
+            "remoteBridgeTest" -> WhaleRemoteBridge.testConnection(context)
+            "workerQuickReply" -> WorkerRuntimeWake.followupOrResume(
+                context,
+                text("id"),
+                text("message"),
+            )
             "sharedChatRead" -> {
                 val sinceMs = request.optLong("sinceMs", 0L)
                 JSONObject().put("messages", WhaleSharedChatStore.list(context, sinceMs))

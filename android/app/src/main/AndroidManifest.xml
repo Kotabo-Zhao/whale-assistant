@@ -336,5 +336,8 @@
         <receiver
             android:name=".companion.WhaleScheduledTaskReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".companion.WhaleWorkerReplyReceiver"
+            android:exported="false" />
     </application>
 </manifest>
