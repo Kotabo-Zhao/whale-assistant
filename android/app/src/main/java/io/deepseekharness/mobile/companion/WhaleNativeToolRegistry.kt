@@ -73,12 +73,25 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             listOf("工坊", "小工具", "小软件", "小程序", "做一个", "做个", "开发", "网页", "html", "打卡", "计算器", "番茄钟", "记账", "倒计时", "背单词", "游戏", "workshop", "mini app").any { it in q }
         val includeCode = expandAll || "code" in expandedCategories ||
             listOf("代码", "文件", "目录", "脚本", "编程", "工程", "写入", "补丁", "ppt", "word", "excel", "pdf", "导出", "安装包", "python", "code", "file", "patch").any { it in q }
-        val includePhone = expandAll || "phone" in expandedCategories ||
-            listOf("手机", "打开", "点击", "截屏", "截图", "屏幕", "滑动", "返回", "桌面", "应用", "app", "副屏", "微信", "抖音", "淘宝", "支付宝", "地图", "美团", "小红书", "哔哩", "b站", "screen", "click", "launch").any { it in q }
+        val hasPhoneVerb = listOf("打开", "启动", "点击", "截屏", "截图", "屏幕", "滑动", "返回", "桌面", "副屏", "操控", "无障碍", "修复", "screen", "click", "launch").any { it in q }
+        val includePhone = expandAll || "phone" in expandedCategories || hasPhoneVerb ||
+            (listOf("手机", "应用", "app", "微信", "抖音", "淘宝", "支付宝", "地图", "美团").any { it in q } && !listOf("搜", "查一下", "搜索", "资料").any { it in q })
         val includeDevice = expandAll || "device" in expandedCategories || "settings" in expandedCategories ||
             listOf("电量", "电池", "媒体", "音量", "播放", "暂停", "剪贴板", "粘贴", "复制", "通知", "定时", "每天", "提醒我", "后台", "状态", "链接", "分享", "battery", "media", "clipboard", "schedule", "status").any { it in q }
         val includeExtensions = expandAll || "extensions" in expandedCategories || "mcp" in expandedCategories || "skill" in expandedCategories ||
             listOf("skill", "技能", "mcp", "安装", "扩展", "插件", "服务器", "github.com", "skill.md").any { it in q }
+
+        val isCasualChitchat = !isWorker && !expandAll && expandedCategories.isEmpty() &&
+            text.length <= 12 &&
+            !includeAppControl && !includePersona && !includePet && !includeWorkshop && !includeCode && !includePhone && !includeDevice && !includeExtensions &&
+            !listOf("记", "存", "查", "搜", "提醒", "待办", "日程", "闹钟", "任务", "朗读", "说", "帮我", "总结", "分析", "http", "www").any { it in q }
+        if (isCasualChitchat) {
+            array.put(schema("whale_memory_search", "检索本地长期记忆。", mapOf("query" to "关键词"), listOf("query")))
+            array.put(schema("whale_web_search", "联网实时搜索网页与中文社区内容。", mapOf("query" to "关键词", "platform" to "auto/bilibili/xiaohongshu/zhihu"), listOf("query")))
+            array.put(schema("whale_secretary_list", "查看未完成待办与日程。", emptyMap(), emptyList()))
+            array.put(schema("whale_tools_expand", "按需热展开更多专域工具组（code/phone/device/settings/extensions/all）。", mapOf("category" to "工具组名"), listOf("category")))
+            return array
+        }
 
         if (includeAppControl) {
             array.put(schema(

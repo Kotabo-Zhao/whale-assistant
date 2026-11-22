@@ -2814,7 +2814,7 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         )}
         {page === 'automation' && (
         <>
-          <AutomationQuickHealCard onOpenAccessibilitySettings={onOpenAccessibilitySettings} />
+          <AutomationQuickHealCard bridge={runtimeBridge} onOpenAccessibilitySettings={onOpenAccessibilitySettings} />
           <div className="settings-subsection" aria-labelledby="automation-subpages">
             <div className="section-title">
               <span className="section-icon"><Bot size={19} /></span>

@@ -151,8 +151,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val expandedCategories = mutableSetOf<String>()
         var toolSchemas = tools.toolSchemas(trimmed, expandedCategories, isWorker = isWorkerSession)
 
-        // 1. 滑动历史窗口准备（用于角色世界书关键词触发与历史回放）
-        val recentHistory = history.takeLast(12)
+        // 1. 分层滑动历史窗口（近期完整保留，远期渐进压缩，兼顾连贯性与 Token 成本）
+        val recentHistory = history.takeLast(10)
         val activePersona = runCatching { CompanionPersonaStore(app).active() }.getOrNull()
 
         // 2. System Prompt：优先以当前激活角色人设领衔，完整保留角色设定与工具规则
@@ -177,7 +177,11 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val totalHist = recentHistory.size
         recentHistory.forEachIndexed { idx, (role, text) ->
             if (role in setOf("user", "assistant") && text.isNotBlank()) {
-                val limit = if (idx >= totalHist - 4) 4_000 else 1_000
+                val limit = when {
+                    idx >= totalHist - 2 -> 2_800
+                    idx >= totalHist - 6 -> 900
+                    else -> 450
+                }
                 val clipped = if (text.length > limit) text.take(limit) + "…[历史已精简]" else text
                 messages.put(JSONObject().put("role", role).put("content", clipped))
             }
@@ -215,20 +219,20 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         var compactedOnce = false
 
         for (round in 0 until MAX_TOOL_ROUNDS) {
-            // 4. 零成本首尾保留裁剪两轮前的冗长工具输出 + 自动卸载最旧截图，保留报错尾行并控制 Token
-            if (round >= 2 && round - 2 < toolMsgIndicesByRound.size) {
-                for (msgIdx in toolMsgIndicesByRound[round - 2]) {
+            // 4. 零成本首尾保留裁剪上一轮冗长工具输出 + 最多保留 2 张近期截图，保留报错尾行并大幅降低多轮 Token
+            if (round >= 1 && round - 1 < toolMsgIndicesByRound.size) {
+                for (msgIdx in toolMsgIndicesByRound[round - 1]) {
                     val m = messages.optJSONObject(msgIdx) ?: continue
                     val raw = m.optString("content", "")
-                    if (raw.length > 720) {
+                    if (raw.length > 520) {
                         m.put("content", WhaleHarnessCore.SpillAndPruneManager.pruneOlderToolResult(raw))
                     }
                 }
             }
-            WhaleHarnessCore.ImageOffloadPolicy.offloadOldestImages(messages, maxRetainedImages = 4)
+            WhaleHarnessCore.ImageOffloadPolicy.offloadOldestImages(messages, maxRetainedImages = 2)
 
-            // 4b. KV 缓存友好型结构化压缩（源自 compaction-basic）：仅在上下文超 56k 字符时触发一次
-            if (!compactedOnce && round >= 4 && WhaleHarnessCore.PrefixCacheCompactor.estimateMessagesChars(messages) > WhaleHarnessCore.PrefixCacheCompactor.COMPACTION_CHAR_THRESHOLD) {
+            // 4b. KV 缓存友好型结构化压缩：上下文超 32k 字符且第 3 轮起触发一次
+            if (!compactedOnce && round >= 3 && WhaleHarnessCore.PrefixCacheCompactor.estimateMessagesChars(messages) > WhaleHarnessCore.PrefixCacheCompactor.COMPACTION_CHAR_THRESHOLD) {
                 compactedOnce = true
                 runCatching {
                     val compactReq = JSONArray()
@@ -588,7 +592,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         if (card != null) {
             val personaPrompt = runCatching { PetRoleplayPrompt.character(card, emptyList()) }.getOrDefault("")
             if (personaPrompt.isNotBlank()) {
-                append(personaPrompt.take(4_500)).append("\n\n")
+                append(personaPrompt.take(3_000)).append("\n\n")
             }
         }
         append("身份与能力：始终保持「$charName」的人设与口吻回复，同时具备手机原生 Super Agent 全部工具能力；处理现实事务时结果准确且不切回客服腔。若用户在对话中约定新的称呼、口癖、语气或相处设定，主动调用 whale_persona_manage(action=\"refine\") 增量修正角色卡。\n")
@@ -616,9 +620,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
         runCatching {
             val skillCatalog = WhaleSkillStore.catalogPrompt(app)
-            if (skillCatalog.isNotBlank()) append(skillCatalog.take(1200)).append("\n")
+            if (skillCatalog.isNotBlank()) append(skillCatalog.take(600)).append("\n")
             val mcpSummary = WhaleMcpManager.promptSummary(app)
-            if (mcpSummary.isNotBlank()) append(mcpSummary.take(600)).append("\n")
+            if (mcpSummary.isNotBlank()) append(mcpSummary.take(350)).append("\n")
             val boardKeys = WhaleWorkerBoard.promptKeysSummary(app)
             if (boardKeys.isNotBlank()) append(boardKeys).append("\n")
         }
@@ -667,29 +671,29 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             // 优先使用结构化 Worker 池摘要（含 7 态、attention 提问与分页指针），仅在内存池为空时回退收件箱摘要，避免重复占 Token
             val poolPrompt = WhaleNativeWorkerPool.recentSummaries(4)
             if (poolPrompt.isNotBlank()) {
-                append(poolPrompt.take(1800)).append("\n")
+                append(poolPrompt.take(900)).append("\n")
             } else {
                 val inboxPrompt = WorkerReportInbox(app).prompt()
-                if (inboxPrompt.isNotBlank()) append(inboxPrompt.take(1400)).append("\n")
+                if (inboxPrompt.isNotBlank()) append(inboxPrompt.take(800)).append("\n")
             }
             val boardKeys = WhaleWorkerBoard.promptKeysSummary(app)
             if (boardKeys.isNotBlank()) append(boardKeys).append("\n")
         }
         runCatching {
             val goals = WhaleGoalGraphStore.promptSummary(app)
-            if (goals.isNotBlank()) append(goals.take(800)).append("\n")
+            if (goals.isNotBlank()) append(goals.take(450)).append("\n")
             val playbooks = WhalePlaybookStore.promptSummary(app)
-            if (playbooks.isNotBlank()) append(playbooks.take(800)).append("\n")
+            if (playbooks.isNotBlank()) append(playbooks.take(450)).append("\n")
         }
         runCatching {
             val skillCatalog = WhaleSkillStore.catalogPrompt(app)
-            if (skillCatalog.isNotBlank()) append(skillCatalog.take(1200)).append("\n")
+            if (skillCatalog.isNotBlank()) append(skillCatalog.take(600)).append("\n")
             val mcpSummary = WhaleMcpManager.promptSummary(app)
-            if (mcpSummary.isNotBlank()) append(mcpSummary.take(600)).append("\n")
+            if (mcpSummary.isNotBlank()) append(mcpSummary.take(350)).append("\n")
         }
         runCatching {
             val rag = WhaleNativeRagRetriever.retrieveContext(app, userQuery)
-            if (rag.isNotBlank()) append(rag.take(2400)).append("\n")
+            if (rag.isNotBlank() && userMessage.trim().length > 10) append(rag.take(1200)).append("\n")
         }
         runCatching {
             val card = persona ?: CompanionPersonaStore(app).active()
@@ -711,7 +715,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         val keys = e.optJSONArray("keys") ?: e.optJSONArray("key") ?: return@mapNotNull null
                         val hit = (0 until keys.length()).any { k -> keys.optString(k).takeIf(String::isNotBlank)?.let { contextText.contains(it, ignoreCase = true) } == true }
                         if (!hit) null else e.optString("content").replace("{{char}}", charName, ignoreCase = true).replace("{{user}}", "用户", ignoreCase = true).takeIf(String::isNotBlank)
-                    }.joinToString("\n").take(1200)
+                    }.joinToString("\n").take(700)
                     if (matched.isNotBlank()) append("[触发世界设定] ").append(matched).append("\n")
                 }
             }

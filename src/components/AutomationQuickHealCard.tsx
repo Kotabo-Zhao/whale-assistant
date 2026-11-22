@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, RefreshCw, ShieldAlert, Wrench } from 'lucide-react'
 import { t } from '../i18n'
-import { runtimeBridge } from '../platform/runtimeBridge'
+import type { RuntimeBridge } from '../platform/types'
 
 interface HealthSnapshot {
   shizuku?: { running?: boolean; authorized?: boolean; ready?: boolean }
@@ -13,7 +13,7 @@ interface HealthSnapshot {
  * 自动化设置页顶部「一键检测与自愈」卡片：
  * 统一展示 Shizuku / 无障碍（含僵尸断连检测）/ 副屏三路状态，一键通过 Shizuku 自动激活/重连无障碍并放行空拦截白名单。
  */
-export function AutomationQuickHealCard({ onOpenAccessibilitySettings }: { onOpenAccessibilitySettings: () => void }) {
+export function AutomationQuickHealCard({ bridge, onOpenAccessibilitySettings }: { bridge: RuntimeBridge; onOpenAccessibilitySettings: () => void }) {
   const [health, setHealth] = useState<HealthSnapshot | null>(null)
   const [busy, setBusy] = useState(false)
   const [report, setReport] = useState<string>('')
@@ -21,12 +21,12 @@ export function AutomationQuickHealCard({ onOpenAccessibilitySettings }: { onOpe
 
   const refresh = useCallback(async () => {
     try {
-      const res = await runtimeBridge.companionDashboard?.({ operation: 'automationHealth' }) as HealthSnapshot | undefined
+      const res = await bridge.companionDashboard?.({ operation: 'automationHealth' }) as HealthSnapshot | undefined
       if (res) setHealth(res)
     } catch {
       // Ignore outside native shell
     }
-  }, [])
+  }, [bridge])
 
   useEffect(() => {
     void refresh()
@@ -37,7 +37,7 @@ export function AutomationQuickHealCard({ onOpenAccessibilitySettings }: { onOpe
     setReport('')
     setActions([])
     try {
-      const res = await runtimeBridge.companionDashboard?.({
+      const res = await bridge.companionDashboard?.({
         operation: 'automationAutoFix',
         relaxWhitelist: true,
       }) as { actions?: unknown[]; nextStep?: string; health?: HealthSnapshot } | undefined
