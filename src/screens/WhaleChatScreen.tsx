@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import MarkdownIt from 'markdown-it'
 import {
   ArrowUp,
@@ -339,13 +339,23 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   }, [sessions, currentSession.id])
 
   const autoFollowRef = useRef(true)
-  useEffect(() => {
+  const programmaticScrollRef = useRef(false)
+  useLayoutEffect(() => {
     const el = listRef.current
-    if (!el) return
-    if (autoFollowRef.current) {
-      el.scrollTop = el.scrollHeight
+    if (!el || !autoFollowRef.current) return
+    programmaticScrollRef.current = true
+    el.scrollTop = el.scrollHeight
+    const raf = window.requestAnimationFrame(() => {
+      if (listRef.current && autoFollowRef.current) {
+        listRef.current.scrollTop = listRef.current.scrollHeight
+      }
+      programmaticScrollRef.current = false
+    })
+    return () => {
+      window.cancelAnimationFrame(raf)
+      programmaticScrollRef.current = false
     }
-  }, [messages, streamingText, streamingSteps])
+  }, [messages, streamingText, streamingSteps, sending])
 
   useEffect(() => {
     if (!bridge.addWhaleChatListener) return
@@ -735,66 +745,97 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const phaseLabel = phaseMeta.text
 
   const renderActivitySvg = (category: string) => {
-    if (category === 'code') {
-      return (
-        <svg className="whale-svg-anim is-code" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path className="svg-stroke-main" d="M8 7L3 12L8 17" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          <path className="svg-stroke-main" d="M16 7L21 12L16 17" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          <line className="svg-cursor-blink" x1="13.5" y1="6" x2="10.5" y2="18" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      )
-    }
-    if (category === 'web') {
-      return (
-        <svg className="whale-svg-anim is-web" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <circle className="svg-orbit-slow" cx="12" cy="12" r="9" fill="none" strokeWidth="1.8" strokeDasharray="16 8" />
-          <ellipse className="svg-stroke-soft" cx="12" cy="12" rx="4.5" ry="9" fill="none" strokeWidth="1.4" />
-          <line className="svg-stroke-soft" x1="3.5" y1="12" x2="20.5" y2="12" strokeWidth="1.4" />
-          <circle className="svg-core-pulse" cx="12" cy="12" r="2.2" />
-        </svg>
-      )
-    }
-    if (category === 'file') {
-      return (
-        <svg className="whale-svg-anim is-file" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path className="svg-stroke-main" d="M6 3H14L19 8V21H6Z" fill="none" strokeWidth="1.8" strokeLinejoin="round" />
-          <path className="svg-flow-down" d="M12 10V16M9.5 13.8L12 16.5L14.5 13.8" fill="none" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )
-    }
-    if (category === 'memory') {
-      return (
-        <svg className="whale-svg-anim is-memory" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <circle className="svg-ripple-ring" cx="12" cy="12" r="8" fill="none" strokeWidth="1.6" />
-          <circle className="svg-orbit-rev" cx="12" cy="12" r="5" fill="none" strokeWidth="1.6" strokeDasharray="10 6" />
-          <circle className="svg-core-pulse" cx="12" cy="12" r="2.5" />
-        </svg>
-      )
-    }
-    if (category === 'phone') {
-      return (
-        <svg className="whale-svg-anim is-phone" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <rect className="svg-stroke-main" x="6" y="2.5" width="12" height="19" rx="2.5" fill="none" strokeWidth="1.8" />
-          <circle className="svg-ripple-ring" cx="12" cy="12" r="3.2" fill="none" strokeWidth="1.6" />
-          <circle className="svg-core-pulse" cx="12" cy="12" r="1.4" />
-        </svg>
-      )
-    }
-    if (category === 'worker') {
-      return (
-        <svg className="whale-svg-anim is-worker" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <circle className="svg-orbit-slow" cx="12" cy="12" r="8.5" fill="none" strokeWidth="1.8" strokeDasharray="8 6" />
-          <circle className="svg-core-pulse" cx="12" cy="5.5" r="2" />
-          <circle className="svg-core-pulse" cx="6.5" cy="15.5" r="2" />
-          <circle className="svg-core-pulse" cx="17.5" cy="15.5" r="2" />
-        </svg>
-      )
-    }
+    const accent =
+      category === 'code' ? '#34d399'
+        : category === 'file' ? '#fbbf24'
+          : category === 'memory' ? '#c084fc'
+            : category === 'phone' ? '#fb7185'
+              : category === 'worker' ? '#22d3ee'
+                : '#38bdf8'
     return (
-      <svg className="whale-svg-anim is-thinking" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-        <circle className="svg-orbit-slow" cx="12" cy="12" r="8.5" fill="none" strokeWidth="2" strokeDasharray="28 16" strokeLinecap="round" />
-        <circle className="svg-orbit-rev" cx="12" cy="12" r="5.2" fill="none" strokeWidth="1.8" strokeDasharray="14 10" strokeLinecap="round" />
-        <circle className="svg-core-pulse" cx="12" cy="12" r="2.2" />
+      <svg className={`whale-girl-svg is-${category}`} viewBox="0 0 36 36" width="28" height="28" aria-hidden="true">
+        {/* 顶部按行为定制的鲸鱼娘小道具 */}
+        {category === 'web' && (
+          <g>
+            <circle className="wgirl-spout-1" cx="15" cy="5.5" r="1.7" fill="#38bdf8" />
+            <circle className="wgirl-spout-2" cx="21" cy="5.5" r="1.5" fill="#7dd3fc" />
+            <path className="wgirl-spout-1" d="M18 8.5C18 5.8 15.5 4.2 13.5 5" fill="none" stroke="#38bdf8" strokeWidth="1.2" strokeLinecap="round" />
+            <path className="wgirl-spout-2" d="M18 8.5C18 5.8 20.5 4.2 22.5 5" fill="none" stroke="#7dd3fc" strokeWidth="1.2" strokeLinecap="round" />
+          </g>
+        )}
+        {category === 'worker' && (
+          <g className="wgirl-orbit">
+            <circle cx="18" cy="3.2" r="2.1" fill="#22d3ee" />
+            <circle cx="32.5" cy="21" r="1.8" fill="#60a5fa" />
+          </g>
+        )}
+        {(category === 'thinking' || category === 'analyzing') && (
+          <g>
+            <circle className="wgirl-spout-1" cx="27.5" cy="9" r="1.6" fill="#7dd3fc" />
+            <circle className="wgirl-spout-2" cx="30.5" cy="5.5" r="1.15" fill="#bae6fd" />
+          </g>
+        )}
+        {category === 'memory' && (
+          <path className="wgirl-spark" d="M29 4.5L30.2 7.3L33 8.5L30.2 9.7L29 12.5L27.8 9.7L25 8.5L27.8 7.3Z" fill="#c084fc" />
+        )}
+
+        {/* 鲸鱼娘主体（轻微浮动） */}
+        <g className="wgirl-body">
+          {/* 冰蓝双马尾 */}
+          <path className="wgirl-tail-l" d="M10 17C6.2 18.2 4.5 22.8 6.4 26.8C8.1 25.9 9.5 24 10.6 21.8Z" fill="#38bdf8" />
+          <path className="wgirl-tail-r" d="M26 17C29.8 18.2 31.5 22.8 29.6 26.8C27.9 25.9 26.5 24 25.4 21.8Z" fill="#38bdf8" />
+
+          {/* 头顶小鲸鱼尾鳍发卡 */}
+          <path className="wgirl-fin" d="M18 10.5C17.2 7.4 14.3 5.7 12.6 7C14.1 8.8 15.8 9.9 18 10.5C20.2 9.9 21.9 8.8 23.4 7C21.7 5.7 18.8 7.4 18 10.5Z" fill={accent} />
+
+          {/* 冰蓝头发轮廓 */}
+          <circle cx="18" cy="19" r="9.4" fill="#7dd3fc" />
+
+          {/* 脸蛋 */}
+          <ellipse cx="18" cy="20.6" rx="7.2" ry="6.4" fill="#fff3eb" />
+
+          {/* 空气刘海 */}
+          <path d="M10.4 18.2C11.4 13.6 14.5 11.2 18 11.2C21.5 11.2 24.6 13.6 25.6 18.2C23.8 16.2 22.1 15.6 20.6 17.5C19.6 15.6 18.7 15.3 18 17.3C17.3 15.3 16.4 15.6 15.4 17.5C13.9 15.6 12.2 16.2 10.4 18.2Z" fill="#38bdf8" />
+
+          {/* 灵动眨眼大眼睛 */}
+          <g className="wgirl-eye">
+            <ellipse cx="15" cy="20.8" rx="1.35" ry="1.75" fill="#0f2942" />
+            <circle cx="14.55" cy="20.1" r="0.55" fill="#ffffff" />
+          </g>
+          <g className="wgirl-eye">
+            <ellipse cx="21" cy="20.8" rx="1.35" ry="1.75" fill="#0f2942" />
+            <circle cx="20.55" cy="20.1" r="0.55" fill="#ffffff" />
+          </g>
+
+          {/* 腮红与微笑 */}
+          <ellipse cx="12.7" cy="22.4" rx="1.25" ry="0.7" fill="#fda4af" opacity="0.75" />
+          <ellipse cx="23.3" cy="22.4" rx="1.25" ry="0.7" fill="#fda4af" opacity="0.75" />
+          <path d="M16.7 23.4C17.3 24.15 18.7 24.15 19.3 23.4" fill="none" stroke="#c26378" strokeWidth="1.15" strokeLinecap="round" />
+
+          {/* 蓝色小领结 */}
+          <path d="M14.8 27.6L18 29.2L21.2 27.6L20.5 30.8L18 29.6L15.5 30.8Z" fill="#0284c7" />
+        </g>
+
+        {/* 右下角按行为定制的动态小徽章 */}
+        {category === 'code' && (
+          <g className="wgirl-spark">
+            <rect x="23" y="23" width="11.5" height="9.5" rx="2.8" fill="#0f172a" stroke="#34d399" strokeWidth="1.2" />
+            <path d="M26.5 26L25 27.8L26.5 29.5M31 26L32.5 27.8L31 29.5" fill="none" stroke="#34d399" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        )}
+        {category === 'file' && (
+          <g className="wgirl-spark">
+            <rect x="24" y="22.5" width="9.5" height="11" rx="2" fill="#fffbeb" stroke="#f59e0b" strokeWidth="1.2" />
+            <line x1="26.2" y1="26" x2="31.2" y2="26" stroke="#f59e0b" strokeWidth="1.2" strokeLinecap="round" />
+            <line x1="26.2" y1="29" x2="30" y2="29" stroke="#f59e0b" strokeWidth="1.2" strokeLinecap="round" />
+          </g>
+        )}
+        {category === 'phone' && (
+          <g>
+            <circle className="wgirl-ripple" cx="29" cy="27" r="4.5" fill="none" stroke="#fb7185" strokeWidth="1.3" />
+            <circle cx="29" cy="27" r="1.8" fill="#fb7185" />
+          </g>
+        )}
       </svg>
     )
   }
@@ -922,8 +963,9 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         className="whale-chat-stream"
         ref={listRef}
         onScroll={event => {
+          if (programmaticScrollRef.current) return
           const el = event.currentTarget
-          autoFollowRef.current = el.scrollHeight - (el.scrollTop + el.clientHeight) <= 72
+          autoFollowRef.current = el.scrollHeight - (el.scrollTop + el.clientHeight) <= 120
         }}
       >
         {messages.length === 0 ? (

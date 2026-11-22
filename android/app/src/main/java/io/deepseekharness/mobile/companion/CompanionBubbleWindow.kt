@@ -1201,9 +1201,10 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val vectorSpinner = if (root === panel) WhaleVectorStatusView(context) else null
             val waitLabel = if (root === panel) ui.text("理解你的问题并规划步骤", 13f, if (ui.dark) Color.parseColor("#DBEAFE") else Color.parseColor("#17324D")).apply {
                 maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
             } else null
             if (waitRow != null && vectorSpinner != null && waitLabel != null) {
-                waitRow.addView(vectorSpinner, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(8) })
+                waitRow.addView(vectorSpinner, LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(8) })
                 waitRow.addView(waitLabel, LinearLayout.LayoutParams(0, -2, 1f))
                 content.addView(waitRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
             }

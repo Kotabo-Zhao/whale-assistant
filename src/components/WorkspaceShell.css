@@ -13,6 +13,10 @@
   padding-block: var(--page-gap) max(24px, env(safe-area-inset-bottom));
   scroll-padding-block: var(--page-gap) 24px;
 }
+.management-shell .app-main.is-chat-main {
+  padding: 0 !important;
+  scroll-padding-block: 0;
+}
 /* The scrolling host owns the page inset. Its border box also positions the native chat. */
 .management-shell .app-main > :is(.screen, .memory-workspace, .assistant-tasks, .persona-page) {
   width: 100%;
