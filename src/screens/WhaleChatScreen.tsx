@@ -547,9 +547,9 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         const rawList = Array.isArray(res?.workers) ? res.workers : (Array.isArray(res?.items) ? res.items : [])
         const mapped = (rawList as Array<Record<string, unknown>>)
           .map(w => ({
-            id: String(w.id ?? ''),
-            title: String(w.title ?? w.task ?? '后台任务').slice(0, 26),
-            status: String(w.status ?? ''),
+            id: typeof w.id === 'string' ? w.id : '',
+            title: (typeof w.title === 'string' ? w.title : (typeof w.task === 'string' ? w.task : '后台任务')).slice(0, 26),
+            status: typeof w.status === 'string' ? w.status : '',
             attention: typeof w.attention === 'string' ? w.attention : (typeof w.question === 'string' ? w.question : ''),
           }))
           .filter(w => w.id && ['running', 'queued', 'blocked', 'needs_input', 'attention'].includes(w.status))
