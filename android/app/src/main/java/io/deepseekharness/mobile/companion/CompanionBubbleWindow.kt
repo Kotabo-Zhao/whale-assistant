@@ -1184,9 +1184,69 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             lastError = null
             val parallelViews = item?.id?.let(parallelBubbles::remove)
             val sentBubble = parallelViews?.first ?: if (root === panel) bubble(message, true).also { renderCompleted(it,message,true) } else TextView(context)
-            val streamingBubble = parallelViews?.second ?: if (root === panel) bubble("•••", false) else TextView(context)
+            val streamingBubble = parallelViews?.second ?: if (root === panel) bubble("🐳 正在潜入记忆深海翻找线索…", false) else TextView(context)
             liveText = ""
-            if (root === panel) renderLive = { text -> streamingBubble.text = text; panel.post { positionUpdater?.invoke() } }
+            val waitStartMs = android.os.SystemClock.uptimeMillis()
+            val petPhaseRef = java.util.concurrent.atomic.AtomicReference("thinking")
+            var waitAnimTick = 0
+            val petThinkingLines = listOf(
+                "🐳 正在潜入记忆深海翻找线索",
+                "🫧 正在把零散思路串成小气泡",
+                "✨ 正在认真推敲怎么回答更贴心",
+                "🧭 正在核对上下文和近期安排",
+            )
+            val petWaves = listOf("·", "··", "···", "〰")
+            fun formatPetWaitText(): String {
+                val p = petPhaseRef.get().orEmpty()
+                val base = when {
+                    p.startsWith("step:") -> "✨ 刚完成：${p.removePrefix("step:").take(18)}"
+                    p == "synthesizing" -> "✍️ 线索齐啦，正在提笔写回复"
+                    p == "steering" || p == "restarting" -> "💡 收到补充，立刻调整方向"
+                    p.startsWith("tool:parallel") -> "⚡ 正在分身同时查好几件事"
+                    p.startsWith("tool:") -> {
+                        val tool = p.removePrefix("tool:")
+                        when {
+                            tool.contains("web_search") || tool.contains("web_fetch") -> "🌐 正在潜出水面联网冲浪"
+                            tool.contains("code_run") || tool.contains("py_install") -> "🧪 正在本地 Python 实验室敲代码"
+                            tool.contains("file_export") || tool.contains("html_to_pdf") -> "📦 正在把成品打包导出"
+                            tool.contains("phone") || tool.contains("virtual_screen") -> "📱 正在小心翼翼帮你看屏操作"
+                            tool.contains("memory") || tool.contains("knowledge") -> "🧠 正在翻看专属记忆小本本"
+                            tool.contains("worker") -> "🚀 正在调度后台分身干活"
+                            else -> "🛠️ 正在调用原生小工具处理"
+                        }
+                    }
+                    else -> petThinkingLines[(waitAnimTick / 5) % petThinkingLines.size]
+                }
+                val wave = petWaves[waitAnimTick % petWaves.size]
+                val sec = ((android.os.SystemClock.uptimeMillis() - waitStartMs) / 1000L).coerceAtLeast(0L)
+                return if (sec > 0L) "$base $wave  (${sec}s)" else "$base $wave"
+            }
+            val waitTicker = object : Runnable {
+                override fun run() {
+                    if (closed || !busy || liveText.isNotEmpty()) return
+                    waitAnimTick += 1
+                    if (root === panel) {
+                        streamingBubble.text = formatPetWaitText()
+                    }
+                    handler.postDelayed(this, 480L)
+                }
+            }
+            if (root === panel) {
+                handler.postDelayed(waitTicker, 480L)
+            }
+            chat.onNativePhase = { phase ->
+                petPhaseRef.set(phase)
+                handler.post {
+                    if (!closed && busy && liveText.isEmpty() && root === panel) {
+                        streamingBubble.text = formatPetWaitText()
+                    }
+                }
+            }
+            if (root === panel) renderLive = { text ->
+                handler.removeCallbacks(waitTicker)
+                streamingBubble.text = text
+                panel.post { positionUpdater?.invoke() }
+            }
             mainQuestion = null
             busy = true; onState("thinking"); newTopic.isEnabled = false; continueButton.isEnabled = chat.handoffSessionId() != null; sendLabel(); status.text = ""; status.visibility = android.view.View.GONE; panel.post { positionUpdater?.invoke() }
             val generation = ++request

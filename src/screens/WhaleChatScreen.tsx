@@ -289,6 +289,14 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [streamingText, setStreamingText] = useState('')
   const [streamingSteps, setStreamingSteps] = useState<WhaleNativeChatStep[]>([])
   const [streamingPhase, setStreamingPhase] = useState('')
+  const [waitElapsedSec, setWaitElapsedSec] = useState(0)
+  const [waitPhraseIdx, setWaitPhraseIdx] = useState(0)
+  const petSyncCursorRef = useRef<number>((() => {
+    try {
+      const saved = Number(window.localStorage.getItem('whale.petSyncCursor.v1') || '0')
+      return Number.isFinite(saved) && saved > 0 ? saved : 0
+    } catch { return 0 }
+  })())
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
@@ -381,11 +389,18 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   }
 
   const startNewSession = () => {
-    if (sending) return
+    if (sending) {
+      void cancelCurrentTurn()
+    }
+    const now = Date.now()
+    petSyncCursorRef.current = now
+    try { window.localStorage.setItem('whale.petSyncCursor.v1', String(now)) } catch { /* ignore */ }
     const fresh = createSession()
     setSessions(prev => [fresh, ...prev].slice(0, MAX_SESSIONS))
     setActiveId(fresh.id)
     setSessionsOpen(false)
+    setInput('')
+    setPendingImages([])
   }
 
   const deleteSession = (id: string) => {
@@ -422,10 +437,16 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     window.addEventListener('whale-miniapp-ask', onMiniAppAsk)
     const pullPetTurns = async () => {
       try {
-        const res = await bridge.companionDashboard?.({ operation: 'sharedChatRead', sinceMs: 0 })
+        const cursor = petSyncCursorRef.current
+        const res = await bridge.companionDashboard?.({ operation: 'sharedChatRead', sinceMs: cursor })
         const rows = Array.isArray(res?.messages) ? (res.messages as Array<{ id?: string; role?: string; text?: string; source?: string; atMs?: number }>) : []
-        const petRows = rows.filter(r => r.source === 'pet' && typeof r.id === 'string' && typeof r.text === 'string' && (r.role === 'user' || r.role === 'assistant'))
+        const petRows = rows.filter(r => r.source === 'pet' && typeof r.id === 'string' && typeof r.text === 'string' && (r.role === 'user' || r.role === 'assistant') && Number(r.atMs ?? 0) > cursor)
         if (petRows.length === 0) return
+        const maxAt = Math.max(...petRows.map(r => Number(r.atMs ?? 0)))
+        if (maxAt > petSyncCursorRef.current) {
+          petSyncCursorRef.current = maxAt
+          try { window.localStorage.setItem('whale.petSyncCursor.v1', String(maxAt)) } catch { /* ignore */ }
+        }
         setSessions(prev => {
           const targetId = prev.some(s => s.id === activeId) ? activeId : prev[0]?.id
           return prev.map(sess => {
@@ -684,11 +705,51 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     }
   }
 
-  const phaseLabel = streamingPhase.startsWith('tool:')
-    ? t('正在调用原生能力…')
-    : streamingPhase === 'synthesizing'
-      ? t('正在整理回答…')
-      : t('正在思考…')
+  useEffect(() => {
+    if (!sending) {
+      setWaitElapsedSec(0)
+      setWaitPhraseIdx(0)
+      return
+    }
+    const t0 = Date.now()
+    const secTimer = window.setInterval(() => {
+      setWaitElapsedSec(Math.floor((Date.now() - t0) / 1000))
+    }, 500)
+    const phraseTimer = window.setInterval(() => {
+      setWaitPhraseIdx(idx => idx + 1)
+    }, 2400)
+    return () => {
+      window.clearInterval(secTimer)
+      window.clearInterval(phraseTimer)
+    }
+  }, [sending])
+
+  const phaseMeta = useMemo(() => {
+    const thinkingPool = [
+      { icon: '🐳', text: t('正在潜入记忆深海翻找线索…') },
+      { icon: '🫧', text: t('正在把零散思路串成小气泡…') },
+      { icon: '✨', text: t('正在认真推敲怎么回答更贴心…') },
+      { icon: '🧭', text: t('正在核对上下文和近期安排…') },
+    ]
+    const p = streamingPhase || 'thinking'
+    if (p === 'steering' || p === 'restarting') return { icon: '💡', text: t('收到你的中途补充，立刻调整方向…') }
+    if (p === 'cancelling') return { icon: '⏹️', text: t('正在收尾停手…') }
+    if (p === 'synthesizing') return { icon: '✍️', text: t('线索齐啦，正在提笔组织回复…') }
+    if (p.startsWith('tool:parallel')) return { icon: '⚡', text: t('正在分身同时核查好几件事…') }
+    if (p.startsWith('tool:')) {
+      const tool = p.slice(5)
+      if (tool.includes('web_search') || tool.includes('web_fetch')) return { icon: '🌐', text: t('正在潜出水面联网冲浪查资料…') }
+      if (tool.includes('code_run') || tool.includes('py_install')) return { icon: '🧪', text: t('正在本地 Python 实验室敲代码验证…') }
+      if (tool.includes('file_export') || tool.includes('html_to_pdf')) return { icon: '📦', text: t('正在把成品文件打包导出…') }
+      if (tool.includes('phone') || tool.includes('virtual_screen')) return { icon: '📱', text: t('正在小心翼翼帮你看屏操作…') }
+      if (tool.includes('memory') || tool.includes('knowledge')) return { icon: '🧠', text: t('正在翻看你的专属记忆小本本…') }
+      if (tool.includes('worker')) return { icon: '🚀', text: t('正在调度后台分身协同干活…') }
+      if (tool.includes('site_auth')) return { icon: '🔐', text: t('正在准备站点授权登录…') }
+      return { icon: '🛠️', text: t('正在调用原生小工具处理中…') }
+    }
+    return thinkingPool[waitPhraseIdx % thinkingPool.length]
+  }, [streamingPhase, waitPhraseIdx])
+  const phaseLabel = phaseMeta.text
 
   const renderReceiptIcon = (kind: ActionReceipt['kind']) => {
     if (style === 'cute') {
@@ -726,7 +787,6 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             className="whale-icon-chip"
             title={t('新对话')}
             aria-label={t('新对话')}
-            disabled={sending}
             onClick={startNewSession}
           >
             {style === 'cute' ? <CuteIcon name="new-chat" size={21} /> : <MessageSquarePlus size={17} />}
@@ -999,22 +1059,21 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         )}
         {sending && (
           <div className="whale-msg whale-msg-assistant" role="status">
-            {(streamingSteps.length > 0 || style !== 'cute') && (
-              <div className="whale-live-plan-bar">
-                <div className="whale-live-plan-visual" title={phaseLabel}>
-                  <span className="whale-plan-whale-dot" aria-hidden="true">🐳</span>
-                  {streamingSteps.length > 0 && (
-                    <span className="whale-step-dots" aria-label={t('已执行 {0} 步', streamingSteps.length)}>
-                      {streamingSteps.slice(-6).map((st, idx) => (
-                        <span key={`dot-${idx}`} className={`whale-step-dot${st.ok ? ' is-ok' : ' is-warn'}`} title={st.label} />
-                      ))}
-                    </span>
-                  )}
-                  <span className="whale-typing-dots" aria-hidden="true"><i /><i /><i /></span>
-                  {style !== 'cute' && <span className="whale-live-plan-status">{phaseLabel}</span>}
-                </div>
+            <div className="whale-live-plan-bar whale-kimi-wait-bar">
+              <div className="whale-live-plan-visual" title={phaseLabel}>
+                <span className="whale-plan-whale-dot whale-swim-icon" aria-hidden="true">{phaseMeta.icon}</span>
+                <span className="whale-live-plan-status whale-kimi-status-text">{phaseLabel}</span>
+                {streamingSteps.length > 0 && (
+                  <span className="whale-step-dots" aria-label={t('已执行 {0} 步', streamingSteps.length)}>
+                    {streamingSteps.slice(-6).map((st, idx) => (
+                      <span key={`dot-${idx}`} className={`whale-step-dot${st.ok ? ' is-ok' : ' is-warn'}`} title={st.label} />
+                    ))}
+                  </span>
+                )}
+                <span className="whale-ocean-wave" aria-hidden="true"><i /><i /><i /><i /></span>
+                {waitElapsedSec > 0 && <span className="whale-wait-timer">{waitElapsedSec}s</span>}
               </div>
-            )}
+            </div>
             {streamingSteps.length > 0 && (
               <div className="whale-msg-steps">
                 <ul>

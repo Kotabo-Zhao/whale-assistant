@@ -333,6 +333,7 @@ internal class CompanionBubbleChat(
     }
 
     @Volatile private var activeNativeControl: WhaleNativeAgentEngine.RunControl? = null
+    @Volatile var onNativePhase: ((String) -> Unit)? = null
     fun steerNative(note: String): Boolean {
         val c = activeNativeControl ?: return false
         c.steer(note)
@@ -362,6 +363,12 @@ internal class CompanionBubbleChat(
                             val raw = streamed.toString()
                             val idx = raw.indexOf("<!--whale_next")
                             onPartial(if (idx >= 0) raw.substring(0, idx).trimEnd() else raw)
+                        }
+                        override fun onPhase(phase: String) {
+                            onNativePhase?.invoke(phase)
+                        }
+                        override fun onStep(step: WhaleNativeAgentEngine.StepRecord) {
+                            if (step.label.isNotBlank()) onNativePhase?.invoke("step:${step.label}")
                         }
                     },
                     control = control,
