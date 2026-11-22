@@ -277,6 +277,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     "lang" to "运行语言：python（默认，内嵌 CPython 3.11 + PTC 工具桥接）或 sh（本地沙箱 Shell）",
                     "code" to "直接执行的代码或命令（与 file 二选一）",
                     "file" to "可选：运行项目内已有相对路径脚本文件（如 main.py）",
+                    "timeoutSec" to "可选超时秒数（默认 45，Python 最高支持 180 秒，Shell 最高 120 秒）",
                 ),
                 listOf("project"),
             ))
@@ -1109,8 +1110,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         rawCode
                     }
                     require(scriptCode.isNotBlank()) { "请提供 code 或 file 参数" }
+                    val timeoutSec = args.optLong("timeoutSec", 45L).coerceIn(3L, 180L)
                     val result = if (lang == "sh" || lang == "shell") {
-                        WhaleCodeRunner.runShell(projectDir, scriptCode)
+                        WhaleCodeRunner.runShell(projectDir, scriptCode, timeoutSec = timeoutSec.coerceAtMost(120L))
                     } else {
                         val ptcBridge = WhaleCodeRunner.ToolBridge { subTool, subArgsJson ->
                             val subOutcome = execute(subTool, subArgsJson)
@@ -1120,7 +1122,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                                 .put("payload", runCatching { JSONObject(subOutcome.payload) }.getOrElse { subOutcome.payload })
                                 .toString()
                         }
-                        WhaleCodeRunner.runPython(app, projectDir, scriptCode, toolBridge = ptcBridge)
+                        WhaleCodeRunner.runPython(app, projectDir, scriptCode, timeoutSec = timeoutSec, toolBridge = ptcBridge)
                     }
                     val ok = result.optBoolean("ok", false)
                     ToolOutcome(name, if (lang == "sh" || lang == "shell") "运行 Shell：$safeProj" else "运行 Python：$safeProj", ok, result.toString(), mutating = true)

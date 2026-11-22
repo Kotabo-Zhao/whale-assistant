@@ -163,7 +163,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                             "职责规范：\n" +
                             "1. 专注独立完成分配的任务，优先使用原生文件/代码/Python PTC/检索工具真实落盘产物并验证结果；\n" +
                             "2. 不要模仿主会话口吻闲聊，不要声称自己是主会话，也不要再次派发嵌套 Worker；\n" +
-                            "3. 完成后输出简洁清晰的结构化交付报告（含产出文件路径、关键数据与校验结果）。"
+                            "3. 调用工具前先核对用途与参数：查时间、数学计算、定时等待或文件处理直接用内置 Python `whale_code_run`（单次最高支持 180 秒），不要盲调网络抓取或无关工具；\n" +
+                            "4. 完成后输出简洁清晰的结构化交付报告（含产出文件路径、关键数据与校验结果）。"
                     } else {
                         buildStaticSystemPrompt(activePersona)
                     },
@@ -448,6 +449,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val step = StepRecord(p.fnName, outcome.label, outcome.ok, dt)
                 steps += step
                 listener?.onStep(step)
+                onProgress?.invoke(round + 1, "第 ${round + 1} 轮 · ${outcome.label}", "[${p.fnName}] ${outcome.label}（${dt}ms）")
                 roundToolIndices.add(messages.length())
                 messages.put(
                     JSONObject()

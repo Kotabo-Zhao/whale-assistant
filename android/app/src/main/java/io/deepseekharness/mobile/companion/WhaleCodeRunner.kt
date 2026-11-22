@@ -36,7 +36,7 @@ internal object WhaleCodeRunner {
         context: Context,
         projectDir: File,
         code: String,
-        timeoutSec: Long = 30L,
+        timeoutSec: Long = 45L,
         toolBridge: ToolBridge? = null,
     ): JSONObject {
         projectDir.mkdirs()
@@ -59,7 +59,7 @@ internal object WhaleCodeRunner {
             }
         }
         return try {
-            future.get(timeoutSec.coerceIn(3L, 60L), TimeUnit.SECONDS)
+            future.get(timeoutSec.coerceIn(3L, 180L), TimeUnit.SECONDS)
         } catch (_: java.util.concurrent.TimeoutException) {
             future.cancel(true)
             JSONObject()
@@ -85,7 +85,7 @@ internal object WhaleCodeRunner {
                 .directory(projectDir)
                 .redirectErrorStream(false)
                 .start()
-            val finished = proc.waitFor(timeoutSec.coerceIn(3L, 45L), TimeUnit.SECONDS)
+            val finished = proc.waitFor(timeoutSec.coerceIn(3L, 120L), TimeUnit.SECONDS)
             if (!finished) {
                 proc.destroyForcibly()
                 return JSONObject().put("ok", false).put("error", "Shell 命令超时（>${timeoutSec}s）已中止。")

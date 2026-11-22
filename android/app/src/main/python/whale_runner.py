@@ -1,11 +1,56 @@
+import builtins
 import io
 import json
 import os
 import sys
+import threading
+import time
 import traceback
-from contextlib import redirect_stdout, redirect_stderr
 
 MAX_PTC_SUB_CALLS = 16
+
+_TL = threading.local()
+_STREAM_INSTALL_LOCK = threading.Lock()
+_STREAMS_INSTALLED = False
+
+
+class _ThreadLocalStream:
+    """Thread-local multiplexer for sys.stdout/sys.stderr so concurrent Workers never cross-talk."""
+
+    def __init__(self, attr_name: str, fallback):
+        self._attr = attr_name
+        self._fallback = fallback
+
+    def _target(self):
+        buf = getattr(_TL, self._attr, None)
+        return buf if buf is not None else self._fallback
+
+    def write(self, s):
+        return self._target().write(s)
+
+    def writelines(self, lines):
+        return self._target().writelines(lines)
+
+    def flush(self):
+        return self._target().flush()
+
+    def isatty(self):
+        return False
+
+    def __getattr__(self, name):
+        return getattr(self._target(), name)
+
+
+def _ensure_thread_local_streams():
+    global _STREAMS_INSTALLED
+    if _STREAMS_INSTALLED:
+        return
+    with _STREAM_INSTALL_LOCK:
+        if _STREAMS_INSTALLED:
+            return
+        sys.stdout = _ThreadLocalStream("stdout", sys.stdout)
+        sys.stderr = _ThreadLocalStream("stderr", sys.stderr)
+        _STREAMS_INSTALLED = True
 
 
 class _WhaleToolsProxy:
@@ -49,14 +94,18 @@ class _WhaleToolsProxy:
 
 
 def run_code(code: str, work_dir: str = "", tool_bridge=None) -> str:
-    """Execute Python code inside the target project directory with optional PTC tool bridge."""
-    prev_cwd = os.getcwd()
+    """Execute Python code with strict per-thread stdout/stderr and work_dir isolation."""
+    _ensure_thread_local_streams()
+    t0 = time.monotonic()
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()
     inspected = []
     ok = True
     error_text = ""
     proxy = _WhaleToolsProxy(tool_bridge)
+
+    resolved_dir = os.path.abspath(work_dir) if work_dir else os.getcwd()
+    os.makedirs(resolved_dir, exist_ok=True)
 
     def _inspect(*values):
         for v in values:
@@ -65,34 +114,42 @@ def run_code(code: str, work_dir: str = "", tool_bridge=None) -> str:
             else:
                 inspected.append(str(v)[:4000])
 
+    def _scoped_open(file, *args, **kwargs):
+        if isinstance(file, (str, os.PathLike)):
+            p = os.fspath(file)
+            if not os.path.isabs(p):
+                file = os.path.join(resolved_dir, p)
+        return builtins.open(file, *args, **kwargs)
+
+    prev_stdout = getattr(_TL, "stdout", None)
+    prev_stderr = getattr(_TL, "stderr", None)
+    _TL.stdout = stdout_buf
+    _TL.stderr = stderr_buf
     try:
-        if work_dir:
-            os.makedirs(work_dir, exist_ok=True)
-            os.chdir(work_dir)
-            if work_dir not in sys.path:
-                sys.path.insert(0, work_dir)
+        if resolved_dir not in sys.path:
+            sys.path.insert(0, resolved_dir)
         namespace = {
             "__name__": "__main__",
-            "__file__": os.path.join(work_dir or prev_cwd, "main.py"),
+            "__file__": os.path.join(resolved_dir, "main.py"),
+            "WORK_DIR": resolved_dir,
+            "open": _scoped_open,
             "tools": proxy,
             "inspect": _inspect,
         }
-        with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
-            exec(compile(code, "<whale_python>", "exec"), namespace, namespace)
+        exec(compile(code, "<whale_python>", "exec"), namespace, namespace)
     except Exception:
         ok = False
         error_text = traceback.format_exc()
     finally:
-        try:
-            os.chdir(prev_cwd)
-        except Exception:
-            pass
+        _TL.stdout = prev_stdout
+        _TL.stderr = prev_stderr
 
     out_text = stdout_buf.getvalue()
     if inspected:
         inspect_block = "\n".join(inspected)
         out_text = (out_text + "\n" + inspect_block).strip() if out_text.strip() else inspect_block
 
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
     return json.dumps(
         {
             "ok": ok,
@@ -100,6 +157,8 @@ def run_code(code: str, work_dir: str = "", tool_bridge=None) -> str:
             "stderr": stderr_buf.getvalue()[:4000],
             "error": error_text[:4000],
             "subCalls": proxy.calls,
+            "workDir": resolved_dir,
+            "elapsedMs": elapsed_ms,
             "pythonVersion": sys.version.split()[0],
         },
         ensure_ascii=False,
