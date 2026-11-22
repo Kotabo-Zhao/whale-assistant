@@ -944,6 +944,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val args = runCatching { JSONObject(rawArgs.ifBlank { "{}" }) }.getOrElse { JSONObject() }
         fun arg(k: String) = args.optString(k, "").trim()
         return when {
+            fnName == "whale_recall" -> {
+                val q = arg("query").take(18)
+                "memory" to if (q.isNotEmpty()) "并行检索记忆与资料「$q」" else "并行检索长期记忆与资料"
+            }
             fnName == "whale_code_run" -> {
                 val proj = arg("project").ifBlank { "scratch" }
                 val f = arg("file")

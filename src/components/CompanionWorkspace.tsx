@@ -196,6 +196,8 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
   const [knowledgeSelectionMode, setKnowledgeSelectionMode] = useState(false)
   const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<Set<string>>(() => new Set())
   const [knowledgeProcessing, setKnowledgeProcessing] = useState<KnowledgeProcessing | null>(null)
+  const [unifiedStats, setUnifiedStats] = useState<{ memoryCount: number; knowledgeCount: number } | null>(null)
+  const [crossMatches, setCrossMatches] = useState<Row[]>([])
   const [writing, setWriting] = useState(Boolean(firstNote?.current))
   const [guidedSearch, setGuidedSearch] = useState(Boolean(firstNote?.current))
   useEffect(() => { if (firstNote) firstNote.current = false }, [firstNote])
@@ -258,6 +260,36 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
     }).catch(() => { if (active) setMessage('图片预览不可用；资料没有发送。') })
     return () => { active = false }
   }, [knowledgeDetail])
+  useEffect(() => {
+    if (!library) return
+    let alive = true
+    void runtimeBridge.companionDashboard({ operation: 'unifiedStats' }).then(res => {
+      if (!alive) return
+      const m = res?.memoryCount
+      const k = res?.knowledgeCount
+      if (typeof m === 'number' && typeof k === 'number') {
+        setUnifiedStats({ memoryCount: m, knowledgeCount: k })
+      }
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [library, revision])
+  useEffect(() => {
+    const q = query.trim()
+    if (!library || q.length < 2 || panel === 'reminders') {
+      setCrossMatches([])
+      return
+    }
+    let alive = true
+    const timer = window.setTimeout(() => {
+      void runtimeBridge.companionDashboard({ operation: 'unifiedRecall', query: q, limit: 4 }).then(res => {
+        if (!alive) return
+        const raw = panel === 'knowledge' ? res?.memories : res?.knowledge
+        if (Array.isArray(raw)) setCrossMatches(rows(raw))
+        else setCrossMatches([])
+      }).catch(() => { if (alive) setCrossMatches([]) })
+    }, 240)
+    return () => { alive = false; window.clearTimeout(timer) }
+  }, [library, panel, query])
   useEffect(() => {
     if (panel !== 'knowledge') return
     const refresh = () => { if (!document.hidden) setRevision(v => v + 1) }
@@ -484,7 +516,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
     if (result) { setSelectedMemoryIds(new Set()); setMemorySelectionMode(false) }
   }
   return <section className={library ? "companion-workspace memory-workspace" : "companion-workspace"} aria-labelledby="companion-workspace-title">
-    <div className={library ? "workspace-heading page-heading" : "workspace-heading"}><div>{library ? <><h1 id="companion-workspace-title">{t("记忆")}</h1><p className="library-intro">随手存下，需要时轻松找回。</p></> : <><h3 id="companion-workspace-title">助手工作台</h3><p>管理本地资料、长期记忆和提醒。</p></>}</div>
+    <div className={library ? "workspace-heading page-heading memory-hub-header" : "workspace-heading"}><div>{library ? <><div className="memory-hub-title-row"><h1 id="companion-workspace-title">{t("记忆")}</h1>{unifiedStats && <div className="memory-hub-stats" aria-label="记忆中心统计"><button type="button" className={`memory-stat-pill${panel === 'knowledge' ? ' is-current' : ''}`} onClick={() => setPanel('knowledge')}>资料 {unifiedStats.knowledgeCount}</button><button type="button" className={`memory-stat-pill${panel === 'memory' ? ' is-current' : ''}`} onClick={() => setPanel('memory')}>记忆 {unifiedStats.memoryCount}</button></div>}</div><p className="library-intro">长期记忆与收藏资料统一检索，随手存下、按需召回。</p></> : <><h3 id="companion-workspace-title">助手工作台</h3><p>管理本地资料、长期记忆和提醒。</p></>}</div>
       <button className="icon-button" type="button" aria-label="刷新助手数据" disabled={busy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></div>
     <div className="workspace-tabs" role="tablist" aria-label="助手工作台分类">
       {([{ id: 'knowledge', label: '资料', icon: <BookOpen size={17} /> }, { id: 'memory', label: '长期记忆', icon: <Brain size={17} /> }, { id: 'reminders', label: '提醒', icon: <Bell size={17} /> }] as const).map(tab =>
@@ -517,6 +549,35 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
       <div className="library-command-row">
         <label className="library-search"><Search size={18} aria-hidden="true"/><span className="sr-only">搜索</span><input aria-label={t("搜索")} type="search" maxLength={panel === 'knowledge' ? 100 : undefined} value={query} onChange={e => setQuery(e.target.value)} placeholder={t(panel === 'memory' ? '搜索已确认及待确认的记忆' : '搜索正文、文件名或来源')} /></label>{query && <button type="button" className="button button-quiet" onClick={() => setQuery('')}>清除搜索</button>}
       </div>
+      {library && crossMatches.length > 0 && (
+        <div className="unified-cross-panel" aria-label="跨库匹配结果">
+          <div className="unified-cross-head">
+            <span>{panel === 'knowledge' ? `同时在「长期记忆」中匹配到 ${crossMatches.length} 条` : `同时在「资料」中匹配到 ${crossMatches.length} 条`}</span>
+            <button type="button" className="unified-cross-jump" onClick={() => setPanel(panel === 'knowledge' ? 'memory' : 'knowledge')}>
+              切过去查看 →
+            </button>
+          </div>
+          <div className="unified-cross-list">
+            {crossMatches.map(row => (
+              <button
+                key={row.id}
+                type="button"
+                className="unified-cross-item"
+                onClick={() => {
+                  if (panel === 'knowledge') {
+                    setPanel('memory')
+                  } else {
+                    showKnowledgeView(row, row.source === 'original' || !!row.documentId ? 'reader' : 'detail')
+                  }
+                }}
+              >
+                <span className="unified-cross-badge">{panel === 'knowledge' ? '记忆' : knowledgeFileTypeLabel(row)}</span>
+                <span className="unified-cross-text">{typeof row.displayName === 'string' && row.displayName ? row.displayName : row.text.slice(0, 72)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className={panel === 'knowledge' ? 'library-intake' : 'library-command-row'} role="group" aria-label={panel === 'knowledge' ? '存入资料' : '添加记忆'}>
         {panel === 'knowledge' && (Capacitor.isNativePlatform()
           ? <button type="button" className="button button-secondary" aria-label="存入本地文件" disabled={busy} onClick={() => {
@@ -577,7 +638,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
       {panel === 'memory' && memoryList.length > 0 && <div className="workspace-card-actions"><p className="workspace-hint">展开分类查看缩略卡片，点击卡片查看详情；左滑可删除。</p><button type="button" disabled={busy} onClick={() => { setMemorySelectionMode(value => !value); setSelectedMemoryIds(new Set()) }}>{memorySelectionMode ? '结束批量管理' : '批量管理'}</button>{memorySelectionMode && <button type="button" className="button-danger-quiet" disabled={busy || selectedMemoryIds.size === 0} onClick={() => { void deleteSelectedMemories() }}>删除所选（{selectedMemoryIds.size}）</button>}</div>}
       {panel === 'memory' ? <><div className="memory-groups">{groups.map(group => <details className="memory-group" key={group.name} open={query.trim() ? true : undefined}>
         <summary><span>{group.name}</span><small>{group.rows.length} 条</small></summary>
-        <div className="workspace-list">{group.rows.map(row => <article className="workspace-card workspace-memory-card" key={row.id}
+        <div className="workspace-list">{group.rows.map(row => <article className="workspace-card workspace-memory-card" data-status={row.status === 'pending' ? 'pending' : 'confirmed'} key={row.id}
           onTouchStart={event => { if (!memorySelectionMode && event.touches.length === 1) swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY, id: row.id } }}
           onTouchEnd={event => { if (memorySelectionMode) return; const start = swipeStart.current; swipeStart.current = null; if (!start || start.id !== row.id || !event.changedTouches.length) return; const dx = event.changedTouches[0].clientX - start.x; const dy = event.changedTouches[0].clientY - start.y; if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) setRevealedMemory(dx < 0 ? row.id : null) }}>
           {memorySelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedMemoryIds.has(row.id)} onChange={() => toggleMemorySelection(row.id)} aria-label={`选择记忆：${row.text}`} />选择</label>}
@@ -593,7 +654,7 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
           {!memorySelectionMode && revealedMemory === row.id && <button type="button" className="memory-delete" onClick={() => { if (window.confirm('删除这条记忆？')) void run({ operation: 'memoryDelete', id: row.id, expected: expected(row), expectedText: row.text }, '已删除。') }}>删除</button>}
         </article>)}</div>
 </details>)}</div>{memoryNextBefore !== null && query.trim() === '' && <button className="button button-secondary" type="button" disabled={busy || loadingMoreMemory} onClick={() => { void loadMoreMemory() }}>{loadingMoreMemory ? '正在加载记忆…' : '加载更多记忆'}</button>}</> : <><div className="workspace-list">{list.map(row => <article className="workspace-card" key={row.id}>{knowledgeSelectionMode && <label className="memory-selection"><input type="checkbox" checked={selectedKnowledgeIds.has(row.id)} onChange={() => toggleKnowledgeSelection(row.id)} aria-label={`选择资料：${typeof row.displayName === 'string' && row.displayName !== '' ? row.displayName : row.text}`} />选择</label>}<div className="knowledge-card-copy">{canPreviewKnowledgeImage(row) && <KnowledgeThumbnail row={row} />}{library ? <button type="button" className="library-result" aria-pressed={knowledgeSelectionMode ? selectedKnowledgeIds.has(row.id) : undefined} onClick={() => knowledgeSelectionMode ? toggleKnowledgeSelection(row.id) : showKnowledgeView(row, row.source === 'original' || !!row.documentId ? 'reader' : 'detail')}>
-          <span className="result-kind">{knowledgeFileTypeLabel(row)}</span>
+          <span className="result-kind" data-kind={knowledgeFileTypeLabel(row)}>{knowledgeFileTypeLabel(row)}</span>
           <span className="result-title">{typeof row.displayName === 'string' && row.displayName ? row.displayName : row.text.split('\n', 1)[0].slice(0, 80)}</span>
           <span className="result-excerpt">{row.source !== 'original' && (typeof row.displayName === 'string' || !!knowledgeQuery || row.text.length > 80) ? <KnowledgeExcerpt text={row.text} query={knowledgeQuery} /> : null}</span>
           <small>{[typeof row.shareOrigin === 'string' ? row.shareOrigin : knowledgeSourceLabel(row.source), row.source === 'original' || row.coverage ? knowledgeParseLabel(row) : null].filter(Boolean).join(' · ')}</small>

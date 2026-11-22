@@ -86,7 +86,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             !includeAppControl && !includePersona && !includePet && !includeWorkshop && !includeCode && !includePhone && !includeDevice && !includeExtensions &&
             !listOf("记", "存", "查", "搜", "提醒", "待办", "日程", "闹钟", "任务", "朗读", "说", "帮我", "总结", "分析", "http", "www").any { it in q }
         if (isCasualChitchat) {
-            array.put(schema("whale_memory_search", "检索本地长期记忆。", mapOf("query" to "关键词"), listOf("query")))
+            array.put(schema("whale_recall", "并行检索长期记忆与本地收藏资料。", mapOf("query" to "关键词", "scope" to "可选：all(默认)/memory/knowledge"), listOf("query")))
             array.put(schema("whale_web_search", "联网实时搜索网页与中文社区内容。", mapOf("query" to "关键词", "platform" to "auto/bilibili/xiaohongshu/zhihu"), listOf("query")))
             array.put(schema("whale_secretary_list", "查看未完成待办与日程。", emptyMap(), emptyList()))
             array.put(schema("whale_tools_expand", "按需热展开更多专域工具组（code/phone/device/settings/extensions/all）。", mapOf("category" to "工具组名"), listOf("category")))
@@ -167,7 +167,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
         }
         if (includeMemory) {
-            array.put(schema("whale_memory_search", "按关键词混合语义检索用户本地长期记忆。", mapOf("query" to "检索关键词"), listOf("query")))
+            array.put(schema("whale_recall", "并行混合语义检索用户的长期记忆、习惯规则与本地资料库（默认同时检索两库，省轮次不漏召回）。", mapOf("query" to "检索关键词", "scope" to "可选：all(默认同时查两库) / memory / knowledge"), listOf("query")))
             array.put(schema("whale_memory_save", "将用户明确表达的偏好或长期事实保存到本地长期记忆。", mapOf("text" to "简明完整的记忆内容"), listOf("text")))
             array.put(schema(
                 "whale_memory_update",
@@ -238,7 +238,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
         }
         if (includeKnowledge) {
-            array.put(schema("whale_knowledge_search", "混合语义检索用户保存在本地资料库中的文档和笔记。", mapOf("query" to "检索关键词"), listOf("query")))
+            if (!includeMemory) {
+                array.put(schema("whale_recall", "并行混合语义检索用户的长期记忆与本地资料库。", mapOf("query" to "检索关键词", "scope" to "可选：all(默认) / memory / knowledge"), listOf("query")))
+            }
             array.put(schema("whale_knowledge_save", "将整理好的文字笔记或摘要直接保存到本地资料库。", mapOf("text" to "要保存的完整正文"), listOf("text")))
             array.put(schema("whale_knowledge_read", "按 ID 读取本地资料库某条笔记/文档的完整正文内容。", mapOf("id" to "资料记录 ID"), listOf("id")))
             array.put(schema("whale_knowledge_delete", "按 ID 删除本地资料库中的过期或重复记录（可撤销）。", mapOf("id" to "资料记录 ID"), listOf("id")))
@@ -840,6 +842,51 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             ToolOutcome(name, "重置悬浮桌宠位置", true, JSONObject().put("ok", true).toString(), mutating = true)
                         }
                         else -> throw IllegalArgumentException("不支持的桌宠操作：$action")
+                    }
+                }
+                "whale_recall" -> {
+                    val query = args.str("query", "").trim()
+                    val scope = args.str("scope", "all").trim().lowercase().ifEmpty { "all" }
+                    val wantMem = scope == "all" || scope == "memory"
+                    val wantKn = scope == "all" || scope == "knowledge"
+                    val exec = java.util.concurrent.Executors.newFixedThreadPool(2)
+                    try {
+                        val memFuture = if (wantMem) exec.submit(java.util.concurrent.Callable {
+                            val hybrid = if (query.isNotEmpty()) {
+                                runCatching { SemanticMemorySearch.execute(app, JSONObject().put("query", query).put("limit", 6).toString()) }.getOrNull()
+                            } else null
+                            hybrid ?: CompanionMemoryStore(app).execute(
+                                JSONObject().put("op", "search").put("query", query).toString(),
+                                fromPetTurn = true,
+                            )
+                        }) else null
+                        val knFuture = if (wantKn) exec.submit(java.util.concurrent.Callable {
+                            val hybrid = if (query.isNotEmpty()) {
+                                runCatching { SemanticKnowledgeSearch.execute(app, JSONObject().put("query", query).put("limit", 5).toString()) }.getOrNull()
+                            } else null
+                            if (hybrid != null) hybrid else {
+                                val store = CompanionKnowledgeStore(app)
+                                val rows = if (query.isEmpty()) store.recent(0, 8) else store.searchPage(query, 0, 8).first
+                                rows.toString()
+                            }
+                        }) else null
+                        val out = JSONObject().put("query", query).put("scope", scope)
+                        if (memFuture != null) {
+                            val memRaw = runCatching { memFuture.get(700L, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrDefault("[]")
+                            out.put("memories", runCatching { org.json.JSONTokener(memRaw).nextValue() }.getOrDefault(memRaw))
+                        }
+                        if (knFuture != null) {
+                            val knRaw = runCatching { knFuture.get(800L, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrDefault("[]")
+                            out.put("knowledge", runCatching { org.json.JSONTokener(knRaw).nextValue() }.getOrDefault(knRaw))
+                        }
+                        val label = when (scope) {
+                            "memory" -> "检索长期记忆"
+                            "knowledge" -> "检索本地资料"
+                            else -> "并行检索记忆与资料"
+                        }
+                        ToolOutcome(name, label, true, out.toString())
+                    } finally {
+                        exec.shutdownNow()
                     }
                 }
                 "whale_memory_search" -> {

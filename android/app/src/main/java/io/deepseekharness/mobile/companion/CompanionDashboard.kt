@@ -192,6 +192,38 @@ internal class CompanionDashboard(private val context: Context) {
                     .put("reminders", reminder.list()).put("recurring", recurring.list())
             }
 
+            "unifiedStats" -> {
+                val memCount = runCatching { memory.countForUser() }.getOrDefault(0)
+                val knCount = runCatching { knowledge.count() }.getOrDefault(0)
+                JSONObject()
+                    .put("memoryCount", memCount)
+                    .put("knowledgeCount", knCount)
+            }
+            "unifiedRecall" -> {
+                val q = request.optString("query", "").trim()
+                val lim = request.optInt("limit", 6).coerceIn(1, 12)
+                val memMatches = JSONArray()
+                val knMatches = JSONArray()
+                if (q.isNotEmpty()) {
+                    val lower = q.lowercase()
+                    val allMem = runCatching { memory.listForUser() }.getOrElse { JSONArray() }
+                    for (i in 0 until allMem.length()) {
+                        val row = allMem.optJSONObject(i) ?: continue
+                        if (row.optString("text", "").lowercase().contains(lower)) {
+                            memMatches.put(row)
+                            if (memMatches.length() >= lim) break
+                        }
+                    }
+                    val knPage = runCatching { knowledge.searchPage(q, 0, lim).first }.getOrElse { JSONArray() }
+                    for (i in 0 until knPage.length()) {
+                        knPage.optJSONObject(i)?.let { knMatches.put(it) }
+                    }
+                }
+                JSONObject()
+                    .put("query", q)
+                    .put("memories", memMatches)
+                    .put("knowledge", knMatches)
+            }
             "memoryList" -> {
                 val store = CompanionStore(context)
                 val suggestions = if (store.notificationMemorySuggestions)
