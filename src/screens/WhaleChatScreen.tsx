@@ -1,7 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import MarkdownIt from 'markdown-it'
+import texmath from 'markdown-it-texmath'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
 import {
+  ArrowDown,
   ArrowUp,
+  ExternalLink,
+  FileText,
+  Share2,
   BellRing,
   BookmarkCheck,
   BookOpen,
@@ -39,6 +46,8 @@ export interface WhaleChatMessage {
   steps?: WhaleNativeChatStep[]
   model?: string
   elapsedMs?: number
+  reasoning?: string
+  reasoningMs?: number
   error?: boolean
   suggestions?: string[]
   steered?: boolean
@@ -54,9 +63,10 @@ export interface WhaleChatSession {
 
 interface ActionReceipt {
   key: string
-  kind: 'secretary' | 'knowledge' | 'memory' | 'workshop'
+  kind: 'secretary' | 'knowledge' | 'memory' | 'workshop' | 'file'
   title: string
   view: AppView
+  fileName?: string
   actionLabel: string
   followUpPrompt?: string
   followUpLabel?: string
@@ -215,6 +225,21 @@ function extractActionReceipts(steps?: WhaleNativeChatStep[]): ActionReceipt[] {
         view: 'tools',
         actionLabel: '打开工坊',
       })
+    } else if (step.tool === 'whale_file_export' || step.tool === 'whale_html_to_pdf') {
+      const extracted = (step.label || '').split(/[：:]/).slice(1).join(':').trim()
+      const fileName = extracted || (step.tool === 'whale_html_to_pdf' ? 'document.pdf' : '')
+      const fkey = `file-${fileName || receipts.length}`
+      if (fileName && !seen.has(fkey)) {
+        seen.add(fkey)
+        receipts.push({
+          key: fkey,
+          kind: 'file',
+          title: fileName,
+          view: 'whale-chat',
+          actionLabel: '打开文件',
+          fileName,
+        })
+      }
     }
   }
   return receipts
@@ -285,10 +310,16 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const [renameDraft, setRenameDraft] = useState('')
   const [input, setInput] = useState('')
   const [pendingImages, setPendingImages] = useState<string[]>([])
+  const [pendingFiles, setPendingFiles] = useState<Array<{ fileName: string; absolutePath: string; bytes: number }>>([])
   const [sending, setSending] = useState(false)
   const [streamingText, setStreamingText] = useState('')
+  const [streamingReasoning, setStreamingReasoning] = useState('')
+  const streamingReasoningRef = useRef('')
+  const reasoningStartRef = useRef<number>(0)
   const [streamingSteps, setStreamingSteps] = useState<WhaleNativeChatStep[]>([])
   const [streamingPhase, setStreamingPhase] = useState('')
+  const [showScrollBottom, setShowScrollBottom] = useState(false)
+  const [activeWorkers, setActiveWorkers] = useState<Array<{ id: string; title: string; status: string; attention?: string }>>([])
   const [waitElapsedSec, setWaitElapsedSec] = useState(0)
   const petSyncCursorRef = useRef<number>((() => {
     try {
@@ -305,7 +336,25 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const md = useMemo(() => new MarkdownIt({ html: false, linkify: true, breaks: true }), [])
+  const md = useMemo(() => {
+    const inst = new MarkdownIt({ html: false, linkify: true, breaks: true })
+    inst.use(texmath, {
+      engine: katex,
+      delimiters: ['dollars', 'brackets'],
+      katexOptions: { throwOnError: false, strict: false },
+    })
+    inst.renderer.rules.fence = (tokens, idx) => {
+      const token = tokens[idx]
+      const lang = (token.info || '').trim().split(/\s+/)[0] || 'text'
+      const rawCode = token.content || ''
+      const escaped = inst.utils.escapeHtml(rawCode)
+      const encoded = encodeURIComponent(rawCode)
+      return `<div class="whale-code-block"><div class="whale-code-head"><span class="whale-code-lang">${inst.utils.escapeHtml(lang)}</span><button type="button" class="whale-code-copy-btn" data-code="${encoded}">复制代码</button></div><pre><code>${escaped}</code></pre></div>`
+    }
+    inst.renderer.rules.table_open = () => '<div class="whale-table-wrap"><table>'
+    inst.renderer.rules.table_close = () => '</table></div>'
+    return inst
+  }, [])
   const renderedHtmlCache = useRef<Map<string, string>>(new Map())
   const renderCachedMarkdown = (id: string, text: string): string => {
     const key = `${id}:${text.length}`
@@ -365,6 +414,10 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       if (disposed || !activeRequestRef.current || event.requestId !== activeRequestRef.current) return
       if (event.type === 'delta' && event.text) {
         setStreamingText(prev => prev + event.text)
+      } else if (event.type === 'reasoning' && event.text) {
+        if (reasoningStartRef.current === 0) reasoningStartRef.current = Date.now()
+        streamingReasoningRef.current += event.text
+        setStreamingReasoning(streamingReasoningRef.current)
       } else if (event.type === 'step' && event.step) {
         setStreamingSteps(prev => [...prev, event.step!])
       } else if (event.type === 'phase' && event.phase) {
@@ -487,6 +540,29 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     }
   }, [bridge, activeId])
 
+  useEffect(() => {
+    const pollWorkers = async () => {
+      try {
+        const res = await bridge.companionDashboard?.({ operation: 'workerList' })
+        const rawList = Array.isArray(res?.workers) ? res.workers : (Array.isArray(res?.items) ? res.items : [])
+        const mapped = (rawList as Array<Record<string, unknown>>)
+          .map(w => ({
+            id: String(w.id ?? ''),
+            title: String(w.title ?? w.task ?? '后台任务').slice(0, 26),
+            status: String(w.status ?? ''),
+            attention: typeof w.attention === 'string' ? w.attention : (typeof w.question === 'string' ? w.question : ''),
+          }))
+          .filter(w => w.id && ['running', 'queued', 'blocked', 'needs_input', 'attention'].includes(w.status))
+        setActiveWorkers(mapped)
+      } catch { /* ignore */ }
+    }
+    void pollWorkers()
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void pollWorkers()
+    }, 6000)
+    return () => window.clearInterval(timer)
+  }, [bridge])
+
   const cancelCurrentTurn = async (): Promise<void> => {
     const reqId = activeRequestRef.current
     if (!reqId) return
@@ -538,16 +614,38 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   const handleImagePick = async (files: FileList | null): Promise<void> => {
     if (!files || files.length === 0) return
     const picked: string[] = []
+    const uploadedDocs: Array<{ fileName: string; absolutePath: string; bytes: number }> = []
     let videoHint = ''
-    for (const file of Array.from(files).slice(0, 3)) {
+    for (const file of Array.from(files).slice(0, 4)) {
       try {
         if (file.type.startsWith('video/')) {
           const { frames, durationSec } = await extractVideoKeyframes(file)
           picked.push(...frames)
           videoHint = `请分析这段视频（时长约 ${durationSec} 秒，已自动抽取 3 张关键帧）`
-        } else {
+        } else if (file.type.startsWith('image/')) {
           const dataUrl = await compressImageToDataUrl(file)
           if (dataUrl) picked.push(dataUrl)
+        } else if (file.size <= 15 * 1024 * 1024) {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onerror = () => reject(new Error('读取文档失败'))
+            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+            reader.readAsDataURL(file)
+          })
+          if (dataUrl && bridge.companionDashboard) {
+            const res = await bridge.companionDashboard({
+              operation: 'uploadChatFile',
+              fileName: file.name,
+              base64: dataUrl,
+            }) as { ok?: boolean; fileName?: string; absolutePath?: string; bytes?: number }
+            if (res?.ok && res.absolutePath) {
+              uploadedDocs.push({
+                fileName: res.fileName || file.name,
+                absolutePath: res.absolutePath,
+                bytes: Number(res.bytes || file.size),
+              })
+            }
+          }
         }
       } catch {
         // Ignore single broken file.
@@ -557,12 +655,27 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
       setPendingImages(prev => [...prev, ...picked].slice(0, 3))
       if (videoHint && !input.trim()) setInput(videoHint)
     }
+    if (uploadedDocs.length > 0) {
+      setPendingFiles(prev => [...prev, ...uploadedDocs].slice(0, 4))
+    }
   }
 
   const sendText = async (raw: string, overrideImages?: string[]): Promise<void> => {
     const attachedImages = overrideImages ?? pendingImages
-    const text = raw.trim() || (attachedImages.length > 0 ? t('请帮我看看这张图并给出实用建议。') : '')
-    if (!text) return
+    const attachedDocs = overrideImages ? [] : pendingFiles
+    const baseText = raw.trim() || (
+      attachedDocs.length > 0
+        ? t('请读取并分析我上传的文档，提炼核心要点。')
+        : (attachedImages.length > 0 ? t('请帮我看看这张图并给出实用建议。') : '')
+    )
+    if (!baseText) return
+    const docHeader = attachedDocs.length > 0
+      ? attachedDocs.map(d => `[已上传文档：uploads/${d.fileName}，路径：${d.absolutePath}，大小：${Math.max(1, Math.round(d.bytes / 1024))}KB]`).join('\n') + '\n'
+      : ''
+    const displayText = attachedDocs.length > 0
+      ? `${attachedDocs.map(d => `📎 ${d.fileName}`).join(' · ')}\n${baseText}`
+      : baseText
+    const text = `${docHeader}${baseText}`
     const targetSessionId = currentSession.id
 
     // 运行中允许随时插话、补充或修正：不锁输入框，立即实时注入正在运行的 Agent 引擎
@@ -597,17 +710,22 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     const userMsg: WhaleChatMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
-      text,
+      text: displayText,
       images: attachedImages.length > 0 ? attachedImages : undefined,
     }
     const nextHistory = [...messages, userMsg]
     autoFollowRef.current = true
-    updateSessionMessages(targetSessionId, prev => [...prev, userMsg], text)
+    setShowScrollBottom(false)
+    updateSessionMessages(targetSessionId, prev => [...prev, userMsg], baseText)
     setInput('')
     setPendingImages([])
+    setPendingFiles([])
     setSlashOpen(false)
     setSending(true)
     setStreamingText('')
+    streamingReasoningRef.current = ''
+    reasoningStartRef.current = 0
+    setStreamingReasoning('')
     setStreamingSteps([])
     setStreamingPhase('thinking')
     activeRequestRef.current = requestId
@@ -629,6 +747,8 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           steps: result.steps,
           model: result.model,
           elapsedMs: result.elapsedMs,
+          reasoning: streamingReasoningRef.current.trim() || undefined,
+          reasoningMs: reasoningStartRef.current > 0 ? Math.max(500, Date.now() - reasoningStartRef.current) : undefined,
           suggestions: result.suggestions,
         },
       ])
@@ -654,6 +774,9 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     } finally {
       activeRequestRef.current = null
       setStreamingText('')
+      streamingReasoningRef.current = ''
+      reasoningStartRef.current = 0
+      setStreamingReasoning('')
       setStreamingSteps([])
       setStreamingPhase('')
       setSending(false)
@@ -850,6 +973,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
     if (kind === 'secretary') return <BellRing size={14} aria-hidden="true" />
     if (kind === 'knowledge') return <BookmarkCheck size={14} aria-hidden="true" />
     if (kind === 'memory') return <Brain size={14} aria-hidden="true" />
+    if (kind === 'file') return <FileText size={14} aria-hidden="true" />
     return <Hammer size={14} aria-hidden="true" />
   }
 
@@ -882,6 +1006,24 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           </button>
         </div>
       </header>
+
+      {activeWorkers.length > 0 && (
+        <div className="whale-worker-capsule" role="status">
+          <span className="whale-worker-capsule-dot" aria-hidden="true" />
+          <span className="whale-worker-capsule-text">
+            {activeWorkers.find(w => w.status === 'blocked' || w.status === 'needs_input' || w.status === 'attention')
+              ? `后台任务待确认：${activeWorkers.find(w => w.status === 'blocked' || w.status === 'needs_input' || w.status === 'attention')!.attention || activeWorkers[0].title}`
+              : `${activeWorkers.length} 个后台任务运行中 · ${activeWorkers[0].title}`}
+          </span>
+          <button
+            type="button"
+            className="whale-worker-capsule-btn"
+            onClick={() => onNavigate('assistant-tasks')}
+          >
+            {t('查看')}
+          </button>
+        </div>
+      )}
 
       {sessionsOpen && (
         <aside className="whale-sessions-drawer" aria-label={t('本地会话管理')}>
@@ -965,7 +1107,22 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         onScroll={event => {
           if (programmaticScrollRef.current) return
           const el = event.currentTarget
-          autoFollowRef.current = el.scrollHeight - (el.scrollTop + el.clientHeight) <= 120
+          const dist = el.scrollHeight - (el.scrollTop + el.clientHeight)
+          autoFollowRef.current = dist <= 120
+          setShowScrollBottom(dist > 200)
+        }}
+        onClick={event => {
+          const target = event.target as HTMLElement | null
+          const copyBtn = target?.closest?.('.whale-code-copy-btn') as HTMLButtonElement | null
+          if (copyBtn) {
+            const rawCode = decodeURIComponent(copyBtn.getAttribute('data-code') || '')
+            if (rawCode && navigator.clipboard?.writeText) {
+              void navigator.clipboard.writeText(rawCode).then(() => {
+                copyBtn.textContent = '已复制'
+                window.setTimeout(() => { copyBtn.textContent = '复制代码' }, 1400)
+              }).catch(() => {})
+            }
+          }
         }}
       >
         {messages.length === 0 ? (
@@ -1012,7 +1169,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
             </div>
           </div>
         ) : (
-          messages.map(msg => {
+          messages.map((msg, msgIdx) => {
             const receipts = msg.role === 'assistant' && !msg.error ? extractActionReceipts(msg.steps) : []
             return (
               <article key={msg.id} className={`whale-msg whale-msg-${msg.role}${msg.error ? ' is-error' : ''}`}>
@@ -1037,6 +1194,14 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                   <div className="whale-msg-row">
                     <img src={whaleChanAvatar} alt="" width={30} height={30} className="whale-msg-inline-avatar" />
                     <div className="whale-msg-col">
+                      {msg.reasoning && (
+                        <details className="whale-reasoning-box">
+                          <summary>
+                            {msg.reasoningMs ? `已深度思考 ${(msg.reasoningMs / 1000).toFixed(1)}s` : '查看深度思考过程'}
+                          </summary>
+                          <div className="whale-reasoning-body">{msg.reasoning}</div>
+                        </details>
+                      )}
                       <div
                         className="whale-msg-bubble whale-markdown"
                         dangerouslySetInnerHTML={{ __html: renderCachedMarkdown(msg.id, msg.text) }}
@@ -1053,6 +1218,20 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                       </div>
                     )}
                     {msg.text}
+                    {msg.role === 'user' && !sending && (
+                      <button
+                        type="button"
+                        className="whale-user-edit-btn"
+                        aria-label={t('编辑重发')}
+                        title={t('编辑重发')}
+                        onClick={() => {
+                          setInput(msg.text)
+                          inputRef.current?.focus()
+                        }}
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    )}
                     {msg.error && (
                       <div className="whale-receipt-btns" style={{ marginTop: 8 }}>
                         {(msg.text.includes('API Key') || msg.text.includes('模型与密钥')) && (
@@ -1100,13 +1279,38 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                               {t(receipt.followUpLabel)}
                             </button>
                           )}
-                          <button
-                            type="button"
-                            className="whale-receipt-btn is-primary"
-                            onClick={() => onNavigate(receipt.view)}
-                          >
-                            {t(receipt.actionLabel)}
-                          </button>
+                          {receipt.kind === 'file' && receipt.fileName ? (
+                            <>
+                              <button
+                                type="button"
+                                className="whale-receipt-btn"
+                                onClick={() => {
+                                  void bridge.companionDashboard?.({ operation: 'shareExportedFile', fileName: receipt.fileName }).catch(() => {})
+                                }}
+                              >
+                                <Share2 size={12} aria-hidden="true" />
+                                {t('分享')}
+                              </button>
+                              <button
+                                type="button"
+                                className="whale-receipt-btn is-primary"
+                                onClick={() => {
+                                  void bridge.companionDashboard?.({ operation: 'openExportedFile', fileName: receipt.fileName }).catch(() => {})
+                                }}
+                              >
+                                <ExternalLink size={12} aria-hidden="true" />
+                                {t('打开')}
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="whale-receipt-btn is-primary"
+                              onClick={() => onNavigate(receipt.view)}
+                            >
+                              {t(receipt.actionLabel)}
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1125,6 +1329,19 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                       onClick={() => copyReply(msg.id, msg.text)}
                     >
                       {copiedId === msg.id ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="whale-copy-btn"
+                      aria-label={t('重新生成')}
+                      title={t('重新生成')}
+                      disabled={sending}
+                      onClick={() => {
+                        const prevUser = [...messages.slice(0, msgIdx)].reverse().find(m => m.role === 'user')
+                        if (prevUser) void sendText(prevUser.text)
+                      }}
+                    >
+                      <RotateCcw size={12} />
                     </button>
 
                   </footer>
@@ -1171,6 +1388,12 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
                   ))}
                 </ul>
               </div>
+            )}
+            {streamingReasoning && (
+              <details className="whale-reasoning-box is-live" open={!streamingText}>
+                <summary>{streamingText ? '深度思考完成' : '深度思考中…'}</summary>
+                <div className="whale-reasoning-body">{streamingReasoning}</div>
+              </details>
             )}
             {streamingText && (
               <div
@@ -1235,6 +1458,42 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         </div>
       )}
 
+      {showScrollBottom && (
+        <button
+          type="button"
+          className="whale-scroll-bottom-btn"
+          aria-label={t('回到底部')}
+          onClick={() => {
+            autoFollowRef.current = true
+            setShowScrollBottom(false)
+            if (listRef.current) {
+              listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
+            }
+          }}
+        >
+          <ArrowDown size={15} />
+          <span>{t('回到底部')}</span>
+        </button>
+      )}
+
+      {pendingFiles.length > 0 && (
+        <div className="whale-file-chip-row" aria-label={t('待发送文档')}>
+          {pendingFiles.map((f, idx) => (
+            <span key={`pending-doc-${idx}`} className="whale-file-chip">
+              <FileText size={13} aria-hidden="true" />
+              <span className="whale-file-chip-name">{f.fileName}</span>
+              <button
+                type="button"
+                aria-label={t('移除文档')}
+                onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== idx))}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {pendingImages.length > 0 && (
         <div className="whale-image-preview-row" aria-label={t('待发送图片')}>
           {pendingImages.map((src, idx) => (
@@ -1263,7 +1522,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,video/*"
+          accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.json,.py,.js,.ts,.tsx,.kt,.java,.c,.cpp,.h,.v,.sv,.html,.xml,.yaml,.yml,.log,.zip"
           multiple
           hidden
           onChange={event => {
@@ -1328,7 +1587,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           <button
             type="submit"
             className={`whale-send-btn${sending ? ' is-steer' : ''}`}
-            disabled={input.trim() === '' && pendingImages.length === 0}
+            disabled={input.trim() === '' && pendingImages.length === 0 && pendingFiles.length === 0}
             aria-label={t('发送')}
             title={t('发送')}
           >

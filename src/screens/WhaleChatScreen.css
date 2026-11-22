@@ -1966,3 +1966,223 @@
   0% { transform: scale(0.5); opacity: 0.95; }
   100% { transform: scale(1.45); opacity: 0; }
 }
+
+/* === 代码块顶栏复制 + 宽表格横向滚动 + 思考抽屉 + 悬浮回底 + 文档芯片 + 后台胶囊 === */
+.whale-code-block {
+  margin: 8px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #f4f7fb;
+}
+:root[data-theme='dark'] .whale-code-block {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: #0b1526;
+}
+.whale-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  background: rgba(15, 23, 42, 0.05);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  color: #475569;
+}
+:root[data-theme='dark'] .whale-code-head {
+  background: rgba(148, 163, 184, 0.1);
+  border-bottom-color: rgba(148, 163, 184, 0.16);
+  color: #93c5fd;
+}
+.whale-code-lang {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: lowercase;
+  font-weight: 600;
+}
+.whale-code-copy-btn {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.whale-code-copy-btn:active {
+  background: rgba(56, 189, 248, 0.2);
+}
+.whale-code-block pre {
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow-x: auto;
+  padding: 10px 12px !important;
+  background: transparent !important;
+}
+.whale-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 8px 0;
+  border-radius: 8px;
+}
+.whale-table-wrap table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 0.86rem;
+}
+.whale-table-wrap th,
+.whale-table-wrap td {
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  white-space: nowrap;
+}
+.whale-reasoning-box {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  color: #334155;
+}
+:root[data-theme='dark'] .whale-reasoning-box {
+  background: rgba(15, 29, 50, 0.85);
+  border-color: rgba(96, 165, 250, 0.28);
+  color: #cbd5e1;
+}
+.whale-reasoning-box summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #0284c7;
+  user-select: none;
+}
+:root[data-theme='dark'] .whale-reasoning-box summary {
+  color: #7dd3fc;
+}
+.whale-reasoning-body {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.28);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 12px;
+  opacity: 0.9;
+}
+.whale-scroll-bottom-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 72px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(255, 255, 255, 0.94);
+  color: #0369a1;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+  cursor: pointer;
+}
+:root[data-theme='dark'] .whale-scroll-bottom-btn {
+  background: rgba(20, 33, 54, 0.94);
+  color: #7dd3fc;
+  border-color: rgba(96, 165, 250, 0.4);
+}
+.whale-file-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 10px 2px;
+}
+.whale-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.34);
+  color: var(--ink);
+}
+.whale-file-chip-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.whale-file-chip button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  padding: 0;
+  cursor: pointer;
+}
+.whale-worker-capsule {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 4px 8px 0;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  background: linear-gradient(120deg, rgba(14, 165, 233, 0.14), rgba(99, 102, 241, 0.12));
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: var(--ink);
+}
+.whale-worker-capsule-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #38bdf8;
+  flex-shrink: 0;
+  animation: whaleSvgPulse 1.4s ease-in-out infinite;
+}
+.whale-worker-capsule-text {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.whale-worker-capsule-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: #2f8af5;
+  color: #ffffff;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.whale-user-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  vertical-align: middle;
+  cursor: pointer;
+}
+.whale-receipt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
