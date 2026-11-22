@@ -34,6 +34,7 @@ import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
 import usagiAvatar from '../assets/usagi-avatar.png'
 import { CuteIcon, type CuteIconName } from '../components/CuteIcon'
+import { AgentStatusIcon } from '../components/AgentStatusIcon'
 import { t } from '../i18n'
 import { useInterfaceStyle } from '../theme'
 import type { RuntimeBridge, WhaleNativeChatStep } from '../platform/types'
@@ -870,89 +871,6 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
   }, [streamingPhase, streamingSteps])
   const phaseLabel = phaseMeta.text
 
-  const renderActivitySvg = (category: string) => {
-    if (category === 'code') {
-      return (
-        <svg className="grok-vec-svg is-code" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
-          <rect className="gv-soft" x="2.5" y="4" width="19" height="16" rx="3.5" fill="none" strokeWidth="1.65" />
-          <path className="gv-main" d="M7.5 9.2L10.8 12L7.5 14.8" fill="none" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-          <line className="gv-blink" x1="12.8" y1="14.8" x2="16.8" y2="14.8" strokeWidth="1.9" strokeLinecap="round" />
-        </svg>
-      )
-    }
-    if (category === 'web') {
-      return (
-        <svg className="grok-vec-svg is-web" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
-          <circle className="gv-soft" cx="12" cy="12" r="8.5" fill="none" strokeWidth="1.5" />
-          <circle className="gv-soft" cx="12" cy="12" r="4.5" fill="none" strokeWidth="1.35" />
-          <g className="gv-spin">
-            <path className="gv-main" d="M12 3.5A8.5 8.5 0 0 1 20.5 12" fill="none" strokeWidth="2" strokeLinecap="round" />
-            <circle className="gv-fill" cx="20.5" cy="12" r="1.9" />
-          </g>
-        </svg>
-      )
-    }
-    if (category === 'file') {
-      return (
-        <svg className="grok-vec-svg is-file" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
-          <rect className="gv-soft" x="4.5" y="2.8" width="15" height="18.4" rx="2.8" fill="none" strokeWidth="1.6" />
-          <line className="gv-dash gv-d1" x1="8" y1="8.2" x2="16" y2="8.2" strokeWidth="1.8" strokeLinecap="round" />
-          <line className="gv-dash gv-d2" x1="8" y1="12" x2="16" y2="12" strokeWidth="1.8" strokeLinecap="round" />
-          <line className="gv-dash gv-d3" x1="8" y1="15.8" x2="13.5" y2="15.8" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>
-      )
-    }
-    if (category === 'memory') {
-      return (
-        <svg className="grok-vec-svg is-memory" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
-          <g className="gv-spin-slow">
-            <polygon className="gv-soft" points="12,4.5 18.8,16.5 5.2,16.5" fill="none" strokeWidth="1.4" strokeLinejoin="round" />
-            <circle className="gv-fill gv-p1" cx="12" cy="4.5" r="2.1" />
-            <circle className="gv-fill gv-p2" cx="18.8" cy="16.5" r="2.1" />
-            <circle className="gv-fill gv-p3" cx="5.2" cy="16.5" r="2.1" />
-          </g>
-        </svg>
-      )
-    }
-    if (category === 'phone') {
-      return (
-        <svg className="grok-vec-svg is-phone" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
-          <circle className="gv-ripple gv-r1" cx="12" cy="12" r="8" fill="none" strokeWidth="1.6" />
-          <circle className="gv-ripple gv-r2" cx="12" cy="12" r="8" fill="none" strokeWidth="1.6" />
-          <circle className="gv-fill" cx="12" cy="12" r="2.4" />
-        </svg>
-      )
-    }
-    if (category === 'worker') {
-      return (
-        <svg className="grok-vec-svg is-worker" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
-          <g className="gv-gear-a">
-            <circle className="gv-main" cx="9.2" cy="9.8" r="3.4" fill="none" strokeWidth="1.7" />
-            <path className="gv-main" d="M9.2 4.6V6.2M9.2 13.4V15M4 9.8H5.6M12.8 9.8H14.4" strokeWidth="1.7" strokeLinecap="round" />
-          </g>
-          <g className="gv-gear-b">
-            <circle className="gv-main" cx="15.8" cy="15.4" r="2.7" fill="none" strokeWidth="1.65" />
-            <path className="gv-main" d="M15.8 11.2V12.5M15.8 18.3V19.6M11.6 15.4H12.9M18.7 15.4H20" strokeWidth="1.65" strokeLinecap="round" />
-          </g>
-        </svg>
-      )
-    }
-    // Grok Bot 同款：丝滑旋转呼吸六瓣星花
-    return (
-      <svg className="grok-vec-svg is-thinking" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
-        <g className="gv-spin">
-          <line className="gv-main gv-spoke-1" x1="12" y1="3.2" x2="12" y2="7.8" strokeWidth="2.1" strokeLinecap="round" />
-          <line className="gv-main gv-spoke-2" x1="12" y1="16.2" x2="12" y2="20.8" strokeWidth="2.1" strokeLinecap="round" />
-          <line className="gv-main gv-spoke-3" x1="4.4" y1="7.6" x2="8.4" y2="9.9" strokeWidth="2.1" strokeLinecap="round" />
-          <line className="gv-main gv-spoke-1" x1="15.6" y1="14.1" x2="19.6" y2="16.4" strokeWidth="2.1" strokeLinecap="round" />
-          <line className="gv-main gv-spoke-2" x1="19.6" y1="7.6" x2="15.6" y2="9.9" strokeWidth="2.1" strokeLinecap="round" />
-          <line className="gv-main gv-spoke-3" x1="8.4" y1="14.1" x2="4.4" y2="16.4" strokeWidth="2.1" strokeLinecap="round" />
-        </g>
-        <circle className="gv-fill gv-core" cx="12" cy="12" r="2.1" />
-      </svg>
-    )
-  }
-
   const renderReceiptIcon = (kind: ActionReceipt['kind']) => {
     if (style !== 'simple') {
       if (kind === 'secretary') return <CuteIcon name="notifications" size={18} />
@@ -1358,7 +1276,7 @@ export function WhaleChatScreen({ bridge, onNavigate }: WhaleChatScreenProps) {
           <div className="whale-msg whale-msg-assistant" role="status">
             {!streamingText && (
               <div className="whale-grok-status-row" title={phaseLabel}>
-                <span className="whale-grok-status-icon" aria-hidden="true">{renderActivitySvg(phaseMeta.category)}</span>
+                <span className="whale-grok-status-icon" aria-hidden="true"><AgentStatusIcon style={style} category={streamingReasoning && !streamingText ? 'reasoning' : phaseMeta.category} /></span>
                 <span className="whale-grok-status-label">{phaseLabel}</span>
                 {waitElapsedSec > 0 && <span className="whale-grok-status-sec">{waitElapsedSec}s</span>}
               </div>

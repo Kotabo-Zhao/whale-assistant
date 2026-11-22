@@ -965,6 +965,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val act = arg("action").ifBlank { arg("target") }.take(18)
                 "phone" to if (act.isNotEmpty()) "屏控操作：$act" else "读取屏幕状态"
             }
+            fnName.startsWith("whale_secretary") || fnName.startsWith("whale_calendar") || fnName.startsWith("whale_todo") || fnName.startsWith("whale_goal") -> {
+                val t = arg("title").ifBlank { arg("query") }.take(18)
+                "tasks" to if (t.isNotEmpty()) "处理事项「$t」" else "查询与整理日程待办"
+            }
             fnName.startsWith("whale_worker") -> {
                 val t = arg("title").ifBlank { arg("key") }.take(18)
                 "worker" to if (t.isNotEmpty()) "调度后台任务「$t」" else "同步后台任务状态"

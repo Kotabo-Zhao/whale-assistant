@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.view.View
 import android.view.animation.LinearInterpolator
@@ -12,12 +13,18 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Grok Bot 风格极简微光矢量动画状态指示器（60 FPS 原生 Canvas 几何动效）：
- * 7 种真实行为状态各具独立矢量动作（星花旋转、终端光标、声呐雷达、文档流光、星图脉冲、触控波纹、双齿轮咬合）。
+ * 桌宠端 3 套主题 × 10 种状态独立极简微光矢量动画（60 FPS 原生 Canvas）：
+ * - usagi（乌萨奇）：暖金长兔耳/兔耳气泡/讨伐棒星芒/金星/小旗
+ * - cute（鲸鱼娘）：海蓝鲸尾水泡/双层海浪/航海罗盘/珍珠光晕
+ * - simple（极简）：Grok 同款六瓣星花/菱形棱镜/声呐雷达/双齿轮
  */
 internal class WhaleVectorStatusView(context: Context) : View(context) {
-    private val isUsagi = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") == "usagi"
-    private val baseColor = if (isUsagi) Color.parseColor("#F59E0B") else Color.parseColor("#2DD4BF")
+    private val stylePref = context.getSharedPreferences("whale-interface", 0).getString("style", "cute") ?: "cute"
+    private val baseColor = when (stylePref) {
+        "usagi" -> Color.parseColor("#F59E0B")
+        "cute" -> Color.parseColor("#38BDF8")
+        else -> Color.parseColor("#2DD4BF")
+    }
 
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -36,6 +43,7 @@ internal class WhaleVectorStatusView(context: Context) : View(context) {
         color = baseColor
     }
     private val rect = RectF()
+    private val path = Path()
     private var t = 0f
     private var category = "thinking"
 
@@ -76,31 +84,35 @@ internal class WhaleVectorStatusView(context: Context) : View(context) {
         softPaint.strokeWidth = sw * 0.85f
         val ang = t * 360f
         val rad = t * Math.PI * 2.0
+        val rock = (sin(rad) * 8.0).toFloat()
 
         when (category) {
             "code" -> {
-                // 极简终端框 + 动态闪烁光标
-                rect.set(cx - r, cy - r * 0.85f, cx + r, cy + r * 0.85f)
+                rect.set(cx - r, cy - r * 0.82f, cx + r, cy + r * 0.82f)
                 canvas.drawRoundRect(rect, s * 0.14f, s * 0.14f, softPaint)
                 val px = cx - r * 0.45f
                 canvas.drawLine(px, cy - r * 0.28f, px + r * 0.34f, cy, strokePaint)
                 canvas.drawLine(px + r * 0.34f, cy, px, cy + r * 0.28f, strokePaint)
-                strokePaint.alpha = (110 + 145 * (0.5 + 0.5 * sin(rad * 2.0))).toInt()
+                strokePaint.alpha = (100 + 155 * (0.5 + 0.5 * sin(rad * 2.0))).toInt()
                 canvas.drawLine(cx + r * 0.08f, cy + r * 0.28f, cx + r * 0.52f, cy + r * 0.28f, strokePaint)
                 strokePaint.alpha = 255
             }
             "web" -> {
-                // 极简声呐雷达圈 + 旋转扫频弧
                 canvas.drawCircle(cx, cy, r, softPaint)
-                canvas.drawCircle(cx, cy, r * 0.52f, softPaint)
-                rect.set(cx - r, cy - r, cx + r, cy + r)
-                canvas.drawArc(rect, ang, 100f, false, strokePaint)
-                val ox = cx + (cos(rad) * r).toFloat()
-                val oy = cy + (sin(rad) * r).toFloat()
-                canvas.drawCircle(ox, oy, sw * 0.9f, fillPaint)
+                if (stylePref == "cute") {
+                    canvas.save(); canvas.rotate(ang, cx, cy)
+                    path.reset()
+                    path.moveTo(cx, cy - r * 0.78f); path.lineTo(cx + r * 0.28f, cy)
+                    path.lineTo(cx, cy + r * 0.78f); path.lineTo(cx - r * 0.28f, cy); path.close()
+                    canvas.drawPath(path, strokePaint)
+                    canvas.restore()
+                } else {
+                    rect.set(cx - r, cy - r, cx + r, cy + r)
+                    canvas.drawArc(rect, ang, 100f, false, strokePaint)
+                    canvas.drawCircle(cx + (cos(rad) * r).toFloat(), cy + (sin(rad) * r).toFloat(), sw * 0.9f, fillPaint)
+                }
             }
             "file" -> {
-                // 极简文档轮廓 + 流动书写线
                 rect.set(cx - r * 0.78f, cy - r, cx + r * 0.78f, cy + r)
                 canvas.drawRoundRect(rect, s * 0.12f, s * 0.12f, softPaint)
                 for (i in 0..2) {
@@ -110,8 +122,15 @@ internal class WhaleVectorStatusView(context: Context) : View(context) {
                     canvas.drawLine(cx - r * 0.42f, y, cx - r * 0.42f + len, y, strokePaint)
                 }
             }
+            "tasks" -> {
+                canvas.drawCircle(cx, cy, r * 0.92f, softPaint)
+                val pulse = 0.65f + 0.35f * sin(rad).toFloat()
+                strokePaint.alpha = (160 + 95 * pulse).toInt().coerceIn(0, 255)
+                canvas.drawLine(cx - r * 0.42f, cy + r * 0.02f, cx - r * 0.1f, cy + r * 0.36f, strokePaint)
+                canvas.drawLine(cx - r * 0.1f, cy + r * 0.36f, cx + r * 0.46f, cy - r * 0.32f, strokePaint)
+                strokePaint.alpha = 255
+            }
             "memory" -> {
-                // 极简三节点星图 + 脉冲光点
                 val pts = Array(3) { i ->
                     val a = rad * 0.5 + i * (Math.PI * 2.0 / 3.0)
                     Pair(cx + (cos(a) * r * 0.82f).toFloat(), cy + (sin(a) * r * 0.82f).toFloat())
@@ -126,7 +145,6 @@ internal class WhaleVectorStatusView(context: Context) : View(context) {
                 }
             }
             "phone" -> {
-                // 极简触控扩散波纹
                 for (i in 0..1) {
                     val prog = (t + i * 0.5f) % 1f
                     strokePaint.alpha = ((1f - prog) * 240).toInt().coerceIn(0, 255)
@@ -136,15 +154,69 @@ internal class WhaleVectorStatusView(context: Context) : View(context) {
                 canvas.drawCircle(cx, cy, sw * 0.9f, fillPaint)
             }
             "worker" -> {
-                // 极简双齿轮反旋咬合
                 drawSpokes(canvas, cx - r * 0.34f, cy - r * 0.22f, r * 0.48f, ang, 6)
                 drawSpokes(canvas, cx + r * 0.36f, cy + r * 0.26f, r * 0.38f, -ang * 1.25f, 6)
             }
+            "analyzing", "reasoning" -> {
+                if (stylePref == "usagi") {
+                    // 乌萨奇兔耳气泡 + 跳动三点
+                    rect.set(cx - r * 0.9f, cy - r * 0.45f, cx + r * 0.9f, cy + r * 0.78f)
+                    canvas.drawRoundRect(rect, r * 0.45f, r * 0.45f, strokePaint)
+                    for (i in -1..1) {
+                        val lift = sin(rad * 2.0 + i * 1.1).toFloat() * r * 0.14f
+                        canvas.drawCircle(cx + i * r * 0.4f, cy + r * 0.16f - lift, sw * 0.75f, fillPaint)
+                    }
+                } else if (stylePref == "cute") {
+                    // 鲸鱼娘双层海浪波纹
+                    for (row in 0..1) {
+                        val baseY = cy + (if (row == 0) -r * 0.28f else r * 0.32f)
+                        path.reset()
+                        for (k in 0..10) {
+                            val fx = cx - r + (2f * r * k / 10f)
+                            val fy = baseY + sin(rad * 1.5 + k * 0.75 + row * 1.5).toFloat() * r * 0.22f
+                            if (k == 0) path.moveTo(fx, fy) else path.lineTo(fx, fy)
+                        }
+                        canvas.drawPath(path, if (row == 0) strokePaint else softPaint)
+                    }
+                } else {
+                    // 极简菱形棱镜旋转
+                    canvas.save(); canvas.rotate(ang * 0.7f, cx, cy)
+                    path.reset()
+                    path.moveTo(cx, cy - r); path.lineTo(cx + r, cy); path.lineTo(cx, cy + r); path.lineTo(cx - r, cy); path.close()
+                    canvas.drawPath(path, strokePaint)
+                    canvas.restore()
+                }
+            }
             else -> {
-                // Grok Bot 同款：丝滑呼吸旋转六瓣星花
-                drawSpokes(canvas, cx, cy, r, ang * 0.85f, 6)
-                val pulse = 0.78f + 0.3f * sin(rad * 2.0).toFloat()
-                canvas.drawCircle(cx, cy, sw * 0.95f * pulse, fillPaint)
+                if (stylePref == "usagi") {
+                    // 乌萨奇长兔耳轻晃 + 顶部小星点
+                    canvas.save(); canvas.rotate(rock, cx, cy + r * 0.3f)
+                    rect.set(cx - r * 0.46f, cy - r * 0.98f, cx - r * 0.08f, cy + r * 0.15f)
+                    canvas.drawRoundRect(rect, r * 0.22f, r * 0.22f, strokePaint)
+                    rect.set(cx + r * 0.08f, cy - r * 0.98f, cx + r * 0.46f, cy + r * 0.15f)
+                    canvas.drawRoundRect(rect, r * 0.22f, r * 0.22f, strokePaint)
+                    rect.set(cx - r * 0.75f, cy - r * 0.08f, cx + r * 0.75f, cy + r * 0.92f)
+                    canvas.drawArc(rect, 0f, 180f, false, softPaint)
+                    canvas.restore()
+                } else if (stylePref == "cute") {
+                    // 鲸鱼娘轻摆尾鳍 + 冒升小水泡
+                    canvas.save(); canvas.rotate(rock, cx, cy + r * 0.4f)
+                    path.reset()
+                    path.moveTo(cx, cy + r * 0.75f)
+                    path.lineTo(cx, cy)
+                    path.quadTo(cx - r * 0.65f, cy - r * 0.12f, cx - r * 0.85f, cy - r * 0.68f)
+                    path.quadTo(cx - r * 0.25f, cy - r * 0.55f, cx, cy - r * 0.18f)
+                    path.quadTo(cx + r * 0.25f, cy - r * 0.55f, cx + r * 0.85f, cy - r * 0.68f)
+                    path.quadTo(cx + r * 0.65f, cy - r * 0.12f, cx, cy)
+                    canvas.drawPath(path, strokePaint)
+                    canvas.restore()
+                    val by = ((t * 1.4f) % 1f) * r * 0.5f
+                    canvas.drawCircle(cx - r * 0.55f, cy + r * 0.55f - by, sw * 0.65f, fillPaint)
+                } else {
+                    drawSpokes(canvas, cx, cy, r, ang * 0.85f, 6)
+                    val pulse = 0.78f + 0.3f * sin(rad * 2.0).toFloat()
+                    canvas.drawCircle(cx, cy, sw * 0.95f * pulse, fillPaint)
+                }
             }
         }
     }
