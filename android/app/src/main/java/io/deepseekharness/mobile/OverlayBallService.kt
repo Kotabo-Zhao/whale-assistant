@@ -569,7 +569,17 @@ class OverlayBallService : Service() {
         }
     }
 
+    private var radialWheelView: View? = null
+
+    private fun dismissRadialWheel() {
+        radialWheelView?.let { v ->
+            runCatching { windowManager.removeViewImmediate(v) }
+        }
+        radialWheelView = null
+    }
+
     override fun onDestroy() {
+        dismissRadialWheel()
         hideRightEdgeDropDock()
         io.deepseekharness.mobile.companion.WhaleAutoMemoryObserver.stopScreenshotObserver(this)
         WorkerDashboardStore.unsubscribeAccepted(taskAccepted)
@@ -1438,6 +1448,203 @@ class OverlayBallService : Service() {
         }
     }
 
+    private fun saveExtractedBitmapToGallery(bmp: android.graphics.Bitmap): Boolean = runCatching {
+        val filename = "Whale_${System.currentTimeMillis()}.jpg"
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, filename)
+                put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "${android.os.Environment.DIRECTORY_PICTURES}/WhaleAssistant")
+                put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: return false
+            contentResolver.openOutputStream(uri)?.use { out ->
+                bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, out)
+            } ?: return false
+            values.clear()
+            values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0)
+            contentResolver.update(uri, values, null, null)
+            true
+        } else {
+            val dir = java.io.File(getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "WhaleAssistant").apply { mkdirs() }
+            java.io.File(dir, filename).outputStream().use { out ->
+                bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, out)
+            }
+            true
+        }
+    }.getOrDefault(false)
+
+    /** 拖宠即问轮盘菜单（Radial Action Wheel）：自动区分完整图片/链接/文字并弹出主题原生 6 键矢量图标轮盘。 */
+    private fun showDragToAskRadialWheel(
+        dropX: Int,
+        dropY: Int,
+        target: DeepSeekAccessibilityService.DragPickTarget?,
+        capturedBitmap: android.graphics.Bitmap?,
+    ) {
+        dismissRadialWheel()
+        val ui = io.deepseekharness.mobile.companion.PetUi(this)
+        val kind = when {
+            target?.targetKind == "link" -> "link"
+            target?.targetKind == "image" -> "image"
+            target == null && capturedBitmap != null && !capturedBitmap.isRecycled -> "image"
+            else -> "text"
+        }
+        val appLabel = target?.packageName?.let { pkg ->
+            runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrNull()
+        }?.takeIf(String::isNotBlank) ?: target?.packageName?.substringAfterLast('.') ?: "屏幕识图"
+
+        val hasBmp = capturedBitmap != null && !capturedBitmap.isRecycled
+        val centerTitle = when (kind) {
+            "image" -> if (target?.imageBounds != null) "完整图片" else "画面识图"
+            "link" -> "提取链接"
+            else -> appLabel.take(6)
+        }
+        val centerSubtitle = when (kind) {
+            "image" -> if (hasBmp) "${capturedBitmap!!.width}×${capturedBitmap.height}" else appLabel.take(10)
+            "link" -> {
+                val url = target?.extractedUrl.orEmpty()
+                runCatching { java.net.URI(url).host?.removePrefix("www.") }.getOrNull()
+                    ?.takeIf(String::isNotBlank)
+                    ?: target?.linkTitle?.take(10)
+                    ?: "链接卡片"
+            }
+            else -> target?.bestHitText?.take(10)?.ifBlank { "指中文字" } ?: "指中内容"
+        }
+
+        val Icon = io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind::class.java
+        val actions = when (kind) {
+            "image" -> listOf(
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("ask_image", "识图解读", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.SPARKLE, primary = true),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("search_image", "以图搜源", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.IMAGE_SEARCH),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("ocr_image", "提取文字", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.OCR),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("save_image", "保存图片", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.SAVE_IMAGE),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("free_ask", "自由提问", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.ASK_FREE),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("close", "关闭", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.CLOSE, muted = true),
+            )
+            "link" -> listOf(
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("sum_link", "总结链接", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.LINK_SUMMARY, primary = true),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("copy_link", "复制链接", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.COPY_LINK),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("verify_link", "深度查证", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.VERIFY),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("save_know", "存资料库", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.BOOKMARK),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("free_ask", "自由提问", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.ASK_FREE),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("close", "关闭", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.CLOSE, muted = true),
+            )
+            else -> listOf(
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("explain", "解释总结", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.SPARKLE, primary = true),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("translate", "精准翻译", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.TRANSLATE),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("verify", "核实真伪", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.VERIFY),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("save_mem", "存记忆", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.BOOKMARK),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("free_ask", "自由提问", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.ASK_FREE),
+                io.deepseekharness.mobile.companion.RadialDragAskWheelView.WheelAction("close", "关闭", io.deepseekharness.mobile.companion.RadialDragAskWheelView.IconKind.CLOSE, muted = true),
+            )
+        }
+        @Suppress("UNUSED_VARIABLE")
+        val _keepIconRef = Icon
+
+        fun encodeImage(): String? = runCatching {
+            val bmp = capturedBitmap ?: return null
+            if (bmp.isRecycled) return null
+            val baos = java.io.ByteArrayOutputStream()
+            bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 86, baos)
+            "data:image/jpeg;base64," + android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.NO_WRAP)
+        }.getOrNull()
+
+        fun sendToChat(question: String, attachImage: Boolean = true) {
+            val imgUrl = if (attachImage) encodeImage() else null
+            val urlLine = target?.extractedUrl?.let { "
+提取链接：$it" }.orEmpty()
+            val ctxLine = target?.mergedContext?.takeIf(String::isNotBlank)?.let { "
+$it" }.orEmpty()
+            val prompt = "$question
+
+来源应用：$appLabel$urlLine$ctxLine"
+            runCatching {
+                val payload = org.json.JSONObject().put("action", "ask").put("prompt", prompt)
+                if (imgUrl != null) payload.put("image", imgUrl)
+                io.deepseekharness.mobile.companion.WhaleAppControlBus.emit(payload)
+                startActivity(
+                    Intent(this, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                )
+            }
+        }
+
+        val wheel = io.deepseekharness.mobile.companion.RadialDragAskWheelView(
+            context = this,
+            ui = ui,
+            anchorX = dropX.toFloat(),
+            anchorY = dropY.toFloat(),
+            centerTitle = centerTitle,
+            centerSubtitle = centerSubtitle,
+            previewBitmap = if (kind == "image" && hasBmp) capturedBitmap else null,
+            actions = actions,
+            onSelect = { act ->
+                dismissRadialWheel()
+                when (act.id) {
+                    "close" -> Unit
+                    "free_ask" -> {
+                        val preHit = target?.let { it.packageName to it.mergedContext }
+                        showDragToAskMenu(dropX, dropY, preHit, capturedBitmap)
+                    }
+                    "save_image" -> {
+                        val ok = if (hasBmp) saveExtractedBitmapToGallery(capturedBitmap!!) else false
+                        android.widget.Toast.makeText(
+                            this,
+                            if (ok) "已保存完整图片到相册 Pictures/WhaleAssistant" else "暂未捕获到可保存的图片，请确认无障碍已开启",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                    "copy_link" -> {
+                        val toCopy = target?.extractedUrl?.takeIf(String::isNotBlank)
+                            ?: target?.linkTitle?.takeIf(String::isNotBlank)
+                            ?: target?.bestHitText.orEmpty()
+                        if (toCopy.isNotBlank()) {
+                            val cm = getSystemService(android.content.ClipboardManager::class.java)
+                            cm?.setPrimaryClip(android.content.ClipData.newPlainText("WhaleLink", toCopy))
+                            android.widget.Toast.makeText(this, "已复制：${toCopy.take(48)}", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(this, "未检测到明文链接，可点「总结链接」联网反查", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    "ask_image" -> sendToChat("请详细解读这张完整图片的内容、细节与核心信息，并给出实用建议：", attachImage = true)
+                    "search_image" -> sendToChat("请调用 whale_image_search 对这张完整图片进行以图搜图/搜同款/找原图出处，并把匹配结果与链接整理给我：", attachImage = true)
+                    "ocr_image" -> sendToChat("请精准提取这张完整图片中的全部文字，按原排版整理输出，并概括重点：", attachImage = true)
+                    "sum_link" -> sendToChat("请优先抓取并深度总结这个链接或卡片的核心内容与关键要点（若无明文 URL 则用 whale_web_search 按标题反查原文）：", attachImage = hasBmp)
+                    "verify_link" -> sendToChat("请联网核查这个链接/文章提到的观点、数据与出处真伪，给出客观查证结论：", attachImage = hasBmp)
+                    "save_know" -> sendToChat("请整理这段链接/卡片的标题、网址与核心要点，并调用 whale_knowledge_save 帮我存入本地资料库：", attachImage = hasBmp)
+                    "explain" -> sendToChat("请用通俗清晰的话帮我解释并总结指中的这段内容：", attachImage = hasBmp)
+                    "translate" -> sendToChat("请将指中的内容精准自然地翻译成中文（若已是中文则译为地道英文），保留专有名词：", attachImage = false)
+                    "verify" -> sendToChat("请联网核实指中这段信息的真实性与最新进展，指出可能的误区：", attachImage = hasBmp)
+                    "save_mem" -> sendToChat("请提炼指中内容的重点，并调用 whale_memory_save 帮我记住：", attachImage = false)
+                }
+            },
+            onDismiss = { dismissRadialWheel() },
+        )
+
+        val overlayType = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            overlayType,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        )
+        runCatching {
+            windowManager.addView(wheel, params)
+            radialWheelView = wheel
+        }.onFailure {
+            // 极端系统限制下回退到原追问卡片
+            val preHit = target?.let { it.packageName to it.mergedContext }
+            showDragToAskMenu(dropX, dropY, preHit, capturedBitmap)
+        }
+    }
+
     /** 拖宠即问（Drag-to-Ask）：主题原生悬浮追问卡片，支持自由输入任意问题与横向快捷胶囊。 */
     private fun showDragToAskMenu(
         dropX: Int,
@@ -1889,7 +2096,7 @@ class OverlayBallService : Service() {
                     if (triggerDragAsk) {
                         // 从 WindowManager 层级彻底透明隐藏桌宠并等待 SurfaceFlinger 提交两帧（140ms），确保截屏零桌宠遮挡
                         val host = ballView
-                        val preHit = DeepSeekAccessibilityService.extractContextAt(dropX, dropY)
+                        val preTarget = DeepSeekAccessibilityService.extractDragTargetAt(dropX, dropY)
                         if (host != null) {
                             host.alpha = 0f
                             host.visibility = View.INVISIBLE
@@ -1897,7 +2104,7 @@ class OverlayBallService : Service() {
                             runCatching { windowManager.updateViewLayout(host, layoutParams) }
                         }
                         hintHandler.postDelayed({
-                            DeepSeekAccessibilityService.captureVisualAt(dropX, dropY) { bmp ->
+                            DeepSeekAccessibilityService.captureVisualAt(dropX, dropY, exactBounds = preTarget?.imageBounds) { bmp ->
                                 hintHandler.post {
                                     if (host != null && ballView === host) {
                                         layoutParams.alpha = 1f
@@ -1905,7 +2112,7 @@ class OverlayBallService : Service() {
                                         host.visibility = View.VISIBLE
                                         runCatching { windowManager.updateViewLayout(host, layoutParams) }
                                     }
-                                    showDragToAskMenu(dropX, dropY, preHit, bmp)
+                                    showDragToAskRadialWheel(dropX, dropY, preTarget, bmp)
                                 }
                             }
                         }, 140L)

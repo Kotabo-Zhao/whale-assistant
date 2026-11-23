@@ -1963,17 +1963,34 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         )
         private val serviceRef = AtomicReference<DeepSeekAccessibilityService?>(null)
 
+        data class DragPickTarget(
+            val packageName: String,
+            val targetKind: String, // "image" | "link" | "text"
+            val mergedContext: String,
+            val bestHitText: String,
+            val extractedUrl: String? = null,
+            val linkTitle: String? = null,
+            val imageBounds: android.graphics.Rect? = null,
+        )
+
+        /** 兼容旧调用：返回 (packageName, mergedContext)。 */
+        fun extractContextAt(screenX: Int, screenY: Int): Pair<String, String>? =
+            extractDragTargetAt(screenX, screenY)?.let { it.packageName to it.mergedContext }
+
         /**
-         * 拖宠即问（Drag-to-Ask）：按屏幕坐标零 Token 提取前景窗口中落点命中的节点文字及周边上下文。
-         * 自动排除本应用、系统桌面与输入法窗口，返回 Pair(pkg, text) 或 null（无障碍未开启/纯图片画面时走视觉兜底）。
+         * 拖宠即问增强拾取（Drag-to-Ask v2）：
+         * 1. 拖到图片上：精确定位 ImageView / PhotoView / DraweeView 等媒体节点的完整屏幕边界 [imageBounds]，供后续边到边提取整张完整图片；
+         * 2. 拖到链接/链接卡片/浏览器网页上：深度提取节点、卡片父容器、浏览器地址栏与剪贴板中的完整链接与标题；
+         * 3. 拖到普通文字上：提取指中段落与周边上下文。
          */
-        fun extractContextAt(screenX: Int, screenY: Int): Pair<String, String>? = runCatching {
+        fun extractDragTargetAt(screenX: Int, screenY: Int): DragPickTarget? = runCatching {
             val svc = serviceRef.get() ?: return null
+            val dm = svc.resources.displayMetrics
+            val screenArea = dm.widthPixels.toLong() * dm.heightPixels.toLong()
             fun isIgnoredPkg(pkg: String): Boolean =
                 pkg.isBlank() || pkg == svc.packageName || pkg.contains("launcher", true) ||
                     pkg.contains("inputmethod", true) || pkg == "com.android.systemui"
 
-            // 优先从多窗口列表找底层真实前台应用窗口（避免拖动悬浮窗时 rootInActiveWindow 指向本应用自身）
             val appRoot: AccessibilityNodeInfo? = runCatching {
                 svc.windows.orEmpty()
                     .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
@@ -1990,71 +2007,118 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             var bestHit = ""
             var bestNode: AccessibilityNodeInfo? = null
             var bestArea = Long.MAX_VALUE
+            var bestImageBounds: android.graphics.Rect? = null
+            var bestImageArea = Long.MAX_VALUE
             val nearby = LinkedHashSet<String>()
-            val urls = LinkedHashSet<String>()
-            val urlRegex = Regex("""https?://[^\s\u4e00-\u9fa5"'<>]+""", RegexOption.IGNORE_CASE)
+            val onScreenUrls = LinkedHashSet<String>()
+            val clipboardUrls = LinkedHashSet<String>()
+
+            val fullUrlRegex = Regex("""https?://[^\s一-龥"'<>]+""", RegexOption.IGNORE_CASE)
+            val bareDomainRegex = Regex(
+                """(?i)((?:www\.|mp\.weixin\.qq\.com|xhslink\.com|www\.xiaohongshu\.com|xiaohongshu\.com|b23\.tv|www\.bilibili\.com|bilibili\.com|v\.douyin\.com|www\.douyin\.com|zhuanlan\.zhihu\.com|www\.zhihu\.com|m\.weibo\.cn|weibo\.com|github\.com|m\.tb\.cn|item\.jd\.com)/[^\s一-龥"'<>]+)""",
+            )
+            val bvRegex = Regex("""(BV1[0-9A-Za-z]{9})""")
             val rect = android.graphics.Rect()
             var visited = 0
 
-            fun collectUrls(text: String) {
-                urlRegex.findAll(text).forEach { m ->
-                    if (urls.size < 4) urls.add(m.value.take(240))
+            fun normalizeAndCollectUrls(text: String, target: MutableSet<String>) {
+                if (text.isBlank()) return
+                fullUrlRegex.findAll(text).forEach { m ->
+                    if (target.size < 4) target.add(m.value.trimEnd('.', ',', ')', ']', ';').take(320))
+                }
+                bareDomainRegex.findAll(text).forEach { m ->
+                    val raw = m.groupValues[1].trimEnd('.', ',', ')', ']', ';')
+                    if (raw.isNotEmpty() && target.none { it.contains(raw, ignoreCase = true) } && target.size < 4) {
+                        target.add("https://$raw".take(320))
+                    }
+                }
+                bvRegex.findAll(text).forEach { m ->
+                    val bv = m.groupValues[1]
+                    val url = "https://www.bilibili.com/video/$bv"
+                    if (target.none { it.contains(bv) } && target.size < 4) target.add(url)
                 }
             }
 
+            fun isImageLikeClass(cls: String): Boolean {
+                val c = cls.lowercase()
+                return c.contains("imageview") || c.contains("photoview") || c.contains("draweeview") ||
+                    c.contains("subsamplingscaleimageview") || c.contains("picture") || c.contains("media") ||
+                    c.contains("textureview") || c.contains("surfaceview") || c.contains("playerview") ||
+                    c.contains("videoview") || c.endsWith(".image")
+            }
+
             fun walk(node: AccessibilityNodeInfo?, depth: Int) {
-                if (node == null || depth > 36 || visited > 650) return
+                if (node == null || depth > 38 || visited > 750) return
                 visited++
+                val cls = node.className?.toString().orEmpty()
+                val resId = node.viewIdResourceName?.lowercase().orEmpty()
                 val txt = node.text?.toString()?.trim().orEmpty()
                 val desc = node.contentDescription?.toString()?.trim().orEmpty()
+                val hint = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) node.hintText?.toString()?.trim().orEmpty() else ""
+                val tooltip = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) node.tooltipText?.toString()?.trim().orEmpty() else ""
+
+                // 检测浏览器/内置 WebView 地址栏 URL
+                if (resId.contains("url_bar") || resId.contains("location_bar") || resId.contains("address") || resId.contains("search_box_text")) {
+                    normalizeAndCollectUrls(txt, onScreenUrls)
+                }
+
                 val label = when {
                     txt.length >= 2 && desc.length >= 2 && txt != desc -> "$txt（$desc）"
                     txt.length >= 2 -> txt
                     desc.length >= 2 -> desc
+                    tooltip.length >= 2 -> tooltip
                     else -> ""
                 }
-                if (label.isNotEmpty()) {
-                    collectUrls(label)
-                    node.getBoundsInScreen(rect)
-                    if (!rect.isEmpty) {
-                        if (rect.contains(screenX, screenY)) {
-                            val area = rect.width().toLong() * rect.height().toLong()
-                            if (area in 1L..bestArea) {
-                                bestArea = area
-                                bestHit = label.take(360)
-                                bestNode = node
-                            }
-                        } else if (nearby.size < 14) {
-                            val cx = rect.centerX()
-                            val cy = rect.centerY()
-                            val dx = (cx - screenX).toLong()
-                            val dy = (cy - screenY).toLong()
-                            if (dx * dx + dy * dy <= 420L * 420L) {
-                                nearby.add(label.take(180))
-                            }
-                        }
+                if (label.isNotEmpty()) normalizeAndCollectUrls(label, onScreenUrls)
+                if (hint.isNotEmpty()) normalizeAndCollectUrls(hint, onScreenUrls)
+
+                node.getBoundsInScreen(rect)
+                if (!rect.isEmpty && rect.contains(screenX, screenY)) {
+                    val w = rect.width()
+                    val h = rect.height()
+                    val area = w.toLong() * h.toLong()
+                    // 精确捕捉落点命中的完整图片/媒体节点边界（排除过小图标与整屏根布局）
+                    val plausibleMediaRect = w >= 120 && h >= 120 && area < (screenArea * 0.94).toLong()
+                    val looksLikePhoto = isImageLikeClass(cls) ||
+                        (txt.isEmpty() && (desc.contains("图片") || desc.contains("照片") || desc.contains("视频") || desc.contains("photo", true) || desc.contains("image", true)))
+                    if (plausibleMediaRect && looksLikePhoto && area in 1L..bestImageArea) {
+                        bestImageArea = area
+                        bestImageBounds = android.graphics.Rect(rect)
+                    }
+                    if (label.isNotEmpty() && area in 1L..bestArea) {
+                        bestArea = area
+                        bestHit = label.take(360)
+                        bestNode = node
+                    }
+                } else if (!rect.isEmpty && label.isNotEmpty() && nearby.size < 14) {
+                    val dx = (rect.centerX() - screenX).toLong()
+                    val dy = (rect.centerY() - screenY).toLong()
+                    if (dx * dx + dy * dy <= 420L * 420L) {
+                        nearby.add(label.take(180))
                     }
                 }
+
                 for (i in 0 until node.childCount) {
                     walk(node.getChild(i), depth + 1)
                 }
             }
             walk(root, 0)
-            // 若命中微信链接卡片或小红书图文卡片，向上追溯 2~3 层父容器把整张卡片的标题/摘要/来源收齐
+
+            // 向上追溯 3~4 层卡片容器，收齐微信链接卡片/小红书笔记卡片的标题、摘要与链接
             val cardTexts = LinkedHashSet<String>()
             var ancestor = bestNode?.parent
             var up = 0
-            while (ancestor != null && up < 3) {
+            while (ancestor != null && up < 4) {
                 val pRect = android.graphics.Rect()
                 ancestor.getBoundsInScreen(pRect)
-                if (pRect.height() in 60..900 && pRect.width() >= 180) {
+                if (pRect.height() in 60..980 && pRect.width() >= 180) {
                     fun collectCard(n: AccessibilityNodeInfo?, d: Int) {
                         if (n == null || d > 6 || cardTexts.size >= 10) return
                         val t1 = n.text?.toString()?.trim().orEmpty()
                         val d1 = n.contentDescription?.toString()?.trim().orEmpty()
                         val s1 = t1.ifBlank { d1 }
                         if (s1.length >= 2) {
-                            collectUrls(s1)
+                            normalizeAndCollectUrls(s1, onScreenUrls)
                             cardTexts.add(s1.take(220))
                         }
                         for (ci in 0 until n.childCount) collectCard(n.getChild(ci), d + 1)
@@ -2065,37 +2129,81 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                 ancestor = ancestor.parent
                 up++
             }
-            // 顺手检查剪贴板中是否有用户刚复制的微信/小红书/B站链接
+
+            // 仅在屏幕上未直接提取到 URL 时，检查剪贴板近期链接作为辅助来源
             runCatching {
                 val cm = svc.getSystemService(android.content.ClipboardManager::class.java)
                 val clipTxt = cm?.primaryClip?.getItemAt(0)?.coerceToText(svc)?.toString().orEmpty()
-                if (clipTxt.isNotBlank()) collectUrls(clipTxt)
+                if (clipTxt.isNotBlank()) normalizeAndCollectUrls(clipTxt, clipboardUrls)
             }
+
+            val primaryUrl = onScreenUrls.firstOrNull() ?: clipboardUrls.firstOrNull()
+            val allUrls = LinkedHashSet<String>().apply {
+                addAll(onScreenUrls)
+                if (isEmpty()) addAll(clipboardUrls)
+            }
+            val linkCardCue = cardTexts.size >= 2 && (
+                bestHit.contains("链接") || bestHit.contains("公众号") || bestHit.contains("小程序") ||
+                    cardTexts.any { it.contains("小红书") || it.contains("微信公众号") || it.contains("哔哩哔哩") || it.contains("知乎") || it.contains("阅读") }
+                )
+
+            val targetKind = when {
+                onScreenUrls.isNotEmpty() || linkCardCue -> "link"
+                bestImageBounds != null -> "image"
+                primaryUrl != null && bestHit.isEmpty() -> "link"
+                else -> "text"
+            }
+
+            val linkTitle = if (targetKind == "link") {
+                cardTexts.firstOrNull { !it.startsWith("http", ignoreCase = true) && it.length in 3..80 }
+                    ?: bestHit.takeIf { !it.startsWith("http", ignoreCase = true) }?.take(60)
+            } else null
+
             val merged = buildString {
                 if (cardTexts.size >= 2) {
                     append("【卡片完整内容】").append(cardTexts.joinToString(" | ").take(520))
                 } else if (bestHit.isNotEmpty()) {
                     append("【指中内容】").append(bestHit)
                 }
-
-                if (urls.isNotEmpty()) {
-                    if (isNotEmpty()) append("\n")
-                    append("【识别链接】").append(urls.joinToString(" "))
+                if (allUrls.isNotEmpty()) {
+                    if (isNotEmpty()) append("
+")
+                    append("【识别链接】").append(allUrls.joinToString(" "))
                 }
                 val extras = nearby.filter { it != bestHit }.take(8)
                 if (extras.isNotEmpty()) {
-                    if (isNotEmpty()) append("\n")
+                    if (isNotEmpty()) append("
+")
                     append("【周边上下文】").append(extras.joinToString(" | "))
                 }
             }.trim().take(900)
-            if (merged.isEmpty()) null else (pkg to merged)
+
+            if (merged.isEmpty() && bestImageBounds == null && primaryUrl == null) {
+                null
+            } else {
+                DragPickTarget(
+                    packageName = pkg,
+                    targetKind = targetKind,
+                    mergedContext = merged,
+                    bestHitText = bestHit.ifBlank { linkTitle.orEmpty() },
+                    extractedUrl = primaryUrl,
+                    linkTitle = linkTitle,
+                    imageBounds = bestImageBounds,
+                )
+            }
         }.getOrNull()
 
         /**
-         * 拖宠即问视觉捕获：利用 Android 11+ 无障碍原生 takeScreenshot（无需额外录屏授权弹窗）
-         * 截取落点附近的图片/视频画面并缩放至 720px 宽，支持图文与视频帧一并分析。
+         * 拖宠即问视觉捕获（v2 完整图片边到边提取）：
+         * - 若无障碍已精确定位图片节点边界 [exactBounds]，则直接按该节点真实坐标边到边裁剪**完整原图区域**（最高保留 1600px 长边，不再只截一小块）；
+         * - 否则截取宽幅完整视口画面（最高保留 1280px 长边）。
          */
-        fun captureVisualAt(screenX: Int, screenY: Int, onResult: (android.graphics.Bitmap?) -> Unit) {
+        fun captureVisualAt(
+            screenX: Int,
+            screenY: Int,
+            exactBounds: android.graphics.Rect? = null,
+            onResult: (android.graphics.Bitmap?) -> Unit,
+        ) {
             val svc = serviceRef.get()
             if (svc == null || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
                 onResult(null)
@@ -2117,14 +2225,33 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                                 if (soft == null) return@runCatching null
                                 val fullW = soft.width
                                 val fullH = soft.height
-                                // 截取以落点 Y 为中心的宽幅画框（覆盖整张图片/视频播放器/图文卡片）
-                                val cropH = minOf(fullH, (fullW * 0.95f).toInt().coerceAtLeast(360))
-                                val top = (screenY - cropH / 2).coerceIn(0, (fullH - cropH).coerceAtLeast(0))
-                                val cropped = android.graphics.Bitmap.createBitmap(soft, 0, top, fullW, cropH)
+
+                                val cropped = if (exactBounds != null && !exactBounds.isEmpty) {
+                                    val left = exactBounds.left.coerceIn(0, (fullW - 2).coerceAtLeast(0))
+                                    val top = exactBounds.top.coerceIn(0, (fullH - 2).coerceAtLeast(0))
+                                    val right = exactBounds.right.coerceIn(left + 1, fullW)
+                                    val bottom = exactBounds.bottom.coerceIn(top + 1, fullH)
+                                    val cw = right - left
+                                    val ch = bottom - top
+                                    if (cw >= 80 && ch >= 80) {
+                                        android.graphics.Bitmap.createBitmap(soft, left, top, cw, ch)
+                                    } else {
+                                        soft
+                                    }
+                                } else {
+                                    val cropH = minOf(fullH, (fullW * 1.35f).toInt().coerceAtLeast(480))
+                                    val top = (screenY - cropH / 2).coerceIn(0, (fullH - cropH).coerceAtLeast(0))
+                                    android.graphics.Bitmap.createBitmap(soft, 0, top, fullW, cropH)
+                                }
                                 if (cropped !== soft) soft.recycle()
-                                if (cropped.width > 720) {
-                                    val scaledH = (cropped.height * 720f / cropped.width).toInt().coerceAtLeast(1)
-                                    val scaled = android.graphics.Bitmap.createScaledBitmap(cropped, 720, scaledH, true)
+
+                                val maxDim = if (exactBounds != null) 1600 else 1280
+                                val longest = maxOf(cropped.width, cropped.height)
+                                if (longest > maxDim) {
+                                    val ratio = maxDim.toFloat() / longest.toFloat()
+                                    val sw = (cropped.width * ratio).toInt().coerceAtLeast(1)
+                                    val sh = (cropped.height * ratio).toInt().coerceAtLeast(1)
+                                    val scaled = android.graphics.Bitmap.createScaledBitmap(cropped, sw, sh, true)
                                     if (scaled !== cropped) cropped.recycle()
                                     scaled
                                 } else {
