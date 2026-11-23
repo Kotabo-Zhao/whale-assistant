@@ -174,15 +174,11 @@ class WhaleContextBudgeterTest {
     fun normalizeHistoryImmutablePreservesByteIdenticalPrefixAcrossTurns() {
         val turn1 = listOf(
             "user" to "帮我写一个快速排序",
-            "assistant" to "```kotlin
-fun qsort() {}
-```
-<!--whale_next:["继续","优化"]-->",
+            "assistant" to "```kotlin\nfun qsort() {}\n```\n<!--whale_next:[\"继续\",\"优化\"]-->",
         )
         val turn2 = turn1 + listOf(
             "user" to "再加个注释",
-            "assistant" to "已补充注释。
-<!--whale_next:["好的"]-->",
+            "assistant" to "已补充注释。\n<!--whale_next:[\"好的\"]-->",
         )
         val h1 = WhaleContextBudgeter.normalizeHistoryImmutable(turn1)
         val h2 = WhaleContextBudgeter.normalizeHistoryImmutable(turn2)

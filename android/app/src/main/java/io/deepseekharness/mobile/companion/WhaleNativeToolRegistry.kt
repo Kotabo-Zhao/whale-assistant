@@ -157,7 +157,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             .put("domain", d)
             .put("count", items.length())
             .put("tools", items)
-            .put("usage", "使用 whale_call(tool="工具名", argsJson="{...}") 立即调用上述任意工具。")
+            .put("usage", "使用 whale_call(tool=\"工具名\", argsJson=\"{...}\") 立即调用上述任意工具。")
     }
 
     /**
