@@ -250,6 +250,20 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_secretary_add", "为用户新增一条秘书事项/待办记录。", mapOf("title" to "事项标题", "note" to "可选补充说明"), listOf("title")))
             array.put(schema("whale_secretary_complete", "将指定编号的秘书事项标记为已完成。", mapOf("id" to "事项 UUID 编号"), listOf("id")))
             array.put(schema("whale_secretary_delete", "删除指定编号的秘书事项。", mapOf("id" to "事项 UUID 编号"), listOf("id")))
+            array.put(schema(
+                "whale_routine_manage",
+                "管理事件触发型主动守护规则（0 Token 本地通知过滤：如取件码自动转待办、出行变动归档、账单存资料库）。",
+                mapOf(
+                    "action" to "list / create / toggle / delete",
+                    "name" to "规则名称（create 时必填）",
+                    "keywordRegex" to "本地触发关键词或正则（create 时必填，如 取件码|菜鸟驿站）",
+                    "actionKind" to "动作类型：add_todo(默认) / save_knowledge / pet_notify",
+                    "packageFilter" to "可选：限定应用包名片段",
+                    "idOrName" to "toggle 或 delete 时的规则 ID 或名称",
+                    "enabled" to "toggle 时 true/false",
+                ),
+                listOf("action"),
+            ))
         }
         if (includeWorkshop) {
             array.put(schema("whale_workshop_list", "列出鲸鱼功能工坊中已启用的本地离线小软件（置顶优先）。", emptyMap(), emptyList()))
@@ -370,6 +384,18 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
             array.put(schema("whale_phone_vision", "多模态看图识屏：安全截取当前手机屏幕并调用视觉模型分析画面、图标、图片内容及按钮坐标（自动拦截密码/支付/锁屏敏感页面）。", mapOf("question" to "可选：想看懂的内容或想找的图标/按钮描述"), emptyList()))
             array.put(schema("whale_phone_vision_click", "视觉定位并直接点击：截屏让多模态视觉模型定位目标图标或无文字按钮的精确屏幕坐标，并立即执行手势点击（适合游戏、Canvas、自定义图标按钮）。", mapOf("target" to "要点击的目标描述，例如：右上角放大镜图标 / 红色关闭按钮"), listOf("target")))
+            array.put(schema(
+                "whale_macro_manage",
+                "教它做一遍（0 Token 录制宏与视觉自愈）：录制用户手动操作路径并确定性回放，遇弹窗或改版返回 needs_ai_heal 供单步自愈。",
+                mapOf(
+                    "action" to "list / start_record / stop_record / replay / delete",
+                    "name" to "录制或回放的宏名称（如 每日签到）",
+                    "idOrName" to "replay / delete 时的宏 ID 或名称",
+                    "startIndex" to "可选：视觉自愈后续跑的起始步骤序号（默认 0）",
+                    "confirmedHighRisk" to "可选：高危步骤经用户确认后传 true",
+                ),
+                listOf("action"),
+            ))
             array.put(schema("whale_automation_heal", "一键诊断并自动修复无障碍服务（含僵尸断连自动通过 Shizuku 重连）、空拦截白名单与副屏就绪状态。", mapOf("relaxWhitelist" to "可选：true（默认）当白名单为空时自动关闭拦截限制"), emptyList()))
             array.put(schema("whale_virtual_screen_control", "启动、停止或查询「目标应用副屏」状态（在后台独立虚拟屏幕上运行目标应用，不打扰主屏幕；需已开启 Shizuku）。", mapOf("action" to "state / start / stop", "target" to "action=start 时的目标应用包名（可用 whale_phone_apps 查）或组件名"), listOf("action")))
             array.put(schema("whale_virtual_screen_action", "在已启动的「目标应用副屏」独立虚拟屏幕上执行点击、输入、滑动、读控件树或返回操作。", mapOf("sessionId" to "可选：副屏会话 ID（不填自动取当前活跃副屏）", "action" to "操作类型：tap / swipe / text / tree / key / back / home / follow", "x" to "可选 X 坐标", "y" to "可选 Y 坐标", "text" to "可选输入文本"), listOf("action")))
@@ -1091,6 +1117,42 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         ?: throw IllegalArgumentException("未找到该资料记录：$id")
                     val removed = store.remove(id, row.optString("text", ""))
                     ToolOutcome(name, "删除本地资料", removed, JSONObject().put("id", id).put("removed", removed).toString(), mutating = true)
+                }
+                "whale_routine_manage" -> {
+                    val action = args.str("action", "list").trim().lowercase()
+                    when (action) {
+                        "list" -> {
+                            val rules = WhaleRoutineEngine.list(app)
+                            val arr = JSONArray()
+                            rules.forEach { arr.put(it.json()) }
+                            ToolOutcome(name, "查看主动守护规则（${rules.size} 条）", true, JSONObject().put("count", rules.size).put("rules", arr).toString())
+                        }
+                        "create" -> {
+                            val created = WhaleRoutineEngine.create(
+                                app,
+                                name = args.str("name", ""),
+                                keywordRegex = args.str("keywordRegex", ""),
+                                actionKind = args.str("actionKind", "add_todo"),
+                                packageFilter = args.str("packageFilter", ""),
+                                titleTemplate = args.str("titleTemplate", ""),
+                                cooldownMinutes = args.optInt("cooldownMinutes", 10),
+                            )
+                            ToolOutcome(name, "已创建守护规则：${created.name}", true, JSONObject().put("ok", true).put("rule", created.json()).toString(), mutating = true)
+                        }
+                        "toggle" -> {
+                            val target = args.str("idOrName", args.str("name", ""))
+                            val en = args.optBoolean("enabled", true)
+                            val updated = WhaleRoutineEngine.toggle(app, target, en)
+                                ?: throw IllegalArgumentException("未找到守护规则：$target")
+                            ToolOutcome(name, if (en) "已启用规则：${updated.name}" else "已暂停规则：${updated.name}", true, JSONObject().put("ok", true).put("rule", updated.json()).toString(), mutating = true)
+                        }
+                        "delete" -> {
+                            val target = args.str("idOrName", args.str("name", ""))
+                            val ok = WhaleRoutineEngine.delete(app, target)
+                            ToolOutcome(name, if (ok) "已删除守护规则" else "未找到守护规则", ok, JSONObject().put("ok", ok).toString(), mutating = true)
+                        }
+                        else -> throw IllegalArgumentException("不支持的守护规则操作：$action")
+                    }
                 }
                 "whale_secretary_list" -> {
                     val query = args.str("query", "").trim()
@@ -2138,6 +2200,40 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             }
                         }
                         else -> throw IllegalArgumentException("不支持的副屏操作：$action")
+                    }
+                }
+                "whale_macro_manage" -> {
+                    val action = args.str("action", "list").trim().lowercase()
+                    when (action) {
+                        "list" -> {
+                            val list = WhaleMacroEngine.list(app)
+                            val arr = JSONArray()
+                            list.forEach { arr.put(it.json()) }
+                            ToolOutcome(name, "查看录制宏（${list.size} 个）", true, JSONObject().put("count", list.size).put("recording", WhaleMacroEngine.isRecording()).put("macros", arr).toString())
+                        }
+                        "start_record" -> {
+                            val res = WhaleMacroEngine.startRecording(args.str("name", "自定义动作"))
+                            ToolOutcome(name, "开始录制操作宏", true, res.toString(), mutating = true)
+                        }
+                        "stop_record" -> {
+                            val res = WhaleMacroEngine.stopRecording(app)
+                            val ok = res.optBoolean("ok", false)
+                            ToolOutcome(name, if (ok) "保存录制宏" else "结束录制", ok, res.toString(), mutating = ok)
+                        }
+                        "replay" -> {
+                            val target = args.str("idOrName", args.str("name", ""))
+                            val startIdx = args.optInt("startIndex", 0)
+                            val confirmed = args.optBoolean("confirmedHighRisk", false)
+                            val res = WhaleMacroEngine.replay(app, target, startIdx, confirmed)
+                            val ok = res.optBoolean("ok", false)
+                            ToolOutcome(name, if (ok) "0 Token 回放宏完成" else "回放宏暂停/需自愈", ok, res.toString(), mutating = true)
+                        }
+                        "delete" -> {
+                            val target = args.str("idOrName", args.str("name", ""))
+                            val ok = WhaleMacroEngine.delete(app, target)
+                            ToolOutcome(name, if (ok) "已删除录制宏" else "未找到录制宏", ok, JSONObject().put("ok", ok).toString(), mutating = true)
+                        }
+                        else -> throw IllegalArgumentException("不支持的宏操作：$action")
                     }
                 }
                 "whale_automation_heal" -> {

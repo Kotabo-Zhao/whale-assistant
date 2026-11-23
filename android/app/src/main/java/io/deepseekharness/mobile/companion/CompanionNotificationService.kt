@@ -44,6 +44,7 @@ class CompanionNotificationService : NotificationListenerService() {
         if (title.isBlank() && text.isBlank()) return
         if (CompanionStore.sensitive("$title $text")) return
         if (runCatching { store.record(sbn.packageName, title, text, notificationKey = sbn.key) }.getOrDefault(false)) {
+            WhaleRoutineEngine.onNotificationAsync(applicationContext, sbn.packageName, title, text)
             if (store.backgroundUnderstanding) BackgroundUnderstanding.ingest(applicationContext, sbn.packageName, title, text, sbn.key, sbn.postTime)
             if (store.automaticNotificationMemory) {
                 val app = applicationContext

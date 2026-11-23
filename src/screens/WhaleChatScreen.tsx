@@ -37,6 +37,7 @@ import usagiAvatar from '../assets/usagi-avatar.png'
 import { CuteIcon, type CuteIconName } from '../components/CuteIcon'
 import { AgentStatusIcon } from '../components/AgentStatusIcon'
 import { ChatMediaCard } from '../components/ChatMediaCard'
+import { ChatWidgetCard, extractWhaleWidgets } from '../components/ChatWidgetCard'
 import { AiWorkspaceModal } from '../components/AiWorkspaceModal'
 import { t } from '../i18n'
 import { useInterfaceStyle } from '../theme'
@@ -1124,10 +1125,28 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
                           <div className="whale-reasoning-body">{msg.reasoning}</div>
                         </details>
                       )}
-                      <div
-                        className="whale-msg-bubble whale-markdown"
-                        dangerouslySetInnerHTML={{ __html: renderCachedMarkdown(msg.id, msg.text) }}
-                      />
+                      {(() => {
+                        const extracted = extractWhaleWidgets(msg.text, false)
+                        return (
+                          <>
+                            {extracted.cleanMarkdown && (
+                              <div
+                                className="whale-msg-bubble whale-markdown"
+                                dangerouslySetInnerHTML={{ __html: renderCachedMarkdown(msg.id, extracted.cleanMarkdown) }}
+                              />
+                            )}
+                            {extracted.widgets.map((wSpec, wIdx) => (
+                              <ChatWidgetCard
+                                key={`${msg.id}-w-${wIdx}`}
+                                spec={wSpec}
+                                storageKey={`${msg.id}-${wIdx}`}
+                                onSaveToWorkshop={prompt => { void sendText(prompt) }}
+                                onSendAction={prompt => { void sendText(prompt) }}
+                              />
+                            ))}
+                          </>
+                        )
+                      })()}
                     </div>
                   </div>
                 ) : (

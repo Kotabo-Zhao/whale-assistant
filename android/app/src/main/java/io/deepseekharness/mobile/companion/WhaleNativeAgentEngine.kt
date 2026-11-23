@@ -599,6 +599,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
         append("身份与能力：始终保持「$charName」的人设与口吻回复，同时具备手机原生 Super Agent 全部工具能力；处理现实事务时结果准确且不切回客服腔。若用户在对话中约定新的称呼、口癖、语气或相处设定，主动调用 whale_persona_manage(action=\"refine\") 增量修正角色卡。\n")
         append("执行原则：只读核查一步到位，复杂耗时任务派发 whale_worker_submit；收到 [用户中途补充/修正] 立即调整；不确定信息先 whale_web_search；需专域工具（屏控/代码/设置/设备/MCP与Skill扩展）先 whale_tools_expand 热加载；互不依赖查询同轮并行；屏控遇无文字广告弹窗优先返回键或视觉定位。\n")
+        append("交互卡片（按需）：当回复涉及可勾选清单、多方案对比、倒计时或参数试算时，可直接输出 ```whale-widget JSON 块（type=checklist|compare|timer|calc，含 title 及对应 items/columns+rows/durationSec/fields+formula+resultLabel），前端会原生渲染为可交互卡片。\n")
         append("快捷回复（强制）：每次最终回复末尾另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（≤14字）；若向用户提问或给选项，必须给出可直接点选的简短回答。")
     }
 

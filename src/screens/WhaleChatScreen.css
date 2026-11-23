@@ -2858,3 +2858,124 @@
   color: #ef4444;
   border-color: rgba(239, 68, 68, 0.3);
 }
+
+/* ── A2UI Native Inline Chat Widgets ── */
+.whale-a2ui-card {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+.whale-a2ui-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 13px;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--line);
+}
+.whale-a2ui-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  color: var(--ink);
+  min-width: 0;
+}
+.whale-a2ui-title svg { color: var(--blue); flex-shrink: 0; }
+.whale-a2ui-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border: 1px solid var(--blue-line, var(--line));
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.whale-a2ui-body { padding: 12px 13px; display: flex; flex-direction: column; gap: 10px; }
+.whale-a2ui-progress-row { display: flex; align-items: center; gap: 8px; }
+.whale-a2ui-progress-track { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-muted); overflow: hidden; }
+.whale-a2ui-progress-fill { height: 100%; border-radius: 999px; background: var(--blue); transition: width 180ms ease; }
+.whale-a2ui-progress-label { font-size: 0.74rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.whale-a2ui-checklist { display: flex; flex-direction: column; gap: 6px; }
+.whale-a2ui-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--ink);
+  text-align: start;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.whale-a2ui-check-row.is-done { opacity: 0.62; }
+.whale-a2ui-check-row.is-done .whale-a2ui-check-text { text-decoration: line-through; }
+.whale-a2ui-check-ico { flex-shrink: 0; color: var(--muted); }
+.whale-a2ui-check-ico.is-done { color: var(--blue); }
+.whale-a2ui-check-text { flex: 1; min-width: 0; }
+.whale-a2ui-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-left: 6px;
+}
+.whale-a2ui-foot { display: flex; justify-content: flex-end; }
+.whale-a2ui-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-muted);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.whale-a2ui-action-btn.is-primary { background: var(--blue); color: var(--on-accent); border-color: transparent; }
+.whale-a2ui-compare-bar { display: flex; gap: 6px; }
+.whale-a2ui-mini-pill {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.whale-a2ui-mini-pill.is-active { background: var(--blue-soft); color: var(--blue); border-color: var(--blue-line, var(--blue)); font-weight: 600; }
+.whale-a2ui-table tr.is-highlight td { background: var(--blue-soft); }
+.whale-a2ui-timer-readout { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.whale-a2ui-timer-clock { font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink); letter-spacing: -0.02em; }
+.whale-a2ui-timer-sub { font-size: 0.78rem; color: var(--muted); }
+.whale-a2ui-timer-actions { display: flex; gap: 8px; }
+.whale-a2ui-calc-result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--blue-soft);
+}
+.whale-a2ui-calc-label { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+.whale-a2ui-calc-num { font-size: 1.35rem; font-weight: 800; color: var(--blue); font-variant-numeric: tabular-nums; }
+.whale-a2ui-calc-fields { display: flex; flex-direction: column; gap: 8px; }
+.whale-a2ui-slider-row { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; }
+.whale-a2ui-slider-head { display: flex; justify-content: space-between; color: var(--ink); }
+.whale-a2ui-slider-row input[type=range] { width: 100%; accent-color: var(--blue); }

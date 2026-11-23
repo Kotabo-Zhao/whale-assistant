@@ -127,6 +127,9 @@ class DeepSeekAccessibilityService : AccessibilityService() {
      * （[AndroidAutomationNodeBackend]），因为它执行的是规则，不是外部请求。
      */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event != null && io.deepseekharness.mobile.companion.WhaleMacroEngine.isRecording()) {
+            runCatching { io.deepseekharness.mobile.companion.WhaleMacroEngine.onAccessibilityClick(applicationContext, event) }
+        }
         if (event == null) return
         try {
             val nowMs = SystemClock.elapsedRealtime()
@@ -1959,6 +1962,96 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             "ACCESSIBILITY_ACTION_TIMEOUT",
         )
         private val serviceRef = AtomicReference<DeepSeekAccessibilityService?>(null)
+
+        /**
+         * 拖宠即问（Drag-to-Ask）：按屏幕坐标零 Token 提取前景窗口中落点命中的节点文字及周边上下文。
+         * 自动排除本应用、系统桌面与输入法窗口，返回 Pair(pkg, text) 或 null（无障碍未开启/纯图片画面时走视觉兜底）。
+         */
+        fun extractContextAt(screenX: Int, screenY: Int): Pair<String, String>? = runCatching {
+            val svc = serviceRef.get() ?: return null
+            val root = svc.rootInActiveWindow ?: return null
+            val pkg = root.packageName?.toString().orEmpty()
+            if (pkg.isBlank() || pkg == svc.packageName || pkg.contains("launcher", true) || pkg.contains("inputmethod", true) || pkg == "com.android.systemui") {
+                return null
+            }
+            var bestHit = ""
+            var bestArea = Long.MAX_VALUE
+            val nearby = LinkedHashSet<String>()
+            val rect = android.graphics.Rect()
+            fun walk(node: AccessibilityNodeInfo?, depth: Int) {
+                if (node == null || depth > 18 || nearby.size >= 10) return
+                val txt = (node.text?.toString()?.trim().orEmpty().ifEmpty { node.contentDescription?.toString()?.trim().orEmpty() })
+                if (txt.length >= 2) {
+                    node.getBoundsInScreen(rect)
+                    if (!rect.isEmpty) {
+                        if (rect.contains(screenX, screenY)) {
+                            val area = rect.width().toLong() * rect.height().toLong()
+                            if (area in 1L..bestArea) {
+                                bestArea = area
+                                bestHit = txt.take(280)
+                            }
+                        } else {
+                            val cx = rect.centerX()
+                            val cy = rect.centerY()
+                            val distSq = (cx - screenX).toLong() * (cx - screenX) + (cy - screenY).toLong() * (cy - screenY)
+                            if (distSq <= 260L * 260L) nearby.add(txt.take(120))
+                        }
+                    }
+                }
+                for (i in 0 until node.childCount) {
+                    walk(node.getChild(i), depth + 1)
+                }
+            }
+            walk(root, 0)
+            val merged = buildString {
+                if (bestHit.isNotEmpty()) append("【指中内容】").append(bestHit)
+                val extras = nearby.filter { it != bestHit }.take(5)
+                if (extras.isNotEmpty()) {
+                    if (isNotEmpty()) append("\n")
+                    append("【周边上下文】").append(extras.joinToString(" | "))
+                }
+            }.trim().take(650)
+            if (merged.isEmpty()) null else (pkg to merged)
+        }.getOrNull()
+
+        /**
+         * 教它做一遍（0 Token 确定性回放）：按三层锚点优先级查找并点击控件
+         * 1. resourceId → 2. 语义 text / contentDesc → 3. 归一化屏幕坐标 (rx, ry)。
+         */
+        fun replayMacroStep(resourceId: String, text: String, contentDesc: String, rx: Float, ry: Float): Boolean {
+            val svc = serviceRef.get() ?: return false
+            val root = svc.rootInActiveWindow
+            if (root != null) {
+                fun clickNode(node: AccessibilityNodeInfo?): Boolean {
+                    var cur = node
+                    var depth = 0
+                    while (cur != null && depth < 6) {
+                        if (cur.isClickable && cur.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                        cur = cur.parent
+                        depth++
+                    }
+                    return false
+                }
+                if (resourceId.isNotBlank()) {
+                    val hits = runCatching { root.findAccessibilityNodeInfosByViewId(resourceId) }.getOrNull().orEmpty()
+                    if (hits.any { clickNode(it) }) return true
+                }
+                val label = text.ifBlank { contentDesc }
+                if (label.isNotBlank()) {
+                    val hits = runCatching { root.findAccessibilityNodeInfosByText(label) }.getOrNull().orEmpty()
+                    if (hits.any { clickNode(it) }) return true
+                }
+            }
+            // 第 3 层兜底：按归一化比例做短按手势
+            val dm = svc.resources.displayMetrics
+            val x = (rx * dm.widthPixels).coerceIn(4f, (dm.widthPixels - 4).coerceAtLeast(4).toFloat())
+            val y = (ry * dm.heightPixels).coerceIn(4f, (dm.heightPixels - 4).coerceAtLeast(4).toFloat())
+            val path = android.graphics.Path().apply { moveTo(x, y) }
+            val gesture = android.accessibilityservice.GestureDescription.Builder()
+                .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0L, 60L))
+                .build()
+            return runCatching { svc.dispatchGesture(gesture, null, null) }.getOrDefault(false)
+        }
 
         /** 事件评估里界面树拷贝的节点上限（比只读快照的 MAX_TREE_NODES 大一些，但仍是硬上限）。 */
         private const val MAX_AUTOMATION_NODES = 400

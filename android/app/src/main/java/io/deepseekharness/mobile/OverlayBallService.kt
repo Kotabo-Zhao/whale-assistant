@@ -1424,6 +1424,91 @@ class OverlayBallService : Service() {
 
     private val cachedTouchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
     private var dragLayoutPending = false
+    private var hoverPickArmed = false
+    private var hoverAnchorX = 0f
+    private var hoverAnchorY = 0f
+    private var hoverPickRunnable: Runnable? = null
+
+    private fun cancelHoverPick(view: View? = ballView) {
+        hoverPickRunnable?.let { hintHandler.removeCallbacks(it) }
+        hoverPickRunnable = null
+        if (hoverPickArmed) {
+            hoverPickArmed = false
+            view?.findViewById<TextView>(R.id.companion_drop_hint)?.visibility = View.GONE
+        }
+    }
+
+    /** 拖宠即问（Drag-to-Ask）：松手后展示意图胶囊，0 Token 直存或一键追问。 */
+    private fun showDragToAskMenu(dropX: Int, dropY: Int) {
+        val hit = DeepSeekAccessibilityService.extractContextAt(dropX, dropY)
+        val preview = hit?.second ?: "当前区域未提取到纯文本（可能是图片、网页或游戏画面），点击下方指令将自动看屏分析。"
+        val actions = arrayOf(
+            "翻译 / 解释这段内容",
+            "比价 / 查真伪",
+            "提炼核心重点",
+            "一键存入资料库（0 Token）",
+            "一键转为待办（0 Token）",
+        )
+        fun dispatchAsk(prefix: String) {
+            val prompt = if (hit != null) {
+                "$prefix\n\n来源应用：${hit.first}\n${hit.second}"
+            } else {
+                "$prefix（请先截取当前屏幕并重点查看坐标 ($dropX, $dropY) 附近的内容）"
+            }
+            runCatching {
+                io.deepseekharness.mobile.companion.WhaleAppControlBus.emit(
+                    org.json.JSONObject().put("action", "ask").put("prompt", prompt),
+                )
+                startActivity(
+                    Intent(this, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                )
+            }
+        }
+        val themed = ContextThemeWrapper(this, R.style.Theme_DeepSeekHarnessMobile)
+        val dialog = android.app.AlertDialog.Builder(themed)
+            .setTitle("拖宠即问 · 发现屏幕内容")
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> dispatchAsk("请简明翻译或通俗解释下面这段屏幕内容：")
+                    1 -> dispatchAsk("请帮我联网核查下面内容的真伪或全网比价避坑：")
+                    2 -> dispatchAsk("请帮我用 3 条要点提炼下面内容的核心信息：")
+                    3 -> {
+                        if (hit != null) {
+                            io.deepseekharness.mobile.companion.CompanionKnowledgeStore(applicationContext)
+                                .add("[拖宠即问 · ${hit.first}]\n${hit.second}", source = "shared_text")
+                            Toast.makeText(applicationContext, "已存入资料库", Toast.LENGTH_SHORT).show()
+                        } else {
+                            dispatchAsk("请截取当前屏幕并把核心内容存入资料库")
+                        }
+                    }
+                    4 -> {
+                        if (hit != null) {
+                            val title = hit.second.replace("【指中内容】", "").lineSequence().firstOrNull()?.take(36).orEmpty().ifBlank { "屏幕待办" }
+                            val req = org.json.JSONObject()
+                                .put("action", "create")
+                                .put("operationId", UUID.randomUUID().toString())
+                                .put("title", title)
+                                .put("note", hit.second.take(300))
+                            io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(applicationContext)
+                                .use { it.queue.secretary.execute(req, owner = "whale-drag-ask") }
+                            Toast.makeText(applicationContext, "已加入秘书待办", Toast.LENGTH_SHORT).show()
+                        } else {
+                            dispatchAsk("请截取当前屏幕并提取待办事项")
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .create()
+        dialog.window?.setType(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE,
+        )
+        runCatching { dialog.show() }.onFailure {
+            Toast.makeText(applicationContext, preview.take(48), Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private fun handleTouch(view: View, event: MotionEvent, size: Int): Boolean {
         val slop = cachedTouchSlop
@@ -1431,6 +1516,7 @@ class OverlayBallService : Service() {
             MotionEvent.ACTION_DOWN -> {
                 petActing.dragging = false
                 dragLayoutPending = false
+                cancelHoverPick(view)
                 // 运行期复查权限：球还在屏幕上、用户仍然点得到，说明权限可能是在本服务运行期间
                 // 被撤销的（部分 ROM 不杀进程也不摘窗口）。此时立即收尾并吞掉本次触摸，
                 // 不留「球还在、通知也在」的假象。
@@ -1509,6 +1595,31 @@ class OverlayBallService : Service() {
                             }
                         }
                     }
+                    // 320ms 停顿拾取防误触：仅在屏幕中间区域静止悬停时激活「拖宠即问」
+                    val inContentZone = event.rawX > metrics.widthPixels * 0.14f && event.rawX < metrics.widthPixels * 0.86f
+                    val movedSinceAnchor = kotlin.math.hypot((event.rawX - hoverAnchorX).toDouble(), (event.rawY - hoverAnchorY).toDouble())
+                    val hoverThresholdPx = 12f * resources.displayMetrics.density
+                    if (!inContentZone) {
+                        cancelHoverPick(view)
+                        hoverAnchorX = event.rawX
+                        hoverAnchorY = event.rawY
+                    } else if (movedSinceAnchor > hoverThresholdPx || hoverPickRunnable == null) {
+                        cancelHoverPick(view)
+                        hoverAnchorX = event.rawX
+                        hoverAnchorY = event.rawY
+                        val r = Runnable {
+                            if (petActing.dragging && !pinching && !longPressFired) {
+                                hoverPickArmed = true
+                                WhaleMotion.feedback(view)
+                                view.findViewById<TextView>(R.id.companion_drop_hint)?.let { hint ->
+                                    hint.text = "松手识别此处"
+                                    hint.visibility = View.VISIBLE
+                                }
+                            }
+                        }
+                        hoverPickRunnable = r
+                        hintHandler.postDelayed(r, 320L)
+                    }
                 } else if (!longPressFired &&
                     OverlayBallPolicy.isLongPress(
                         deltaX, deltaY, slop,
@@ -1556,6 +1667,10 @@ class OverlayBallService : Service() {
                     WhaleMotion.feedback(view)
                     view.performClick()
                 } else {
+                    val triggerDragAsk = hoverPickArmed
+                    val dropX = event.rawX.toInt()
+                    val dropY = event.rawY.toInt()
+                    cancelHoverPick(view)
                     // 拖动结束：吸附到最近边缘并记住位置。
                     val metrics = resources.displayMetrics
                     layoutParams.x = OverlayBallPolicy.snapToEdge(
@@ -1566,10 +1681,13 @@ class OverlayBallService : Service() {
                     if (bubbleChat.visible) bubbleChat.followPet()
                     preferences.writePosition(layoutParams.x, layoutParams.y)
                     layoutPetMenu()
+                    if (triggerDragAsk) {
+                        hintHandler.post { showDragToAskMenu(dropX, dropY) }
+                    }
                 }
                 return true
             }
-            MotionEvent.ACTION_CANCEL -> {petActing.dragging=false;wakePetMotion();return true}
+            MotionEvent.ACTION_CANCEL -> {cancelHoverPick(view);petActing.dragging=false;wakePetMotion();return true}
         }
         return false
     }
