@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import traceback
+import types
 import urllib.parse
 import urllib.request
 import zipfile
@@ -85,7 +86,57 @@ def _ensure_thread_local_hooks():
         sys.stderr = _ThreadLocalStream("stderr", sys.stderr)
         builtins.open = _thread_scoped_builtins_open
         io.open = _thread_scoped_io_open
+        _configure_android_matplotlib_fonts()
         _HOOKS_INSTALLED = True
+
+
+def _configure_android_matplotlib_fonts():
+    """Auto-wire Android system CJK fonts into matplotlib so Chinese charts never render boxes."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg", force=True)
+        from matplotlib import font_manager, rcParams
+        candidates = [
+            "/system/fonts/NotoSansCJK-Regular.ttc",
+            "/system/fonts/NotoSansSC-Regular.otf",
+            "/system/fonts/MiSansVF.ttf",
+            "/system/fonts/HarmonyOS_Sans_SC.ttf",
+            "/system/fonts/DroidSansFallback.ttf",
+        ]
+        for font_path in candidates:
+            if os.path.isfile(font_path):
+                font_manager.fontManager.addfont(font_path)
+                prop = font_manager.FontProperties(fname=font_path)
+                rcParams["font.sans-serif"] = [prop.get_name(), "DejaVu Sans"]
+                break
+        rcParams["axes.unicode_minus"] = False
+    except Exception:
+        pass
+
+
+def _install_virtual_pip_module(site_dir: str):
+    """Expose a virtual `pip` module so scripts doing `import pip; pip.main(['install', pkg])` work seamlessly."""
+    mod = types.ModuleType("pip")
+
+    def _install(pkg: str, mirror: str = "") -> dict:
+        return json.loads(install_pure_wheel(pkg, site_dir, mirror))
+
+    def _main(argv=None) -> int:
+        args = list(argv or [])
+        pkgs = [a for a in args if a and not a.startswith("-") and a.lower() not in ("install", "upgrade")]
+        if not pkgs:
+            return 0
+        all_ok = True
+        for p in pkgs:
+            res = _install(p)
+            print(json.dumps(res, ensure_ascii=False))
+            if not res.get("ok"):
+                all_ok = False
+        return 0 if all_ok else 1
+
+    mod.install = _install
+    mod.main = _main
+    sys.modules["pip"] = mod
 
 
 class _WhaleToolsProxy:
@@ -212,12 +263,17 @@ def run_code(
     if site_dir_resolved not in sys.path:
         sys.path.insert(0, site_dir_resolved)
 
+    _install_virtual_pip_module(site_dir_resolved)
+
     def _pip_install(package_name: str, mirror_url: str = "") -> dict:
         raw_res = install_pure_wheel(package_name, site_dir_resolved, mirror_url)
         try:
             return json.loads(raw_res)
         except Exception:
             return {"ok": False, "error": raw_res}
+
+    def _fetch_with_auth(url: str, max_chars: int = 8000) -> dict:
+        return proxy.call("whale_web_fetch", {"url": str(url), "maxChars": int(max_chars)})
 
     def _installed_packages() -> list:
         names = set()
@@ -255,6 +311,7 @@ def run_code(
                 "SITE_PACKAGES": site_dir_resolved,
                 "pip_install": _pip_install,
                 "installed_packages": _installed_packages,
+                "fetch_with_auth": _fetch_with_auth,
                 "open": _thread_scoped_builtins_open,
                 "tools": proxy,
                 "inspect": _inspect,

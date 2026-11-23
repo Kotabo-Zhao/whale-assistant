@@ -147,6 +147,9 @@ chaquopy {
             install("jinja2")
             install("tabulate")
             install("python-dateutil")
+            install("cryptography")
+            install("chardet")
+            install("xlrd")
         }
     }
 }

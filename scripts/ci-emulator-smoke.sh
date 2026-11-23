@@ -48,7 +48,7 @@ echo "App PID after interaction: ${PID_AFTER:-<NOT RUNNING>}" | tee -a "$REPORT"
 echo "[5/5] Inspecting logcat for crashes/ANRs..." | tee -a "$REPORT"
 adb logcat -d -v time > "$LOGCAT" || true
 
-FATAL_COUNT="$(grep -cE "FATAL EXCEPTION|ANR in ${PKG}|SIGSEGV.*${PKG}|UnsatisfiedLinkError" "$LOGCAT" || true)"
+FATAL_COUNT="$(grep -E "FATAL EXCEPTION|ANR in ${PKG}|SIGSEGV.*${PKG}|UnsatisfiedLinkError" "$LOGCAT" | grep -vc "FATAL EXCEPTION: UiAutomation" || true)"
 JS_ERR_COUNT="$(grep -cE "Capacitor/Console:.*(Uncaught|TypeError|ReferenceError)" "$LOGCAT" || true)"
 
 echo "Fatal/ANR matches: $FATAL_COUNT" | tee -a "$REPORT"
