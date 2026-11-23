@@ -169,4 +169,26 @@ class WhaleContextBudgeterTest {
         assertEquals(13_000, stats.totalSavedChars)
         assertEquals(0.65f, stats.compressionRatio, 0.001f)
     }
+
+    @Test
+    fun normalizeHistoryImmutablePreservesByteIdenticalPrefixAcrossTurns() {
+        val turn1 = listOf(
+            "user" to "帮我写一个快速排序",
+            "assistant" to "```kotlin
+fun qsort() {}
+```
+<!--whale_next:["继续","优化"]-->",
+        )
+        val turn2 = turn1 + listOf(
+            "user" to "再加个注释",
+            "assistant" to "已补充注释。
+<!--whale_next:["好的"]-->",
+        )
+        val h1 = WhaleContextBudgeter.normalizeHistoryImmutable(turn1)
+        val h2 = WhaleContextBudgeter.normalizeHistoryImmutable(turn2)
+        // 前两条消息必须跨轮字节级完全一致，保证 KV Prefix Cache 命中
+        assertEquals(h1[0], h2[0])
+        assertEquals(h1[1], h2[1])
+        assertFalse(h1[1].second.contains("whale_next"))
+    }
 }

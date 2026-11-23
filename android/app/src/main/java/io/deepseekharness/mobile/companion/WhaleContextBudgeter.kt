@@ -439,6 +439,46 @@ internal object WhaleContextBudgeter {
         return selectedReversed.reversed()
     }
 
+    /**
+     * KV Prefix Cache 锁死型 Append-Only 历史窗口（Manus / DeepSeek / Nadir 2026 最佳实践）：
+     * - 每条历史消息仅按自身内容做确定性清洗（去 `<!--whale_next:...-->` + 固定上限 [perMessageCap]），
+     *   **绝不**因距离末尾变远而二次改写或折叠代码块，确保第 1..N 条消息在下一轮保持字节级完全一致；
+     * - 仅当历史条数超过 [maxTurns] 时按 [blockSlide] 整块向前滑动，让相邻多轮稳定命中 85%~95% 跨轮前缀缓存。
+     */
+    fun normalizeHistoryImmutable(
+        history: List<Pair<String, String>>,
+        maxTurns: Int = 16,
+        blockSlide: Int = 8,
+        perMessageCap: Int = 1_600,
+    ): List<Pair<String, String>> {
+        val valid = history.filter { (role, text) ->
+            role in setOf("user", "assistant") && text.isNotBlank()
+        }
+        if (valid.isEmpty()) return emptyList()
+        val windowStart = if (valid.size <= maxTurns) {
+            0
+        } else {
+            val excess = valid.size - maxTurns
+            val blocks = ((excess + blockSlide - 1) / blockSlide) * blockSlide
+            blocks.coerceAtMost((valid.size - 2).coerceAtLeast(0))
+        }
+        val slice = valid.subList(windowStart, valid.size)
+        return slice.mapNotNull { (role, raw) ->
+            val cleaned = if (role == "assistant") {
+                nextTagRegex.replace(raw, "").trim()
+            } else {
+                raw.trim()
+            }
+            if (cleaned.isEmpty()) return@mapNotNull null
+            val capped = if (cleaned.length > perMessageCap) {
+                cleaned.take((perMessageCap - 8).coerceAtLeast(32)).trimEnd() + "…[已精简]"
+            } else {
+                cleaned
+            }
+            role to capped
+        }
+    }
+
     // -------------------------------------------------------------------------
     // 内部工具函数
     // -------------------------------------------------------------------------

@@ -177,9 +177,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         var schemaBundle = tools.toolSchemaBundle(trimmed, expandedCategories, isWorker = isWorkerSession, explicitDynamicNames = expandedDynamicNames)
         var toolSchemas = schemaBundle.schemas
 
-        // 1. 预算制滑动历史窗口（自动剥离协议尾注、折叠远期代码块，总历史严控 4200 字符内）
-        val rawHistoryChars = history.takeLast(10).sumOf { it.second.length }
-        val recentHistory = WhaleContextBudgeter.compressHistory(history, maxTurns = 10, maxTotalChars = 4_200)
+        // 1. KV 锁死型 Append-Only 历史窗口（绝不因轮次推进二次改写历史消息，保跨轮 85%~95% 前缀缓存命中）
+        val rawHistoryChars = history.takeLast(16).sumOf { it.second.length }
+        val recentHistory = WhaleContextBudgeter.normalizeHistoryImmutable(history, maxTurns = 16, blockSlide = 8, perMessageCap = 1_600)
         val compactHistoryChars = recentHistory.sumOf { it.second.length }
         val activePersona = runCatching { CompanionPersonaStore(app).active() }.getOrNull()
 
@@ -580,9 +580,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 messages.put(JSONObject().put("role", "user").put("content", roundReminders.distinct().joinToString("\n\n")))
             }
             toolMsgIndicesByRound.add(roundToolIndices)
+            // KV 锁死策略：严禁在多轮循环中途改写 tools 数组；新造或新发现的工具直接经 whale_call 立即调用，保 100% 前缀缓存不击穿
             if (needSchemaRefresh) {
-                schemaBundle = tools.toolSchemaBundle(trimmed, expandedCategories, isWorker = isWorkerSession, explicitDynamicNames = expandedDynamicNames)
-                toolSchemas = schemaBundle.schemas
+                needSchemaRefresh = false
             }
             if (control?.cancelled?.get() == true) break
             if (control?.hasPendingSteer() == true) {
@@ -699,7 +699,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
         append("身份与能力：始终保持「$charName」的人设与口吻回复，同时具备手机原生 Super Agent 全部工具能力；处理现实事务时结果准确且不切回客服腔。若用户在对话中约定新的称呼、口癖、语气或相处设定，主动调用 whale_persona_manage(action=\"refine\") 增量修正角色卡。\n")
         append("自我认知与主观能动性原则：\n")
-        append("1. 清楚自身能力、绝不轻言做不到：你拥有内置 Python 3.11 沙箱、自主造工具引擎（whale_tool_create 支持 python/composite/http_json/js）、功能工坊离线小软件、全网+B站/小红书/搜图检索、无障碍与副屏 0-Token 录制宏、事件主动守护与长期目标图。不确定有无现成工具或权限时，先调 whale_self_capabilities 自检或 whale_tools_expand 热加载专域工具。\n")
+        append("1. 清楚自身能力、绝不轻言做不到：你拥有内置 Python 3.11 沙箱、自主造工具引擎（whale_tool_create 支持 python/composite/http_json/js）、功能工坊离线小软件、全网+B站/小红书/搜图检索、无障碍与副屏 0-Token 录制宏、事件主动守护与长期目标图。除常驻工具外，全部 94+ 专域工具（手机屏控/截屏/副屏/工坊/文件/设置/定时/造工具/自造 custom_*/MCP）均通过 whale_tool_catalog(domain) 查参数并用 whale_call(tool, argsJson) 直接调用，绝不轻言做不到。\n")
         append("2. 缺工具自己造、造完即刻用：遇到现有工具覆盖不到的可复用需求（专属计算、数据解析、接口抓取、组合流程），主动用 whale_tool_create(kind=\"python\"|\"composite\"|\"http_json\"|\"js\") 为自己造一个 custom_* 长期工具并立刻调用验证；需要常驻交互界面时主动用 whale_workshop_create 造小工具或输出 whale-widget 卡片。\n")
         append("3. 先做后报、遇阻自主换路：所有只读调研、查证与代码验证直接一步做完再交付，严禁停在半路反问\"要不要我帮你查\"；工具报错或抓空时立刻自主换通道（web_fetch→web_render/web_search/image_search；代码报错自修重跑至通过；宏遇弹窗单步视觉自愈），绝不把原始报错甩给用户；仅支付、删除、对外发消息等不可逆操作才先确认；察觉长期目标或高频习惯时主动用 whale_goal_create / whale_playbook_save / whale_routine_manage 帮主人沉淀。\n")
         append("交互卡片（按需）：当回复涉及可勾选清单、多方案对比、倒计时或参数试算时，可直接输出 ```whale-widget JSON 块（type=checklist|compare|timer|calc，含 title 及对应 items/columns+rows/durationSec/fields+formula+resultLabel），前端会原生渲染为可交互卡片。\n")
@@ -751,7 +751,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             sections.add(WhaleContextBudgeter.ContextSection(id, priority, maxChars, clean))
         }
 
-        val nowStr = SimpleDateFormat("yyyy-MM-dd EEE HH:mm", Locale.CHINA).format(Date())
+        val nowStr = SimpleDateFormat("yyyy-MM-dd EEE HH时", Locale.CHINA).format(Date())
         addSec("time", 0, 48, "[时间] $nowStr")
 
         var hasTodo = false
@@ -798,7 +798,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 indexParts.add("0-Token宏:${savedMacros.take(4).joinToString(",") { it.name }}")
             }
             if (indexParts.isNotEmpty()) {
-                addSec("deferred_index", 1, 240, "[可按需唤醒(whale_tools_expand)] ${indexParts.joinToString(" | ")}")
+                addSec("deferred_index", 1, 240, "[可经whale_call直调] ${indexParts.joinToString(" | ")}")
             }
 
             val openMatters = owner.optJSONArray("openMatters")

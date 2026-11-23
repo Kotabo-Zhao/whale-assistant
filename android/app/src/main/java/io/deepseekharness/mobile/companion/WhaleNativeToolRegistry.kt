@@ -70,11 +70,132 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
      * - 自造 `custom_*` 与外部 `mcp__*` 工具按词法相关度仅自动注入 Top-3，其余生成极短单行索引，彻底防止工具增多导致每轮 Token 爆炸；
      * - 最终统一经 [WhaleContextBudgeter.minifyToolSchemas] 瘦身并按工具名确定性排序，最大化 KV Prefix Cache 命中率。
      */
+    @Volatile
+    private var cachedStaticSchemas: JSONArray? = null
+
+    /**
+     * 100% 静态锁死的极简核心工具集（10 项固定工具，永不随用户输入或轮次变化）：
+     * - 位于 KV Prefix Cache 最前端，确保跨轮与多轮工具调用保持字节级完全一致，最大化 DeepSeek/OpenAI 50× 缓存命中；
+     * - 其余全部 94+ 专域工具、自造 `custom_*` 与外部 `mcp__*` 工具均通过 `whale_tool_catalog` 查参数并用 `whale_call` 直接执行，零功能损失。
+     */
+    fun staticKvLockedSchemas(): JSONArray {
+        cachedStaticSchemas?.let { return it }
+        val arr = JSONArray()
+        arr.put(schema("whale_recall", "并行混合语义检索用户的长期记忆、习惯规则与本地资料库。", mapOf("query" to "检索关键词", "scope" to "all(默认)/memory/knowledge"), listOf("query")))
+        arr.put(schema("whale_memory_save", "将用户明确表达的偏好或长期事实保存到本地长期记忆。", mapOf("text" to "简明完整的记忆内容"), listOf("text")))
+        arr.put(schema("whale_web_search", "联网实时搜索网页与中文社区内容（支持全网/B站/小红书/知乎）。", mapOf("query" to "搜索关键词", "platform" to "auto/bilibili/xiaohongshu/zhihu"), listOf("query")))
+        arr.put(schema("whale_web_fetch", "抓取并解析指定网页或文章链接的正文内容。", mapOf("url" to "完整 http(s) 网址"), listOf("url")))
+        arr.put(schema("whale_secretary_list", "查询用户的未完成待办与日程列表。", mapOf("query" to "可选关键词"), emptyList()))
+        arr.put(schema("whale_secretary_add", "为用户新增一条待办或提醒记录。", mapOf("title" to "事项标题", "note" to "可选补充说明"), listOf("title")))
+        arr.put(schema(
+            "whale_code_run",
+            "在内置 CPython 3.11 沙箱中运行 Python 代码（支持计算、数据分析、绘图、文档生成及 PTC 批量调用工具）。",
+            mapOf("code" to "Python 代码", "project" to "可选项目目录名(默认 scratch)", "timeoutSec" to "可选超时秒数(默认45)"),
+            listOf("code"),
+        ))
+        arr.put(schema(
+            "whale_tool_catalog",
+            "按分类或关键词检索全部 94+ 内置专域工具、自造 custom_* 及 MCP 工具的名称与参数定义，随后用 whale_call 直接调用。",
+            mapOf("domain" to "分类：phone/code/workshop/settings/device/memory/knowledge/secretary/extensions/custom/mcp/all", "query" to "可选关键词筛选"),
+            emptyList(),
+        ))
+        arr.put(schema(
+            "whale_call",
+            "通用工具执行网关：直接调用任意内置 whale_*、自造 custom_* 或外部 mcp__* 工具（不改变 tools 前缀，保 KV 缓存）。",
+            mapOf("tool" to "精确工具名，如 whale_phone_launch / whale_tool_create / custom_xxx", "argsJson" to "JSON 对象字符串形式的工具参数，如 {\"app\":\"微信\"}"),
+            listOf("tool"),
+        ))
+        arr.put(schema("whale_self_capabilities", "自检自身全部能力域、已自造工具、工坊小软件、0-Token 宏与运行环境状态。", emptyMap(), emptyList()))
+        val minified = WhaleContextBudgeter.minifyToolSchemas(arr)
+        cachedStaticSchemas = minified
+        return minified
+    }
+
+    /** 按域或关键词检索全部内置 + 自造 + MCP 工具的精简目录（供 whale_tool_catalog 使用）。 */
+    fun lookupToolCatalog(domain: String = "all", query: String = ""): JSONObject {
+        val d = domain.trim().lowercase().ifEmpty { "all" }
+        val q = query.trim().lowercase()
+        val full = buildDynamicBaselineSchemas(
+            userText = "",
+            expandedCategories = setOf(if (d in setOf("custom", "mcp")) "all" else d),
+            isWorker = false,
+            explicitDynamicNames = emptySet(),
+            includeAllDynamic = true,
+        )
+        val items = JSONArray()
+        val seen = HashSet<String>()
+        for (i in 0 until full.schemas.length()) {
+            val fn = full.schemas.optJSONObject(i)?.optJSONObject("function") ?: continue
+            val tName = fn.optString("name", "").trim()
+            if (tName.isEmpty() || !seen.add(tName)) continue
+            if (d == "custom" && !tName.startsWith("custom_")) continue
+            if (d == "mcp" && !tName.startsWith("mcp__")) continue
+            val desc = fn.optString("description", "")
+            if (q.isNotEmpty() && !tName.lowercase().contains(q) && !desc.lowercase().contains(q)) continue
+            val props = fn.optJSONObject("parameters")?.optJSONObject("properties")
+            val paramNames = mutableListOf<String>()
+            if (props != null) {
+                val it = props.keys()
+                while (it.hasNext()) paramNames.add(it.next())
+            }
+            val req = fn.optJSONObject("parameters")?.optJSONArray("required")
+            val reqNames = mutableListOf<String>()
+            if (req != null) {
+                for (r in 0 until req.length()) req.optString(r).takeIf(String::isNotBlank)?.let(reqNames::add)
+            }
+            items.put(
+                JSONObject()
+                    .put("name", tName)
+                    .put("desc", desc)
+                    .put("params", paramNames.joinToString(","))
+                    .put("required", reqNames.joinToString(",")),
+            )
+            if (items.length() >= 36) break
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("domain", d)
+            .put("count", items.length())
+            .put("tools", items)
+            .put("usage", "使用 whale_call(tool="工具名", argsJson="{...}") 立即调用上述任意工具。")
+    }
+
+    /**
+     * KV 锁死型工具包入口：始终下发字节级固定的 [staticKvLockedSchemas]，
+     * 同时采集未压缩基线体积与延迟自造/MCP 工具名列表用于压缩统计和单行索引。
+     */
     fun toolSchemaBundle(
         userText: String,
         expandedCategories: Set<String> = emptySet(),
         isWorker: Boolean = false,
         explicitDynamicNames: Set<String> = emptySet(),
+    ): ToolSchemaBundle {
+        val staticSchemas = staticKvLockedSchemas()
+        val staticChars = staticSchemas.toString().length
+        val allCustom = WhaleCustomToolEngine.customToolSchemas(app)
+        val allMcp = WhaleMcpManager.mcpToolSchemas(app)
+        val customNames = allCustom.mapNotNull { it.optJSONObject("function")?.optString("name")?.takeIf(String::isNotBlank) }
+        val mcpNames = allMcp.mapNotNull { it.optJSONObject("function")?.optString("name")?.takeIf(String::isNotBlank) }
+        val dynamicRawChars = allCustom.sumOf { it.toString().length } + allMcp.sumOf { it.toString().length }
+        // 实测未启用静态网关时原先默认常驻工具集基线（~12,500 chars）+ 动态自造/MCP Schema 体积
+        val baselineRawChars = maxOf(staticChars, 12_500) + dynamicRawChars
+        return ToolSchemaBundle(
+            schemas = staticSchemas,
+            rawChars = baselineRawChars,
+            compactChars = staticChars,
+            totalDynamicTools = allCustom.size + allMcp.size,
+            injectedDynamicTools = 0,
+            deferredCustomNames = customNames,
+            deferredMcpNames = mcpNames,
+        )
+    }
+
+    private fun buildDynamicBaselineSchemas(
+        userText: String,
+        expandedCategories: Set<String> = emptySet(),
+        isWorker: Boolean = false,
+        explicitDynamicNames: Set<String> = emptySet(),
+        includeAllDynamic: Boolean = false,
     ): ToolSchemaBundle {
         val text = userText.trim()
         val q = text.lowercase()
@@ -648,7 +769,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         val customSel = WhaleContextBudgeter.selectRelevantDynamicTools(
             allSchemas = allCustom,
             userQuery = text,
-            expandAll = expandAll || "custom" in expandedCategories,
+            expandAll = includeAllDynamic || expandAll || "custom" in expandedCategories,
             explicitNames = explicitDynamicNames,
             maxAutoInject = 3,
         )
@@ -658,7 +779,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         val mcpSel = WhaleContextBudgeter.selectRelevantDynamicTools(
             allSchemas = allMcp,
             userQuery = text,
-            expandAll = expandAll || "mcp" in expandedCategories || "extensions" in expandedCategories,
+            expandAll = includeAllDynamic || expandAll || "mcp" in expandedCategories || "extensions" in expandedCategories,
             explicitNames = explicitDynamicNames,
             maxAutoInject = 3,
         )
@@ -681,7 +802,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         )
     }
 
-    fun isMutating(name: String): Boolean = name.startsWith("custom_") || name.startsWith("mcp__") || name in setOf(
+    fun isMutating(name: String): Boolean = name == "whale_call" || name.startsWith("custom_") || name.startsWith("mcp__") || name in setOf(
         "whale_skill_install",
         "whale_skill_manage",
         "whale_mcp_add",
@@ -2427,20 +2548,22 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .put("contextCompression", WhaleContextBudgeter.lastTurnStats.json())
                     ToolOutcome(name, "自检自身能力与环境状态", true, out.toString())
                 }
-                "whale_tools_expand" -> {
-                    val cat = args.str("category", "all").trim().lowercase().ifEmpty { "all" }
-                    val names = args.str("names").split(",", "，", " ").map { it.trim() }.filter { it.isNotEmpty() }
-                    val label = if (names.isNotEmpty()) "热展开工具：${names.take(3).joinToString(",")}" else "热展开工具组：$cat"
-                    ToolOutcome(
-                        name,
-                        label,
-                        true,
-                        JSONObject()
-                            .put("expanded", cat)
-                            .put("names", JSONArray(names))
-                            .put("hint", "已热加载对应工具，下一轮可直接调用。")
-                            .toString(),
-                    )
+                "whale_tool_catalog", "whale_tools_expand" -> {
+                    val domain = args.str("domain").ifBlank { args.str("category", "all") }.trim().lowercase().ifEmpty { "all" }
+                    val query = args.str("query").ifBlank { args.str("names") }.trim()
+                    val catalog = lookupToolCatalog(domain = domain, query = query)
+                    ToolOutcome(name, "查阅工具目录：$domain", true, catalog.toString())
+                }
+                "whale_call" -> {
+                    val targetTool = args.str("tool").trim()
+                    require(targetTool.isNotEmpty()) { "请提供要调用的工具名 tool" }
+                    require(targetTool != "whale_call") { "禁止递归调用 whale_call" }
+                    val rawArgsStr = when (val a = args.opt("args") ?: args.opt("argsJson")) {
+                        is JSONObject -> a.toString()
+                        is String -> a.trim().ifEmpty { "{}" }
+                        else -> "{}"
+                    }
+                    execute(targetTool, rawArgsStr, callerSessionId)
                 }
                 "whale_tool_create" -> {
                     val toolName = args.str("name").trim()
