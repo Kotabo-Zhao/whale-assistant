@@ -474,7 +474,17 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_voice_speak", "用硅基流动 CosyVoice2 拟人语音让桌宠大声说出一句话。", mapOf("text" to "要朗读的自然中文或英文内容", "voice" to "可选音色：diana / claire / bella / anna / alex / benjamin"), listOf("text")))
             array.put(schema("whale_voice_config", "修改桌宠语音配置（切换音色、语速或开关自动朗读）。", mapOf("autoSpeakPet" to "可选：true 或 false", "voice" to "可选：diana（欢快女声）/ claire（温柔女声）/ bella（活力女声）/ anna（沉稳女声）/ alex（沉稳男声）", "speed" to "可选语速 0.7-1.5"), emptyList()))
             array.put(schema("whale_web_search", "联网实时搜索网页与中文社区内容（支持 B站原生直搜、小红书/知乎/GitHub 定向检索及中文多引擎聚合），返回标题、摘要与链接。", mapOf("query" to "搜索关键词", "platform" to "可选平台定向：auto（自动识别）/ bilibili（B站原生直搜）/ xiaohongshu（小红书）/ zhihu（知乎）/ github", "limit" to "可选返回条数（1-8，默认 5）"), listOf("query")))
-            array.put(schema("whale_web_render", "使用手机原生离屏 WebView 执行 JS 渲染后提取动态网页正文与链接（专治小红书笔记/搜索页、B站动态页、SPA 前端渲染网站，自动复用已授权登录态 Cookie）。", mapOf("url" to "完整 https:// 或 http:// 网址", "waitMs" to "可选等待 JS 渲染毫秒数（1000-8000，默认 2600）", "maxChars" to "可选最大字符数（默认 6000）"), listOf("url")))
+            array.put(schema(
+            "whale_image_search",
+            "联网搜图与以图搜图（支持关键词搜高清图片/找同款/配图，或传本地 imagePath 走百度识图以图搜图）。",
+            mapOf(
+                "query" to "搜图关键词或画面描述（如 乌萨奇 周边 挂件、某款耳机外观）",
+                "imagePath" to "可选：本地图片绝对路径，用于以图搜图上传",
+                "limit" to "返回图片数量（1~10，默认 6）",
+            ),
+            emptyList(),
+        ))
+        array.put(schema("whale_web_render", "使用手机原生离屏 WebView 执行 JS 渲染后提取动态网页正文与链接（专治小红书笔记/搜索页、B站动态页、SPA 前端渲染网站，自动复用已授权登录态 Cookie）。", mapOf("url" to "完整 https:// 或 http:// 网址", "waitMs" to "可选等待 JS 渲染毫秒数（1000-8000，默认 2600）", "maxChars" to "可选最大字符数（默认 6000）"), listOf("url")))
             array.put(schema("whale_site_auth", "管理通用站点登录态凭据库（Android Keystore 加密存储 Cookie，明文永不暴露给模型）：支持拉起内嵌 WebView 供用户自行登录并授权保存站点 Cookie、查看已授权域名列表或撤销授权。", mapOf("action" to "open_login（拉起站点登录页）/ list（查看已授权域名）/ revoke（撤销指定域名授权）", "url" to "open_login 时的目标 https:// 网址（如 https://www.bilibili.com）或 revoke 时的域名", "label" to "可选站点名称备注（如 B站）"), listOf("action")))
             array.put(schema("whale_web_fetch", "联网抓取指定 HTTPS/HTTP 网页或文本接口的正文内容（已授权站点自动携带加密登录态 Cookie）。", mapOf("url" to "完整网页 URL", "maxChars" to "可选最大字符数，默认 6000"), listOf("url")))
             array.put(schema("whale_memory_delete", "按 ID 删除一条本地长期记忆。", mapOf("id" to "记忆 UUID"), listOf("id")))
@@ -1732,6 +1742,14 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val platform = args.str("platform", "auto").trim()
                     val res = WhaleWebFetcher.search(q, limit, platform, app)
                     ToolOutcome(name, "联网搜索：$q", res.optInt("count", 0) > 0 || res.has("xhsSearchUrl"), res.toString())
+                }
+                "whale_image_search" -> {
+                    val q = args.str("query", "").trim()
+                    val imgPath = args.str("imagePath", "").trim()
+                    val lim = args.optInt("limit", 6)
+                    val res = WhaleWebFetcher.searchImages(query = q, imagePath = imgPath, limit = lim)
+                    val cnt = res.optInt("count", 0)
+                    ToolOutcome(name, if (cnt > 0) "搜到 $cnt 张相关图片" else "已完成以图搜图查询", res.optBoolean("ok", false), res.toString())
                 }
                 "whale_web_render" -> {
                     val rawUrl = args.str("url").trim()

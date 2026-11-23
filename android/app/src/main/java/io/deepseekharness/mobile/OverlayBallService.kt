@@ -1471,8 +1471,9 @@ class OverlayBallService : Service() {
                 if (imgDataUrl != null) "请结合这张屏幕画面与内容，判断我最可能需要什么帮助并直接给出实用解答："
                 else "请结合我指中的这段屏幕内容，判断我最可能需要什么帮助并直接给出实用解答："
             }
+            val linkHint = "\n（注：若画面或文字是微信链接卡片、公众号文章、小红书笔记或商品图但未直接显示 URL，请先根据标题/作者/画面特征调用 whale_web_search 或 whale_image_search 联网检索原文与同款，再给出完整解答。）"
             val prompt = if (hit != null) {
-                "$cleanQ\n\n来源应用：$appLabel\n${hit.second}"
+                "$cleanQ\n\n来源应用：$appLabel\n${hit.second}$linkHint"
             } else if (imgDataUrl != null) {
                 "$cleanQ（已附上当前屏幕画面，来源：$appLabel）"
             } else {
@@ -1886,18 +1887,28 @@ class OverlayBallService : Service() {
                     preferences.writePosition(layoutParams.x, layoutParams.y)
                     layoutPetMenu()
                     if (triggerDragAsk) {
-                        // 先隐藏桌宠 40ms 拍下无遮挡的干净画面（支持图片/视频帧/小红书图文），再弹出追问卡片
+                        // 从 WindowManager 层级彻底透明隐藏桌宠并等待 SurfaceFlinger 提交两帧（140ms），确保截屏零桌宠遮挡
                         val host = ballView
                         val preHit = DeepSeekAccessibilityService.extractContextAt(dropX, dropY)
-                        host?.visibility = View.INVISIBLE
+                        if (host != null) {
+                            host.alpha = 0f
+                            host.visibility = View.INVISIBLE
+                            layoutParams.alpha = 0f
+                            runCatching { windowManager.updateViewLayout(host, layoutParams) }
+                        }
                         hintHandler.postDelayed({
                             DeepSeekAccessibilityService.captureVisualAt(dropX, dropY) { bmp ->
                                 hintHandler.post {
-                                    host?.visibility = View.VISIBLE
+                                    if (host != null && ballView === host) {
+                                        layoutParams.alpha = 1f
+                                        host.alpha = 1f
+                                        host.visibility = View.VISIBLE
+                                        runCatching { windowManager.updateViewLayout(host, layoutParams) }
+                                    }
                                     showDragToAskMenu(dropX, dropY, preHit, bmp)
                                 }
                             }
-                        }, 45L)
+                        }, 140L)
                     }
                 }
                 return true

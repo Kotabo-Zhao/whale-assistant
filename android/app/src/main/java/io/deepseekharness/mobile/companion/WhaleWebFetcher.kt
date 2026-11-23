@@ -422,4 +422,107 @@ internal object WhaleWebFetcher {
         }
         return out.toByteArray() to truncated
     }
+
+    /**
+     * 搜图与以图搜图：
+     * 1. 若传入本地图片路径 imagePath，尝试上传至百度识图接口获取以图搜图结果页；
+     * 2. 同时基于关键词通过 Bing / 百度图片接口抓取高清图片直链、标题与来源页，支持搜图、找同款、找配图。
+     */
+    fun searchImages(query: String = "", imagePath: String = "", limit: Int = 6): JSONObject {
+        val cleanQ = query.trim()
+        val cap = limit.coerceIn(1, 10)
+        val out = JSONObject().put("query", cleanQ)
+        var reverseUrl = ""
+        if (imagePath.isNotBlank()) {
+            val f = java.io.File(imagePath)
+            if (f.isFile && f.length() in 1L..(8L * 1024 * 1024)) {
+                reverseUrl = runCatching { uploadBaiduReverseImage(f) }.getOrDefault("")
+                if (reverseUrl.isNotBlank()) out.put("reverseSearchUrl", reverseUrl)
+            }
+        }
+        val items = JSONArray()
+        val seen = HashSet<String>()
+        if (cleanQ.isNotEmpty()) {
+            // Engine 1: Bing Images async HTML (clean murl/purl/t JSON attributes)
+            runCatching {
+                val enc = java.net.URLEncoder.encode(cleanQ, "UTF-8")
+                val html = fetchRawHtml("https://cn.bing.com/images/async?q=$enc&first=1&count=${cap + 4}&mmasync=1")
+                if (html.isNotBlank()) {
+                    val doc = Jsoup.parse(html)
+                    for (a in doc.select("a.iusc")) {
+                        val mJson = a.attr("m").takeIf(String::isNotBlank) ?: continue
+                        val mObj = runCatching { JSONObject(mJson) }.getOrNull() ?: continue
+                        val imgUrl = mObj.optString("murl").trim()
+                        if (imgUrl.startsWith("http") && seen.add(imgUrl)) {
+                            items.put(
+                                JSONObject()
+                                    .put("title", mObj.optString("t").trim().take(80))
+                                    .put("imageUrl", imgUrl)
+                                    .put("sourceUrl", mObj.optString("purl").trim())
+                                    .put("engine", "bing_images"),
+                            )
+                            if (items.length() >= cap) break
+                        }
+                    }
+                }
+            }
+            // Engine 2: Baidu Images JSON fallback if Bing returned fewer than requested
+            if (items.length() < cap) {
+                runCatching {
+                    val enc = java.net.URLEncoder.encode(cleanQ, "UTF-8")
+                    val raw = fetchRawHtml("https://image.baidu.com/search/acjson?tn=resultjson_com&ipn=rj&word=$enc&pn=0&rn=${cap + 4}")
+                    if (raw.isNotBlank()) {
+                        val data = JSONObject(raw).optJSONArray("data")
+                        if (data != null) {
+                            for (i in 0 until data.length()) {
+                                val row = data.optJSONObject(i) ?: continue
+                                val imgUrl = row.optString("hoverURL").ifBlank { row.optString("thumbURL") }.trim()
+                                if (imgUrl.startsWith("http") && seen.add(imgUrl)) {
+                                    val title = Jsoup.parse(row.optString("fromPageTitleEnc").ifBlank { row.optString("fromPageTitle") }).text().take(80)
+                                    items.put(
+                                        JSONObject()
+                                            .put("title", title)
+                                            .put("imageUrl", imgUrl)
+                                            .put("sourceUrl", row.optString("replaceUrl").trim())
+                                            .put("engine", "baidu_images"),
+                                    )
+                                    if (items.length() >= cap) break
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out.put("ok", items.length() > 0 || reverseUrl.isNotBlank())
+        out.put("count", items.length())
+        out.put("images", items)
+        return out
+    }
+
+    private fun uploadBaiduReverseImage(file: java.io.File): String {
+        val boundary = "----WhaleBoundary${System.currentTimeMillis()}"
+        val conn = (URL("https://graph.baidu.com/upload?from=pc").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = CONNECT_TIMEOUT_MS
+            readTimeout = READ_TIMEOUT_MS
+            setRequestProperty("User-Agent", DESKTOP_UA)
+            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+        }
+        return try {
+            conn.outputStream.use { os ->
+                os.write("--$boundary\r\nContent-Disposition: form-data; name=\"image\"; filename=\"query.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n".toByteArray())
+                file.inputStream().use { it.copyTo(os) }
+                os.write("\r\n--$boundary--\r\n".toByteArray())
+                os.flush()
+            }
+            if (conn.responseCode !in 200..299) return ""
+            val (bytes, _) = readBoundedBytes(conn.inputStream, 128 * 1024)
+            val json = JSONObject(String(bytes, Charsets.UTF_8))
+            json.optJSONObject("data")?.optString("url").orEmpty()
+        } finally {
+            conn.disconnect()
+        }
+    }
 }

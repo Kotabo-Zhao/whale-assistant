@@ -1988,6 +1988,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             val root = appRoot ?: return null
             val pkg = root.packageName?.toString().orEmpty()
             var bestHit = ""
+            var bestNode: AccessibilityNodeInfo? = null
             var bestArea = Long.MAX_VALUE
             val nearby = LinkedHashSet<String>()
             val urls = LinkedHashSet<String>()
@@ -2021,6 +2022,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                             if (area in 1L..bestArea) {
                                 bestArea = area
                                 bestHit = label.take(360)
+                                bestNode = node
                             }
                         } else if (nearby.size < 14) {
                             val cx = rect.centerX()
@@ -2038,8 +2040,44 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                 }
             }
             walk(root, 0)
+            // 若命中微信链接卡片或小红书图文卡片，向上追溯 2~3 层父容器把整张卡片的标题/摘要/来源收齐
+            val cardTexts = LinkedHashSet<String>()
+            var ancestor = bestNode?.parent
+            var up = 0
+            while (ancestor != null && up < 3) {
+                val pRect = android.graphics.Rect()
+                ancestor.getBoundsInScreen(pRect)
+                if (pRect.height() in 60..900 && pRect.width() >= 180) {
+                    fun collectCard(n: AccessibilityNodeInfo?, d: Int) {
+                        if (n == null || d > 6 || cardTexts.size >= 10) return
+                        val t1 = n.text?.toString()?.trim().orEmpty()
+                        val d1 = n.contentDescription?.toString()?.trim().orEmpty()
+                        val s1 = t1.ifBlank { d1 }
+                        if (s1.length >= 2) {
+                            collectUrls(s1)
+                            cardTexts.add(s1.take(220))
+                        }
+                        for (ci in 0 until n.childCount) collectCard(n.getChild(ci), d + 1)
+                    }
+                    collectCard(ancestor, 0)
+                    if (cardTexts.size >= 2) break
+                }
+                ancestor = ancestor.parent
+                up++
+            }
+            // 顺手检查剪贴板中是否有用户刚复制的微信/小红书/B站链接
+            runCatching {
+                val cm = svc.getSystemService(android.content.ClipboardManager::class.java)
+                val clipTxt = cm?.primaryClip?.getItemAt(0)?.coerceToText(svc)?.toString().orEmpty()
+                if (clipTxt.isNotBlank()) collectUrls(clipTxt)
+            }
             val merged = buildString {
-                if (bestHit.isNotEmpty()) append("【指中内容】").append(bestHit)
+                if (cardTexts.size >= 2) {
+                    append("【卡片完整内容】").append(cardTexts.joinToString(" | ").take(520))
+                } else if (bestHit.isNotEmpty()) {
+                    append("【指中内容】").append(bestHit)
+                }
+
                 if (urls.isNotEmpty()) {
                     if (isNotEmpty()) append("\n")
                     append("【识别链接】").append(urls.joinToString(" "))
