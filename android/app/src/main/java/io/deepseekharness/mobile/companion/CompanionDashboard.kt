@@ -56,6 +56,33 @@ internal class CompanionDashboard(private val context: Context) {
             "extensionsList" -> JSONObject()
                 .put("skills", WhaleSkillStore.list(context))
                 .put("mcpServers", WhaleMcpManager.listServers(context))
+            "readinessProbe" -> {
+                val app = context.applicationContext
+                val overlayOk = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    android.provider.Settings.canDrawOverlays(app)
+                } else true
+                val health = runCatching { WhaleAutoHealBridge.health(app) }.getOrElse { JSONObject() }
+                val a11yOk = health.optBoolean("accessibilityConnected", false)
+                val shizukuOk = health.optBoolean("shizukuReady", false)
+                val notifOk = runCatching {
+                    val flat = android.provider.Settings.Secure.getString(app.contentResolver, "enabled_notification_listeners").orEmpty()
+                    flat.contains(app.packageName)
+                }.getOrDefault(false)
+                val store = io.deepseekharness.mobile.runtime.RuntimeStore(app)
+                val modelKeyOk = io.deepseekharness.mobile.runtime.ModelProvider.entries.any {
+                    !store.readModelCredential(it.wireValue).isNullOrBlank()
+                } || store.settings().customModelProviders.any {
+                    !store.readModelCredential(it.id).isNullOrBlank()
+                }
+                val voiceKeyOk = runCatching { WhaleVoiceEngine.readConfig(app).apiKey.isNotBlank() }.getOrDefault(false)
+                JSONObject()
+                    .put("overlay", overlayOk)
+                    .put("accessibility", a11yOk)
+                    .put("notifications", notifOk)
+                    .put("shizuku", shizukuOk)
+                    .put("modelKey", modelKeyOk)
+                    .put("voiceKey", voiceKeyOk)
+            }
             "skillInstall" -> {
                 val url = request.optString("url").trim()
                 val name = request.optString("name").trim()

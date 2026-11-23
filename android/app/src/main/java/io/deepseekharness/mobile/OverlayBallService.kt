@@ -430,6 +430,14 @@ class OverlayBallService : Service() {
         WorkerDashboardStore.subscribeAccepted(taskAccepted)
         DeviceControlState.subscribe(controlListener)
         io.deepseekharness.mobile.companion.WhaleTokenMeter.subscribe(tokenListener)
+        liveIsland = io.deepseekharness.mobile.companion.WhaleLiveIslandOverlay(this, windowManager) {
+            runCatching {
+                startActivity(
+                    Intent(this, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                )
+            }
+        }.also { it.start() }
         runCatching { ensureNotificationChannel() }
         windowManager = getSystemService(WindowManager::class.java)
         // 亮屏 / 息屏 / 解锁都会改变「球是否可见」：收到后只重算动画门控，不重载头像、不动窗口。
@@ -570,8 +578,62 @@ class OverlayBallService : Service() {
     }
 
     private var radialWheelView: View? = null
+    private var liveIsland: io.deepseekharness.mobile.companion.WhaleLiveIslandOverlay? = null
+    private var snapAnimator: android.animation.ValueAnimator? = null
+    private var dragVelocityTracker: android.view.VelocityTracker? = null
 
-    private fun dismissRadialWheel() {
+    private fun cancelSnapSpring() {
+        snapAnimator?.cancel()
+        snapAnimator = null
+    }
+
+    private fun animateSnapToEdgeWithSpring(host: View?, targetX: Int, targetY: Int) {
+        cancelSnapSpring()
+        if (host == null || !host.isAttachedToWindow) {
+            layoutParams.x = targetX
+            layoutParams.y = targetY
+            return
+        }
+        val startX = layoutParams.x
+        val startY = layoutParams.y
+        if (startX == targetX && startY == targetY) return
+        val anim = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 320L
+            interpolator = android.view.animation.OvershootInterpolator(1.05f)
+            addUpdateListener { va ->
+                val f = va.animatedValue as Float
+                if (ballView !== host || !host.isAttachedToWindow) {
+                    va.cancel()
+                    return@addUpdateListener
+                }
+                layoutParams.x = (startX + (targetX - startX) * f).toInt()
+                layoutParams.y = (startY + (targetY - startY) * f).toInt()
+                runCatching { windowManager.updateViewLayout(host, layoutParams) }
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (ballView === host && host.isAttachedToWindow) {
+                        layoutParams.x = targetX
+                        layoutParams.y = targetY
+                        runCatching { windowManager.updateViewLayout(host, layoutParams) }
+                        // 贴边轻挤压回弹（微果冻质感）
+                        host.animate().scaleX(0.93f).scaleY(1.07f).setDuration(70L).withEndAction {
+                            host.animate().scaleX(1f).scaleY(1f).setDuration(140L)
+                                .setInterpolator(android.view.animation.OvershootInterpolator(1.8f)).start()
+                        }.start()
+                        updateControlBounds()
+                        if (bubbleChat.visible) bubbleChat.followPet()
+                        preferences.writePosition(layoutParams.x, layoutParams.y)
+                        layoutPetMenu()
+                    }
+                }
+            })
+        }
+        snapAnimator = anim
+        anim.start()
+    }
+
+    private fun cancelSnapSpring(); dragVelocityTracker?.recycle(); dragVelocityTracker = null; dismissRadialWheel() {
         radialWheelView?.let { v ->
             runCatching { windowManager.removeViewImmediate(v) }
         }
@@ -585,6 +647,8 @@ class OverlayBallService : Service() {
         WorkerDashboardStore.unsubscribeAccepted(taskAccepted)
         DeviceControlState.unsubscribe(controlListener)
         io.deepseekharness.mobile.companion.WhaleTokenMeter.unsubscribe(tokenListener)
+        liveIsland?.stop()
+        liveIsland = null
         calendarServiceDestroyed = true
         reminderHints.clear()
         avatarDestroyed = true
@@ -1933,6 +1997,9 @@ class OverlayBallService : Service() {
         val slop = cachedTouchSlop
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                cancelSnapSpring()
+                dragVelocityTracker?.recycle()
+                dragVelocityTracker = android.view.VelocityTracker.obtain().also { it.addMovement(event) }
                 petActing.dragging = false
                 pinching = false
                 dragLayoutPending = false
@@ -1950,6 +2017,7 @@ class OverlayBallService : Service() {
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
+                dragVelocityTracker?.addMovement(event)
                 val deltaX = event.rawX - touchStartX
                 val deltaY = event.rawY - touchStartY
                 // 双指捏合无级缩放桌宠大小（44dp–160dp）
@@ -2090,16 +2158,30 @@ class OverlayBallService : Service() {
                     val dropX = event.rawX.toInt()
                     val dropY = event.rawY.toInt()
                     cancelHoverPick(view)
-                    // 拖动结束：吸附到最近边缘并记住位置。
+                    // 拖动结束：结合松手速度惯性预测落点，弹簧物理吸附边缘并带微挤压回弹
                     val metrics = resources.displayMetrics
-                    layoutParams.x = OverlayBallPolicy.snapToEdge(
-                        layoutParams.x, metrics.widthPixels, size,
-                    )
-                    runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
-                    ballView?.postOnAnimation { updateControlBounds() }
-                    if (bubbleChat.visible) bubbleChat.followPet()
-                    preferences.writePosition(layoutParams.x, layoutParams.y)
-                    layoutPetMenu()
+                    var vx = 0f
+                    var vy = 0f
+                    dragVelocityTracker?.let { vt ->
+                        vt.addMovement(event)
+                        vt.computeCurrentVelocity(1000)
+                        vx = vt.xVelocity
+                        vy = vt.yVelocity
+                        vt.recycle()
+                    }
+                    dragVelocityTracker = null
+                    val projectedX = (layoutParams.x + (vx * 0.12f).toInt())
+                    val projectedY = (layoutParams.y + (vy * 0.10f).toInt())
+                    val (_, clampedY) = OverlayBallPolicy.clampPosition(projectedX, projectedY, metrics.widthPixels, metrics.heightPixels, size)
+                    val targetX = OverlayBallPolicy.snapToEdge(projectedX, metrics.widthPixels, size)
+                    if (triggerDragAsk) {
+                        layoutParams.x = targetX
+                        layoutParams.y = clampedY
+                        runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
+                        preferences.writePosition(layoutParams.x, layoutParams.y)
+                    } else {
+                        animateSnapToEdgeWithSpring(ballView, targetX, clampedY)
+                    }
                     if (triggerDragAsk) {
                         // 从 WindowManager 层级彻底透明隐藏桌宠并等待 SurfaceFlinger 提交两帧（140ms），确保截屏零桌宠遮挡
                         val host = ballView

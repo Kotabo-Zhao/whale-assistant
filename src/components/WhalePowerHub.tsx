@@ -14,6 +14,16 @@ type UsageBreakdown = {
   chatTokens: number
   workerTokens: number
   phoneTokens: number
+  petTokens?: number
+  bgTokens?: number
+}
+type ReadinessState = {
+  overlay?: boolean
+  accessibility?: boolean
+  notifications?: boolean
+  shizuku?: boolean
+  modelKey?: boolean
+  voiceKey?: boolean
 }
 
 function fmtTok(n: number): string {
@@ -33,6 +43,7 @@ export function WhalePowerHub() {
   const [extBusy, setExtBusy] = useState(false)
 
   const [usage, setUsage] = useState<UsageBreakdown | null>(null)
+  const [readiness, setReadiness] = useState<ReadinessState | null>(null)
   const [fastModel, setFastModel] = useState('')
   const [deepModel, setDeepModel] = useState('')
   const [routerMsg, setRouterMsg] = useState('')
@@ -52,6 +63,8 @@ export function WhalePowerHub() {
       if (res.usage && typeof res.usage === 'object') setUsage(res.usage as UsageBreakdown)
       if (typeof res.fastModel === 'string') setFastModel(res.fastModel)
       if (typeof res.deepModel === 'string') setDeepModel(res.deepModel)
+      const probe = await runtimeBridge.companionDashboard({ operation: 'readinessProbe' })
+      if (probe && typeof probe === 'object') setReadiness(probe as ReadinessState)
     } catch { /* ignore in browser preview */ }
   }, [])
 
@@ -249,10 +262,27 @@ export function WhalePowerHub() {
           </span>
         </summary>
         <div className="whale-power-body">
+          {readiness && (
+            <div className="whale-usage-pills" aria-label={t('能力就绪体检')}>
+              {([
+                ['modelKey', '主模型'],
+                ['overlay', '悬浮窗'],
+                ['accessibility', '无障碍'],
+                ['notifications', '通知'],
+                ['shizuku', 'Shizuku'],
+                ['voiceKey', '语音'],
+              ] as const).map(([k, lbl]) => (
+                <span key={k} className={readiness[k] ? 'whale-ready-on' : 'whale-ready-off'}>
+                  {readiness[k] ? '● ' : '○ '}{t(lbl)}
+                </span>
+              ))}
+            </div>
+          )}
           {usage && (
             <div className="whale-usage-pills">
               <span>{t('对话')} {fmtTok(usage.chatTokens)}</span>
-              <span>{t('后台')} {fmtTok(usage.workerTokens)}</span>
+              {typeof usage.petTokens === 'number' && usage.petTokens > 0 && <span>{t('桌宠')} {fmtTok(usage.petTokens)}</span>}
+              <span>{t('后台')} {fmtTok(usage.workerTokens + (usage.bgTokens ?? 0))}</span>
               <span>{t('屏控')} {fmtTok(usage.phoneTokens)}</span>
               <span>{t('缓存命中')} {Math.round(usage.cacheHitRatio * 100)}%</span>
               {typeof usage.compressionRatio === 'number' && usage.compressionRatio > 0 && (

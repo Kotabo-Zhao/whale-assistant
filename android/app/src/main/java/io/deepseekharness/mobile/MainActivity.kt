@@ -267,7 +267,13 @@ class MainActivity : BridgeActivity() {
         val preview = text.take(600) + if (text.length > 600) "\n…（预览已截断，保存的是完整内容）" else ""
         val dialog = androidx.appcompat.app.AlertDialog.Builder(AppThemePreference.palette(this)).setTitle("处理分享的文字")
             .setMessage("$preview\n\n保存到本机收件箱后，运行环境及当前或后续对话可能读取并发送给模型。放入草稿后请核对，再自行发送。")
-            .setNegativeButton("取消", null).setPositiveButton("保存…") { _, _ ->
+            .setNegativeButton("取消", null)
+            .setNeutralButton("直接问助手") { _, _ ->
+                io.deepseekharness.mobile.companion.WhaleAppControlBus.emit(
+                    org.json.JSONObject().put("action", "ask").put("prompt", "请帮我分析或处理以下我刚分享过来的内容：\n\n" + text.take(8_000)),
+                )
+            }
+            .setPositiveButton("保存…") { _, _ ->
                 androidx.appcompat.app.AlertDialog.Builder(AppThemePreference.palette(this)).setTitle("选择保存位置")
                     .setMessage("本地资料支持最长 200 万字并自动分段保存；开启对话资料访问后，匹配内容可能发送给模型。收件箱可供运行环境读取。")
                     .setPositiveButton("本地资料库") { _, _ -> saveSharedKnowledge(text) }

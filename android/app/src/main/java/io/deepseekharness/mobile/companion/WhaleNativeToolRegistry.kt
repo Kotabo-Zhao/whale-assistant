@@ -763,6 +763,29 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
             array.put(schema("whale_mcp_list", "列出已配置 MCP 服务器及工具。", emptyMap(), emptyList()))
             array.put(schema(
+                "whale_cloud_sync",
+                "端到端 AES-256-GCM 加密 WebDAV 云同步（零云端明文）：同步自造工具、0-Token 宏、守护规则、长期目标与角色卡。",
+                mapOf(
+                    "action" to "status / configure / push / pull",
+                    "url" to "configure 时的 WebDAV 目录网址",
+                    "username" to "configure 时的账号",
+                    "password" to "configure 时的应用密码",
+                    "passphrase" to "push/pull 时的端到端加密口令(>=6位)",
+                ),
+                listOf("action"),
+            ))
+            array.put(schema(
+                "whale_share_pack",
+                "将自造工具、工坊小软件或录制宏打包为 WHALE1 一键分享口令码，或从口令码直接导入本机。",
+                mapOf(
+                    "action" to "export / import",
+                    "kind" to "export 时对象类型：custom_tool / workshop / macro",
+                    "idOrName" to "export 时的名称或 ID",
+                    "code" to "import 时的 WHALE1:... 口令码",
+                ),
+                listOf("action"),
+            ))
+            array.put(schema(
                 "whale_mcp_add",
                 "接入远程 HTTP/JSON-RPC MCP 或本地进程内 Python MCP（url 传 python://<id> 并附带定义 TOOLS 与 call_tool(name, args) 的 code，直接在内置 CPython 3.11 运行，无需 npx/stdio 常驻进程）。",
                 mapOf(
@@ -2706,6 +2729,25 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val res = WhaleAgentBrainEnhancer.MemoryConsolidator.consolidate(app, dryRun = dryRun)
                     val ok = res.optBoolean("ok", false)
                     ToolOutcome(name, if (dryRun) "预览记忆提纯去重" else "执行记忆提纯与冲突消解", ok, res.toString(), mutating = !dryRun && ok)
+                }
+                "whale_cloud_sync" -> {
+                    val action = args.str("action", "status").trim().lowercase()
+                    val res = when (action) {
+                        "configure" -> WhaleCloudSync.configure(app, args.str("url"), args.str("username"), args.str("password"))
+                        "push" -> WhaleCloudSync.push(app, args.str("passphrase"))
+                        "pull" -> WhaleCloudSync.pull(app, args.str("passphrase"))
+                        else -> WhaleCloudSync.status(app)
+                    }
+                    ToolOutcome(name, "端到端云同步：$action", res.optBoolean("ok", true), res.toString(), mutating = action != "status")
+                }
+                "whale_share_pack" -> {
+                    val action = args.str("action", "export").trim().lowercase()
+                    val res = if (action == "import") {
+                        WhaleShareCodeCodec.importCode(app, args.str("code"))
+                    } else {
+                        WhaleShareCodeCodec.exportCode(app, args.str("kind"), args.str("idOrName"))
+                    }
+                    ToolOutcome(name, if (action == "import") "导入分享口令码" else "生成分享口令码", res.optBoolean("ok", true), res.toString(), mutating = action == "import")
                 }
                 "whale_task_checkpoint" -> {
                     val action = args.str("action", "status").trim().lowercase()

@@ -172,6 +172,30 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send(200, _mcp_rpc(server, "tools/call", {"name": tool, "arguments": arguments}))
             return
 
+        if self.path == "/files/search":
+            data = self._read_json()
+            query = str(data.get("query", "")).strip().lower()
+            root_dir = os.path.expanduser(str(data.get("root", "~")).strip() or "~")
+            limit = max(1, min(int(data.get("limit", 20)), 50))
+            matches = []
+            if query and os.path.isdir(root_dir):
+                for cur, dirs, files in os.walk(root_dir):
+                    dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "__pycache__", ".git", "AppData", "Library")]
+                    for fn in files:
+                        if query in fn.lower():
+                            full = os.path.join(cur, fn)
+                            try:
+                                st = os.stat(full)
+                                matches.append({"path": full, "name": fn, "size": st.st_size, "mtime": int(st.st_mtime)})
+                            except OSError:
+                                pass
+                            if len(matches) >= limit:
+                                break
+                    if len(matches) >= limit:
+                        break
+            self._send(200, {"ok": True, "query": query, "count": len(matches), "files": matches})
+            return
+
         self._send(404, {"ok": False, "error": "Not found"})
 
     def log_message(self, fmt, *args):

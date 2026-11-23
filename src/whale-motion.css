@@ -359,6 +359,60 @@ body, .app-header, .bottom-navigation, .sidebar-nav {
   transform: translate3d(0, -1px, 0);
 }
 
+
+/* Micro-interactions: shimmer progress, smooth A2UI checklist & voice fluid pulse */
+@keyframes whale-shimmer-sweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes whale-voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #0B5FFF) 42%, transparent); transform: scale(1); }
+  50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent, #0B5FFF) 0%, transparent); transform: scale(1.06); }
+}
+
+@keyframes whale-check-pop {
+  0% { transform: scale(0.82); }
+  60% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+.whale-thinking-bar,
+.whale-phase-banner {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent, #0B5FFF) 10%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: whale-shimmer-sweep 2.2s ease-in-out infinite;
+}
+
+.whale-voice-recording,
+.whale-mic-btn.is-listening {
+  animation: whale-voice-pulse 1.3s ease-in-out infinite;
+}
+
+.whale-widget-check-item.is-done {
+  animation: whale-check-pop 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.whale-ready-on {
+  color: var(--accent, #0B5FFF);
+  font-weight: 600;
+}
+
+.whale-ready-off {
+  opacity: 0.58;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Battery & Accessibility Eco Shutdown: zero animation/GPU wakeups */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

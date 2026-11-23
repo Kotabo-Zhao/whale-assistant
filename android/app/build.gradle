@@ -125,7 +125,7 @@ chaquopy {
     defaultConfig {
         version = "3.11"
         pip {
-            // 全功能 Python 3.11 生态预装：科学计算、数据分析、图表绘制、办公文档、网络爬虫与符号数学
+            // 精简必装高频 C 扩展与办公核心（APK 保持轻巧）；其余纯 Python 库由 whale_runner.py 按需首次 import 自动静默安装
             install("pillow")
             install("lxml")
             install("python-pptx")
@@ -134,21 +134,9 @@ chaquopy {
             install("pypdf")
             install("beautifulsoup4")
             install("numpy")
-            install("pandas")
-            install("matplotlib")
             install("requests")
-            install("httpx")
             install("pyyaml")
-            install("markdown")
-            install("qrcode")
-            install("reportlab")
-            install("sympy")
-            install("jinja2")
-            install("tabulate")
-            install("python-dateutil")
             install("cryptography")
-            install("chardet")
-            install("xlrd")
         }
     }
 }

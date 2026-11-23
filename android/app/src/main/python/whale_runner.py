@@ -114,6 +114,60 @@ def _configure_android_matplotlib_fonts():
         pass
 
 
+
+_AUTO_INSTALL_MAP = {
+    "qrcode": "qrcode",
+    "markdown": "markdown",
+    "jinja2": "jinja2",
+    "tabulate": "tabulate",
+    "chardet": "chardet",
+    "xlrd": "xlrd",
+    "httpx": "httpx",
+    "sympy": "sympy",
+    "reportlab": "reportlab",
+    "dateutil": "python-dateutil",
+    "feedparser": "feedparser",
+    "toml": "toml",
+    "rich": "rich",
+    "pydantic": "pydantic",
+}
+_AUTO_INSTALL_TRIED = set()
+
+
+class _WhaleAutoInstallFinder:
+    """sys.meta_path hook: lazily downloads pure-Python packages into writable SITE_PACKAGES on first import."""
+
+    def __init__(self, site_dir: str):
+        self._site_dir = site_dir
+
+    def find_spec(self, fullname, path=None, target=None):
+        top = fullname.split(".", 1)[0]
+        pkg = _AUTO_INSTALL_MAP.get(top)
+        if not pkg or top in _AUTO_INSTALL_TRIED:
+            return None
+        _AUTO_INSTALL_TRIED.add(top)
+        try:
+            res = json.loads(install_pure_wheel(pkg, self._site_dir))
+            if res.get("ok"):
+                importlib.invalidate_caches()
+                for finder in sys.meta_path:
+                    if finder is self:
+                        continue
+                    spec = getattr(finder, "find_spec", None)
+                    if spec:
+                        found = spec(fullname, path, target)
+                        if found is not None:
+                            return found
+        except Exception:
+            pass
+        return None
+
+
+def _ensure_auto_install_hook(site_dir: str):
+    if not any(isinstance(f, _WhaleAutoInstallFinder) for f in sys.meta_path):
+        sys.meta_path.append(_WhaleAutoInstallFinder(site_dir))
+
+
 def _install_virtual_pip_module(site_dir: str):
     """Expose a virtual `pip` module so scripts doing `import pip; pip.main(['install', pkg])` work seamlessly."""
     mod = types.ModuleType("pip")
@@ -264,6 +318,7 @@ def run_code(
         sys.path.insert(0, site_dir_resolved)
 
     _install_virtual_pip_module(site_dir_resolved)
+    _ensure_auto_install_hook(site_dir_resolved)
 
     def _pip_install(package_name: str, mirror_url: str = "") -> dict:
         raw_res = install_pure_wheel(package_name, site_dir_resolved, mirror_url)

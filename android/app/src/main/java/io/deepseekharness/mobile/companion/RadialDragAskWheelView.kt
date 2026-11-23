@@ -117,12 +117,20 @@ internal class RadialDragAskWheelView(
     private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-        duration = 250L
-        interpolator = OvershootInterpolator(1.18f)
+        duration = 340L
+        interpolator = android.view.animation.DecelerateInterpolator(1.5f)
         addUpdateListener {
             bloomProgress = it.animatedValue as Float
             invalidate()
         }
+    }
+
+    private fun staggeredProgress(index: Int): Float {
+        val delay = index * 0.08f
+        val local = ((bloomProgress - delay) / (1f - delay).coerceAtLeast(0.25f)).coerceIn(0f, 1f)
+        // 轻弹性过冲曲线（Overshoot）
+        val t = local - 1f
+        return (t * t * (2.2f * t + 1.2f) + 1f).coerceIn(0f, 1.16f)
     }
 
     init {
@@ -172,12 +180,18 @@ internal class RadialDragAskWheelView(
         orbitPaint.color = withAlpha(ui.primary, (110 * alphaFactor).toInt())
         canvas.drawCircle(cx, cy, orbitRadius * p, orbitPaint)
 
-        // 3. 外圈 6 个带独立矢量图标的轮盘按键
+        // 3. 外圈 6 个带独立矢量图标的轮盘按键（28ms 顺时针交错绽放 + 磁吸 1.18× 主题光晕聚焦）
         actions.forEachIndexed { idx, action ->
-            val (ix, iy) = itemCenter(idx, p)
+            val sp = staggeredProgress(idx)
+            val itemAlpha = sp.coerceIn(0f, 1f)
+            val (ix, iy) = itemCenter(idx, sp)
             val isPressed = idx == pressedIndex
-            val scale = (if (isPressed) 0.90f else 1f) * alphaFactor.coerceAtLeast(0.01f)
+            val scale = (if (isPressed) 1.18f else 1f) * itemAlpha.coerceAtLeast(0.01f)
             val r = itemRadius * scale
+            if (isPressed) {
+                shadowPaint.color = withAlpha(ui.primary, (86 * itemAlpha).toInt())
+                canvas.drawCircle(ix, iy, r + 7f * dp, shadowPaint)
+            }
 
             // 轻阴影
             shadowPaint.color = Color.argb((54 * alphaFactor).toInt(), 0, 0, 0)
