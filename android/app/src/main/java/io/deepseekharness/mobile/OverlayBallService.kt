@@ -170,7 +170,7 @@ class OverlayBallService : Service() {
             shape = android.graphics.drawable.GradientDrawable.OVAL
             setColor(android.graphics.Color.argb(210, 255, 255, 255))
         }
-        val nextLabel = snap.compactLabel()
+        val nextLabel = io.deepseekharness.mobile.companion.WhaleTokenMeter.compactLabelWithMetrics(this, snap)
         val changed = label.text?.toString() != nextLabel
         label.text = nextLabel
         if (changed && companionMotionEnabled()) {

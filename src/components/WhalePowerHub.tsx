@@ -8,6 +8,8 @@ type McpRow = { id: string; name: string; url: string; enabled: boolean; toolCou
 type UsageBreakdown = {
   totalTokens: number
   cacheHitRatio: number
+  compressionRatio?: number
+  savedChars?: number
   estimatedYuan: number
   chatTokens: number
   workerTokens: number
@@ -253,6 +255,9 @@ export function WhalePowerHub() {
               <span>{t('后台')} {fmtTok(usage.workerTokens)}</span>
               <span>{t('屏控')} {fmtTok(usage.phoneTokens)}</span>
               <span>{t('缓存命中')} {Math.round(usage.cacheHitRatio * 100)}%</span>
+              {typeof usage.compressionRatio === 'number' && usage.compressionRatio > 0 && (
+                <span>{t('上下文压缩')} {Math.round(usage.compressionRatio * 100)}%</span>
+              )}
             </div>
           )}
           <div className="whale-power-group">

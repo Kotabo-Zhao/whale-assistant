@@ -53,6 +53,9 @@ export interface WhaleChatMessage {
   steps?: WhaleNativeChatStep[]
   model?: string
   elapsedMs?: number
+  compressionRatio?: number
+  savedChars?: number
+  cacheHitRatio?: number
   reasoning?: string
   reasoningMs?: number
   error?: boolean
@@ -761,6 +764,9 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
           steps: result.steps,
           model: result.model,
           elapsedMs: result.elapsedMs,
+          compressionRatio: result.compressionRatio,
+          savedChars: result.savedChars,
+          cacheHitRatio: result.cacheHitRatio,
           reasoning: streamingReasoningRef.current.trim() || undefined,
           reasoningMs: reasoningStartRef.current > 0 ? Math.max(500, Date.now() - reasoningStartRef.current) : undefined,
           suggestions: result.suggestions,
@@ -1273,6 +1279,8 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
                     <span>
                       {msg.model ?? 'whale'}
                       {msg.elapsedMs ? ` · ${(msg.elapsedMs / 1000).toFixed(1)}s` : ''}
+                      {typeof msg.compressionRatio === 'number' && msg.compressionRatio > 0 ? ` · ${t('压缩')} ${Math.round(msg.compressionRatio * 100)}%` : ''}
+                      {typeof msg.cacheHitRatio === 'number' && msg.cacheHitRatio >= 0 ? ` · ${t('缓存')} ${Math.round(msg.cacheHitRatio * 100)}%` : ''}
                     </span>
                     <button
                       type="button"

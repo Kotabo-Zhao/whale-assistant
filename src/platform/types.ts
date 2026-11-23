@@ -2440,4 +2440,7 @@ export interface WhaleNativeChatResult {
   mode: string
   suggestions?: string[]
   cancelled?: boolean
+  compressionRatio?: number
+  savedChars?: number
+  cacheHitRatio?: number
 }

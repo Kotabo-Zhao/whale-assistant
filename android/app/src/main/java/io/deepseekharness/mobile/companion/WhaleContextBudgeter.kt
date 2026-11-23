@@ -25,15 +25,22 @@ internal object WhaleContextBudgeter {
         val compactDynamicCtxChars: Int = 0,
         val rawHistoryChars: Int = 0,
         val compactHistoryChars: Int = 0,
-        val toolPayloadSavedChars: Int = 0,
+        val toolPayloadRawChars: Int = 0,
+        val toolPayloadCompactChars: Int = 0,
         val ragSkippedByGate: Boolean = false,
         val timestampMs: Long = System.currentTimeMillis(),
     ) {
+        val rawTotalChars: Int
+            get() = rawSchemaChars + rawDynamicCtxChars + rawHistoryChars + toolPayloadRawChars
+
+        val compactTotalChars: Int
+            get() = compactSchemaChars + compactDynamicCtxChars + compactHistoryChars + toolPayloadCompactChars
+
         val totalSavedChars: Int
-            get() = (rawSchemaChars - compactSchemaChars).coerceAtLeast(0) +
-                (rawDynamicCtxChars - compactDynamicCtxChars).coerceAtLeast(0) +
-                (rawHistoryChars - compactHistoryChars).coerceAtLeast(0) +
-                toolPayloadSavedChars.coerceAtLeast(0)
+            get() = (rawTotalChars - compactTotalChars).coerceAtLeast(0)
+
+        val compressionRatio: Float
+            get() = if (rawTotalChars <= 0) 0f else (totalSavedChars.toFloat() / rawTotalChars.toFloat()).coerceIn(0f, 1f)
 
         val estimatedSavedTokens: Int
             get() = (totalSavedChars / 2.2).toInt().coerceAtLeast(0)
@@ -46,7 +53,11 @@ internal object WhaleContextBudgeter {
             .put("compactDynamicCtxChars", compactDynamicCtxChars)
             .put("rawHistoryChars", rawHistoryChars)
             .put("compactHistoryChars", compactHistoryChars)
-            .put("toolPayloadSavedChars", toolPayloadSavedChars)
+            .put("toolPayloadRawChars", toolPayloadRawChars)
+            .put("toolPayloadCompactChars", toolPayloadCompactChars)
+            .put("rawTotalChars", rawTotalChars)
+            .put("compactTotalChars", compactTotalChars)
+            .put("compressionRatio", compressionRatio.toDouble())
             .put("ragSkippedByGate", ragSkippedByGate)
             .put("totalSavedChars", totalSavedChars)
             .put("estimatedSavedTokens", estimatedSavedTokens)

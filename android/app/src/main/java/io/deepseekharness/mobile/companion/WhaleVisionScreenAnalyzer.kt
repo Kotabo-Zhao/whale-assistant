@@ -87,7 +87,7 @@ internal object WhaleVisionScreenAnalyzer {
             resp.optJSONObject("usage")?.let { u ->
                 val pTok = u.optLong("prompt_tokens", 0L)
                 val cTok = u.optLong("completion_tokens", 0L)
-                val cacheHit = u.optLong("prompt_cache_hit_tokens", 0L)
+                val cacheHit = WhaleTokenMeter.extractCacheHitTokens(u)
                 if (pTok > 0L || cTok > 0L) {
                     runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, endpoint.model) }
                 }

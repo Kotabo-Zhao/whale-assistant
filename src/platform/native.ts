@@ -125,7 +125,7 @@ import {
 } from './validation'
 
 interface NativeRuntimePlugin {
-  whaleNativeChat(request: { message: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; sessionId?: string; requestId?: string; images?: string[] }): Promise<{ reply: string; steps: Array<{ tool: string; label: string; ok: boolean; durationMs: number }>; model: string; elapsedMs: number; mode: string; suggestions?: string[]; cancelled?: boolean }>
+  whaleNativeChat(request: { message: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; sessionId?: string; requestId?: string; images?: string[] }): Promise<{ reply: string; steps: Array<{ tool: string; label: string; ok: boolean; durationMs: number }>; model: string; elapsedMs: number; mode: string; suggestions?: string[]; cancelled?: boolean; compressionRatio?: number; savedChars?: number; cacheHitRatio?: number }>
   whaleNativeChatSteer(request: { requestId: string; message: string }): Promise<{ ok: boolean; steered: boolean }>
   whaleNativeChatCancel(request: { requestId: string }): Promise<{ ok: boolean }>
   setHarnessViewport(options: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>

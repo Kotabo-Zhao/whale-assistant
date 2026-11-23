@@ -151,4 +151,22 @@ class WhaleContextBudgeterTest {
         assertFalse(compressed[3].second.contains("whale_next"))
         assertTrue(compressed[3].second.contains("最新回复保留完整内容"))
     }
+
+    @Test
+    fun turnCompressionStatsCalculatesExactCompressionRatio() {
+        val stats = WhaleContextBudgeter.TurnCompressionStats(
+            rawSchemaChars = 10_000,
+            compactSchemaChars = 3_000,
+            rawDynamicCtxChars = 4_000,
+            compactDynamicCtxChars = 1_500,
+            rawHistoryChars = 2_000,
+            compactHistoryChars = 1_000,
+            toolPayloadRawChars = 4_000,
+            toolPayloadCompactChars = 1_500,
+        )
+        assertEquals(20_000, stats.rawTotalChars)
+        assertEquals(7_000, stats.compactTotalChars)
+        assertEquals(13_000, stats.totalSavedChars)
+        assertEquals(0.65f, stats.compressionRatio, 0.001f)
+    }
 }

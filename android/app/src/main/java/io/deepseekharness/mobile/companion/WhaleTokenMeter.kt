@@ -27,6 +27,9 @@ internal object WhaleTokenMeter {
     private const val KEY_SCENE_CHAT = "scene_chat_tokens"
     private const val KEY_SCENE_WORKER = "scene_worker_tokens"
     private const val KEY_SCENE_PHONE = "scene_phone_tokens"
+    private const val KEY_REPORTED_PROMPT = "reported_prompt_tokens"
+    private const val KEY_COMP_RAW_CHARS = "comp_raw_chars"
+    private const val KEY_COMP_COMPACT_CHARS = "comp_compact_chars"
     private const val DEFAULT_DAILY_BUDGET = 200_000L
     private const val USD_TO_CNY = 7.20
 
@@ -161,6 +164,9 @@ internal object WhaleTokenMeter {
                 .putLong(KEY_SCENE_CHAT, 0L)
                 .putLong(KEY_SCENE_WORKER, 0L)
                 .putLong(KEY_SCENE_PHONE, 0L)
+                .putLong(KEY_REPORTED_PROMPT, 0L)
+                .putLong(KEY_COMP_RAW_CHARS, 0L)
+                .putLong(KEY_COMP_COMPACT_CHARS, 0L)
                 .apply()
             return Snapshot(today, 0L, 0L, 0L, 0L, budget)
         }
@@ -182,6 +188,7 @@ internal object WhaleTokenMeter {
         cacheHitTokens: Long = 0L,
         model: String = "deepseek-chat",
         scene: String = "chat",
+        reportedByApi: Boolean = true,
     ): Snapshot {
         val addPrompt = promptTokens.coerceAtLeast(0L)
         val addCompletion = completionTokens.coerceAtLeast(0L)
@@ -200,6 +207,7 @@ internal object WhaleTokenMeter {
         val chatBase = prefs.getLong(KEY_SCENE_CHAT, 0L).coerceAtLeast(0L)
         val workerBase = prefs.getLong(KEY_SCENE_WORKER, 0L).coerceAtLeast(0L)
         val phoneBase = prefs.getLong(KEY_SCENE_PHONE, 0L).coerceAtLeast(0L)
+        val reportedBase = prefs.getLong(KEY_REPORTED_PROMPT, 0L).coerceAtLeast(0L)
         prefs.edit()
             .putString(KEY_DAY, next.day)
             .putLong(KEY_PROMPT, next.promptTokens)
@@ -209,6 +217,7 @@ internal object WhaleTokenMeter {
             .putLong(KEY_SCENE_CHAT, chatBase + if (scene == "chat") addedTotal else 0L)
             .putLong(KEY_SCENE_WORKER, workerBase + if (scene == "worker") addedTotal else 0L)
             .putLong(KEY_SCENE_PHONE, phoneBase + if (scene == "phone") addedTotal else 0L)
+            .putLong(KEY_REPORTED_PROMPT, reportedBase + if (reportedByApi) addPrompt else 0L)
             .apply()
         listeners.forEach { runCatching { it(next) } }
         return next
@@ -222,16 +231,55 @@ internal object WhaleTokenMeter {
         listeners.remove(listener)
     }
 
+    @Synchronized
+    fun recordCompression(context: Context, rawChars: Int, compactChars: Int) {
+        if (rawChars <= 0) return
+        val snap = snapshot(context)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val rawBase = prefs.getLong(KEY_COMP_RAW_CHARS, 0L).coerceAtLeast(0L)
+        val compactBase = prefs.getLong(KEY_COMP_COMPACT_CHARS, 0L).coerceAtLeast(0L)
+        prefs.edit()
+            .putString(KEY_DAY, snap.day)
+            .putLong(KEY_COMP_RAW_CHARS, rawBase + rawChars.toLong())
+            .putLong(KEY_COMP_COMPACT_CHARS, compactBase + compactChars.coerceIn(0, rawChars).toLong())
+            .apply()
+        listeners.forEach { runCatching { it(snap) } }
+    }
+
+    fun compactLabelWithMetrics(context: Context, snap: Snapshot = snapshot(context)): String {
+        val base = snap.compactLabel()
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val rawChars = prefs.getLong(KEY_COMP_RAW_CHARS, 0L).coerceAtLeast(0L)
+        val compactChars = prefs.getLong(KEY_COMP_COMPACT_CHARS, 0L).coerceIn(0L, rawChars)
+        val compPct = if (rawChars > 0L) (((rawChars - compactChars) * 100L) / rawChars).toInt().coerceIn(0, 99) else 0
+        val reportedPrompt = prefs.getLong(KEY_REPORTED_PROMPT, 0L).coerceAtLeast(0L)
+        val cacheDenom = if (reportedPrompt > 0L) reportedPrompt else snap.promptTokens
+        val cachePct = if (cacheDenom > 0L) ((snap.cacheHitTokens * 100L) / cacheDenom).toInt().coerceIn(0, 100) else 0
+        val parts = mutableListOf(base)
+        if (compPct > 0) parts.add("压$compPct%")
+        if (cachePct > 0) parts.add("缓$cachePct%")
+        return parts.joinToString(" · ")
+    }
+
     fun breakdownJson(context: Context): JSONObject {
         val snap = snapshot(context)
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val reportedPrompt = prefs.getLong(KEY_REPORTED_PROMPT, 0L).coerceAtLeast(0L)
+        val cacheDenom = if (reportedPrompt > 0L) reportedPrompt else snap.promptTokens
+        val accurateCacheRatio = if (cacheDenom <= 0L) 0.0 else (snap.cacheHitTokens.toDouble() / cacheDenom.toDouble()).coerceIn(0.0, 1.0)
+        val rawChars = prefs.getLong(KEY_COMP_RAW_CHARS, 0L).coerceAtLeast(0L)
+        val compactChars = prefs.getLong(KEY_COMP_COMPACT_CHARS, 0L).coerceIn(0L, rawChars)
+        val compressionRatio = if (rawChars <= 0L) 0.0 else ((rawChars - compactChars).toDouble() / rawChars.toDouble()).coerceIn(0.0, 1.0)
         return JSONObject()
             .put("day", snap.day)
             .put("totalTokens", snap.totalTokens)
             .put("promptTokens", snap.promptTokens)
+            .put("reportedPromptTokens", reportedPrompt)
             .put("completionTokens", snap.completionTokens)
             .put("cacheHitTokens", snap.cacheHitTokens)
-            .put("cacheHitRatio", snap.cacheHitRatio.toDouble())
+            .put("cacheHitRatio", accurateCacheRatio)
+            .put("compressionRatio", compressionRatio)
+            .put("savedChars", (rawChars - compactChars).coerceAtLeast(0L))
             .put("estimatedYuan", snap.estimatedYuan)
             .put("dailyBudgetTokens", snap.dailyBudgetTokens)
             .put("chatTokens", prefs.getLong(KEY_SCENE_CHAT, 0L).coerceAtLeast(0L))

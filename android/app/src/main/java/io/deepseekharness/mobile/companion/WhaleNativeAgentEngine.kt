@@ -97,13 +97,16 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val suggestions: List<String> = emptyList(),
         val cancelled: Boolean = false,
         val hitRoundLimit: Boolean = false,
+        val compressionRatio: Double? = null,
+        val savedChars: Int = 0,
+        val cacheHitRatio: Double? = null,
     ) {
         fun json(): JSONObject {
             val stepsArr = JSONArray()
             steps.forEach { stepsArr.put(it.json()) }
             val sugArr = JSONArray()
             suggestions.forEach { sugArr.put(it) }
-            return JSONObject()
+            val out = JSONObject()
                 .put("reply", reply)
                 .put("steps", stepsArr)
                 .put("model", model)
@@ -111,7 +114,28 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 .put("mode", mode)
                 .put("suggestions", sugArr)
                 .put("cancelled", cancelled)
+            if (compressionRatio != null && compressionRatio > 0.0) {
+                out.put("compressionRatio", compressionRatio)
+                out.put("savedChars", savedChars)
+            }
+            if (cacheHitRatio != null && cacheHitRatio >= 0.0) {
+                out.put("cacheHitRatio", cacheHitRatio)
+            }
+            return out
         }
+    }
+
+    private class TurnUsageAcc {
+        var reportedPromptTokens: Long = 0L
+        var cacheHitTokens: Long = 0L
+        fun addReported(prompt: Long, cacheHit: Long) {
+            if (prompt > 0L) {
+                reportedPromptTokens += prompt
+                cacheHitTokens += cacheHit.coerceIn(0L, prompt)
+            }
+        }
+        fun cacheHitRatioOrNull(): Double? =
+            if (reportedPromptTokens <= 0L) null else (cacheHitTokens.toDouble() / reportedPromptTokens.toDouble()).coerceIn(0.0, 1.0)
     }
 
     private data class AssistantTurn(
@@ -200,7 +224,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             ragSkippedByGate = built.third
             built.second
         }
-        var toolPayloadSavedChars = 0
+        var toolPayloadRawChars = 0
+        var toolPayloadCompactChars = 0
+        val turnUsage = TurnUsageAcc()
         WhaleContextBudgeter.lastTurnStats = WhaleContextBudgeter.TurnCompressionStats(
             rawSchemaChars = schemaBundle.rawChars,
             compactSchemaChars = schemaBundle.compactChars,
@@ -210,7 +236,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             compactDynamicCtxChars = dynamicCtx.length,
             rawHistoryChars = rawHistoryChars,
             compactHistoryChars = compactHistoryChars,
-            toolPayloadSavedChars = 0,
+            toolPayloadRawChars = 0,
+            toolPayloadCompactChars = 0,
             ragSkippedByGate = ragSkippedByGate,
         )
         val userPayload = if (dynamicCtx.isNotBlank()) {
@@ -270,7 +297,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     val compactReq = JSONArray()
                     for (ci in 0 until messages.length()) compactReq.put(messages.get(ci))
                     compactReq.put(JSONObject().put("role", "user").put("content", WhaleHarnessCore.PrefixCacheCompactor.COMPACTION_INSTRUCTION))
-                    val summaryTurn = callChatCompletionsWithRetry(endpoint = endpoint, messages = compactReq, toolsArray = null, listener = null, control = control)
+                    val summaryTurn = callChatCompletionsWithRetry(endpoint = endpoint, messages = compactReq, toolsArray = null, listener = null, control = control, usageAcc = turnUsage)
                     val summaryText = summaryTurn.content.trim()
                     if (summaryText.length >= 40) {
                         val sysMsg = messages.optJSONObject(0)
@@ -338,6 +365,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     } else null,
                     control = control,
                     fallbacks = fallbackEndpoints,
+                    usageAcc = turnUsage,
                 )
             } catch (err: Throwable) {
                 if (control?.cancelled?.get() == true) {
@@ -531,7 +559,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     headPoints = WhaleContextBudgeter.TOOL_INLINE_HEAD_POINTS,
                     tailPoints = WhaleContextBudgeter.TOOL_INLINE_TAIL_POINTS,
                 )
-                toolPayloadSavedChars += (rawOut.length - boundedOut.length).coerceAtLeast(0)
+                toolPayloadRawChars += rawOut.length
+                toolPayloadCompactChars += boundedOut.length
                 messages.put(
                     JSONObject()
                         .put("role", "tool")
@@ -539,9 +568,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         .put("content", boundedOut),
                 )
             }
-            if (toolPayloadSavedChars > 0) {
+            if (toolPayloadRawChars > 0) {
                 WhaleContextBudgeter.lastTurnStats = WhaleContextBudgeter.lastTurnStats.copy(
-                    toolPayloadSavedChars = toolPayloadSavedChars,
+                    toolPayloadRawChars = toolPayloadRawChars,
+                    toolPayloadCompactChars = toolPayloadCompactChars,
                 )
             }
             // 若因中途取消导致尾部 tool_calls 未全部执行，自动补齐协议合法的占位错误结果（源自 session/repair.ts）
@@ -582,6 +612,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     toolsArray = null,
                     listener = listener,
                     control = control,
+                    usageAcc = turnUsage,
                 )
             }.getOrNull()
             finalReply = summaryTurn?.content?.trim().orEmpty()
@@ -607,6 +638,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
         val (cleanReply, parsedSuggestions) = extractSuggestions(finalReply)
         val suggestions = if (parsedSuggestions.isNotEmpty() || wasCancelled) parsedSuggestions else inferFallbackSuggestions(cleanReply)
+        val finalStats = WhaleContextBudgeter.lastTurnStats
+        if (finalStats.rawTotalChars > 0) {
+            runCatching { WhaleTokenMeter.recordCompression(app, finalStats.rawTotalChars, finalStats.compactTotalChars) }
+        }
         return ChatResult(
             reply = cleanReply,
             steps = steps,
@@ -615,6 +650,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             suggestions = if (wasCancelled) emptyList() else suggestions,
             cancelled = wasCancelled,
             hitRoundLimit = hitRoundLimit,
+            compressionRatio = if (finalStats.rawTotalChars > 0) finalStats.compressionRatio.toDouble() else null,
+            savedChars = finalStats.totalSavedChars,
+            cacheHitRatio = turnUsage.cacheHitRatioOrNull(),
         )
     }
 
@@ -858,6 +896,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         listener: StreamListener?,
         control: RunControl? = null,
         fallbacks: List<Endpoint> = emptyList(),
+        usageAcc: TurnUsageAcc? = null,
     ): AssistantTurn {
         // 每次发起模型请求前执行全链路 tool_calls <-> tool 序列校验，杜绝 HTTP 400 协议错位
         WhaleHarnessCore.ToolCallRecovery.sanitizeMessageSequence(messages)
@@ -868,7 +907,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             for (attempt in 0..maxAttempts) {
                 if (control?.cancelled?.get() == true) throw InterruptedException("cancelled")
                 try {
-                    return callChatCompletions(target, messages, toolsArray, listener, control = control)
+                    return callChatCompletions(target, messages, toolsArray, listener, control = control, usageAcc = usageAcc)
                 } catch (error: Throwable) {
                     if (control?.cancelled?.get() == true || control?.steerInterrupt?.get() == true) throw error
                     val isTransient = error is TransientHttpException ||
@@ -899,6 +938,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         listener: StreamListener?,
         includeUsageOption: Boolean = true,
         control: RunControl? = null,
+        usageAcc: TurnUsageAcc? = null,
     ): AssistantTurn {
         val wantStream = listener != null
         val body = JSONObject()
@@ -930,7 +970,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (code !in 200..299) {
                 val errText = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
                 if (code == 400 && wantStream && includeUsageOption && errText.contains("stream_options", ignoreCase = true)) {
-                    return callChatCompletions(endpoint, messages, toolsArray, listener, includeUsageOption = false, control = control)
+                    return callChatCompletions(endpoint, messages, toolsArray, listener, includeUsageOption = false, control = control, usageAcc = usageAcc)
                 }
                 val msg = "模型接口返回 HTTP $code：${errText.take(240)}"
                 if (WhaleSuperagentCore.isTransientFailure(statusCode = code, errorText = errText)) throw TransientHttpException(msg)
@@ -938,7 +978,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             val contentType = conn.contentType.orEmpty().lowercase()
             if (wantStream && contentType.contains("text/event-stream")) {
-                return parseSseResponse(BufferedReader(InputStreamReader(stream, Charsets.UTF_8)), listener, endpoint.model, messages.toString().length)
+                return parseSseResponse(BufferedReader(InputStreamReader(stream, Charsets.UTF_8)), listener, endpoint.model, messages.toString().length, usageAcc)
             }
             val text = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
             val response = JSONObject(text)
@@ -948,10 +988,11 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val cTok = usageObj.optLong("completion_tokens", 0L)
                 val cacheHit = WhaleTokenMeter.extractCacheHitTokens(usageObj)
                 if (pTok > 0L || cTok > 0L) {
-                    runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, endpoint.model, activeScene) }
+                    usageAcc?.addReported(pTok, cacheHit)
+                    runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, endpoint.model, activeScene, reportedByApi = true) }
                 }
             } else {
-                runCatching { WhaleTokenMeter.record(app, messages.toString().length / 3L, text.length / 4L, 0L, endpoint.model, activeScene) }
+                runCatching { WhaleTokenMeter.record(app, messages.toString().length / 3L, text.length / 4L, 0L, endpoint.model, activeScene, reportedByApi = false) }
             }
             val choice = response.optJSONArray("choices")?.optJSONObject(0)
                 ?: throw IllegalStateException("模型服务未返回有效内容")
@@ -977,6 +1018,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         listener: StreamListener?,
         model: String,
         promptCharsHint: Int,
+        usageAcc: TurnUsageAcc? = null,
     ): AssistantTurn {
         val contentBuilder = StringBuilder()
         val reasoningBuilder = StringBuilder()
@@ -997,7 +1039,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     val cacheHit = WhaleTokenMeter.extractCacheHitTokens(usageObj)
                     if (pTok > 0L || cTok > 0L) {
                         recordedUsage = true
-                        runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, model, activeScene) }
+                        usageAcc?.addReported(pTok, cacheHit)
+                        runCatching { WhaleTokenMeter.record(app, pTok, cTok, cacheHit, model, activeScene, reportedByApi = true) }
                     }
                 }
                 val delta = chunk.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: continue
@@ -1053,7 +1096,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
         }
         if (!recordedUsage) {
-            runCatching { WhaleTokenMeter.record(app, promptCharsHint / 3L, contentBuilder.length.coerceAtLeast(12) / 2L, 0L, model, activeScene) }
+            runCatching { WhaleTokenMeter.record(app, promptCharsHint / 3L, contentBuilder.length.coerceAtLeast(12) / 2L, 0L, model, activeScene, reportedByApi = false) }
         }
         return AssistantTurn(contentBuilder.toString(), toolCalls, reasoningBuilder.toString())
     }

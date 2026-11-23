@@ -664,7 +664,11 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         )
         mcpSel.selected.forEach { array.put(it) }
 
-        val rawChars = array.toString().length
+        val selectedCustomNames = customSel.selected.mapNotNull { it.optJSONObject("function")?.optString("name") }.toSet()
+        val selectedMcpNames = mcpSel.selected.mapNotNull { it.optJSONObject("function")?.optString("name") }.toSet()
+        val deferredChars = allCustom.filter { it.optJSONObject("function")?.optString("name") !in selectedCustomNames }.sumOf { it.toString().length } +
+            allMcp.filter { it.optJSONObject("function")?.optString("name") !in selectedMcpNames }.sumOf { it.toString().length }
+        val rawChars = array.toString().length + deferredChars
         val minified = WhaleContextBudgeter.minifyToolSchemas(array)
         return ToolSchemaBundle(
             schemas = minified,
