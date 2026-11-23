@@ -50,19 +50,46 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
     private val app = context.applicationContext
     private val codeWorkspace by lazy { WhaleNativeCodeWorkspace(File(app.filesDir, "whale-projects")) }
 
-    /** 按本轮用户输入动态选择工具集；同时始终允许全软件控制意图命中。 */
-    fun toolSchemas(userText: String, expandedCategories: Set<String> = emptySet(), isWorker: Boolean = false): JSONArray {
+    data class ToolSchemaBundle(
+        val schemas: JSONArray,
+        val rawChars: Int,
+        val compactChars: Int,
+        val totalDynamicTools: Int,
+        val injectedDynamicTools: Int,
+        val deferredCustomNames: List<String>,
+        val deferredMcpNames: List<String>,
+    )
+
+    /** 兼容旧调用入口：返回已完成极致瘦身与排序的 Tool Schema 数组。 */
+    fun toolSchemas(userText: String, expandedCategories: Set<String> = emptySet(), isWorker: Boolean = false): JSONArray =
+        toolSchemaBundle(userText, expandedCategories, isWorker).schemas
+
+    /**
+     * 按本轮用户输入与按需展开状态动态装配精简工具集：
+     * - 核心常驻仅保留 6~7 个最高频入口，重型管理/专域工具按语义关键词或 whale_tools_expand 懒加载；
+     * - 自造 `custom_*` 与外部 `mcp__*` 工具按词法相关度仅自动注入 Top-3，其余生成极短单行索引，彻底防止工具增多导致每轮 Token 爆炸；
+     * - 最终统一经 [WhaleContextBudgeter.minifyToolSchemas] 瘦身并按工具名确定性排序，最大化 KV Prefix Cache 命中率。
+     */
+    fun toolSchemaBundle(
+        userText: String,
+        expandedCategories: Set<String> = emptySet(),
+        isWorker: Boolean = false,
+        explicitDynamicNames: Set<String> = emptySet(),
+    ): ToolSchemaBundle {
         val text = userText.trim()
         val q = text.lowercase()
         val array = JSONArray()
         val expandAll = "all" in expandedCategories ||
             listOf("有哪些工具", "能力清单", "所有工具", "全部工具", "你能做什么", "有什么功能", "all tools").any { it in q }
 
-        // 核心能力始终常驻（记忆/档案/资料/待办/联网/日历闹钟/Worker/语音/自造工具）；
-        // 重型专域工具按需自动激活，并随时可通过 whale_tools_expand 一键热展开全部 94 项工具，平均节省 65%~75% Schema Token。
-        val includeMemory = true
-        val includeKnowledge = true
-        val includeSecretary = true
+        val includeMemoryAdmin = expandAll || "memory" in expandedCategories ||
+            listOf("档案", "主人", "修改记忆", "更新记忆", "清理噪音", "垃圾记忆", "目标", "计划", "习惯", "工作流", "playbook", "goal", "profile", "memory", "偏好", "称呼").any { it in q }
+        val includeKnowledgeAdmin = expandAll || "knowledge" in expandedCategories || "memory" in expandedCategories ||
+            listOf("资料库", "笔记", "收藏", "存笔记", "保存资料", "读资料", "删资料", "knowledge", "note", "文章", "总结保存").any { it in q }
+        val includeSecretaryAdmin = expandAll || "secretary" in expandedCategories || "device" in expandedCategories ||
+            listOf("完成待办", "删待办", "删除待办", "取消待办", "守护", "规则", "取件码", "自动监听", "routine").any { it in q }
+        val includeToolAuthoring = expandAll || "custom" in expandedCategories || "code" in expandedCategories || "extensions" in expandedCategories ||
+            listOf("造工具", "自造", "自定义工具", "建一个工具", "做个工具", "写个工具", "删工具", "custom_", "tool_create").any { it in q }
         val includeAppControl = expandAll || "settings" in expandedCategories ||
             listOf("设置", "主题", "深色", "浅色", "风格", "极简", "可爱", "语言", "页面", "跳转", "刷新", "自治", "权限", "开关", "theme", "style", "setting").any { it in q }
         val includePersona = expandAll || "settings" in expandedCategories ||
@@ -86,11 +113,13 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             !includeAppControl && !includePersona && !includePet && !includeWorkshop && !includeCode && !includePhone && !includeDevice && !includeExtensions &&
             !listOf("记", "存", "查", "搜", "提醒", "待办", "日程", "闹钟", "任务", "朗读", "说", "帮我", "总结", "分析", "http", "www").any { it in q }
         if (isCasualChitchat) {
-            array.put(schema("whale_recall", "并行检索长期记忆与本地收藏资料。", mapOf("query" to "关键词", "scope" to "可选：all(默认)/memory/knowledge"), listOf("query")))
-            array.put(schema("whale_web_search", "联网实时搜索网页与中文社区内容。", mapOf("query" to "关键词", "platform" to "auto/bilibili/xiaohongshu/zhihu"), listOf("query")))
+            array.put(schema("whale_recall", "并行检索长期记忆与本地资料。", mapOf("query" to "关键词", "scope" to "all/memory/knowledge"), listOf("query")))
+            array.put(schema("whale_web_search", "联网实时搜索网页与中文社区。", mapOf("query" to "关键词", "platform" to "auto/bilibili/xiaohongshu/zhihu"), listOf("query")))
             array.put(schema("whale_secretary_list", "查看未完成待办与日程。", emptyMap(), emptyList()))
-            array.put(schema("whale_tools_expand", "按需热展开更多专域工具组（code/phone/device/settings/extensions/all）。", mapOf("category" to "工具组名"), listOf("category")))
-            return array
+            array.put(schema("whale_tools_expand", "热展开专域工具组或指定工具名。", mapOf("category" to "memory/knowledge/secretary/custom/mcp/code/phone/device/settings/extensions/all", "names" to "可选逗号分隔精确工具名"), listOf("category")))
+            val rawLen = array.toString().length
+            val minified = WhaleContextBudgeter.minifyToolSchemas(array)
+            return ToolSchemaBundle(minified, rawLen, minified.toString().length, 0, 0, emptyList(), emptyList())
         }
 
         if (includeAppControl) {
@@ -166,9 +195,10 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 listOf("action"),
             ))
         }
-        if (includeMemory) {
-            array.put(schema("whale_recall", "并行混合语义检索用户的长期记忆、习惯规则与本地资料库（默认同时检索两库，省轮次不漏召回）。", mapOf("query" to "检索关键词", "scope" to "可选：all(默认同时查两库) / memory / knowledge"), listOf("query")))
-            array.put(schema("whale_memory_save", "将用户明确表达的偏好或长期事实保存到本地长期记忆。", mapOf("text" to "简明完整的记忆内容"), listOf("text")))
+        // 精简核心常驻：记忆召回、记忆保存、待办查询/新增
+        array.put(schema("whale_recall", "并行混合语义检索用户的长期记忆、习惯规则与本地资料库。", mapOf("query" to "检索关键词", "scope" to "all(默认)/memory/knowledge"), listOf("query")))
+        array.put(schema("whale_memory_save", "将用户明确表达的偏好或长期事实保存到本地长期记忆。", mapOf("text" to "简明完整的记忆内容"), listOf("text")))
+        if (includeMemoryAdmin) {
             array.put(schema(
                 "whale_memory_update",
                 "纠正或更新指定 ID 的本地长期记忆内容（自动保留修改历史）。",
@@ -237,17 +267,14 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 emptyList(),
             ))
         }
-        if (includeKnowledge) {
-            if (!includeMemory) {
-                array.put(schema("whale_recall", "并行混合语义检索用户的长期记忆与本地资料库。", mapOf("query" to "检索关键词", "scope" to "可选：all(默认) / memory / knowledge"), listOf("query")))
-            }
-            array.put(schema("whale_knowledge_save", "将整理好的文字笔记或摘要直接保存到本地资料库。", mapOf("text" to "要保存的完整正文"), listOf("text")))
-            array.put(schema("whale_knowledge_read", "按 ID 读取本地资料库某条笔记/文档的完整正文内容。", mapOf("id" to "资料记录 ID"), listOf("id")))
+        if (includeKnowledgeAdmin) {
+            array.put(schema("whale_knowledge_save", "将整理好的文字笔记或摘要保存到本地资料库。", mapOf("text" to "完整正文"), listOf("text")))
+            array.put(schema("whale_knowledge_read", "按 ID 读取本地资料库某条笔记/文档的完整正文。", mapOf("id" to "资料记录 ID"), listOf("id")))
             array.put(schema("whale_knowledge_delete", "按 ID 删除本地资料库中的过期或重复记录（可撤销）。", mapOf("id" to "资料记录 ID"), listOf("id")))
         }
-        if (includeSecretary) {
-            array.put(schema("whale_secretary_list", "查询用户的未完成秘书事项与待办列表。", mapOf("query" to "可选筛选关键词"), emptyList()))
-            array.put(schema("whale_secretary_add", "为用户新增一条秘书事项/待办记录。", mapOf("title" to "事项标题", "note" to "可选补充说明"), listOf("title")))
+        array.put(schema("whale_secretary_list", "查询用户的未完成秘书事项与待办列表。", mapOf("query" to "可选筛选关键词"), emptyList()))
+        array.put(schema("whale_secretary_add", "为用户新增一条秘书事项/待办记录。", mapOf("title" to "事项标题", "note" to "可选补充说明"), listOf("title")))
+        if (includeSecretaryAdmin) {
             array.put(schema("whale_secretary_complete", "将指定编号的秘书事项标记为已完成。", mapOf("id" to "事项 UUID 编号"), listOf("id")))
             array.put(schema("whale_secretary_delete", "删除指定编号的秘书事项。", mapOf("id" to "事项 UUID 编号"), listOf("id")))
             array.put(schema(
@@ -540,25 +567,30 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         ))
         array.put(schema(
             "whale_tools_expand",
-            "当本轮需要尚未展开的专域工具时调用，立即在下一轮热加载对应工具组。可选分类：phone(手机屏控/截屏/副屏)、code(代码文件/功能工坊)、settings(应用设置/主题/桌宠/人设)、device(设备电量/通知/剪贴板/定时任务)、extensions(MCP服务器与Skill技能安装管理)、all(全部工具)。",
-            mapOf("category" to "分类：phone / code / settings / device / extensions / all"),
+            "热展开尚未加载的专域工具组或指定工具名，下一轮立即生效。分类：memory/knowledge/secretary/custom/mcp/phone/code/settings/device/extensions/all。",
+            mapOf(
+                "category" to "分类：memory/knowledge/secretary/custom/mcp/phone/code/settings/device/extensions/all",
+                "names" to "可选：逗号分隔的精确工具名（如 custom_snr_calc,mcp__srv__tool）",
+            ),
             listOf("category"),
         ))
-        array.put(schema(
-            "whale_tool_create",
-            "让 Agent 自己创造或更新一个持久化的自定义可调用工具（名称必须以 custom_ 开头），创建后立即热加载并可在本轮及后续所有对话直接调用。支持四种引擎：python（推荐：内置 CPython 3.11 沙箱，直接读取 args 字典，适合计算/解析/数据处理/绘图）、composite（串联现有 whale_* 工具的工作流）、http_json（HTTPS 接口调用，支持 {{param}} 与 extractPath）、js（隔离 JS 沙箱）。",
-            mapOf(
-                "name" to "工具名，必须以 custom_ 开头，仅小写字母/数字/下划线，如 custom_weather 或 custom_snr_calc",
-                "description" to "工具用途说明(2~200字)",
-                "kind" to "执行引擎类型：python（推荐）/ composite / http_json / js",
-                "paramsJson" to """可选，JSON 对象字符串，如 {"city":"城市名"}""",
-                "requiredJson" to """可选，必填参数名 JSON 数组字符串，如 ["city"]""",
-                "definitionJson" to """必填，JSON 对象字符串：composite 传 {"steps":[{"tool":"whale_...","args":{...}}]}；http_json 传 {"url":"https://...","method":"GET","extractPath":"..."}；js 传 {"code":"return ...;"}""",
-            ),
-            listOf("name", "description", "kind", "definitionJson"),
-        ))
-        array.put(schema("whale_tool_list", "列出 Agent 已创建保存的全部自定义工具（custom_*）。", emptyMap(), emptyList()))
-        array.put(schema("whale_tool_delete", "删除指定的 Agent 自造自定义工具。", mapOf("name" to "要删除的 custom_* 工具名"), listOf("name")))
+        if (includeToolAuthoring) {
+            array.put(schema(
+                "whale_tool_create",
+                "自主创造或更新持久化自定义工具（custom_*），支持 python/composite/http_json/js，创建后立刻热加载调用。",
+                mapOf(
+                    "name" to "custom_ 开头的小写字母数字下划线工具名",
+                    "description" to "工具用途说明(2~200字)",
+                    "kind" to "python(推荐)/composite/http_json/js",
+                    "paramsJson" to """可选参数描述 JSON，如 {"city":"城市"}""",
+                    "requiredJson" to """可选必填参数 JSON 数组，如 ["city"]""",
+                    "definitionJson" to """必填定义 JSON：python/js 传 {"code":"..."}；composite 传 {"steps":[...]}；http_json 传 {"url":"..."}""",
+                ),
+                listOf("name", "description", "kind", "definitionJson"),
+            ))
+            array.put(schema("whale_tool_list", "列出已保存的全部自造工具（custom_*）。", emptyMap(), emptyList()))
+            array.put(schema("whale_tool_delete", "删除指定的自造工具。", mapOf("name" to "custom_* 工具名"), listOf("name")))
+        }
         // 仅在已有已启用 Skill 或按需展开 extensions 时才注入 Skill/MCP Schema，日常对话零额外 Token 消耗
         if (includeExtensions || WhaleSkillStore.hasEnabledSkills(app)) {
             array.put(schema(
@@ -612,13 +644,37 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 listOf("action", "id"),
             ))
         }
-        for (customSchema in WhaleCustomToolEngine.customToolSchemas(app)) {
-            array.put(customSchema)
-        }
-        for (mcpSchema in WhaleMcpManager.mcpToolSchemas(app)) {
-            array.put(mcpSchema)
-        }
-        return array
+        val allCustom = WhaleCustomToolEngine.customToolSchemas(app)
+        val customSel = WhaleContextBudgeter.selectRelevantDynamicTools(
+            allSchemas = allCustom,
+            userQuery = text,
+            expandAll = expandAll || "custom" in expandedCategories,
+            explicitNames = explicitDynamicNames,
+            maxAutoInject = 3,
+        )
+        customSel.selected.forEach { array.put(it) }
+
+        val allMcp = WhaleMcpManager.mcpToolSchemas(app)
+        val mcpSel = WhaleContextBudgeter.selectRelevantDynamicTools(
+            allSchemas = allMcp,
+            userQuery = text,
+            expandAll = expandAll || "mcp" in expandedCategories || "extensions" in expandedCategories,
+            explicitNames = explicitDynamicNames,
+            maxAutoInject = 3,
+        )
+        mcpSel.selected.forEach { array.put(it) }
+
+        val rawChars = array.toString().length
+        val minified = WhaleContextBudgeter.minifyToolSchemas(array)
+        return ToolSchemaBundle(
+            schemas = minified,
+            rawChars = rawChars,
+            compactChars = minified.toString().length,
+            totalDynamicTools = allCustom.size + allMcp.size,
+            injectedDynamicTools = customSel.selected.size + mcpSel.selected.size,
+            deferredCustomNames = customSel.deferredNames,
+            deferredMcpNames = mcpSel.deferredNames,
+        )
     }
 
     fun isMutating(name: String): Boolean = name.startsWith("custom_") || name.startsWith("mcp__") || name in setOf(
@@ -2364,15 +2420,22 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .put("savedMacros", macros)
                         .put("activeRoutines", routines)
                         .put("environment", envDiag)
+                        .put("contextCompression", WhaleContextBudgeter.lastTurnStats.json())
                     ToolOutcome(name, "自检自身能力与环境状态", true, out.toString())
                 }
                 "whale_tools_expand" -> {
                     val cat = args.str("category", "all").trim().lowercase().ifEmpty { "all" }
+                    val names = args.str("names").split(",", "，", " ").map { it.trim() }.filter { it.isNotEmpty() }
+                    val label = if (names.isNotEmpty()) "热展开工具：${names.take(3).joinToString(",")}" else "热展开工具组：$cat"
                     ToolOutcome(
                         name,
-                        "热展开工具组：$cat",
+                        label,
                         true,
-                        JSONObject().put("expanded", cat).put("hint", "已热加载该组工具，下一轮可直接调用。").toString(),
+                        JSONObject()
+                            .put("expanded", cat)
+                            .put("names", JSONArray(names))
+                            .put("hint", "已热加载对应工具，下一轮可直接调用。")
+                            .toString(),
                     )
                 }
                 "whale_tool_create" -> {

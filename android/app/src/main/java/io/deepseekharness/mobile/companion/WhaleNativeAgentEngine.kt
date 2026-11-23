@@ -149,13 +149,17 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val endpoint = rawEndpoint.copy(model = routeDecision.model)
         val fallbackEndpoints = allEndpoints.drop(1)
         val expandedCategories = mutableSetOf<String>()
-        var toolSchemas = tools.toolSchemas(trimmed, expandedCategories, isWorker = isWorkerSession)
+        val expandedDynamicNames = mutableSetOf<String>()
+        var schemaBundle = tools.toolSchemaBundle(trimmed, expandedCategories, isWorker = isWorkerSession, explicitDynamicNames = expandedDynamicNames)
+        var toolSchemas = schemaBundle.schemas
 
-        // 1. 分层滑动历史窗口（近期完整保留，远期渐进压缩，兼顾连贯性与 Token 成本）
-        val recentHistory = history.takeLast(10)
+        // 1. 预算制滑动历史窗口（自动剥离协议尾注、折叠远期代码块，总历史严控 4200 字符内）
+        val rawHistoryChars = history.takeLast(10).sumOf { it.second.length }
+        val recentHistory = WhaleContextBudgeter.compressHistory(history, maxTurns = 10, maxTotalChars = 4_200)
+        val compactHistoryChars = recentHistory.sumOf { it.second.length }
         val activePersona = runCatching { CompanionPersonaStore(app).active() }.getOrNull()
 
-        // 2. System Prompt：优先以当前激活角色人设领衔，完整保留角色设定与工具规则
+        // 2. System Prompt：100% 静态前缀，优先以当前激活角色人设领衔，保 KV Prompt Cache 高命中
         val messages = JSONArray()
         messages.put(
             JSONObject()
@@ -174,21 +178,41 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     },
                 ),
         )
-        val totalHist = recentHistory.size
-        recentHistory.forEachIndexed { idx, (role, text) ->
-            if (role in setOf("user", "assistant") && text.isNotBlank()) {
-                val limit = when {
-                    idx >= totalHist - 2 -> 2_800
-                    idx >= totalHist - 6 -> 900
-                    else -> 450
-                }
-                val clipped = if (text.length > limit) text.take(limit) + "…[历史已精简]" else text
-                messages.put(JSONObject().put("role", role).put("content", clipped))
-            }
+        recentHistory.forEach { (role, text) ->
+            messages.put(JSONObject().put("role", role).put("content", text))
         }
 
-        // 3. 动态本轮上下文（档案/Worker/RAG/持久化检查点与任务表）放在最新用户消息前，绝不污染静态 System Prompt 缓存前缀
-        val dynamicCtx = if (isWorkerSession) buildWorkerDynamicContext() else buildDynamicTurnContext(trimmed, activePersona, recentHistory, sessionId)
+        // 3. 分级硬预算动态上下文（P0/P1/P2 + 跨段去重 + RAG 语义门控 + 延迟工具单行索引），放在最新用户消息前，绝不污染静态 System Prompt 缓存前缀
+        var rawDynamicCtxChars = 0
+        var ragSkippedByGate = false
+        val dynamicCtx = if (isWorkerSession) {
+            buildWorkerDynamicContext().also { rawDynamicCtxChars = it.length }
+        } else {
+            val built = buildDynamicTurnContext(
+                userQuery = trimmed,
+                persona = activePersona,
+                recentHistory = recentHistory,
+                sessionId = sessionId,
+                deferredCustomNames = schemaBundle.deferredCustomNames,
+                deferredMcpNames = schemaBundle.deferredMcpNames,
+            )
+            rawDynamicCtxChars = built.first
+            ragSkippedByGate = built.third
+            built.second
+        }
+        var toolPayloadSavedChars = 0
+        WhaleContextBudgeter.lastTurnStats = WhaleContextBudgeter.TurnCompressionStats(
+            rawSchemaChars = schemaBundle.rawChars,
+            compactSchemaChars = schemaBundle.compactChars,
+            totalDynamicToolsAvailable = schemaBundle.totalDynamicTools,
+            injectedDynamicTools = schemaBundle.injectedDynamicTools,
+            rawDynamicCtxChars = rawDynamicCtxChars,
+            compactDynamicCtxChars = dynamicCtx.length,
+            rawHistoryChars = rawHistoryChars,
+            compactHistoryChars = compactHistoryChars,
+            toolPayloadSavedChars = 0,
+            ragSkippedByGate = ragSkippedByGate,
+        )
         val userPayload = if (dynamicCtx.isNotBlank()) {
             "$dynamicCtx\n\n用户消息：${trimmed.take(24_000)}"
         } else {
@@ -216,24 +240,32 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val toolMsgIndicesByRound = ArrayList<List<Int>>()
         var finalReply = ""
         var hitRoundLimit = false
-        var compactedOnce = false
+        var lastCompactedRound = -4
+        var maskedUpToRound = 0
 
         for (round in 0 until MAX_TOOL_ROUNDS) {
-            // 4. 零成本首尾保留裁剪上一轮冗长工具输出 + 最多保留 2 张近期截图，保留报错尾行并大幅降低多轮 Token
-            if (round >= 1 && round - 1 < toolMsgIndicesByRound.size) {
-                for (msgIdx in toolMsgIndicesByRound[round - 1]) {
-                    val m = messages.optJSONObject(msgIdx) ?: continue
-                    val raw = m.optString("content", "")
-                    if (raw.length > 520) {
-                        m.put("content", WhaleHarnessCore.SpillAndPruneManager.pruneOlderToolResult(raw))
+            // 4. KV Prefix Cache 优先策略：上下文未达 20k 高水位前严禁原地篡改历史 tool 消息（保 85%~95% 前缀缓存命中）；
+            //    仅超水位时对更早轮次（0 until round-1）做一次性批量观察掩码裁剪，兼顾缓存命中与极低内存/Token。
+            val currentMsgChars = WhaleHarnessCore.PrefixCacheCompactor.estimateMessagesChars(messages)
+            if (round >= 2 && currentMsgChars > WhaleContextBudgeter.KV_OBSERVATION_MASK_HIGH_WATER_CHARS) {
+                val maskEnd = (round - 1).coerceAtMost(toolMsgIndicesByRound.size)
+                for (rIdx in maskedUpToRound until maskEnd) {
+                    for (msgIdx in toolMsgIndicesByRound[rIdx]) {
+                        val m = messages.optJSONObject(msgIdx) ?: continue
+                        val raw = m.optString("content", "")
+                        if (raw.length > 480) {
+                            m.put("content", WhaleHarnessCore.SpillAndPruneManager.pruneOlderToolResult(raw, thresholdChars = 480, headPoints = 220, tailPoints = 180))
+                        }
                     }
                 }
+                maskedUpToRound = maskEnd
             }
             WhaleHarnessCore.ImageOffloadPolicy.offloadOldestImages(messages, maxRetainedImages = 2)
 
-            // 4b. KV 缓存友好型结构化压缩：上下文超 32k 字符且第 3 轮起触发一次
-            if (!compactedOnce && round >= 3 && WhaleHarnessCore.PrefixCacheCompactor.estimateMessagesChars(messages) > WhaleHarnessCore.PrefixCacheCompactor.COMPACTION_CHAR_THRESHOLD) {
-                compactedOnce = true
+            // 4b. KV 缓存友好型结构化压缩：上下文超 24k 字符且距上次压缩 >= 4 轮时触发（支持超长任务多次无损续跑）
+            if (round - lastCompactedRound >= 4 && round >= 3 && WhaleHarnessCore.PrefixCacheCompactor.estimateMessagesChars(messages) > WhaleHarnessCore.PrefixCacheCompactor.COMPACTION_CHAR_THRESHOLD) {
+                lastCompactedRound = round
+                maskedUpToRound = 0
                 runCatching {
                     val compactReq = JSONArray()
                     for (ci in 0 until messages.length()) compactReq.put(messages.get(ci))
@@ -463,11 +495,21 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val p = planned[idx]
                 val (outcome, dt) = executed[idx]
                 if (outcome.ok) {
-                    if (p.fnName in setOf("whale_tool_create", "whale_tool_delete", "whale_mcp_add", "whale_mcp_manage")) {
+                    if (p.fnName == "whale_tool_create") {
+                        val createdName = runCatching { JSONObject(p.fnArgs).optString("name", "").trim() }.getOrDefault("")
+                        if (createdName.isNotEmpty()) expandedDynamicNames.add(createdName)
+                        needSchemaRefresh = true
+                    } else if (p.fnName in setOf("whale_tool_delete", "whale_mcp_add", "whale_mcp_manage")) {
                         needSchemaRefresh = true
                     } else if (p.fnName == "whale_tools_expand") {
-                        val cat = runCatching { JSONObject(p.fnArgs).optString("category", "all") }.getOrDefault("all").lowercase()
+                        val expandArgs = runCatching { JSONObject(p.fnArgs) }.getOrNull()
+                        val cat = expandArgs?.optString("category", "all").orEmpty().trim().lowercase().ifEmpty { "all" }
                         expandedCategories.add(cat)
+                        expandArgs?.optString("names", "").orEmpty()
+                            .split(",", "，", " ")
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                            .forEach { expandedDynamicNames.add(it) }
                         needSchemaRefresh = true
                     }
                 }
@@ -479,11 +521,27 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 listener?.onStep(step)
                 onProgress?.invoke(round + 1, "第 ${round + 1} 轮 · ${outcome.label}", "[${p.fnName}] ${outcome.label}（${dt}ms）")
                 roundToolIndices.add(messages.length())
+                val rawOut = outcome.payload
+                val compactedOut = WhaleContextBudgeter.compactToolPayload(rawOut)
+                val boundedOut = WhaleHarnessCore.SpillAndPruneManager.boundToolOutput(
+                    context = app,
+                    toolName = p.fnName,
+                    rawPayload = compactedOut,
+                    maxInlineChars = WhaleContextBudgeter.TOOL_INLINE_MAX_CHARS,
+                    headPoints = WhaleContextBudgeter.TOOL_INLINE_HEAD_POINTS,
+                    tailPoints = WhaleContextBudgeter.TOOL_INLINE_TAIL_POINTS,
+                )
+                toolPayloadSavedChars += (rawOut.length - boundedOut.length).coerceAtLeast(0)
                 messages.put(
                     JSONObject()
                         .put("role", "tool")
                         .put("tool_call_id", p.callId)
-                        .put("content", WhaleHarnessCore.SpillAndPruneManager.boundToolOutput(app, p.fnName, outcome.payload)),
+                        .put("content", boundedOut),
+                )
+            }
+            if (toolPayloadSavedChars > 0) {
+                WhaleContextBudgeter.lastTurnStats = WhaleContextBudgeter.lastTurnStats.copy(
+                    toolPayloadSavedChars = toolPayloadSavedChars,
                 )
             }
             // 若因中途取消导致尾部 tool_calls 未全部执行，自动补齐协议合法的占位错误结果（源自 session/repair.ts）
@@ -493,7 +551,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             toolMsgIndicesByRound.add(roundToolIndices)
             if (needSchemaRefresh) {
-                toolSchemas = tools.toolSchemas(trimmed, expandedCategories, isWorker = isWorkerSession)
+                schemaBundle = tools.toolSchemaBundle(trimmed, expandedCategories, isWorker = isWorkerSession, explicitDynamicNames = expandedDynamicNames)
+                toolSchemas = schemaBundle.schemas
             }
             if (control?.cancelled?.get() == true) break
             if (control?.hasPendingSteer() == true) {
@@ -637,17 +696,44 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
     }.trim()
 
-    private fun buildDynamicTurnContext(userQuery: String, persona: JSONObject? = null, recentHistory: List<Pair<String, String>> = emptyList(), sessionId: String = "whale-main"): String = buildString {
+    private fun buildDynamicTurnContext(
+        userQuery: String,
+        persona: JSONObject? = null,
+        recentHistory: List<Pair<String, String>> = emptyList(),
+        sessionId: String = "whale-main",
+        deferredCustomNames: List<String> = emptyList(),
+        deferredMcpNames: List<String> = emptyList(),
+    ): Triple<Int, String, Boolean> {
+        val sections = ArrayList<WhaleContextBudgeter.ContextSection>(12)
+        var rawChars = 0
+        fun addSec(id: String, priority: Int, maxChars: Int, content: String) {
+            val clean = content.trim()
+            if (clean.isEmpty()) return
+            rawChars += clean.length
+            sections.add(WhaleContextBudgeter.ContextSection(id, priority, maxChars, clean))
+        }
+
+        val nowStr = SimpleDateFormat("yyyy-MM-dd EEE HH:mm", Locale.CHINA).format(Date())
+        addSec("time", 0, 48, "[时间] $nowStr")
+
+        var hasTodo = false
+        var hasCheckpoint = false
         runCatching {
             val todoSnap = WhaleHarnessCore.SessionTodoStore.snapshotPrompt(sessionId, app)
-            if (todoSnap.isNotBlank()) append(todoSnap.take(900)).append("\n")
+            if (todoSnap.isNotBlank()) {
+                hasTodo = true
+                addSec("todo", 0, 480, todoSnap)
+            }
             val cp = WhaleHarnessCore.PrefixCacheCompactor.loadCheckpoint(app, sessionId)
-            if (cp.isNotBlank()) append("[前序压缩检查点] ").append(cp.take(1200)).append("\n")
+            if (cp.isNotBlank()) {
+                hasCheckpoint = true
+                addSec("checkpoint", 0, 720, "[前序压缩检查点] $cp")
+            }
         }
+
         runCatching {
             val owner = OwnerContext(app).read()
-            val profile = owner.optJSONObject("profile")
-            val fields = profile?.optJSONArray("fields")
+            val fields = owner.optJSONObject("profile")?.optJSONArray("fields")
             val confirmed = mutableListOf<String>()
             if (fields != null) {
                 for (i in 0 until fields.length()) {
@@ -658,72 +744,85 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
             }
             if (confirmed.isNotEmpty()) {
-                append("[主人档案] ").append(confirmed.joinToString("；")).append("\n")
+                addSec("owner", 0, 320, "[主人档案] ${confirmed.joinToString("；")}")
             }
-            val nowStr = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.CHINA).format(Date())
-            append("[当前时间] ").append(nowStr).append("\n")
-            val myCustomTools = runCatching { WhaleCustomToolEngine.loadAll(WhaleCustomToolEngine.storeFile(app)) }.getOrDefault(emptyList())
-            if (myCustomTools.isNotEmpty()) {
-                append("[我已自造的工具] ").append(myCustomTools.take(6).joinToString("、") { "${it.optString("name")}(${it.optString("kind")})" }).append("\n")
+
+            // 合并未加载的自造/MCP 工具 + 录制宏为超紧凑单行索引，约 4 tokens/工具
+            val indexParts = mutableListOf<String>()
+            if (deferredCustomNames.isNotEmpty()) {
+                indexParts.add("自造工具(${deferredCustomNames.size}):${deferredCustomNames.take(8).joinToString(",")}")
             }
-            val activeGoals = runCatching { WhaleGoalGraphStore.list(app, includeCompleted = false) }.getOrDefault(emptyList())
-            if (activeGoals.isNotEmpty()) {
-                val gLine = activeGoals.take(3).joinToString("；") { g ->
-                    if (g.nextAction.isNotBlank()) "${g.title}(下一步:${g.nextAction.take(24)})" else g.title
-                }
-                append("[进行中长期目标] ").append(gLine).append("\n")
+            if (deferredMcpNames.isNotEmpty()) {
+                indexParts.add("MCP(${deferredMcpNames.size}):${deferredMcpNames.take(6).joinToString(",")}")
             }
             val savedMacros = runCatching { WhaleMacroEngine.list(app) }.getOrDefault(emptyList())
             if (savedMacros.isNotEmpty()) {
-                append("[可0-Token回放宏] ").append(savedMacros.take(4).joinToString("、") { it.name }).append("\n")
+                indexParts.add("0-Token宏:${savedMacros.take(4).joinToString(",") { it.name }}")
             }
+            if (indexParts.isNotEmpty()) {
+                addSec("deferred_index", 1, 240, "[可按需唤醒(whale_tools_expand)] ${indexParts.joinToString(" | ")}")
+            }
+
             val openMatters = owner.optJSONArray("openMatters")
             if (openMatters != null && openMatters.length() > 0) {
                 val top = mutableListOf<String>()
-                for (i in 0 until minOf(5, openMatters.length())) {
+                for (i in 0 until minOf(3, openMatters.length())) {
                     val m = openMatters.optJSONObject(i) ?: continue
                     val title = m.optString("title").ifBlank { m.optString("text") }.trim()
                     val due = m.optString("dueAt").ifBlank { m.optString("when") }.trim()
                     if (title.isNotEmpty()) top.add(if (due.isNotEmpty()) "$title($due)" else title)
                 }
-                append("[未完成待办] 共 ").append(openMatters.length()).append(" 条")
-                if (top.isNotEmpty()) append("：").append(top.joinToString("；"))
-                append("\n")
+                if (top.isNotEmpty()) {
+                    addSec("matters", 1, 220, "[待办(${openMatters.length()})] ${top.joinToString("；")}")
+                }
             }
         }
+
+        // 单一来源注入长期目标（消除原先双重注入）
         runCatching {
-            // 优先使用结构化 Worker 池摘要（含 7 态、attention 提问与分页指针），仅在内存池为空时回退收件箱摘要，避免重复占 Token
-            val poolPrompt = WhaleNativeWorkerPool.recentSummaries(4)
+            val activeGoals = WhaleGoalGraphStore.list(app, includeCompleted = false)
+            if (activeGoals.isNotEmpty()) {
+                val gLine = activeGoals.take(3).joinToString("；") { g ->
+                    if (g.nextAction.isNotBlank()) "${g.title}(下一步:${g.nextAction.take(20)})" else g.title
+                }
+                addSec("goals", 1, 220, "[长期目标] $gLine")
+            }
+        }
+
+        runCatching {
+            val poolPrompt = WhaleNativeWorkerPool.recentSummaries(3)
             if (poolPrompt.isNotBlank()) {
-                append(poolPrompt.take(900)).append("\n")
+                addSec("workers", 1, 420, poolPrompt)
             } else {
                 val inboxPrompt = WorkerReportInbox(app).prompt()
-                if (inboxPrompt.isNotBlank()) append(inboxPrompt.take(800)).append("\n")
+                if (inboxPrompt.isNotBlank()) addSec("workers", 1, 360, inboxPrompt)
             }
             val boardKeys = WhaleWorkerBoard.promptKeysSummary(app)
-            if (boardKeys.isNotBlank()) append(boardKeys).append("\n")
+            if (boardKeys.isNotBlank()) addSec("board", 2, 160, boardKeys)
         }
+
         runCatching {
-            val goals = WhaleGoalGraphStore.promptSummary(app)
-            if (goals.isNotBlank()) append(goals.take(450)).append("\n")
             val playbooks = WhalePlaybookStore.promptSummary(app)
-            if (playbooks.isNotBlank()) append(playbooks.take(450)).append("\n")
-        }
-        runCatching {
+            if (playbooks.isNotBlank()) addSec("playbooks", 2, 240, playbooks)
             val skillCatalog = WhaleSkillStore.catalogPrompt(app)
-            if (skillCatalog.isNotBlank()) append(skillCatalog.take(600)).append("\n")
+            if (skillCatalog.isNotBlank()) addSec("skills", 2, 240, skillCatalog)
             val mcpSummary = WhaleMcpManager.promptSummary(app)
-            if (mcpSummary.isNotBlank()) append(mcpSummary.take(350)).append("\n")
+            if (mcpSummary.isNotBlank()) addSec("mcp", 2, 180, mcpSummary)
         }
-        runCatching {
-            val rag = WhaleNativeRagRetriever.retrieveContext(app, userQuery)
-            if (rag.isNotBlank() && userQuery.trim().length > 10) append(rag.take(1200)).append("\n")
+
+        // RAG 语义门控：纯控制/短指令不盲目注入无关记忆，有效问题才触发并行 RAG 并与上方档案/待办自动去重
+        val triggerRag = WhaleContextBudgeter.shouldTriggerAutoRag(userQuery)
+        if (triggerRag) {
+            runCatching {
+                val rag = WhaleNativeRagRetriever.retrieveContext(app, userQuery)
+                if (rag.isNotBlank()) addSec("rag", 2, 760, rag)
+            }
         }
+
         runCatching {
             val card = persona ?: CompanionPersonaStore(app).active()
-            // 仅当角色卡含非恒定世界书条目时，按最近对话关键词动态触发（不破坏 System Prompt 缓存前缀）
             if (card.optString("worldBook").isNotBlank()) {
-                val contextText = (recentHistory.takeLast(4).map { it.second } + userQuery).joinToString("\n")
+                val contextText = (recentHistory.takeLast(3).map { it.second } + userQuery).joinToString("\n")
                 val book = runCatching { JSONObject(card.optString("worldBook")) }.getOrNull()
                 val rawEntries = book?.opt("entries")
                 val entries = when (rawEntries) {
@@ -739,14 +838,18 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         val keys = e.optJSONArray("keys") ?: e.optJSONArray("key") ?: return@mapNotNull null
                         val hit = (0 until keys.length()).any { k -> keys.optString(k).takeIf(String::isNotBlank)?.let { contextText.contains(it, ignoreCase = true) } == true }
                         if (!hit) null else e.optString("content").replace("{{char}}", charName, ignoreCase = true).replace("{{user}}", "用户", ignoreCase = true).takeIf(String::isNotBlank)
-                    }.joinToString("\n").take(700)
-                    if (matched.isNotBlank()) append("[触发世界设定] ").append(matched).append("\n")
+                    }.joinToString("\n")
+                    if (matched.isNotBlank()) addSec("worldbook", 2, 420, "[触发世界设定] $matched")
                 }
             }
             val post = PetRoleplayPrompt.afterHistory(card)
-            if (post.isNotBlank()) append("[角色持续指令] ").append(post.take(600))
+            if (post.isNotBlank()) addSec("post_history", 1, 320, "[角色指令] $post")
         }
-    }.trim()
+
+        val budget = WhaleContextBudgeter.dynamicContextBudget(userQuery, hasCheckpoint = hasCheckpoint, hasActiveTodo = hasTodo)
+        val assembled = WhaleContextBudgeter.assembleDynamicContext(sections, totalBudgetChars = budget)
+        return Triple(rawChars, assembled, !triggerRag)
+    }
 
     private fun callChatCompletionsWithRetry(
         endpoint: Endpoint,

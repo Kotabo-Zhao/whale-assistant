@@ -546,7 +546,7 @@ internal object WhaleHarnessCore {
     // -------------------------------------------------------------------------
 
     object PrefixCacheCompactor {
-        const val COMPACTION_CHAR_THRESHOLD = 32_000
+        const val COMPACTION_CHAR_THRESHOLD = 24_000
 
         const val COMPACTION_INSTRUCTION =
             "请作为上下文压缩引擎，将上方已完成的对话与工具调用压缩为一份紧凑的结构化检查点（<compacted-summary>），以便无缝续跑：\n" +
