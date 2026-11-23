@@ -39,7 +39,7 @@ internal object WhaleCustomToolEngine {
 
     private val NAME_REGEX = Regex("^custom_[a-z][a-z0-9_]{1,40}$")
     private val TEMPLATE_REGEX = Regex("\\{\\{\\s*([a-zA-Z0-9_]+)\\s*\\}\\}")
-    private val VALID_KINDS = setOf("composite", "http_json", "js")
+    private val VALID_KINDS = setOf("composite", "http_json", "js", "python")
     private val FORBIDDEN_COMPOSITE_TOOLS = setOf("whale_tool_create", "whale_tool_delete")
     private val lock = Any()
 
@@ -173,7 +173,7 @@ internal object WhaleCustomToolEngine {
     }
 
     fun validateDefinition(kind: String, definition: JSONObject) {
-        require(kind in VALID_KINDS) { "不支持的工具类型：$kind（仅支持 composite / http_json / js）" }
+        require(kind in VALID_KINDS) { "不支持的工具类型：$kind（仅支持 composite / http_json / js / python）" }
         when (kind) {
             "composite" -> {
                 val steps = definition.optJSONArray("steps")
@@ -202,6 +202,12 @@ internal object WhaleCustomToolEngine {
                 val code = definition.optString("code", "").trim()
                 require(code.isNotEmpty() && code.length <= MAX_JS_CHARS) {
                     "js 工具 code 长度需在 1~$MAX_JS_CHARS 字符之间"
+                }
+            }
+            "python" -> {
+                val code = definition.optString("code", "").trim()
+                require(code.isNotEmpty() && code.length <= 16_000) {
+                    "python 工具 code 长度需在 1~16000 字符之间"
                 }
             }
         }
@@ -553,7 +559,26 @@ internal object WhaleCustomToolEngine {
             "composite" -> executeComposite(record, args, stepExecutor)
             "http_json" -> executeHttpJson(record, args)
             "js" -> executeJs(context, record, args)
+            "python" -> executePython(context, record, args)
             else -> ExecutionResult(false, "未知自造工具类型", JSONObject().put("error", "UNSUPPORTED_KIND").toString())
         }
+    }
+
+    private fun executePython(context: Context, record: JSONObject, args: JSONObject): ExecutionResult {
+        val toolName = record.optString("name", "custom_python")
+        val code = record.optJSONObject("definition")?.optString("code", "").orEmpty()
+        if (code.isBlank()) {
+            return ExecutionResult(false, "自造 Python 工具代码为空", JSONObject().put("error", "EMPTY_CODE").toString())
+        }
+        val dir = File(WhaleCodeRunner.workspaceRoot(context), "custom-tools").apply { mkdirs() }
+        val argsLiteral = JSONObject.quote(args.toString())
+        val wrapped = buildString {
+            append("import json as _whale_json\n")
+            append("args = _whale_json.loads(").append(argsLiteral).append(")\n")
+            append(code).append("\n")
+        }
+        val res = WhaleCodeRunner.runPython(context = context, projectDir = dir, code = wrapped, timeoutSec = 45L)
+        val ok = res.optBoolean("ok", false)
+        return ExecutionResult(ok, if (ok) "执行自造 Python 工具：$toolName" else "自造 Python 工具报错：$toolName", res.toString())
     }
 }

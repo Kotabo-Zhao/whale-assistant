@@ -533,6 +533,12 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_share_text", "唤起安卓系统原生分享面板，将文案或摘要直接分享到微信、备忘录等任意应用。", mapOf("text" to "要分享的正文内容", "title" to "可选分享标题"), listOf("text")))
         }
         array.put(schema(
+            "whale_self_capabilities",
+            "实时自检 Agent 自身的完整能力清单与环境状态：返回全部可展开工具域、已自造的 custom_* 工具、已装 Skill/MCP、功能工坊小软件、0-Token 录制宏、主动守护规则以及无障碍/副屏/Python 就绪状态。不确定能否完成任务时优先调用此工具自检。",
+            emptyMap(),
+            emptyList(),
+        ))
+        array.put(schema(
             "whale_tools_expand",
             "当本轮需要尚未展开的专域工具时调用，立即在下一轮热加载对应工具组。可选分类：phone(手机屏控/截屏/副屏)、code(代码文件/功能工坊)、settings(应用设置/主题/桌宠/人设)、device(设备电量/通知/剪贴板/定时任务)、extensions(MCP服务器与Skill技能安装管理)、all(全部工具)。",
             mapOf("category" to "分类：phone / code / settings / device / extensions / all"),
@@ -540,11 +546,11 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         ))
         array.put(schema(
             "whale_tool_create",
-            "让 Agent 自己创建或更新一个持久化的自定义可调用工具（名称必须以 custom_ 开头），创建成功后立即注入工具列表并可在本轮及后续所有对话直接调用。支持三种类型：composite（串联现有 whale_* 工具的工作流）、http_json（HTTPS 接口调用，支持 {{param}} 模板与 extractPath）、js（无网络无文件隔离 JS 计算沙箱，写函数体接收 args 并 return 结果）。",
+            "让 Agent 自己创造或更新一个持久化的自定义可调用工具（名称必须以 custom_ 开头），创建后立即热加载并可在本轮及后续所有对话直接调用。支持四种引擎：python（推荐：内置 CPython 3.11 沙箱，直接读取 args 字典，适合计算/解析/数据处理/绘图）、composite（串联现有 whale_* 工具的工作流）、http_json（HTTPS 接口调用，支持 {{param}} 与 extractPath）、js（隔离 JS 沙箱）。",
             mapOf(
                 "name" to "工具名，必须以 custom_ 开头，仅小写字母/数字/下划线，如 custom_weather 或 custom_snr_calc",
                 "description" to "工具用途说明(2~200字)",
-                "kind" to "执行引擎类型：composite / http_json / js",
+                "kind" to "执行引擎类型：python（推荐）/ composite / http_json / js",
                 "paramsJson" to """可选，JSON 对象字符串，如 {"city":"城市名"}""",
                 "requiredJson" to """可选，必填参数名 JSON 数组字符串，如 ["city"]""",
                 "definitionJson" to """必填，JSON 对象字符串：composite 传 {"steps":[{"tool":"whale_...","args":{...}}]}；http_json 传 {"url":"https://...","method":"GET","extractPath":"..."}；js 传 {"code":"return ...;"}""",
@@ -2324,6 +2330,41 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     WhaleVoiceEngine.saveConfig(app, voice = voice, speed = speed, autoSpeakPet = autoSpeak)
                     if (autoSpeak == false) WhaleVoiceEngine.stopSpeaking()
                     ToolOutcome(name, "已更新桌宠语音设置", true, WhaleVoiceEngine.snapshotJson(app).toString(), mutating = true)
+                }
+                "whale_self_capabilities" -> {
+                    val customTools = JSONArray()
+                    runCatching { WhaleCustomToolEngine.loadAll(WhaleCustomToolEngine.storeFile(app)) }.getOrDefault(emptyList()).forEach { t ->
+                        customTools.put(JSONObject().put("name", t.optString("name")).put("kind", t.optString("kind")).put("description", t.optString("description")))
+                    }
+                    val workshopApps = JSONArray()
+                    runCatching { io.deepseekharness.mobile.features.WhaleFeatureStore(app).activeTools() }.getOrDefault(emptyList()).forEach { a ->
+                        workshopApps.put(JSONObject().put("id", a.id).put("title", a.title))
+                    }
+                    val macros = JSONArray()
+                    runCatching { WhaleMacroEngine.list(app) }.getOrDefault(emptyList()).forEach { m ->
+                        macros.put(JSONObject().put("name", m.name).put("steps", m.steps.size))
+                    }
+                    val routines = JSONArray()
+                    runCatching { WhaleRoutineEngine.list(app).filter { it.enabled } }.getOrDefault(emptyList()).forEach { r ->
+                        routines.put(JSONObject().put("name", r.name).put("actionKind", r.actionKind))
+                    }
+                    val envDiag = runCatching { WhaleAutoHealBridge.diagnose(app) }.getOrElse { JSONObject() }
+                    val domains = JSONObject()
+                        .put("code", "内置 CPython 3.11 代码运行、文件读写、图表/文档生成、功能工坊离线小软件开发")
+                        .put("phone", "无障碍屏控、副屏后台操作、截屏识图、0-Token 录制宏与自愈、自动化自检修复")
+                        .put("device", "电量、通知、剪贴板、定时任务、应用跳转、语音朗读")
+                        .put("settings", "主题外观、桌宠控制、角色人设增量修正、自治模式")
+                        .put("extensions", "Skill 技能安装管理、MCP 外部工具服务器、远程算力桥")
+                        .put("self_authoring", "whale_tool_create 可自主创造 python/composite/http_json/js 持久化 custom_* 工具并立刻热加载调用")
+                    val out = JSONObject()
+                        .put("ok", true)
+                        .put("toolDomains", domains)
+                        .put("selfAuthoredTools", customTools)
+                        .put("workshopMiniApps", workshopApps)
+                        .put("savedMacros", macros)
+                        .put("activeRoutines", routines)
+                        .put("environment", envDiag)
+                    ToolOutcome(name, "自检自身能力与环境状态", true, out.toString())
                 }
                 "whale_tools_expand" -> {
                     val cat = args.str("category", "all").trim().lowercase().ifEmpty { "all" }

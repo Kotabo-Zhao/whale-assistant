@@ -473,6 +473,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
                 val step = StepRecord(p.fnName, outcome.label, outcome.ok, dt)
                 steps += step
+                if (!outcome.ok && !outcome.payload.contains("REPEAT_LOOP_ABORTED") && round < MAX_TOOL_ROUNDS - 2) {
+                    roundReminders.add("提示：工具 ${p.fnName} 本次未成功，请不要直接放弃或把原始报错甩给用户；优先自主换用备选工具、调 whale_tools_expand/whale_self_capabilities 查找能力，或用 Python/whale_tool_create 自行构造方案后再交付。")
+                }
                 listener?.onStep(step)
                 onProgress?.invoke(round + 1, "第 ${round + 1} 轮 · ${outcome.label}", "[${p.fnName}] ${outcome.label}（${dt}ms）")
                 roundToolIndices.add(messages.length())
@@ -598,7 +601,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
         }
         append("身份与能力：始终保持「$charName」的人设与口吻回复，同时具备手机原生 Super Agent 全部工具能力；处理现实事务时结果准确且不切回客服腔。若用户在对话中约定新的称呼、口癖、语气或相处设定，主动调用 whale_persona_manage(action=\"refine\") 增量修正角色卡。\n")
-        append("执行原则：只读核查一步到位，复杂耗时任务派发 whale_worker_submit；收到 [用户中途补充/修正] 立即调整；不确定信息先 whale_web_search；需专域工具（屏控/代码/设置/设备/MCP与Skill扩展）先 whale_tools_expand 热加载；互不依赖查询同轮并行；屏控遇无文字广告弹窗优先返回键或视觉定位。\n")
+        append("自我认知与主观能动性原则：\n")
+        append("1. 清楚自身能力、绝不轻言做不到：你拥有内置 Python 3.11 沙箱、自主造工具引擎（whale_tool_create 支持 python/composite/http_json/js）、功能工坊离线小软件、全网+B站/小红书/搜图检索、无障碍与副屏 0-Token 录制宏、事件主动守护与长期目标图。不确定有无现成工具或权限时，先调 whale_self_capabilities 自检或 whale_tools_expand 热加载专域工具。\n")
+        append("2. 缺工具自己造、造完即刻用：遇到现有工具覆盖不到的可复用需求（专属计算、数据解析、接口抓取、组合流程），主动用 whale_tool_create(kind=\"python\"|\"composite\"|\"http_json\"|\"js\") 为自己造一个 custom_* 长期工具并立刻调用验证；需要常驻交互界面时主动用 whale_workshop_create 造小工具或输出 whale-widget 卡片。\n")
+        append("3. 先做后报、遇阻自主换路：所有只读调研、查证与代码验证直接一步做完再交付，严禁停在半路反问\"要不要我帮你查\"；工具报错或抓空时立刻自主换通道（web_fetch→web_render/web_search/image_search；代码报错自修重跑至通过；宏遇弹窗单步视觉自愈），绝不把原始报错甩给用户；仅支付、删除、对外发消息等不可逆操作才先确认；察觉长期目标或高频习惯时主动用 whale_goal_create / whale_playbook_save / whale_routine_manage 帮主人沉淀。\n")
         append("交互卡片（按需）：当回复涉及可勾选清单、多方案对比、倒计时或参数试算时，可直接输出 ```whale-widget JSON 块（type=checklist|compare|timer|calc，含 title 及对应 items/columns+rows/durationSec/fields+formula+resultLabel），前端会原生渲染为可交互卡片。\n")
         append("快捷回复（强制）：每次最终回复末尾另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（≤14字）；若向用户提问或给选项，必须给出可直接点选的简短回答。")
     }
@@ -656,6 +662,21 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             val nowStr = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.CHINA).format(Date())
             append("[当前时间] ").append(nowStr).append("\n")
+            val myCustomTools = runCatching { WhaleCustomToolEngine.loadAll(WhaleCustomToolEngine.storeFile(app)) }.getOrDefault(emptyList())
+            if (myCustomTools.isNotEmpty()) {
+                append("[我已自造的工具] ").append(myCustomTools.take(6).joinToString("、") { "${it.optString("name")}(${it.optString("kind")})" }).append("\n")
+            }
+            val activeGoals = runCatching { WhaleGoalGraphStore.list(app, includeCompleted = false) }.getOrDefault(emptyList())
+            if (activeGoals.isNotEmpty()) {
+                val gLine = activeGoals.take(3).joinToString("；") { g ->
+                    if (g.nextAction.isNotBlank()) "${g.title}(下一步:${g.nextAction.take(24)})" else g.title
+                }
+                append("[进行中长期目标] ").append(gLine).append("\n")
+            }
+            val savedMacros = runCatching { WhaleMacroEngine.list(app) }.getOrDefault(emptyList())
+            if (savedMacros.isNotEmpty()) {
+                append("[可0-Token回放宏] ").append(savedMacros.take(4).joinToString("、") { it.name }).append("\n")
+            }
             val openMatters = owner.optJSONArray("openMatters")
             if (openMatters != null && openMatters.length() > 0) {
                 val top = mutableListOf<String>()
