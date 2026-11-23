@@ -2348,7 +2348,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     runCatching { WhaleRoutineEngine.list(app).filter { it.enabled } }.getOrDefault(emptyList()).forEach { r ->
                         routines.put(JSONObject().put("name", r.name).put("actionKind", r.actionKind))
                     }
-                    val envDiag = runCatching { WhaleAutoHealBridge.diagnose(app) }.getOrElse { JSONObject() }
+                    val envDiag = runCatching { WhaleAutoHealBridge.health(app) }.getOrElse { JSONObject() }
                     val domains = JSONObject()
                         .put("code", "内置 CPython 3.11 代码运行、文件读写、图表/文档生成、功能工坊离线小软件开发")
                         .put("phone", "无障碍屏控、副屏后台操作、截屏识图、0-Token 录制宏与自愈、自动化自检修复")

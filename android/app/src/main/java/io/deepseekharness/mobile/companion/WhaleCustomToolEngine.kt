@@ -570,7 +570,7 @@ internal object WhaleCustomToolEngine {
         if (code.isBlank()) {
             return ExecutionResult(false, "自造 Python 工具代码为空", JSONObject().put("error", "EMPTY_CODE").toString())
         }
-        val dir = File(WhaleCodeRunner.workspaceRoot(context), "custom-tools").apply { mkdirs() }
+        val dir = File(File(context.applicationContext.filesDir, "whale-projects"), "custom-tools").apply { mkdirs() }
         val argsLiteral = JSONObject.quote(args.toString())
         val wrapped = buildString {
             append("import json as _whale_json\n")
