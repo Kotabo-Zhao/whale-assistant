@@ -210,3 +210,74 @@
   }
   .management-shell .app-main:has(> .settings-detail-page) { scroll-padding-block-start:4rem; }
 }
+
+/* ── Redesigned 「我的 / 设置」 Unified Aesthetics ── */
+.account-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.account-workspace .account-controls {
+  margin-bottom: 0;
+}
+
+.account-workspace .account-sections {
+  margin: 0;
+  padding: 5px;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-muted);
+}
+
+.account-workspace .account-sections .account-group-toggle {
+  border: 1px solid transparent;
+  border-radius: var(--radius-inner);
+  background: transparent;
+  color: var(--muted);
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.account-workspace .account-sections .account-group-toggle[aria-expanded=true] {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--blue-line, var(--line));
+  box-shadow: var(--shadow-card);
+}
+
+.account-workspace .account-sections .account-group-toggle[aria-expanded=true] svg {
+  color: var(--blue);
+}
+
+.account-workspace .management-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  flex-shrink: 0;
+}
+
+.account-workspace .management-copy strong {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.account-workspace .management-copy small {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+.account-autonomy-dock {
+  margin-top: 4px;
+}
+
+.account-autonomy-dock .whale-autonomy-card {
+  margin-bottom: 0;
+}

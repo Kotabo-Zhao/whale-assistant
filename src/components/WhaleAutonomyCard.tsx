@@ -281,7 +281,15 @@ export function WhaleAutonomyCard({
         </div>
       </details>
 
-      <WhalePowerHub />
+      <details className="whale-voice-box whale-collapsible">
+        <summary className="whale-voice-head" style={{ cursor: 'pointer', listStyle: 'none' }}>
+          <strong>{t('扩展、MCP 与算力中心')}</strong>
+          <span>{t('Token · Skills · 远程桥')}</span>
+        </summary>
+        <div style={{ marginTop: '10px' }}>
+          <WhalePowerHub />
+        </div>
+      </details>
 
       {(onOpenOverlay || onOpenAccessibility || onOpenNotifications) && (
         <div className="whale-perm-shortcuts" aria-label={t('系统权限快捷授权')}>

@@ -7,6 +7,7 @@ import { Capacitor } from '@capacitor/core'
 import appMark from './assets/app-mark.png'
 import whaleWave from './assets/whale-wave.svg'
 import whaleChanBadge from './assets/whale-chan-badge.png'
+import usagiAvatar from './assets/usagi-avatar.png'
 import { CuteIcon } from './components/CuteIcon'
 import { saveLanguage, t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
@@ -1297,9 +1298,11 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
           <h1>{t("设置")}</h1>
         </div>
         <div className="heading-actions account-heading-actions">
-          {interfaceStyle === 'cute'
-            ? <img className="whale-signature is-maid-badge" src={whaleChanBadge} alt="" width={34} height={34} />
-            : <img className="whale-signature" src={whaleWave} alt="" width={53} height={32} />}
+          {interfaceStyle === 'usagi'
+            ? <img className="whale-signature is-maid-badge" src={usagiAvatar} alt="" width={34} height={34} />
+            : interfaceStyle === 'cute'
+              ? <img className="whale-signature is-maid-badge" src={whaleChanBadge} alt="" width={34} height={34} />
+              : <img className="whale-signature" src={whaleWave} alt="" width={53} height={32} />}
           {!searching && <button type="button" className="account-advanced-toggle" aria-controls="account-categories" aria-expanded={advanced}
             onClick={() => { setAdvanced(value => !value); if (expanded === 'device' || expanded === 'workspace') toggleGroup(expanded) }}>
             <SlidersHorizontal size={18}/><strong>{t('高级设置')}</strong>
@@ -1362,8 +1365,6 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
         </p>
       )}
 
-      {!searching && <WhaleAutonomyCard onOpenOverlay={() => onOpenPage('runtime')} onOpenAccessibility={() => onOpenPage('automation-accessibility')} onOpenNotifications={() => { void runtimeBridge.openCompanionSettings() }} />}
-
       {!searching && <nav id="account-categories" className="account-sections" data-advanced={advanced} aria-label={t('设置分类')}>
         {SETTINGS_HOME_GROUPS.filter(group => advanced || !['device', 'workspace'].includes(group.id)).map(group => <button key={group.id} type="button" className="account-group-toggle"
           aria-label={t(group.label)} aria-expanded={expanded === group.id} aria-controls={'settings-group-' + group.id} onClick={() => toggleGroup(group.id)}>
@@ -1403,6 +1404,15 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
         </section>
       ))}
       </div>
+      {!searching && (
+        <div className="account-autonomy-dock">
+          <WhaleAutonomyCard
+            onOpenOverlay={() => onOpenPage('runtime')}
+            onOpenAccessibility={() => onOpenPage('automation-accessibility')}
+            onOpenNotifications={() => { void runtimeBridge.openCompanionSettings() }}
+          />
+        </div>
+      )}
     </div>
   )
 }
