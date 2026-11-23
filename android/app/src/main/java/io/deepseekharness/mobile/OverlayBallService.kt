@@ -1577,9 +1577,12 @@ class OverlayBallService : Service() {
             actions = actions,
             onSelect = { act ->
                 dismissRadialWheel()
+                var handedOffBitmap = false
+                try {
                 when (act.id) {
                     "close" -> Unit
                     "free_ask" -> {
+                        handedOffBitmap = true
                         val preHit = target?.let { it.packageName to it.mergedContext }
                         showDragToAskMenu(dropX, dropY, preHit, capturedBitmap)
                     }
@@ -1614,8 +1617,16 @@ class OverlayBallService : Service() {
                     "verify" -> sendToChat("请联网核实指中这段信息的真实性与最新进展，指出可能的误区：", attachImage = hasBmp)
                     "save_mem" -> sendToChat("请提炼指中内容的重点，并调用 whale_memory_save 帮我记住：", attachImage = false)
                 }
+                } finally {
+                    if (!handedOffBitmap) {
+                        capturedBitmap?.let { if (!it.isRecycled) it.recycle() }
+                    }
+                }
             },
-            onDismiss = { dismissRadialWheel() },
+            onDismiss = {
+                dismissRadialWheel()
+                capturedBitmap?.let { if (!it.isRecycled) it.recycle() }
+            },
         )
 
         val overlayType = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {

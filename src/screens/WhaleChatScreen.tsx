@@ -504,8 +504,8 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
 
   const sendTextRef = useRef<(raw: string, overrideImages?: string[]) => Promise<void>>(async () => {})
   useEffect(() => {
-    const onMiniAppAsk = (ev: Event) => {
-      const detail = (ev as CustomEvent<string | { prompt?: string; image?: string }>).detail
+    const winWithPending = window as Window & { __whalePendingAsk?: { prompt: string; image?: string } }
+    const dispatchAskDetail = (detail: string | { prompt?: string; image?: string } | undefined) => {
       if (typeof detail === 'string' && detail.trim()) {
         void sendTextRef.current(detail.trim())
       } else if (detail && typeof detail === 'object' && typeof detail.prompt === 'string' && detail.prompt.trim()) {
@@ -513,7 +513,18 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
         void sendTextRef.current(detail.prompt.trim(), imgs)
       }
     }
+    const onMiniAppAsk = (ev: Event) => {
+      if (winWithPending.__whalePendingAsk) {
+        delete winWithPending.__whalePendingAsk
+      }
+      dispatchAskDetail((ev as CustomEvent<string | { prompt?: string; image?: string }>).detail)
+    }
     window.addEventListener('whale-miniapp-ask', onMiniAppAsk)
+    if (winWithPending.__whalePendingAsk) {
+      const queued = winWithPending.__whalePendingAsk
+      delete winWithPending.__whalePendingAsk
+      window.setTimeout(() => dispatchAskDetail(queued), 20)
+    }
     const pullPetTurns = async () => {
       try {
         const cursor = petSyncCursorRef.current

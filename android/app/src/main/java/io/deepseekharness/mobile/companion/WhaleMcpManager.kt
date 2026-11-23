@@ -212,7 +212,8 @@ print("__WHALE_MCP_RES__" + json.dumps(res, ensure_ascii=False, default=str))
         val trimmedUrl = rawUrl.trim()
         if (trimmedUrl.startsWith("python://", ignoreCase = true) || pythonCode.isNotBlank()) {
             val slugSource = id.ifBlank { trimmedUrl.removePrefix("python://").removePrefix("PYTHON://").ifBlank { name } }
-            val cleanId = sanitizeId(slugSource).replace("-", "_").ifBlank { "py_mcp" }
+            val rawPyId = sanitizeId(slugSource).replace("-", "_").ifBlank { "py_mcp" }
+            val cleanId = if (rawPyId.first().isDigit()) "mcp_$rawPyId" else rawPyId
             val cleanName = name.trim().ifEmpty { cleanId }.take(48)
             val scriptFile = java.io.File(pythonMcpDir(context), "$cleanId.py")
             if (pythonCode.isNotBlank()) {

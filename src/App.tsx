@@ -3882,8 +3882,10 @@ export function App() {
         if (prompt) {
           setActiveView('whale-chat')
           const image = typeof event.image === 'string' && event.image.startsWith('data:image/') ? event.image : undefined
+          const payload = image ? { prompt, image } : { prompt }
+          ;(window as Window & { __whalePendingAsk?: { prompt: string; image?: string } }).__whalePendingAsk = payload
           window.setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('whale-miniapp-ask', { detail: image ? { prompt, image } : prompt }))
+            window.dispatchEvent(new CustomEvent('whale-miniapp-ask', { detail: payload }))
           }, 80)
         }
       } else if (event.action === 'refresh') {
