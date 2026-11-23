@@ -633,7 +633,7 @@ class OverlayBallService : Service() {
         anim.start()
     }
 
-    private fun cancelSnapSpring(); dragVelocityTracker?.recycle(); dragVelocityTracker = null; dismissRadialWheel() {
+    private fun dismissRadialWheel() {
         radialWheelView?.let { v ->
             runCatching { windowManager.removeViewImmediate(v) }
         }
@@ -641,6 +641,9 @@ class OverlayBallService : Service() {
     }
 
     override fun onDestroy() {
+        cancelSnapSpring()
+        dragVelocityTracker?.recycle()
+        dragVelocityTracker = null
         dismissRadialWheel()
         hideRightEdgeDropDock()
         io.deepseekharness.mobile.companion.WhaleAutoMemoryObserver.stopScreenshotObserver(this)
