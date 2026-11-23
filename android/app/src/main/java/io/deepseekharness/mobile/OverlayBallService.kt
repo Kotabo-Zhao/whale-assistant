@@ -1465,7 +1465,7 @@ class OverlayBallService : Service() {
                 )
             }
         }
-        val themed = ContextThemeWrapper(this, R.style.Theme_DeepSeekHarnessMobile)
+        val themed = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
         val dialog = android.app.AlertDialog.Builder(themed)
             .setTitle("拖宠即问 · 发现屏幕内容")
             .setItems(actions) { _, which ->
