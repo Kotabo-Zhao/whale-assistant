@@ -334,6 +334,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 if (lastLabel.isNotEmpty()) "analyzing|分析「$lastLabel」结果，决定下一步" else "analyzing|汇总当前进展，规划下一步"
             }
             listener?.onPhase(roundPhase)
+            if (!isWorkerSession) {
+                WhaleLiveIslandBus.reportForeground("鲸鱼助手", roundPhase.substringAfter('|').take(22), trimmed.take(80))
+            }
             onProgress?.invoke(round + 1, "第 ${round + 1} 轮推理中…", finalReply)
             val streamBridge = if (listener != null || onProgress != null) {
                 object : StreamListener {
@@ -573,6 +576,9 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     }
                 }
                 listener?.onStep(step)
+                if (!isWorkerSession) {
+                    WhaleLiveIslandBus.reportForeground("鲸鱼助手", outcome.label.take(22), "已完成 ${steps.size} 步 · ${p.fnName}（${dt}ms）")
+                }
                 onProgress?.invoke(round + 1, "第 ${round + 1} 轮 · ${outcome.label}", "[${p.fnName}] ${outcome.label}（${dt}ms）")
                 roundToolIndices.add(messages.length())
                 val rawOut = outcome.payload
@@ -681,6 +687,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (fsmNow != null && fsmNow.optString("status") != "awaiting_approval") {
                 WhaleAgentBrainEnhancer.DurableTaskCheckpoint.clearState(app, sessionId)
             }
+        }
+        if (!isWorkerSession) {
+            if (wasCancelled) WhaleLiveIslandBus.clearForeground()
+            else WhaleLiveIslandBus.completeForeground(ok = true, summary = cleanReply.take(48))
         }
         val finalStats = WhaleContextBudgeter.lastTurnStats
         if (finalStats.rawTotalChars > 0) {
