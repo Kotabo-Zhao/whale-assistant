@@ -439,11 +439,13 @@ internal object WhaleCustomToolEngine {
                 if (getRequestProperty("Content-Type") == null) {
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 }
-                val body = renderTemplate(def.optString("body", "{}"), args)
-                outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             }
         }
         try {
+            if (method == "POST") {
+                val body = renderTemplate(def.optString("body", "{}"), args)
+                conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            }
             val status = conn.responseCode
             val stream = if (status in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
             val rawBytes = stream?.use { input ->

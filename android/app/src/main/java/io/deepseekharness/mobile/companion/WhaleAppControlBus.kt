@@ -11,14 +11,31 @@ import java.util.concurrent.CopyOnWriteArraySet
  */
 internal object WhaleAppControlBus {
     private val listeners = CopyOnWriteArraySet<(JSONObject) -> Unit>()
+    private val pending = ArrayDeque<JSONObject>()
 
     fun subscribe(listener: (JSONObject) -> Unit): () -> Unit {
         listeners.add(listener)
+        val replay = synchronized(pending) {
+            val copy = pending.toList()
+            pending.clear()
+            copy
+        }
+        for (item in replay) {
+            runCatching { listener(item) }
+        }
         return { listeners.remove(listener) }
     }
 
     fun emit(payload: JSONObject) {
-        for (listener in listeners) {
+        val snapshot = listeners.toList()
+        if (snapshot.isEmpty()) {
+            synchronized(pending) {
+                while (pending.size >= 4) pending.removeFirst()
+                pending.addLast(payload)
+            }
+            return
+        }
+        for (listener in snapshot) {
             runCatching { listener(payload) }
         }
     }

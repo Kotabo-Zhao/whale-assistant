@@ -128,6 +128,7 @@ internal class RadialDragAskWheelView(
     init {
         isClickable = true
         isFocusable = true
+        isFocusableInTouchMode = true
         if (previewBitmap != null && !previewBitmap.isRecycled) {
             thumbShader = BitmapShader(previewBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
             thumbPaint.shader = thumbShader
@@ -271,6 +272,14 @@ internal class RadialDragAskWheelView(
             centerSubPaint.color = withAlpha(ui.onPrimary, (255 * alphaFactor).toInt())
             canvas.drawText(subText, cx, subY, centerSubPaint)
         }
+    }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK && event.action == android.view.KeyEvent.ACTION_UP) {
+            onDismiss()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

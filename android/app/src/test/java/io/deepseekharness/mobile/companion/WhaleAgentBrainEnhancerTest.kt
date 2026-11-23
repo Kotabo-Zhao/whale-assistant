@@ -51,4 +51,18 @@ class WhaleAgentBrainEnhancerTest {
             WhaleHarnessCore.PrefixCacheCompactor.isCheckpointRelevant(staleSalaryCheckpoint, sameTopicHistory, "好呀，直接做"),
         )
     }
+
+    @Test
+    fun appControlBusBuffersColdStartEventsUntilSubscriberAttaches() {
+        val received = mutableListOf<String>()
+        WhaleAppControlBus.emit(org.json.JSONObject().put("action", "ask").put("prompt", "cold-start-test"))
+        val unsub = WhaleAppControlBus.subscribe { obj ->
+            received.add(obj.optString("prompt"))
+        }
+        try {
+            assertTrue("cold-start-test" in received)
+        } finally {
+            unsub()
+        }
+    }
 }

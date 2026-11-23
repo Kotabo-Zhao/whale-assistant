@@ -1067,12 +1067,18 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val action = args.str("action", "").trim().lowercase()
                     when (action) {
                         "start" -> {
-                            val intent = Intent(app, OverlayBallService::class.java)
-                            runCatching { app.startForegroundService(intent) }.onFailure { app.startService(intent) }
-                            ToolOutcome(name, "启动悬浮桌宠", true, JSONObject().put("ok", true).put("action", "start").toString(), mutating = true)
+                            OverlayBallService.start(app)
+                            val ok = OverlayBallService.isRunning
+                            ToolOutcome(
+                                name,
+                                if (ok) "启动悬浮桌宠" else "启动悬浮桌宠受系统后台限制",
+                                ok,
+                                JSONObject().put("ok", ok).put("action", "start").put("failure", OverlayBallService.lastStartFailure.orEmpty()).toString(),
+                                mutating = ok,
+                            )
                         }
                         "stop" -> {
-                            app.stopService(Intent(app, OverlayBallService::class.java))
+                            OverlayBallService.stop(app)
                             ToolOutcome(name, "隐藏悬浮桌宠", true, JSONObject().put("ok", true).put("action", "stop").toString(), mutating = true)
                         }
                         "resize" -> {
