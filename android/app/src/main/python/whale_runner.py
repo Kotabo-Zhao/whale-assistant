@@ -1,5 +1,7 @@
 import builtins
 import html
+import importlib
+import importlib.metadata
 import io
 import json
 import os
@@ -197,6 +199,36 @@ def run_code(
     os.environ["TMPDIR"] = tmp_dir
     tempfile.tempdir = tmp_dir
     _mount_extra_paths(extra_paths_json)
+    site_dir_resolved = ""
+    try:
+        parsed_extra = json.loads(extra_paths_json) if extra_paths_json else []
+        if isinstance(parsed_extra, list) and parsed_extra and isinstance(parsed_extra[0], str):
+            site_dir_resolved = parsed_extra[0].strip()
+    except Exception:
+        site_dir_resolved = ""
+    if not site_dir_resolved:
+        site_dir_resolved = os.path.join(resolved_dir, ".site-packages")
+    os.makedirs(site_dir_resolved, exist_ok=True)
+    if site_dir_resolved not in sys.path:
+        sys.path.insert(0, site_dir_resolved)
+
+    def _pip_install(package_name: str, mirror_url: str = "") -> dict:
+        raw_res = install_pure_wheel(package_name, site_dir_resolved, mirror_url)
+        try:
+            return json.loads(raw_res)
+        except Exception:
+            return {"ok": False, "error": raw_res}
+
+    def _installed_packages() -> list:
+        names = set()
+        try:
+            for dist in importlib.metadata.distributions():
+                n = dist.metadata.get("Name")
+                if n:
+                    names.add(n)
+        except Exception:
+            pass
+        return sorted(names)
 
     def _inspect(*values):
         for v in values:
@@ -220,6 +252,9 @@ def run_code(
                 "__name__": "__main__",
                 "__file__": os.path.join(resolved_dir, "main.py"),
                 "WORK_DIR": resolved_dir,
+                "SITE_PACKAGES": site_dir_resolved,
+                "pip_install": _pip_install,
+                "installed_packages": _installed_packages,
                 "open": _thread_scoped_builtins_open,
                 "tools": proxy,
                 "inspect": _inspect,
@@ -256,14 +291,64 @@ def run_code(
     )
 
 
-def install_pure_wheel(package_name: str, site_dir: str, mirror_url: str = "") -> str:
-    """Download and extract a pure-Python .whl (py3-none-any) from domestic/PyPI mirrors into site_dir."""
+def _parse_requires_dist(metadata_text: str) -> list:
+    """Extract mandatory (non-extra) dependency package names from wheel METADATA."""
+    deps = []
+    for line in metadata_text.splitlines():
+        if not line.startswith("Requires-Dist:"):
+            continue
+        spec = line.split(":", 1)[1].strip()
+        if ";" in spec:
+            req_part, marker = spec.split(";", 1)
+            if "extra" in marker:
+                continue
+            if "sys_platform" in marker and "win32" in marker and "==" in marker:
+                continue
+            spec = req_part.strip()
+        m = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)", spec)
+        if m:
+            deps.append(m.group(1))
+    return deps
+
+
+def _is_dist_installed(pkg_name: str, site_dir: str) -> bool:
+    norm = re.sub(r"[-_.]+", "-", pkg_name.strip()).lower()
+    mod_guess = norm.replace("-", "_")
+    try:
+        importlib.metadata.distribution(norm)
+        return True
+    except Exception:
+        pass
+    try:
+        if importlib.util.find_spec(mod_guess) is not None:
+            return True
+    except Exception:
+        pass
+    if os.path.isdir(os.path.join(site_dir, mod_guess)) or os.path.isfile(os.path.join(site_dir, mod_guess + ".py")):
+        return True
+    return False
+
+
+def _install_wheel_recursive(
+    package_name: str,
+    site_dir: str,
+    mirror_url: str,
+    visited: set,
+    installed_list: list,
+    skipped_deps: list,
+    depth: int = 0,
+) -> dict:
     pkg = re.sub(r"[^A-Za-z0-9._-]", "", str(package_name or "").strip()).lower()
     if not pkg:
-        return json.dumps({"ok": False, "error": "包名不能为空"}, ensure_ascii=False)
+        return {"ok": False, "error": "包名不能为空"}
     normalized = re.sub(r"[-_.]+", "-", pkg)
-    os.makedirs(site_dir, exist_ok=True)
+    if normalized in visited:
+        return {"ok": True, "package": pkg, "alreadyVisited": True}
+    visited.add(normalized)
+    if depth > 0 and _is_dist_installed(normalized, site_dir):
+        return {"ok": True, "package": pkg, "alreadyInstalled": True}
 
+    os.makedirs(site_dir, exist_ok=True)
     mirrors = []
     if mirror_url and str(mirror_url).strip().startswith("https://"):
         mirrors.append(str(mirror_url).strip().rstrip("/") + "/")
@@ -275,7 +360,7 @@ def install_pure_wheel(package_name: str, site_dir: str, mirror_url: str = "") -
         ]
     )
 
-    headers = {"User-Agent": "WhaleAssistant/0.4 (Android Python PureWheel Installer)"}
+    headers = {"User-Agent": "WhaleAssistant/0.5 (Android Python PureWheel Installer)"}
     last_error = "无法连接任何 PyPI 镜像源"
     wheel_href = None
     wheel_filename = None
@@ -304,17 +389,18 @@ def install_pure_wheel(package_name: str, site_dir: str, mirror_url: str = "") -
             last_error = f"{base}: {err}"
 
     if not wheel_href:
-        return json.dumps({"ok": False, "package": pkg, "error": last_error}, ensure_ascii=False)
+        return {"ok": False, "package": pkg, "error": last_error}
 
     try:
         req = urllib.request.Request(wheel_href, headers=headers)
         with urllib.request.urlopen(req, timeout=45) as resp:
             raw = resp.read(MAX_WHEEL_BYTES + 1)
         if len(raw) > MAX_WHEEL_BYTES:
-            return json.dumps({"ok": False, "package": pkg, "error": "Wheel 包体积超过 25MB 上限"}, ensure_ascii=False)
+            return {"ok": False, "package": pkg, "error": "Wheel 包体积超过 25MB 上限"}
 
         target_root = os.path.realpath(site_dir)
         extracted = 0
+        metadata_text = ""
         with zipfile.ZipFile(io.BytesIO(raw), "r") as zf:
             for member in zf.infolist():
                 if member.is_dir():
@@ -323,23 +409,53 @@ def install_pure_wheel(package_name: str, site_dir: str, mirror_url: str = "") -
                 if not (dest == target_root or dest.startswith(target_root + os.sep)):
                     raise RuntimeError(f"检测到非法 Wheel 路径：{member.filename}")
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
-                with zf.open(member, "r") as src, _ORIG_BUILTINS_OPEN(dest, "wb") as dst:
-                    dst.write(src.read())
+                data = zf.read(member)
+                if member.filename.endswith(".dist-info/METADATA") and not metadata_text:
+                    metadata_text = data.decode("utf-8", errors="replace")
+                with _ORIG_BUILTINS_OPEN(dest, "wb") as dst:
+                    dst.write(data)
                 extracted += 1
 
         if target_root not in sys.path:
             sys.path.insert(0, target_root)
+        importlib.invalidate_caches()
+        installed_list.append(wheel_filename)
 
-        return json.dumps(
-            {
-                "ok": True,
-                "package": pkg,
-                "wheel": wheel_filename,
-                "mirror": used_mirror,
-                "filesExtracted": extracted,
-                "siteDir": target_root,
-            },
-            ensure_ascii=False,
-        )
+        # 自动递归安装纯 Python 子依赖（最多 4 层、累计 12 个包）
+        if depth < 4 and metadata_text:
+            for dep in _parse_requires_dist(metadata_text):
+                if len(visited) >= 12:
+                    break
+                dep_norm = re.sub(r"[-_.]+", "-", dep).lower()
+                if dep_norm in visited or _is_dist_installed(dep_norm, target_root):
+                    continue
+                sub = _install_wheel_recursive(dep_norm, target_root, mirror_url, visited, installed_list, skipped_deps, depth + 1)
+                if not sub.get("ok"):
+                    skipped_deps.append({"package": dep_norm, "reason": sub.get("error", "")[:120]})
+
+        return {
+            "ok": True,
+            "package": pkg,
+            "wheel": wheel_filename,
+            "mirror": used_mirror,
+            "filesExtracted": extracted,
+            "installedWheels": installed_list,
+            "skippedDeps": skipped_deps,
+            "siteDir": target_root,
+        }
     except Exception as err:
-        return json.dumps({"ok": False, "package": pkg, "error": f"下载或解压失败：{err}"}, ensure_ascii=False)
+        return {"ok": False, "package": pkg, "error": f"下载或解压失败：{err}"}
+
+
+def install_pure_wheel(package_name: str, site_dir: str, mirror_url: str = "") -> str:
+    """Download and extract a pure-Python .whl (py3-none-any) + recursive pure deps into site_dir."""
+    res = _install_wheel_recursive(
+        package_name=package_name,
+        site_dir=site_dir,
+        mirror_url=mirror_url,
+        visited=set(),
+        installed_list=[],
+        skipped_deps=[],
+        depth=0,
+    )
+    return json.dumps(res, ensure_ascii=False)

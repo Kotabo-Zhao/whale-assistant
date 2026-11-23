@@ -125,7 +125,7 @@ chaquopy {
     defaultConfig {
         version = "3.11"
         pip {
-            // 预装高频办公文档、图像处理与网页解析库，离线即可生成真 PPTX / DOCX / XLSX / PDF
+            // 全功能 Python 3.11 生态预装：科学计算、数据分析、图表绘制、办公文档、网络爬虫与符号数学
             install("pillow")
             install("lxml")
             install("python-pptx")
@@ -133,6 +133,20 @@ chaquopy {
             install("openpyxl")
             install("pypdf")
             install("beautifulsoup4")
+            install("numpy")
+            install("pandas")
+            install("matplotlib")
+            install("scipy")
+            install("requests")
+            install("httpx")
+            install("pyyaml")
+            install("markdown")
+            install("qrcode")
+            install("reportlab")
+            install("sympy")
+            install("jinja2")
+            install("tabulate")
+            install("python-dateutil")
         }
     }
 }
