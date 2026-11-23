@@ -1422,11 +1422,15 @@ class OverlayBallService : Service() {
         runCatching { windowManager.removeView(dock) }
     }
 
+    private val cachedTouchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
+    private var dragLayoutPending = false
+
     private fun handleTouch(view: View, event: MotionEvent, size: Int): Boolean {
-        val slop = ViewConfiguration.get(this).scaledTouchSlop
+        val slop = cachedTouchSlop
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                petActing.dragging=false
+                petActing.dragging = false
+                dragLayoutPending = false
                 // 运行期复查权限：球还在屏幕上、用户仍然点得到，说明权限可能是在本服务运行期间
                 // 被撤销的（部分 ROM 不杀进程也不摘窗口）。此时立即收尾并吞掉本次触摸，
                 // 不留「球还在、通知也在」的假象。
@@ -1474,21 +1478,37 @@ class OverlayBallService : Service() {
                 // 长按已弹出菜单后不再拖动：此时 ACTION_UP 会直接返回，跳过吸附与落盘，
                 // 这样从长按直接松手不会意外移动桌宠。
                 if (!longPressFired && !OverlayBallPolicy.isClick(deltaX, deltaY, slop)) {
-                    petActing.dragging=true
-                    wakePetMotion()
+                    if (!petActing.dragging) {
+                        petActing.dragging = true
+                        wakePetMotion()
+                    }
                     val metrics = resources.displayMetrics
                     val (x, y) = OverlayBallPolicy.clampPosition(
                         initialX + deltaX.toInt(),
                         initialY + deltaY.toInt(),
                         metrics.widthPixels, metrics.heightPixels, size,
                     )
-                    layoutParams.x = x
-                    layoutParams.y = y
-                    runCatching { windowManager.updateViewLayout(ballView, layoutParams) }
-                    ballView?.postOnAnimation { updateControlBounds() }
-                    if (bubbleChat.visible) bubbleChat.followPet()
-                    // Keep the open menu next to the moving pet.
-                    layoutPetMenu()
+                    if (x != layoutParams.x || y != layoutParams.y) {
+                        layoutParams.x = x
+                        layoutParams.y = y
+                        if (!dragLayoutPending) {
+                            dragLayoutPending = true
+                            val host = ballView
+                            if (host != null) {
+                                host.postOnAnimation {
+                                    dragLayoutPending = false
+                                    if (ballView === host) {
+                                        runCatching { windowManager.updateViewLayout(host, layoutParams) }
+                                        updateControlBounds()
+                                        if (bubbleChat.visible) bubbleChat.followPet()
+                                        layoutPetMenu()
+                                    }
+                                }
+                            } else {
+                                dragLayoutPending = false
+                            }
+                        }
+                    }
                 } else if (!longPressFired &&
                     OverlayBallPolicy.isLongPress(
                         deltaX, deltaY, slop,

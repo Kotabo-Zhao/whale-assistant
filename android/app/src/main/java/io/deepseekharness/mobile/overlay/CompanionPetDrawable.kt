@@ -44,15 +44,20 @@ internal class CompanionPetDrawable(
     val displayedClipName get() = displayedClip
     val cachedAtlasCount get() = cache.size
     val cachedBitmapBytes get() = cache.values.sumOf { it.allocationByteCount.toLong() }
-    // Reserve one idle plus two large clips (action + return), scaled to the actual avatar.
+    // Reserve one idle plus four active clips (drag/touch/reading/return) so first drag is always warm.
     val cacheLimitBytes = minOf(MAX_BITMAP_BYTES, targetSize.coerceIn(96, PetCels.CELL).toLong().let { side ->
-        side * side * 4 * (PetCels.clips.getValue("idle").cells + 2 * PetCels.clips.values.maxOf { it.cells })
+        side * side * 4 * (PetCels.clips.getValue("idle").cells + 4 * PetCels.clips.values.maxOf { it.cells })
     })
+
+    private fun assetKey(name: String): String {
+        val rows = PetCels.clips.getValue(name).rows
+        return if (usagiTheme) usagiAtlasPath(name, rows) else "pet-cels/$name.webp"
+    }
 
     init {
         // Constructor is called on the avatar executor. One idle atlas is enough to attach.
         displayed = decode("idle")
-        cache["idle"] = displayed
+        cache[assetKey("idle")] = displayed
         prewarmHotAtlases()
     }
 
@@ -98,7 +103,7 @@ internal class CompanionPetDrawable(
         pose = next
         currentCel = cel
         wanted = currentCel.clip
-        val loaded = cache[wanted]
+        val loaded = cache[assetKey(wanted)]
         if (loaded != null) show(loaded, currentCel)
         else request(wanted)
     }
@@ -109,11 +114,11 @@ internal class CompanionPetDrawable(
         val visible = PetCelSample(displayedClip, displayedFrame, currentCel.nextMs)
         currentCel = playback.sample(next, now, quietIdle, visible) { name ->
             wanted = name
-            if (name in cache) true else { request(name); false }
+            if (assetKey(name) in cache) true else { request(name); false }
         }
-        cache[currentCel.clip]?.let { show(it, currentCel) }
+        cache[assetKey(currentCel.clip)]?.let { show(it, currentCel) }
         playback.nextAtlas?.let { name ->
-            if (name !in cache) { wanted = name; request(name) }
+            if (assetKey(name) !in cache) { wanted = name; request(name) }
         }
     }
 
@@ -138,29 +143,30 @@ internal class CompanionPetDrawable(
     }
 
     private fun request(name: String) {
-        if (closed || decoding || name in failed) return
+        val key = assetKey(name)
+        if (closed || decoding || key in failed || key in cache) return
         decoding = true
         decoder.execute {
             // Rapid business-state changes must not decode every obsolete state in the queue.
-            val result = if (!closed && wanted == name) runCatching { decode(name) } else null
+            val result = if (!closed && assetKey(wanted) == key) runCatching { decode(name) } else null
             val bitmap = result?.getOrNull()
             val posted = main.post {
                 decoding = false
                 if (closed) bitmap?.recycle()
                 else {
                     if (bitmap != null) {
-                        if (wanted == name) {
-                            cache[name] = bitmap
-                            if (currentCel.clip == name) show(bitmap, currentCel)
+                        if (key !in cache) {
+                            cache[key] = bitmap
+                            if (assetKey(currentCel.clip) == key) show(bitmap, currentCel)
                             trim()
                             onAtlasReady?.invoke()
                         } else bitmap.recycle()
                     } else if (result?.isFailure == true) {
-                        failed.add(name)
+                        failed.add(key)
                         android.util.Log.w("WhalePet", "Could not decode animation $name", result.exceptionOrNull())
                     }
                     // Only one decode/result may be outstanding. Coalesce all intervening states.
-                    if (wanted !in cache) request(wanted)
+                    if (assetKey(wanted) !in cache) request(wanted)
                 }
             }
             if (!posted) bitmap?.recycle()
@@ -168,14 +174,23 @@ internal class CompanionPetDrawable(
     }
 
     private fun prewarmHotAtlases() {
-        val hot = listOf("touch_enter", "touch", "reading_enter", "reading", "drag_enter", "drag")
+        // 优先预热拖动与轻点图集，彻底消除首次拖动时同步解码与纹理上传导致的卡顿
+        val hot = if (usagiTheme) {
+            listOf("drag", "celebrate", "reading", "writing")
+        } else {
+            listOf("drag_enter", "drag", "touch_enter", "touch", "reading")
+        }
         decoder.execute {
+            val seenKeys = HashSet<String>()
+            seenKeys.add(assetKey("idle"))
             for (name in hot) {
                 if (closed) break
+                val key = assetKey(name)
+                if (!seenKeys.add(key)) continue
                 val bmp = runCatching { decode(name) }.getOrNull() ?: continue
                 val posted = main.post {
                     if (closed) bmp.recycle()
-                    else if (name !in cache) { cache[name] = bmp; trim() }
+                    else if (key !in cache) { cache[key] = bmp; trim() }
                     else bmp.recycle()
                 }
                 if (!posted) bmp.recycle()
@@ -196,7 +211,8 @@ internal class CompanionPetDrawable(
     /** Test/export preparation only; never called by draw() or the live overlay's UI thread. */
     fun prepareForExport(action: PetAction, elapsed: Long = 0) {
         val name = PetCels.sample(PetPose(action, elapsed)).clip
-        if (name !in cache) cache[name] = decode(name)
+        val key = assetKey(name)
+        if (key !in cache) cache[key] = decode(name)
         setPose(PetPose(action, elapsed))
         trim()
     }
