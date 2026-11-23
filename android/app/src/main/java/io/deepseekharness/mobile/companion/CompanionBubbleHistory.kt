@@ -36,7 +36,18 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
     fun save(snapshot: Snapshot, requireWritable: Boolean = false): Unit = synchronized(lock) {
         if (writable == null) load()
         if (writable != true) { check(!requireWritable) { "对话记录不可写，未交办新任务。" }; return@synchronized }
-        val bytes = encode(snapshot)
+        val normalized = ArrayList<CompanionBubbleChat.Message>(18)
+        for (msg in snapshot.messages) {
+            val wantRole = if (normalized.size % 2 == 0) "user" else "assistant"
+            if (msg.role == wantRole) {
+                normalized.add(msg)
+            } else if (msg.role == "user" && normalized.isNotEmpty() && normalized.last().role == "user") {
+                normalized[normalized.lastIndex] = msg
+            }
+        }
+        if (normalized.size % 2 != 0) normalized.removeAt(normalized.lastIndex)
+        val cleanSnapshot = snapshot.copy(messages = normalized.takeLast(18))
+        val bytes = encode(cleanSnapshot)
         PetReplyOperation.whileActive { writer.replace(file.baseFile, bytes) }
         if (snapshot.pending == null && snapshot.messages.lastOrNull()?.role == "assistant") {
             ContextFollowupEvents.chat(app, "pet")
@@ -87,20 +98,10 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
             require(snapshot.sessionId.isNotBlank() && snapshot.sessionId.length <= 256)
             require(snapshot.topicId.isNotBlank() && snapshot.topicId.length <= 256)
             require(snapshot.scope.matches(Regex("[0-9a-f]{64}")))
-            // 自动规整为合法的 (user, assistant) 交替对（最多 18 条），避免单条打断或主动消息导致写入校验崩溃
-            val normalized = ArrayList<CompanionBubbleChat.Message>(18)
-            for (msg in snapshot.messages) {
-                val wantRole = if (normalized.size % 2 == 0) "user" else "assistant"
-                if (msg.role == wantRole) {
-                    normalized.add(msg)
-                } else if (msg.role == "user" && normalized.isNotEmpty() && normalized.last().role == "user") {
-                    normalized[normalized.lastIndex] = msg
-                }
-            }
-            if (normalized.size % 2 != 0) normalized.removeAt(normalized.lastIndex)
-            val bounded = normalized.takeLast(18)
+            require(snapshot.messages.size in 0..18 && snapshot.messages.size % 2 == 0)
             val rows = JSONArray()
-            bounded.forEachIndexed { index, message ->
+            snapshot.messages.forEachIndexed { index, message ->
+                require(message.role == if (index % 2 == 0) "user" else "assistant")
                 require(message.images.size <= 6 && message.images.all { it.matches(Regex("sha256:[a-f0-9]{64}")) })
                 val citations = JSONArray()
                 message.citations.take(6).forEach { citation ->
