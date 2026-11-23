@@ -146,7 +146,7 @@ internal object WhaleAgentBrainEnhancer {
             for (item in sorted) {
                 val bg = charBigrams(item.text)
                 val isDup = bg.size >= 4 && kept.any { (_, prevBg) ->
-                    prevBg.size >= 4 && jaccard(bg, prevBg) >= duplicateThreshold
+                    prevBg.size >= 4 && (jaccard(bg, prevBg) >= duplicateThreshold || overlapCoefficient(bg, prevBg) >= 0.85)
                 }
                 if (isDup) {
                     dupDrops.add(item.id)
@@ -237,6 +237,16 @@ internal object WhaleAgentBrainEnhancer {
             for (x in small) if (x in large) inter += 1
             val union = a.size + b.size - inter
             return if (union <= 0) 0.0 else inter.toDouble() / union.toDouble()
+        }
+
+        private fun overlapCoefficient(a: Set<String>, b: Set<String>): Double {
+            val minSize = minOf(a.size, b.size)
+            if (minSize <= 0) return 0.0
+            val small = if (a.size <= b.size) a else b
+            val large = if (a.size <= b.size) b else a
+            var inter = 0
+            for (x in small) if (x in large) inter += 1
+            return inter.toDouble() / minSize.toDouble()
         }
     }
 
