@@ -38,12 +38,17 @@ internal object WhaleModelRouter {
         val tier = classify(query, hasImages, dailyBudgetProgress)
         val m = configuredModel.trim()
         val lower = m.lowercase(Locale.US)
-        // 仅在 DeepSeek 官方推理/高价模型上对超简短闲聊或高预算场景自动切回 deepseek-chat 省钱
-        if (tier == Tier.FAST && lower in setOf("deepseek-reasoner", "deepseek-v4-pro", "deepseek-r1")) {
+        val peak = WhaleTokenMeter.isDeepSeekPeakUtc()
+        // 在 DeepSeek 官方高价推理模型上：简短闲聊、预算超 85% 或工作日 2× 高峰期非深度任务自动切回 deepseek-chat 省钱
+        if ((tier == Tier.FAST || (peak && tier == Tier.BALANCED)) && lower in setOf("deepseek-reasoner", "deepseek-v4-pro", "deepseek-r1")) {
             return Decision(
                 model = "deepseek-chat",
                 tier = Tier.FAST,
-                reason = if (dailyBudgetProgress >= 0.85f) "budget_guard_fast" else "quick_turn_fast",
+                reason = when {
+                    dailyBudgetProgress >= 0.85f -> "budget_guard_fast"
+                    peak -> "deepseek_peak_guard_fast"
+                    else -> "quick_turn_fast"
+                },
             )
         }
         return Decision(model = m, tier = tier, reason = "configured")
@@ -79,6 +84,20 @@ internal object WhaleModelRouter {
             base.tier == Tier.FAST && fastOverride.isNotEmpty() -> base.copy(model = fastOverride, reason = "user_fast_scene")
             base.tier == Tier.DEEP && deepOverride.isNotEmpty() -> base.copy(model = deepOverride, reason = "user_deep_scene")
             else -> base
+        }
+    }
+
+    /** 内部摘要/上下文压缩/记忆整理专用极速低价模型路由。 */
+    fun routeForInternalTask(context: Context, configuredModel: String): String {
+        val (fastOverride, _) = runCatching { readSceneOverrides(context) }.getOrDefault("" to "")
+        if (fastOverride.isNotEmpty()) return fastOverride
+        val m = configuredModel.trim()
+        val lower = m.lowercase(Locale.US)
+        return when {
+            lower in setOf("deepseek-reasoner", "deepseek-v4-pro", "deepseek-r1") -> "deepseek-chat"
+            lower.startsWith("gpt-4o") && !lower.contains("mini") -> "gpt-4o-mini"
+            lower.contains("claude") && (lower.contains("opus") || lower.contains("sonnet")) -> "claude-haiku-4-5"
+            else -> m
         }
     }
 }

@@ -332,6 +332,24 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 mapOf("dryRun" to "可选：true 仅预览数量和样例，false(默认) 直接清理"),
                 emptyList(),
             ))
+            array.put(schema(
+                "whale_memory_consolidate",
+                "一键记忆提纯与冲突消解：自动合并高度重复的长期记忆，并按时间优先消解新旧偏好冲突（本地零 Token 执行）。",
+                mapOf("dryRun" to "可选：true 仅预览将合并与消解的数量，false(默认) 直接执行"),
+                emptyList(),
+            ))
+            array.put(schema(
+                "whale_task_checkpoint",
+                "管理跨会话持久化断点续跑与高危审批状态机：查看断点、在高危操作前挂起等待用户审批、或清除已完成断点。",
+                mapOf(
+                    "action" to "status / pause_for_approval / clear",
+                    "goal" to "pause_for_approval 时的任务目标",
+                    "pendingTool" to "待审批的高危工具名",
+                    "pendingArgsJson" to "待审批工具的参数 JSON",
+                    "nextAction" to "批准后的下一步动作描述",
+                ),
+                listOf("action"),
+            ))
             array.put(schema("whale_owner_profile", "读取用户的主人档案摘要与已记录偏好。", emptyMap(), emptyList()))
             array.put(schema(
                 "whale_owner_profile_edit",
@@ -536,7 +554,10 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_macro_manage",
                 "教它做一遍（0 Token 录制宏与视觉自愈）：录制用户手动操作路径并确定性回放，遇弹窗或改版返回 needs_ai_heal 供单步自愈。",
                 mapOf(
-                    "action" to "list / start_record / stop_record / replay / delete",
+                    "action" to "list / start_record / stop_record / replay / heal_step / delete",
+                    "stepIndex" to "heal_step 时要回写坐标的步骤序号（从 0 开始）",
+                    "rx" to "heal_step 时新归一化 X 坐标（0.01~0.99）",
+                    "ry" to "heal_step 时新归一化 Y 坐标（0.01~0.99）",
                     "name" to "录制或回放的宏名称（如 每日签到）",
                     "idOrName" to "replay / delete 时的宏 ID 或名称",
                     "startIndex" to "可选：视觉自愈后续跑的起始步骤序号（默认 0）",
@@ -743,12 +764,13 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             array.put(schema("whale_mcp_list", "列出已配置 MCP 服务器及工具。", emptyMap(), emptyList()))
             array.put(schema(
                 "whale_mcp_add",
-                "接入标准 HTTP/JSON-RPC MCP 服务器并自动拉取工具。",
+                "接入远程 HTTP/JSON-RPC MCP 或本地进程内 Python MCP（url 传 python://<id> 并附带定义 TOOLS 与 call_tool(name, args) 的 code，直接在内置 CPython 3.11 运行，无需 npx/stdio 常驻进程）。",
                 mapOf(
-                    "url" to "MCP 地址（https:// 或局域网 http://）",
+                    "url" to "MCP 地址：https://、局域网 http://，或本地进程内 python://<id>",
                     "name" to "可选显示名",
                     "id" to "可选英文标识",
                     "authHeader" to "可选 Authorization 头",
+                    "code" to "可选：python:// 本地 MCP 的 Python 源码（需定义 TOOLS 列表与 call_tool(name, args)）",
                 ),
                 listOf("url"),
             ))
@@ -2425,6 +2447,23 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             val ok = res.optBoolean("ok", false)
                             ToolOutcome(name, if (ok) "保存录制宏" else "结束录制", ok, res.toString(), mutating = ok)
                         }
+                        "heal_step" -> {
+                            val idOrName = args.str("idOrName").ifBlank { args.str("name") }.trim()
+                            val stepIdx = args.optInt("stepIndex", -1)
+                            val rx = args.optDouble("rx", -1.0).toFloat()
+                            val ry = args.optDouble("ry", -1.0).toFloat()
+                            val res = WhaleMacroEngine.healStepCoordinates(
+                                app,
+                                idOrName = idOrName,
+                                stepIndex = stepIdx,
+                                newRx = rx,
+                                newRy = ry,
+                                newResourceId = args.str("resourceId").trim(),
+                                newText = args.str("text").trim(),
+                            )
+                            val ok = res.optBoolean("ok", false)
+                            ToolOutcome(name, if (ok) "回写宏视觉自愈坐标" else "宏自愈回写失败", ok, res.toString(), mutating = ok)
+                        }
                         "replay" -> {
                             val target = args.str("idOrName", args.str("name", ""))
                             val startIdx = args.optInt("startIndex", 0)
@@ -2535,7 +2574,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .put("phone", "无障碍屏控、副屏后台操作、截屏识图、0-Token 录制宏与自愈、自动化自检修复")
                         .put("device", "电量、通知、剪贴板、定时任务、应用跳转、语音朗读")
                         .put("settings", "主题外观、桌宠控制、角色人设增量修正、自治模式")
-                        .put("extensions", "Skill 技能安装管理、MCP 外部工具服务器、远程算力桥")
+                        .put("extensions", "Skill 技能安装、远程 HTTP MCP 与本地进程内 Python MCP（whale_mcp_add 传 python://<id>+code 直接在内置 CPython 3.11 运行，无需 npx/stdio）、Android Keystore 加密站点登录态（whale_site_auth 拉起安全 WebView 登录供 whale_web_fetch 自动携带 Cookie，绝不向用户索要明文 SESSDATA）")
                         .put("self_authoring", "whale_tool_create 可自主创造 python/composite/http_json/js 持久化 custom_* 工具并立刻热加载调用")
                     val out = JSONObject()
                         .put("ok", true)
@@ -2652,8 +2691,41 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val id = args.str("id").trim()
                     val displayName = args.str("name").trim()
                     val authHeader = args.str("authHeader").trim()
-                    val res = WhaleMcpManager.addOrUpdateServer(app, id, displayName, url, authHeader)
+                    val pyCode = args.str("code")
+                    val res = WhaleMcpManager.addOrUpdateServer(app, id, displayName, url, authHeader, pyCode)
                     ToolOutcome(name, "接入 MCP：${res.optString("name")}", true, res.toString(), mutating = true)
+                }
+                "whale_memory_consolidate" -> {
+                    val dryRun = args.optBoolean("dryRun", false)
+                    val res = WhaleAgentBrainEnhancer.MemoryConsolidator.consolidate(app, dryRun = dryRun)
+                    val ok = res.optBoolean("ok", false)
+                    ToolOutcome(name, if (dryRun) "预览记忆提纯去重" else "执行记忆提纯与冲突消解", ok, res.toString(), mutating = !dryRun && ok)
+                }
+                "whale_task_checkpoint" -> {
+                    val action = args.str("action", "status").trim().lowercase()
+                    when (action) {
+                        "pause_for_approval" -> {
+                            val saved = WhaleAgentBrainEnhancer.DurableTaskCheckpoint.saveState(
+                                context = app,
+                                sessionId = callerSessionId,
+                                goal = args.str("goal", "未命名任务"),
+                                status = "awaiting_approval",
+                                completedSteps = emptyList(),
+                                nextAction = args.str("nextAction"),
+                                pendingTool = args.str("pendingTool"),
+                                pendingArgsJson = args.str("pendingArgsJson"),
+                            )
+                            ToolOutcome(name, "已挂起任务等待主人审批", true, saved.toString(), mutating = true)
+                        }
+                        "clear" -> {
+                            WhaleAgentBrainEnhancer.DurableTaskCheckpoint.clearState(app, callerSessionId)
+                            ToolOutcome(name, "已清除任务断点", true, JSONObject().put("ok", true).toString(), mutating = true)
+                        }
+                        else -> {
+                            val cur = WhaleAgentBrainEnhancer.DurableTaskCheckpoint.loadState(app, callerSessionId)
+                            ToolOutcome(name, "查看断点任务状态", true, (cur ?: JSONObject().put("status", "none")).toString())
+                        }
+                    }
                 }
                 "whale_mcp_call" -> {
                     val server = args.str("server").trim()

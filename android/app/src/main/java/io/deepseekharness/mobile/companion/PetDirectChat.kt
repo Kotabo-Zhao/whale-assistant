@@ -119,14 +119,23 @@ internal class PetDirectChat(private val context: android.content.Context) {
 
     private fun request(key: String, model: String, messages: JSONArray, tools: JSONArray, alreadySearched: Boolean, onPartial: (String) -> Unit): Turn {
         val body = JSONObject().put("model", model).put("messages", messages).put("stream", true)
+            .put("stream_options", JSONObject().put("include_usage", true))
             .put("max_tokens", 2048).put("thinking", JSONObject().put("type", "disabled"))
         if (tools.length() > 0) body.put("tools",tools)
         if (alreadySearched) body.put("tool_choice", "none")
-        return PetModelHttp.post(key,body.toString(),120_000) { readStream(it,onPartial) }
+        return PetModelHttp.post(key, body.toString(), 120_000) { reader ->
+            readStream(reader, onPartial) { pTok, cTok, cacheHit ->
+                runCatching { WhaleTokenMeter.record(context, pTok, cTok, cacheHit, model, scene = "pet", reportedByApi = true) }
+            }
+        }
     }
     companion object {
         /** DONE terminates the SSE response even when its HTTP connection remains open. */
-        internal fun readStream(reader: java.io.BufferedReader, onPartial: (String) -> Unit = {}): Turn {
+        internal fun readStream(
+            reader: java.io.BufferedReader,
+            onPartial: (String) -> Unit = {},
+            onUsage: ((promptTokens: Long, completionTokens: Long, cacheHitTokens: Long) -> Unit)? = null,
+        ): Turn {
             val answer = StringBuilder(); val calls = sortedMapOf<Int, ToolCall>()
             var finish = ""
             while (true) {
@@ -140,6 +149,13 @@ internal class PetDirectChat(private val context: android.content.Context) {
                     throw IllegalStateException("模型返回了无效数据，回复未完成，请重试。", error)
                 }
                 if (payload.has("error")) error("模型流式响应报告错误，回复未完成，请稍后重试。")
+                val usageObj = payload.optJSONObject("usage")
+                if (usageObj != null && onUsage != null) {
+                    val pTok = usageObj.optLong("prompt_tokens", 0L)
+                    val cTok = usageObj.optLong("completion_tokens", 0L)
+                    val cacheHit = WhaleTokenMeter.extractCacheHitTokens(usageObj)
+                    if (pTok > 0L || cTok > 0L) onUsage(pTok, cTok, cacheHit)
+                }
                 val choice = payload.optJSONArray("choices")?.optJSONObject(0) ?: continue
                 val delta = choice.optJSONObject("delta")
                 val token = delta?.opt("content") as? String ?: ""

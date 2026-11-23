@@ -297,7 +297,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     val compactReq = JSONArray()
                     for (ci in 0 until messages.length()) compactReq.put(messages.get(ci))
                     compactReq.put(JSONObject().put("role", "user").put("content", WhaleHarnessCore.PrefixCacheCompactor.COMPACTION_INSTRUCTION))
-                    val summaryTurn = callChatCompletionsWithRetry(endpoint = endpoint, messages = compactReq, toolsArray = null, listener = null, control = control, usageAcc = turnUsage)
+                    val compactEp = endpoint.copy(model = WhaleModelRouter.routeForInternalTask(app, endpoint.model))
+                    val summaryTurn = callChatCompletionsWithRetry(endpoint = compactEp, messages = compactReq, toolsArray = null, listener = null, control = control, usageAcc = turnUsage)
                     val summaryText = summaryTurn.content.trim()
                     if (summaryText.length >= 40) {
                         val sysMsg = messages.optJSONObject(0)
@@ -544,7 +545,26 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val step = StepRecord(p.fnName, outcome.label, outcome.ok, dt)
                 steps += step
                 if (!outcome.ok && !outcome.payload.contains("REPEAT_LOOP_ABORTED") && round < MAX_TOOL_ROUNDS - 2) {
-                    roundReminders.add("提示：工具 ${p.fnName} 本次未成功，请不要直接放弃或把原始报错甩给用户；优先自主换用备选工具、调 whale_tools_expand/whale_self_capabilities 查找能力，或用 Python/whale_tool_create 自行构造方案后再交付。")
+                    val knownLesson = runCatching { WhaleAgentBrainEnhancer.ReflexionLessonStore.matchForTool(app, p.fnName) }.getOrNull()
+                    val hintMsg = if (!knownLesson.isNullOrBlank()) {
+                        "提示：工具 ${p.fnName} 本次未成功。历史避坑经验：$knownLesson 。请直接换路解决后再交付。"
+                    } else {
+                        "提示：工具 ${p.fnName} 本次未成功，请不要直接放弃或把原始报错甩给用户；优先通过 whale_tool_catalog/whale_call 换用备选工具，或用 Python 自行构造方案后再交付。"
+                    }
+                    roundReminders.add(hintMsg)
+                } else if (outcome.ok) {
+                    // 若刚在前面步骤失败过不同工具而本次换路成功，自动沉淀 1 条 Reflexion 避坑经验
+                    val prevFailed = steps.dropLast(1).lastOrNull { !it.ok && it.tool != p.fnName }
+                    if (prevFailed != null) {
+                        runCatching {
+                            WhaleAgentBrainEnhancer.ReflexionLessonStore.recordRecovery(
+                                app,
+                                failedTool = prevFailed.tool,
+                                errorHint = prevFailed.label,
+                                recoveredTool = p.fnName,
+                            )
+                        }
+                    }
                 }
                 listener?.onStep(step)
                 onProgress?.invoke(round + 1, "第 ${round + 1} 轮 · ${outcome.label}", "[${p.fnName}] ${outcome.label}（${dt}ms）")
@@ -598,6 +618,16 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val wasCancelled = control?.cancelled?.get() == true
         if (finalReply.isBlank() && !wasCancelled && steps.isNotEmpty()) {
             hitRoundLimit = true
+            runCatching {
+                WhaleAgentBrainEnhancer.DurableTaskCheckpoint.saveState(
+                    context = app,
+                    sessionId = sessionId,
+                    goal = trimmed.take(120),
+                    status = "paused",
+                    completedSteps = steps.filter { it.ok }.map { "${it.tool}:${it.label}" },
+                    nextAction = "用户回复继续后沿当前检查点接续执行",
+                )
+            }
             // 达到最大工具轮数后，强制补发一轮无 tools 的收尾总结请求，确保模型自然汇报进展而非吐出机械报错
             listener?.onPhase("synthesizing")
             messages.put(
@@ -700,7 +730,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         append("身份与能力：始终保持「$charName」的人设与口吻回复，同时具备手机原生 Super Agent 全部工具能力；处理现实事务时结果准确且不切回客服腔。若用户在对话中约定新的称呼、口癖、语气或相处设定，主动调用 whale_persona_manage(action=\"refine\") 增量修正角色卡。\n")
         append("自我认知与主观能动性原则：\n")
         append("1. 清楚自身能力、绝不轻言做不到：你拥有内置 Python 3.11 沙箱、自主造工具引擎（whale_tool_create 支持 python/composite/http_json/js）、功能工坊离线小软件、全网+B站/小红书/搜图检索、无障碍与副屏 0-Token 录制宏、事件主动守护与长期目标图。除常驻工具外，全部 94+ 专域工具（手机屏控/截屏/副屏/工坊/文件/设置/定时/造工具/自造 custom_*/MCP）均通过 whale_tool_catalog(domain) 查参数并用 whale_call(tool, argsJson) 直接调用，绝不轻言做不到。\n")
-        append("2. 缺工具自己造、造完即刻用：遇到现有工具覆盖不到的可复用需求（专属计算、数据解析、接口抓取、组合流程），主动用 whale_tool_create(kind=\"python\"|\"composite\"|\"http_json\"|\"js\") 为自己造一个 custom_* 长期工具并立刻调用验证；需要常驻交互界面时主动用 whale_workshop_create 造小工具或输出 whale-widget 卡片。\n")
+        append("2. 缺工具自己造、本地 MCP 与加密登录态直接用：遇到可复用需求主动用 whale_tool_create(kind=\"python\"|\"composite\"|\"http_json\"|\"js\") 造 custom_* 工具，或用 whale_mcp_add(url=\"python://<id>\", code=...) 在内置 CPython 3.11 进程内直接部署本地 Python MCP（无需 npx/stdio）；需要读取 B站/小红书/知乎等用户已登录账号数据时，绝不索要明文 SESSDATA/Cookie，直接调 whale_call(tool=\"whale_site_auth\", argsJson=\"{\\\"action\\\":\\\"open_login\\\",\\\"url\\\":\\\"https://...\\\"}\") 让用户在安全 WebView 授权，Cookie 由 Android Keystore 加密托管并由 whale_web_fetch 自动携带。\n")
         append("3. 先做后报、遇阻自主换路：所有只读调研、查证与代码验证直接一步做完再交付，严禁停在半路反问\"要不要我帮你查\"；工具报错或抓空时立刻自主换通道（web_fetch→web_render/web_search/image_search；代码报错自修重跑至通过；宏遇弹窗单步视觉自愈），绝不把原始报错甩给用户；仅支付、删除、对外发消息等不可逆操作才先确认；察觉长期目标或高频习惯时主动用 whale_goal_create / whale_playbook_save / whale_routine_manage 帮主人沉淀。\n")
         append("交互卡片（按需）：当回复涉及可勾选清单、多方案对比、倒计时或参数试算时，可直接输出 ```whale-widget JSON 块（type=checklist|compare|timer|calc，含 title 及对应 items/columns+rows/durationSec/fields+formula+resultLabel），前端会原生渲染为可交互卡片。\n")
         append("快捷回复（强制）：每次最终回复末尾另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（≤14字）；若向用户提问或给选项，必须给出可直接点选的简短回答。")
@@ -766,6 +796,15 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             if (cp.isNotBlank()) {
                 hasCheckpoint = true
                 addSec("checkpoint", 0, 720, "[前序压缩检查点] $cp")
+            }
+            val fsmSnap = WhaleAgentBrainEnhancer.DurableTaskCheckpoint.promptSummary(app, sessionId)
+            if (fsmSnap.isNotBlank()) {
+                hasCheckpoint = true
+                addSec("task_fsm", 0, 260, fsmSnap)
+            }
+            val reflexion = WhaleAgentBrainEnhancer.ReflexionLessonStore.promptHints(app, userQuery, maxItems = 2)
+            if (reflexion.isNotBlank()) {
+                addSec("reflexion", 2, 180, reflexion)
             }
         }
 

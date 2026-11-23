@@ -288,4 +288,41 @@ internal object WhaleMacroEngine {
             .put("tokenCost", 0)
             .put("summary", "已 0 Token 完成「${macro.name}」全部 ${completedLabels.size} 步操作。")
     }
+
+    /** 视觉自愈坐标回写：将 AI 单步视觉修复后的新坐标/节点锚点永久写回已保存的 0-Token 宏。 */
+    @Synchronized
+    fun healStepCoordinates(
+        context: Context,
+        idOrName: String,
+        stepIndex: Int,
+        newRx: Float,
+        newRy: Float,
+        newResourceId: String = "",
+        newText: String = "",
+    ): JSONObject {
+        val all = list(context).toMutableList()
+        val mIdx = all.indexOfFirst { it.id == idOrName.trim() || it.name.equals(idOrName.trim(), ignoreCase = true) }
+        if (mIdx < 0) return JSONObject().put("ok", false).put("error", "未找到录制宏：$idOrName")
+        val macro = all[mIdx]
+        if (stepIndex !in macro.steps.indices) {
+            return JSONObject().put("ok", false).put("error", "步骤序号越界：$stepIndex（总计 ${macro.steps.size} 步）")
+        }
+        val oldStep = macro.steps[stepIndex]
+        val updatedStep = oldStep.copy(
+            rx = newRx.coerceIn(0.01f, 0.99f),
+            ry = newRy.coerceIn(0.01f, 0.99f),
+            resourceId = newResourceId.trim().ifEmpty { oldStep.resourceId },
+            text = newText.trim().ifEmpty { oldStep.text },
+        )
+        val newSteps = macro.steps.toMutableList().apply { this[stepIndex] = updatedStep }
+        all[mIdx] = macro.copy(steps = newSteps, updatedAt = System.currentTimeMillis())
+        saveAll(context, all)
+        return JSONObject()
+            .put("ok", true)
+            .put("macroId", macro.id)
+            .put("name", macro.name)
+            .put("healedStepIndex", stepIndex)
+            .put("step", updatedStep.json())
+            .put("summary", "已将第 ${stepIndex + 1} 步自愈后的新定位回写至宏「${macro.name}」，下次将 0 Token 直接命中。")
+    }
 }

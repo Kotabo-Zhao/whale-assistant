@@ -27,6 +27,8 @@ internal object WhaleTokenMeter {
     private const val KEY_SCENE_CHAT = "scene_chat_tokens"
     private const val KEY_SCENE_WORKER = "scene_worker_tokens"
     private const val KEY_SCENE_PHONE = "scene_phone_tokens"
+    private const val KEY_SCENE_PET = "scene_pet_tokens"
+    private const val KEY_SCENE_BG = "scene_bg_tokens"
     private const val KEY_REPORTED_PROMPT = "reported_prompt_tokens"
     private const val KEY_COMP_RAW_CHARS = "comp_raw_chars"
     private const val KEY_COMP_COMPACT_CHARS = "comp_compact_chars"
@@ -164,6 +166,8 @@ internal object WhaleTokenMeter {
                 .putLong(KEY_SCENE_CHAT, 0L)
                 .putLong(KEY_SCENE_WORKER, 0L)
                 .putLong(KEY_SCENE_PHONE, 0L)
+                .putLong(KEY_SCENE_PET, 0L)
+                .putLong(KEY_SCENE_BG, 0L)
                 .putLong(KEY_REPORTED_PROMPT, 0L)
                 .putLong(KEY_COMP_RAW_CHARS, 0L)
                 .putLong(KEY_COMP_COMPACT_CHARS, 0L)
@@ -207,6 +211,8 @@ internal object WhaleTokenMeter {
         val chatBase = prefs.getLong(KEY_SCENE_CHAT, 0L).coerceAtLeast(0L)
         val workerBase = prefs.getLong(KEY_SCENE_WORKER, 0L).coerceAtLeast(0L)
         val phoneBase = prefs.getLong(KEY_SCENE_PHONE, 0L).coerceAtLeast(0L)
+        val petBase = prefs.getLong(KEY_SCENE_PET, 0L).coerceAtLeast(0L)
+        val bgBase = prefs.getLong(KEY_SCENE_BG, 0L).coerceAtLeast(0L)
         val reportedBase = prefs.getLong(KEY_REPORTED_PROMPT, 0L).coerceAtLeast(0L)
         prefs.edit()
             .putString(KEY_DAY, next.day)
@@ -217,6 +223,8 @@ internal object WhaleTokenMeter {
             .putLong(KEY_SCENE_CHAT, chatBase + if (scene == "chat") addedTotal else 0L)
             .putLong(KEY_SCENE_WORKER, workerBase + if (scene == "worker") addedTotal else 0L)
             .putLong(KEY_SCENE_PHONE, phoneBase + if (scene == "phone") addedTotal else 0L)
+            .putLong(KEY_SCENE_PET, petBase + if (scene == "pet") addedTotal else 0L)
+            .putLong(KEY_SCENE_BG, bgBase + if (scene == "background") addedTotal else 0L)
             .putLong(KEY_REPORTED_PROMPT, reportedBase + if (reportedByApi) addPrompt else 0L)
             .apply()
         listeners.forEach { runCatching { it(next) } }
@@ -285,5 +293,7 @@ internal object WhaleTokenMeter {
             .put("chatTokens", prefs.getLong(KEY_SCENE_CHAT, 0L).coerceAtLeast(0L))
             .put("workerTokens", prefs.getLong(KEY_SCENE_WORKER, 0L).coerceAtLeast(0L))
             .put("phoneTokens", prefs.getLong(KEY_SCENE_PHONE, 0L).coerceAtLeast(0L))
+            .put("petTokens", prefs.getLong(KEY_SCENE_PET, 0L).coerceAtLeast(0L))
+            .put("bgTokens", prefs.getLong(KEY_SCENE_BG, 0L).coerceAtLeast(0L))
     }
 }
