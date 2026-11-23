@@ -287,7 +287,7 @@ internal object WhaleAgentBrainEnhancer {
         fun loadState(context: Context, sessionId: String): JSONObject? = runCatching {
             val f = stateFile(context, sessionId)
             if (!f.isFile) return null
-            if (System.currentTimeMillis() - f.lastModified() > 24 * 60 * 60 * 1000L) return null
+            if (System.currentTimeMillis() - f.lastModified() > 2 * 60 * 60 * 1000L) return null
             JSONObject(f.readText(Charsets.UTF_8))
         }.getOrNull()
 

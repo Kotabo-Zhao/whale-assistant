@@ -510,12 +510,23 @@ internal object WhaleHarnessCore {
                 )
         }
 
+        fun clear(sessionId: String, context: Context? = null) {
+            lists.remove(sessionId)
+            if (context != null) {
+                runCatching {
+                    val safe = sessionId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(64).ifBlank { "default" }
+                    File(File(context.applicationContext.filesDir, "whale-session-state"), "todo_$safe.json").delete()
+                }
+            }
+        }
+
         fun snapshotPrompt(sessionId: String, context: Context? = null): String {
             val items = lists[sessionId] ?: if (context != null) {
                 runCatching {
                     val safe = sessionId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(64).ifBlank { "default" }
                     val f = File(File(context.applicationContext.filesDir, "whale-session-state"), "todo_$safe.json")
-                    if (!f.isFile) emptyList() else {
+                    // 超过 2 小时的旧任务表自动过期，防止污染新话题
+                    if (!f.isFile || System.currentTimeMillis() - f.lastModified() > 2 * 60 * 60 * 1000L) emptyList() else {
                         val arr = JSONArray(f.readText(Charsets.UTF_8))
                         (0 until arr.length()).mapNotNull { i ->
                             val o = arr.optJSONObject(i) ?: return@mapNotNull null
@@ -526,7 +537,7 @@ internal object WhaleHarnessCore {
                     }
                 }.getOrDefault(emptyList())
             } else emptyList()
-            if (items.isEmpty()) return ""
+            if (items.isEmpty() || items.all { it.status == "completed" }) return ""
             return buildString {
                 appendLine("[当前任务清单]")
                 items.forEach { item ->
@@ -575,13 +586,56 @@ internal object WhaleHarnessCore {
             }
         }
 
-        fun loadCheckpoint(context: Context, sessionId: String): String = runCatching {
+        fun clearCheckpoint(context: Context, sessionId: String) {
+            runCatching {
+                val safe = sessionId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(64).ifBlank { "default" }
+                File(File(context.applicationContext.filesDir, "whale-session-state"), "cp_$safe.txt").delete()
+            }
+        }
+
+        fun loadCheckpoint(context: Context, sessionId: String, maxAgeMs: Long = 30 * 60 * 1000L): String = runCatching {
             val safe = sessionId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(64).ifBlank { "default" }
             val f = File(File(context.applicationContext.filesDir, "whale-session-state"), "cp_$safe.txt")
-            if (f.isFile && System.currentTimeMillis() - f.lastModified() <= 24 * 60 * 60 * 1000L) {
+            if (f.isFile && System.currentTimeMillis() - f.lastModified() <= maxAgeMs) {
                 f.readText(Charsets.UTF_8).trim()
             } else ""
         }.getOrDefault("")
+
+        /**
+         * 话题相关性守卫：防止旧任务压缩检查点（如“谈薪 Excel”）在用户已切换新话题（如“翻 GitHub 项目”）
+         * 并发出“好呀直接做”等短接续句时污染当前轮次导致串号。
+         */
+        fun isCheckpointRelevant(
+            checkpointText: String,
+            recentHistory: List<Pair<String, String>>,
+            userQuery: String,
+        ): Boolean {
+            if (checkpointText.isBlank()) return false
+            val recentWindow = (recentHistory.takeLast(2).map { it.second } + userQuery).joinToString(" ").trim()
+            if (recentWindow.isEmpty()) return false
+            val cpTokens = extractTopicTokens(checkpointText)
+            val recentTokens = extractTopicTokens(recentWindow)
+            if (cpTokens.isEmpty() || recentTokens.isEmpty()) return false
+            var overlap = 0
+            for (t in recentTokens) {
+                if (t in cpTokens) overlap += 1
+                if (overlap >= 2) return true
+            }
+            return false
+        }
+
+        private fun extractTopicTokens(text: String): Set<String> {
+            val lower = text.lowercase()
+            val stop = setOf("我们", "你们", "这个", "那个", "一下", "直接", "可以", "好的", "好呀", "继续", "现在", "已经", "需要", "帮我", "进行", "处理", "任务", "结果", "内容")
+            val out = HashSet<String>()
+            Regex("[a-z0-9_.-]{3,}").findAll(lower).forEach { m -> out.add(m.value) }
+            val cjk = lower.filter { it in '\u4e00'..'\u9fff' }
+            for (i in 0 until cjk.length - 1) {
+                val bg = cjk.substring(i, i + 2)
+                if (bg !in stop) out.add(bg)
+            }
+            return out
+        }
     }
 
     // -------------------------------------------------------------------------

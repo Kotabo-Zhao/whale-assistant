@@ -1911,7 +1911,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         is String -> JSONArray(rawTodos.trim().ifBlank { "[]" })
                         else -> JSONArray()
                     }
-                    val res = WhaleHarnessCore.SessionTodoStore.write("whale-main", arr, app)
+                    val res = WhaleHarnessCore.SessionTodoStore.write(callerSessionId, arr, app)
                     ToolOutcome(name, "更新任务进度清单", true, res.toString(), mutating = true)
                 }
                 "whale_proactive_mode" -> {

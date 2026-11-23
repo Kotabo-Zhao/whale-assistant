@@ -251,8 +251,15 @@ internal object WhaleNativeWorkerPool {
         return arr
     }
 
-    fun recentSummaries(limit: Int = 4): String {
-        val recent = entries.values.sortedByDescending { it.finishedAtMs.takeIf { ts -> ts > 0L } ?: it.startedAtMs }.take(limit)
+    fun recentSummaries(limit: Int = 4, maxAgeMs: Long = 20 * 60 * 1000L): String {
+        val now = System.currentTimeMillis()
+        val recent = entries.values
+            .filter { e ->
+                e.state == "running" || e.state == "queued" || e.attention.isNotBlank() ||
+                    (now - (e.finishedAtMs.takeIf { ts -> ts > 0L } ?: e.updatedAtMs) <= maxAgeMs)
+            }
+            .sortedByDescending { it.finishedAtMs.takeIf { ts -> ts > 0L } ?: it.startedAtMs }
+            .take(limit)
         if (recent.isEmpty()) return ""
         return buildString {
             append("\n以下是当前会话周期内后台 Worker 的最新状态与精简卡片（全文超 600 字已自动截断，需细节可调用 whale_read_resource）：\n")

@@ -177,6 +177,12 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         var schemaBundle = tools.toolSchemaBundle(trimmed, expandedCategories, isWorker = isWorkerSession, explicitDynamicNames = expandedDynamicNames)
         var toolSchemas = schemaBundle.schemas
 
+        // 全新对话（空历史）时自动清空该会话残留的旧压缩检查点、旧任务表与断点状态，彻底杜绝跨话题串号
+        if (history.isEmpty() && !isWorkerSession) {
+            WhaleHarnessCore.PrefixCacheCompactor.clearCheckpoint(app, sessionId)
+            WhaleHarnessCore.SessionTodoStore.clear(sessionId, app)
+            WhaleAgentBrainEnhancer.DurableTaskCheckpoint.clearState(app, sessionId)
+        }
         // 1. KV 锁死型 Append-Only 历史窗口（绝不因轮次推进二次改写历史消息，保跨轮 85%~95% 前缀缓存命中）
         val rawHistoryChars = history.takeLast(16).sumOf { it.second.length }
         val recentHistory = WhaleContextBudgeter.normalizeHistoryImmutable(history, maxTurns = 16, blockSlide = 8, perMessageCap = 1_600)
@@ -453,7 +459,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val outcome = if (isForegroundSlowTool) {
                     val future = parallelToolPool.submit(Callable { tools.execute(p.fnName, p.fnArgs, sessionId) })
                     try {
-                        future.get(5_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        future.get(12_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
                     } catch (_: java.util.concurrent.TimeoutException) {
                         val jobId = "bg-${UUID.randomUUID().toString().take(8)}"
                         WhaleNativeWorkerPool.submit(title = "后台执行 ${p.fnName}", id = jobId, priorityBy = "launch") {
@@ -462,7 +468,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         }
                         WhaleNativeToolRegistry.ToolOutcome(
                             p.fnName,
-                            "超过 5 秒已自动转后台",
+                            "超过 12 秒已自动转后台",
                             true,
                             JSONObject()
                                 .put("status", "promoted_to_background")
@@ -668,6 +674,14 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
         val (cleanReply, parsedSuggestions) = extractSuggestions(finalReply)
         val suggestions = if (parsedSuggestions.isNotEmpty() || wasCancelled) parsedSuggestions else inferFallbackSuggestions(cleanReply)
+        // 本轮正常交付后自动清理临时压缩检查点与已续跑完的 paused 断点，防止下一轮切换新话题时发生串号
+        if (!hitRoundLimit && !wasCancelled && !isWorkerSession) {
+            WhaleHarnessCore.PrefixCacheCompactor.clearCheckpoint(app, sessionId)
+            val fsmNow = WhaleAgentBrainEnhancer.DurableTaskCheckpoint.loadState(app, sessionId)
+            if (fsmNow != null && fsmNow.optString("status") != "awaiting_approval") {
+                WhaleAgentBrainEnhancer.DurableTaskCheckpoint.clearState(app, sessionId)
+            }
+        }
         val finalStats = WhaleContextBudgeter.lastTurnStats
         if (finalStats.rawTotalChars > 0) {
             runCatching { WhaleTokenMeter.recordCompression(app, finalStats.rawTotalChars, finalStats.compactTotalChars) }
@@ -794,13 +808,22 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             val cp = WhaleHarnessCore.PrefixCacheCompactor.loadCheckpoint(app, sessionId)
             if (cp.isNotBlank()) {
-                hasCheckpoint = true
-                addSec("checkpoint", 0, 720, "[前序压缩检查点] $cp")
+                if (WhaleHarnessCore.PrefixCacheCompactor.isCheckpointRelevant(cp, recentHistory, userQuery)) {
+                    hasCheckpoint = true
+                    addSec("checkpoint", 0, 720, "[前序压缩检查点（仅在与最新对话同话题时参考，短句如“好呀/直接做”必须优先承接紧邻上一条助手回复）] $cp")
+                } else {
+                    // 话题已切换，主动清除过期旧检查点防止串号
+                    WhaleHarnessCore.PrefixCacheCompactor.clearCheckpoint(app, sessionId)
+                }
             }
             val fsmSnap = WhaleAgentBrainEnhancer.DurableTaskCheckpoint.promptSummary(app, sessionId)
             if (fsmSnap.isNotBlank()) {
-                hasCheckpoint = true
-                addSec("task_fsm", 0, 260, fsmSnap)
+                if (WhaleHarnessCore.PrefixCacheCompactor.isCheckpointRelevant(fsmSnap, recentHistory, userQuery) || fsmSnap.contains("awaiting_approval")) {
+                    hasCheckpoint = true
+                    addSec("task_fsm", 0, 260, fsmSnap)
+                } else {
+                    WhaleAgentBrainEnhancer.DurableTaskCheckpoint.clearState(app, sessionId)
+                }
             }
             val reflexion = WhaleAgentBrainEnhancer.ReflexionLessonStore.promptHints(app, userQuery, maxItems = 2)
             if (reflexion.isNotBlank()) {
