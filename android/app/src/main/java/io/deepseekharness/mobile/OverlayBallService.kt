@@ -430,16 +430,18 @@ class OverlayBallService : Service() {
         WorkerDashboardStore.subscribeAccepted(taskAccepted)
         DeviceControlState.subscribe(controlListener)
         io.deepseekharness.mobile.companion.WhaleTokenMeter.subscribe(tokenListener)
-        liveIsland = io.deepseekharness.mobile.companion.WhaleLiveIslandOverlay(this, windowManager) {
-            runCatching {
-                startActivity(
-                    Intent(this, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
-                )
-            }
-        }.also { it.start() }
         runCatching { ensureNotificationChannel() }
         windowManager = getSystemService(WindowManager::class.java)
+        runCatching {
+            liveIsland = io.deepseekharness.mobile.companion.WhaleLiveIslandOverlay(this, windowManager) {
+                runCatching {
+                    startActivity(
+                        Intent(this, MainActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                    )
+                }
+            }.also { it.start() }
+        }
         // 亮屏 / 息屏 / 解锁都会改变「球是否可见」：收到后只重算动画门控，不重载头像、不动窗口。
         if (!screenVisibilityRegistered) {
             val filter = IntentFilter().apply {
