@@ -219,10 +219,21 @@ internal class CompanionPetDrawable(
 
     private fun displayedSource(): Rect {
         retainedCel?.let { source.set(0, 0, it.width, it.height); return source }
+        val rows = PetCels.clips.getValue(displayedClip).rows
+        val totalCells = (PetCels.COLUMNS * rows).coerceAtLeast(1)
+        val effectiveFrame = if (usagiTheme && !pose.reduced) {
+            val stepMs = when (pose.action) {
+                PetAction.IDLE, PetAction.WAIT, PetAction.PAUSED, PetAction.STOPPED -> 55L
+                else -> 34L
+            }
+            ((android.os.SystemClock.uptimeMillis() / stepMs) % totalCells).toInt()
+        } else {
+            displayedFrame.coerceIn(0, totalCells - 1)
+        }
         val cellW = displayed.width / PetCels.COLUMNS
-        val cellH = displayed.height / PetCels.clips.getValue(displayedClip).rows
-        val col = displayedFrame % PetCels.COLUMNS
-        val row = displayedFrame / PetCels.COLUMNS
+        val cellH = displayed.height / rows
+        val col = effectiveFrame % PetCels.COLUMNS
+        val row = effectiveFrame / PetCels.COLUMNS
         source.set(col * cellW, row * cellH, (col + 1) * cellW, (row + 1) * cellH)
         return source
     }
@@ -295,7 +306,7 @@ internal class CompanionPetDrawable(
         if (!pose.reduced && ambientTickAllowed) {
             val isResting = pose.action == PetAction.IDLE || pose.action == PetAction.WAIT ||
                 pose.action == PetAction.PAUSED || pose.action == PetAction.STOPPED
-            val tickMs = if (isResting) 42L else 16L
+            val tickMs = if (usagiTheme) (if (isResting) 33L else 20L) else (if (isResting) 42L else 16L)
             main.removeCallbacks(liveTick)
             main.postDelayed(liveTick, tickMs)
         }

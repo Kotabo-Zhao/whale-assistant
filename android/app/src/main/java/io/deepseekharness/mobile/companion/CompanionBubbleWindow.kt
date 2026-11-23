@@ -473,8 +473,8 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 composeTask()
             }
         })
-        shortcut(ui.string(R.string.pet_menu_capture), R.drawable.ic_cute_memory, "存入本地资料库") { openCapture() }
-        shortcut(ui.string(R.string.pet_menu_tools), R.drawable.ic_cute_workshop, ui.string(R.string.pet_menu_tools)) {
+        shortcut(ui.string(R.string.pet_menu_capture), (if (ui.usagi) R.drawable.ic_usagi_memory else R.drawable.ic_cute_memory), "存入本地资料库") { openCapture() }
+        shortcut(ui.string(R.string.pet_menu_tools), (if (ui.usagi) R.drawable.ic_usagi_workshop else R.drawable.ic_cute_workshop), ui.string(R.string.pet_menu_tools)) {
             sessionActions.visibility = android.view.View.GONE
             if (toolShelf.childCount > 0) toolShelf.removeAllViews()
             else toolShelf.addView(WhalePetToolShelf(context, { panel.post { positionUpdater?.invoke() } }, ::openTool, ::hide))
@@ -839,7 +839,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
                 return connection
             }
         }.apply {
-            hint = ui.string(R.string.pet_ui_input); setTextColor(foreground); setHintTextColor(secondary)
+            hint = if (ui.usagi) "告诉乌萨奇你想做什么…" else ui.string(R.string.pet_ui_input); setTextColor(foreground); setHintTextColor(secondary)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
             background = null; setPadding(dp(10), dp(8), dp(2), dp(8)); minHeight = dp(44); textSize = 15f; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(2000))
             setText(draft); setSelection(text.length)

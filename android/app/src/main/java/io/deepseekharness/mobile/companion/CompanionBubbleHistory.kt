@@ -20,7 +20,18 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
             writable = true
             return@synchronized null
         }
-        try { decode(file.readFully()).also { writable = true } } catch (_: Exception) { writable = false; null }
+        try {
+            decode(file.readFully()).also { writable = true }
+        } catch (_: Exception) {
+            // 自愈损坏或版本不兼容的旧历史文件，避免桌宠对话永久卡死在「对话记录写入失败」
+            runCatching {
+                val corrupt = File(file.baseFile.parentFile, "companion-bubble-history-corrupt-${System.currentTimeMillis()}.bak")
+                if (file.baseFile.exists()) file.baseFile.renameTo(corrupt)
+                File(file.baseFile.path + ".bak").delete()
+            }
+            writable = true
+            null
+        }
     }
     fun save(snapshot: Snapshot, requireWritable: Boolean = false): Unit = synchronized(lock) {
         if (writable == null) load()
@@ -76,10 +87,20 @@ internal class CompanionBubbleHistory(context: Context, private val writer: Task
             require(snapshot.sessionId.isNotBlank() && snapshot.sessionId.length <= 256)
             require(snapshot.topicId.isNotBlank() && snapshot.topicId.length <= 256)
             require(snapshot.scope.matches(Regex("[0-9a-f]{64}")))
-            require(snapshot.messages.size in 0..18 && snapshot.messages.size % 2 == 0)
+            // 自动规整为合法的 (user, assistant) 交替对（最多 18 条），避免单条打断或主动消息导致写入校验崩溃
+            val normalized = ArrayList<CompanionBubbleChat.Message>(18)
+            for (msg in snapshot.messages) {
+                val wantRole = if (normalized.size % 2 == 0) "user" else "assistant"
+                if (msg.role == wantRole) {
+                    normalized.add(msg)
+                } else if (msg.role == "user" && normalized.isNotEmpty() && normalized.last().role == "user") {
+                    normalized[normalized.lastIndex] = msg
+                }
+            }
+            if (normalized.size % 2 != 0) normalized.removeAt(normalized.lastIndex)
+            val bounded = normalized.takeLast(18)
             val rows = JSONArray()
-            snapshot.messages.forEachIndexed { index, message ->
-                require(message.role == if (index % 2 == 0) "user" else "assistant")
+            bounded.forEachIndexed { index, message ->
                 require(message.images.size <= 6 && message.images.all { it.matches(Regex("sha256:[a-f0-9]{64}")) })
                 val citations = JSONArray()
                 message.citations.take(6).forEach { citation ->
