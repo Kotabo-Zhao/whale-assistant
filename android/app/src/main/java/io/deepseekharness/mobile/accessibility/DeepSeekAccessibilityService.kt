@@ -1048,17 +1048,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         val focusedCandidate: Boolean,
         val submit: Boolean,
     ) {
-        data class DragPickTarget(
-        val packageName: String,
-        val targetKind: String, // "image" | "link" | "text"
-        val mergedContext: String,
-        val bestHitText: String,
-        val extractedUrl: String? = null,
-        val linkTitle: String? = null,
-        val imageBounds: android.graphics.Rect? = null,
-    )
-
-    companion object {
+        companion object {
             fun success(
                 method: VirtualScreenTextPolicy.TextMethod,
                 focusedCandidate: Boolean,
@@ -1954,6 +1944,16 @@ class DeepSeekAccessibilityService : AccessibilityService() {
     }
 
     private fun failure(code: String, text: String): DeviceCommandResult = DeviceCommandResult(false, 1, text, false, code)
+
+    data class DragPickTarget(
+        val packageName: String,
+        val targetKind: String, // "image" | "link" | "text"
+        val mergedContext: String,
+        val bestHitText: String,
+        val extractedUrl: String? = null,
+        val linkTitle: String? = null,
+        val imageBounds: android.graphics.Rect? = null,
+    )
 
     companion object {
         private const val ACTION_INTERVAL_MS = 350L
