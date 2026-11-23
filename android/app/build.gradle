@@ -136,7 +136,6 @@ chaquopy {
             install("numpy")
             install("pandas")
             install("matplotlib")
-            install("scipy")
             install("requests")
             install("httpx")
             install("pyyaml")

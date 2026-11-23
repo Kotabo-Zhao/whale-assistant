@@ -1934,6 +1934,7 @@ class OverlayBallService : Service() {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 petActing.dragging = false
+                pinching = false
                 dragLayoutPending = false
                 cancelHoverPick(view)
                 // 运行期复查权限：球还在屏幕上、用户仍然点得到，说明权限可能是在本服务运行期间
@@ -1982,7 +1983,7 @@ class OverlayBallService : Service() {
                 if (pinching) return true
                 // 长按已弹出菜单后不再拖动：此时 ACTION_UP 会直接返回，跳过吸附与落盘，
                 // 这样从长按直接松手不会意外移动桌宠。
-                if (!longPressFired && !OverlayBallPolicy.isClick(deltaX, deltaY, slop)) {
+                if (!longPressFired && (petActing.dragging || !OverlayBallPolicy.isClick(deltaX, deltaY, slop))) {
                     if (!petActing.dragging) {
                         petActing.dragging = true
                         wakePetMotion()
@@ -2000,13 +2001,11 @@ class OverlayBallService : Service() {
                             dragLayoutPending = true
                             val host = ballView
                             if (host != null) {
+                                // 热拖动帧内仅更新桌宠自身窗口，杜绝每帧多次跨进程 IPC 与 requestLayout 引发卡顿
                                 host.postOnAnimation {
                                     dragLayoutPending = false
-                                    if (ballView === host) {
+                                    if (ballView === host && host.isAttachedToWindow) {
                                         runCatching { windowManager.updateViewLayout(host, layoutParams) }
-                                        updateControlBounds()
-                                        if (bubbleChat.visible) bubbleChat.followPet()
-                                        layoutPetMenu()
                                     }
                                 }
                             } else {
@@ -2068,7 +2067,8 @@ class OverlayBallService : Service() {
                     view.findViewById<android.widget.TextView>(R.id.companion_drop_hint)?.visibility = View.GONE
                     return true
                 }
-                petActing.dragging=false
+                petActing.dragging = false
+                dragLayoutPending = false
                 wakePetMotion()
                 val deltaX = event.rawX - touchStartX
                 val deltaY = event.rawY - touchStartY
@@ -2127,7 +2127,7 @@ class OverlayBallService : Service() {
                 }
                 return true
             }
-            MotionEvent.ACTION_CANCEL -> {cancelHoverPick(view);petActing.dragging=false;wakePetMotion();return true}
+            MotionEvent.ACTION_CANCEL -> {cancelHoverPick(view);pinching=false;dragLayoutPending=false;longPressFired=false;petActing.dragging=false;wakePetMotion();return true}
         }
         return false
     }

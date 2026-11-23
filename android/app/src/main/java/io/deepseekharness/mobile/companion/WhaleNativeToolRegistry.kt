@@ -89,7 +89,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         arr.put(schema("whale_secretary_add", "为用户新增一条待办或提醒记录。", mapOf("title" to "事项标题", "note" to "可选补充说明"), listOf("title")))
         arr.put(schema(
             "whale_code_run",
-            "在内置全功能 CPython 3.11 中运行代码（预装 numpy/pandas/matplotlib/scipy/pillow/openpyxl/docx/pptx/pypdf/reportlab/requests/httpx/bs4/lxml/sympy/yaml/qrcode；装新包直接调内置 pip_install(\"包名\") 或 whale_py_install，禁止 subprocess 调外部 pip）。",
+            "在内置全功能 CPython 3.11 中运行代码（预装 numpy/pandas/matplotlib/pillow/openpyxl/docx/pptx/pypdf/reportlab/requests/httpx/bs4/lxml/sympy/yaml/qrcode；装新包直接调内置 pip_install(\"包名\") 或 whale_py_install，禁止 subprocess 调外部 pip）。",
             mapOf("code" to "Python 代码", "project" to "可选项目目录名(默认 scratch)", "timeoutSec" to "可选超时秒数(默认45)"),
             listOf("code"),
         ))
