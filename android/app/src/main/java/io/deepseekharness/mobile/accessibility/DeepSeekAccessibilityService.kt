@@ -1969,32 +1969,67 @@ class DeepSeekAccessibilityService : AccessibilityService() {
          */
         fun extractContextAt(screenX: Int, screenY: Int): Pair<String, String>? = runCatching {
             val svc = serviceRef.get() ?: return null
-            val root = svc.rootInActiveWindow ?: return null
+            fun isIgnoredPkg(pkg: String): Boolean =
+                pkg.isBlank() || pkg == svc.packageName || pkg.contains("launcher", true) ||
+                    pkg.contains("inputmethod", true) || pkg == "com.android.systemui"
+
+            // 优先从多窗口列表找底层真实前台应用窗口（避免拖动悬浮窗时 rootInActiveWindow 指向本应用自身）
+            val appRoot: AccessibilityNodeInfo? = runCatching {
+                svc.windows.orEmpty()
+                    .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+                    .sortedByDescending { it.layer }
+                    .firstNotNullOfOrNull { w ->
+                        val r = w.root ?: return@firstNotNullOfOrNull null
+                        val p = r.packageName?.toString().orEmpty()
+                        if (isIgnoredPkg(p)) null else r
+                    }
+            }.getOrNull() ?: svc.rootInActiveWindow?.takeIf { !isIgnoredPkg(it.packageName?.toString().orEmpty()) }
+
+            val root = appRoot ?: return null
             val pkg = root.packageName?.toString().orEmpty()
-            if (pkg.isBlank() || pkg == svc.packageName || pkg.contains("launcher", true) || pkg.contains("inputmethod", true) || pkg == "com.android.systemui") {
-                return null
-            }
             var bestHit = ""
             var bestArea = Long.MAX_VALUE
             val nearby = LinkedHashSet<String>()
+            val urls = LinkedHashSet<String>()
+            val urlRegex = Regex("""https?://[^\s\u4e00-\u9fa5"'<>]+""", RegexOption.IGNORE_CASE)
             val rect = android.graphics.Rect()
+            var visited = 0
+
+            fun collectUrls(text: String) {
+                urlRegex.findAll(text).forEach { m ->
+                    if (urls.size < 4) urls.add(m.value.take(240))
+                }
+            }
+
             fun walk(node: AccessibilityNodeInfo?, depth: Int) {
-                if (node == null || depth > 18 || nearby.size >= 10) return
-                val txt = (node.text?.toString()?.trim().orEmpty().ifEmpty { node.contentDescription?.toString()?.trim().orEmpty() })
-                if (txt.length >= 2) {
+                if (node == null || depth > 36 || visited > 650) return
+                visited++
+                val txt = node.text?.toString()?.trim().orEmpty()
+                val desc = node.contentDescription?.toString()?.trim().orEmpty()
+                val label = when {
+                    txt.length >= 2 && desc.length >= 2 && txt != desc -> "$txt（$desc）"
+                    txt.length >= 2 -> txt
+                    desc.length >= 2 -> desc
+                    else -> ""
+                }
+                if (label.isNotEmpty()) {
+                    collectUrls(label)
                     node.getBoundsInScreen(rect)
                     if (!rect.isEmpty) {
                         if (rect.contains(screenX, screenY)) {
                             val area = rect.width().toLong() * rect.height().toLong()
                             if (area in 1L..bestArea) {
                                 bestArea = area
-                                bestHit = txt.take(280)
+                                bestHit = label.take(360)
                             }
-                        } else {
+                        } else if (nearby.size < 14) {
                             val cx = rect.centerX()
                             val cy = rect.centerY()
-                            val distSq = (cx - screenX).toLong() * (cx - screenX) + (cy - screenY).toLong() * (cy - screenY)
-                            if (distSq <= 260L * 260L) nearby.add(txt.take(120))
+                            val dx = (cx - screenX).toLong()
+                            val dy = (cy - screenY).toLong()
+                            if (dx * dx + dy * dy <= 420L * 420L) {
+                                nearby.add(label.take(180))
+                            }
                         }
                     }
                 }
@@ -2005,19 +2040,19 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             walk(root, 0)
             val merged = buildString {
                 if (bestHit.isNotEmpty()) append("【指中内容】").append(bestHit)
-                val extras = nearby.filter { it != bestHit }.take(5)
+                if (urls.isNotEmpty()) {
+                    if (isNotEmpty()) append("\n")
+                    append("【识别链接】").append(urls.joinToString(" "))
+                }
+                val extras = nearby.filter { it != bestHit }.take(8)
                 if (extras.isNotEmpty()) {
                     if (isNotEmpty()) append("\n")
                     append("【周边上下文】").append(extras.joinToString(" | "))
                 }
-            }.trim().take(650)
+            }.trim().take(900)
             if (merged.isEmpty()) null else (pkg to merged)
         }.getOrNull()
 
-        /**
-         * 教它做一遍（0 Token 确定性回放）：按三层锚点优先级查找并点击控件
-         * 1. resourceId → 2. 语义 text / contentDesc → 3. 归一化屏幕坐标 (rx, ry)。
-         */
         /**
          * 拖宠即问视觉捕获：利用 Android 11+ 无障碍原生 takeScreenshot（无需额外录屏授权弹窗）
          * 截取落点附近的图片/视频画面并缩放至 720px 宽，支持图文与视频帧一并分析。

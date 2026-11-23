@@ -1439,9 +1439,14 @@ class OverlayBallService : Service() {
     }
 
     /** 拖宠即问（Drag-to-Ask）：主题原生悬浮追问卡片，支持自由输入任意问题与横向快捷胶囊。 */
-    private fun showDragToAskMenu(dropX: Int, dropY: Int) {
+    private fun showDragToAskMenu(
+        dropX: Int,
+        dropY: Int,
+        preHit: Pair<String, String>? = null,
+        preBitmap: android.graphics.Bitmap? = null,
+    ) {
         val ui = io.deepseekharness.mobile.companion.PetUi(this)
-        val hit = DeepSeekAccessibilityService.extractContextAt(dropX, dropY)
+        val hit = preHit ?: DeepSeekAccessibilityService.extractContextAt(dropX, dropY)
         val appLabel = hit?.first?.let { pkg ->
             runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrNull()
         }?.takeIf(String::isNotBlank) ?: if (hit != null) hit.first.substringAfterLast('.') else "视觉看屏"
@@ -1449,7 +1454,7 @@ class OverlayBallService : Service() {
             ?: "未检测到纯文本（图片、网页或游戏画面），发送后将自动截取坐标 ($dropX, $dropY) 附近画面识别。"
 
         var dialogRef: android.app.AlertDialog? = null
-        var capturedBitmap: android.graphics.Bitmap? = null
+        var capturedBitmap: android.graphics.Bitmap? = preBitmap
         var attachVisual = true
 
         fun encodeCapturedImage(): String? = runCatching {
@@ -1576,20 +1581,10 @@ class OverlayBallService : Service() {
         card.addView(thumbRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(10) })
         card.addView(previewBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(10) })
 
-        // 异步截取落点附近的真实画面（支持图片、视频帧、网页与商品卡）
-        DeepSeekAccessibilityService.captureVisualAt(dropX, dropY) { bmp ->
-            if (bmp != null) {
-                hintHandler.post {
-                    if (dialogRef?.isShowing == true) {
-                        capturedBitmap = bmp
-                        thumbView.setImageBitmap(bmp)
-                        thumbRow.visibility = View.VISIBLE
-                        if (hit == null) previewBox.visibility = View.GONE
-                    } else {
-                        bmp.recycle()
-                    }
-                }
-            }
+        if (preBitmap != null && !preBitmap.isRecycled) {
+            thumbView.setImageBitmap(preBitmap)
+            thumbRow.visibility = View.VISIBLE
+            if (hit == null) previewBox.visibility = View.GONE
         }
 
         // 3. 自由追问输入栏 + 发送按钮
@@ -1891,7 +1886,18 @@ class OverlayBallService : Service() {
                     preferences.writePosition(layoutParams.x, layoutParams.y)
                     layoutPetMenu()
                     if (triggerDragAsk) {
-                        hintHandler.post { showDragToAskMenu(dropX, dropY) }
+                        // 先隐藏桌宠 40ms 拍下无遮挡的干净画面（支持图片/视频帧/小红书图文），再弹出追问卡片
+                        val host = ballView
+                        val preHit = DeepSeekAccessibilityService.extractContextAt(dropX, dropY)
+                        host?.visibility = View.INVISIBLE
+                        hintHandler.postDelayed({
+                            DeepSeekAccessibilityService.captureVisualAt(dropX, dropY) { bmp ->
+                                hintHandler.post {
+                                    host?.visibility = View.VISIBLE
+                                    showDragToAskMenu(dropX, dropY, preHit, bmp)
+                                }
+                            }
+                        }, 45L)
                     }
                 }
                 return true
