@@ -2166,14 +2166,12 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                     append("【指中内容】").append(bestHit)
                 }
                 if (allUrls.isNotEmpty()) {
-                    if (isNotEmpty()) append("
-")
+                    if (isNotEmpty()) append("\n")
                     append("【识别链接】").append(allUrls.joinToString(" "))
                 }
                 val extras = nearby.filter { it != bestHit }.take(8)
                 if (extras.isNotEmpty()) {
-                    if (isNotEmpty()) append("
-")
+                    if (isNotEmpty()) append("\n")
                     append("【周边上下文】").append(extras.joinToString(" | "))
                 }
             }.trim().take(900)

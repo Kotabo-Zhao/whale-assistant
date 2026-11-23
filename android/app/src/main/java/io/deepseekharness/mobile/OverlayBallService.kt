@@ -1552,13 +1552,9 @@ class OverlayBallService : Service() {
 
         fun sendToChat(question: String, attachImage: Boolean = true) {
             val imgUrl = if (attachImage) encodeImage() else null
-            val urlLine = target?.extractedUrl?.let { "
-提取链接：$it" }.orEmpty()
-            val ctxLine = target?.mergedContext?.takeIf(String::isNotBlank)?.let { "
-$it" }.orEmpty()
-            val prompt = "$question
-
-来源应用：$appLabel$urlLine$ctxLine"
+            val urlLine = target?.extractedUrl?.let { "\n提取链接：$it" }.orEmpty()
+            val ctxLine = target?.mergedContext?.takeIf(String::isNotBlank)?.let { "\n$it" }.orEmpty()
+            val prompt = "$question\n\n来源应用：$appLabel$urlLine$ctxLine"
             runCatching {
                 val payload = org.json.JSONObject().put("action", "ask").put("prompt", prompt)
                 if (imgUrl != null) payload.put("image", imgUrl)
