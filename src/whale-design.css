@@ -1347,3 +1347,150 @@ button:active .whale-cute-icon,
   border-color: rgba(251, 191, 36, 0.22);
   background: linear-gradient(180deg, rgba(38, 28, 18, 0.96) 0%, rgba(30, 22, 14, 0.98) 100%);
 }
+
+
+/* ==========================================================================
+   THREE-THEME BESPOKE VISUAL & TACTILE OVERHAUL (2026-11)
+   1. simple — Precision Instrument (sharp hairlines, crisp 110ms press, optical rail)
+   2. cute   — Pelagic Porcelain (glossy sheen, buoyant jelly press, oceanic halo)
+   3. usagi  — Nagano Comic Zine (hand-drawn ink outline, 3px hard sticker shadow press)
+   ========================================================================== */
+
+/* --- 1. SIMPLE: Precision Instrument --- */
+:root[data-style='simple'] .whale-icon-chip,
+:root[data-style='simple'] .whale-next-chip,
+:root[data-style='simple'] .whale-perm-chip {
+  border-radius: 10px;
+  border-width: 1px;
+  transition: transform 110ms cubic-bezier(0.2, 0, 0, 1), border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+:root[data-style='simple'] .whale-icon-chip:active,
+:root[data-style='simple'] .whale-next-chip:active,
+:root[data-style='simple'] .whale-perm-chip:active {
+  transform: scale(0.96);
+}
+:root[data-style='simple'] .whale-composer {
+  border-radius: 16px;
+  transition: border-color 150ms ease, box-shadow 180ms ease;
+}
+:root[data-style='simple'] .whale-composer:focus-within {
+  box-shadow: 0 0 0 1px var(--accent, #0B5FFF), 0 10px 26px -14px rgba(11, 95, 255, 0.45);
+}
+:root[data-style='simple'] .whale-send-btn {
+  border-radius: 11px;
+  transition: transform 110ms cubic-bezier(0.2, 0, 0, 1), opacity 140ms ease, box-shadow 160ms ease;
+}
+:root[data-style='simple'] .whale-send-btn:not(:disabled):active {
+  transform: scale(0.94);
+}
+:root[data-style='simple'] .bottom-navigation-item.is-active {
+  position: relative;
+}
+:root[data-style='simple'] .bottom-navigation-item.is-active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 26%;
+  right: 26%;
+  height: 2px;
+  border-radius: 99px;
+  background: var(--accent, #0B5FFF);
+}
+
+/* --- 2. CUTE: Pelagic Porcelain --- */
+:root[data-style='cute'] .whale-icon-chip,
+:root[data-style='cute'] .whale-next-chip,
+:root[data-style='cute'] .whale-perm-chip {
+  border-radius: 999px;
+  box-shadow: 0 4px 14px -8px rgba(14, 116, 200, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  transition: transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease, background-color 180ms ease;
+}
+:root[data-style='cute'][data-theme='dark'] .whale-icon-chip,
+:root[data-style='cute'][data-theme='dark'] .whale-next-chip,
+:root[data-style='cute'][data-theme='dark'] .whale-perm-chip {
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+:root[data-style='cute'] .whale-icon-chip:active,
+:root[data-style='cute'] .whale-next-chip:active,
+:root[data-style='cute'] .whale-perm-chip:active {
+  transform: scale(0.93);
+}
+:root[data-style='cute'] .whale-composer {
+  border-radius: 26px;
+  transition: box-shadow 220ms ease, border-color 200ms ease;
+}
+:root[data-style='cute'] .whale-composer:focus-within {
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.18), 0 12px 28px -12px rgba(14, 116, 200, 0.30);
+}
+:root[data-style='cute'] .whale-send-btn:not(:disabled) {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 6px 18px -6px rgba(14, 116, 200, 0.52);
+  transition: transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
+}
+:root[data-style='cute'] .whale-send-btn:not(:disabled):active {
+  transform: scale(0.90);
+}
+:root[data-style='cute'] .whale-msg-bubble {
+  border-radius: 22px;
+  box-shadow: 0 6px 18px -12px rgba(15, 23, 42, 0.16);
+}
+
+/* --- 3. USAGI: Nagano Comic Zine (Hard Sticker Shadow Press) --- */
+:root[data-style='usagi'] .whale-icon-chip,
+:root[data-style='usagi'] .whale-next-chip,
+:root[data-style='usagi'] .whale-perm-chip {
+  border: 1.5px solid #6B4423;
+  box-shadow: 0 3px 0 #6B4423;
+  border-radius: 16px;
+  transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 120ms ease;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-icon-chip,
+:root[data-style='usagi'][data-theme='dark'] .whale-next-chip,
+:root[data-style='usagi'][data-theme='dark'] .whale-perm-chip {
+  border-color: #B47B38;
+  box-shadow: 0 3px 0 #140D07;
+}
+:root[data-style='usagi'] .whale-icon-chip:active,
+:root[data-style='usagi'] .whale-next-chip:active,
+:root[data-style='usagi'] .whale-perm-chip:active {
+  transform: translate3d(0, 2px, 0);
+  box-shadow: 0 1px 0 #6B4423;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-icon-chip:active,
+:root[data-style='usagi'][data-theme='dark'] .whale-next-chip:active,
+:root[data-style='usagi'][data-theme='dark'] .whale-perm-chip:active {
+  box-shadow: 0 1px 0 #140D07;
+}
+:root[data-style='usagi'] .whale-composer {
+  border: 1.8px solid #6B4423;
+  box-shadow: 0 4px 0 rgba(107, 68, 35, 0.28);
+  border-radius: 22px;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-composer {
+  border-color: #B47B38;
+  box-shadow: 0 4px 0 #120C06;
+}
+:root[data-style='usagi'] .whale-composer:focus-within {
+  transform: translate3d(0, -1px, 0);
+  box-shadow: 0 5px 0 rgba(217, 119, 6, 0.38);
+}
+:root[data-style='usagi'] .whale-send-btn:not(:disabled) {
+  border: 1.5px solid #5C3A1B;
+  box-shadow: 0 3px 0 #5C3A1B;
+  transition: transform 110ms ease, box-shadow 110ms ease;
+}
+:root[data-style='usagi'] .whale-send-btn:not(:disabled):active {
+  transform: translate3d(0, 2px, 0);
+  box-shadow: 0 1px 0 #5C3A1B;
+}
+:root[data-style='usagi'] .whale-msg-bubble {
+  border: 1.5px solid rgba(107, 68, 35, 0.42);
+  box-shadow: 0 3px 0 rgba(107, 68, 35, 0.16);
+  border-radius: 20px;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-msg-bubble {
+  border-color: rgba(217, 159, 68, 0.36);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.38);
+}

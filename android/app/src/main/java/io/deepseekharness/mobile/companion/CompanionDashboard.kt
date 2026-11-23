@@ -56,6 +56,18 @@ internal class CompanionDashboard(private val context: Context) {
             "extensionsList" -> JSONObject()
                 .put("skills", WhaleSkillStore.list(context))
                 .put("mcpServers", WhaleMcpManager.listServers(context))
+            "liveIslandPrefs" -> {
+                if (request.has("floatingIsland")) {
+                    WhaleNativeLiveNotification.setFloatingIslandEnabled(context, request.optBoolean("floatingIsland", false))
+                }
+                if (request.has("nativeNotif")) {
+                    WhaleNativeLiveNotification.setNativeNotifEnabled(context, request.optBoolean("nativeNotif", true))
+                }
+                JSONObject()
+                    .put("ok", true)
+                    .put("floatingIsland", WhaleNativeLiveNotification.isFloatingIslandEnabled(context))
+                    .put("nativeNotif", WhaleNativeLiveNotification.isNativeNotifEnabled(context))
+            }
             "readinessProbe" -> {
                 val app = context.applicationContext
                 val overlayOk = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {

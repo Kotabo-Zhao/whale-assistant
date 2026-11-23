@@ -124,17 +124,32 @@ internal class WhaleLiveIslandOverlay(
         destroyed = true
         expanded = false
         handler.removeCallbacks(pollRunnable)
+        WhaleNativeLiveNotification.cancel(context)
         hideNow()
     }
 
     private fun syncAllSources() {
         val next = computeSnapshot()
         if (next.mode == Mode.NONE) {
+            WhaleNativeLiveNotification.cancel(context)
             if (!expanded) hideNow()
             return
         }
         currentSnap = next
-        showOrUpdate(next)
+        // 1. 系统原生实况进度通知（默认开启，走系统通知栏/Android 16 Live Updates，不与手机自带灵动岛重影）
+        WhaleNativeLiveNotification.update(
+            context = context,
+            title = next.title,
+            subtitle = next.subtitle.ifBlank { next.detail },
+            ongoing = next.mode != Mode.COMPLETED,
+            indeterminate = next.mode != Mode.COMPLETED,
+        )
+        // 2. 自绘顶部悬浮胶囊（独立开关，默认关闭避免与自带灵动岛打架）
+        if (WhaleNativeLiveNotification.isFloatingIslandEnabled(context)) {
+            showOrUpdate(next)
+        } else {
+            hideNow()
+        }
     }
 
     private fun computeSnapshot(): IslandSnapshot {

@@ -44,6 +44,8 @@ export function WhalePowerHub() {
 
   const [usage, setUsage] = useState<UsageBreakdown | null>(null)
   const [readiness, setReadiness] = useState<ReadinessState | null>(null)
+  const [nativeNotifOn, setNativeNotifOn] = useState(true)
+  const [floatingIslandOn, setFloatingIslandOn] = useState(false)
   const [fastModel, setFastModel] = useState('')
   const [deepModel, setDeepModel] = useState('')
   const [routerMsg, setRouterMsg] = useState('')
@@ -65,6 +67,9 @@ export function WhalePowerHub() {
       if (typeof res.deepModel === 'string') setDeepModel(res.deepModel)
       const probe = await runtimeBridge.companionDashboard({ operation: 'readinessProbe' })
       if (probe && typeof probe === 'object') setReadiness(probe as ReadinessState)
+      const island = await runtimeBridge.companionDashboard({ operation: 'liveIslandPrefs' })
+      if (typeof island.nativeNotif === 'boolean') setNativeNotifOn(island.nativeNotif)
+      if (typeof island.floatingIsland === 'boolean') setFloatingIslandOn(island.floatingIsland)
     } catch { /* ignore in browser preview */ }
   }, [])
 
@@ -304,6 +309,28 @@ export function WhalePowerHub() {
             <button type="button" className="whale-perm-chip" onClick={() => { void compactMemory() }}>
               <Sparkles size={13} aria-hidden="true" />
               {t('一键记忆体检去重')}
+            </button>
+            <button
+              type="button"
+              className="whale-perm-chip"
+              onClick={() => {
+                const next = !nativeNotifOn
+                setNativeNotifOn(next)
+                void runtimeBridge.companionDashboard({ operation: 'liveIslandPrefs', nativeNotif: next }).catch(() => {})
+              }}
+            >
+              {nativeNotifOn ? '● ' : '○ '}{t('系统实况通知')}
+            </button>
+            <button
+              type="button"
+              className="whale-perm-chip"
+              onClick={() => {
+                const next = !floatingIslandOn
+                setFloatingIslandOn(next)
+                void runtimeBridge.companionDashboard({ operation: 'liveIslandPrefs', floatingIsland: next }).catch(() => {})
+              }}
+            >
+              {floatingIslandOn ? '● ' : '○ '}{t('自绘顶部岛')}
             </button>
           </div>
           {routerMsg && <p className="whale-power-feedback">{routerMsg}</p>}
