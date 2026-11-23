@@ -516,11 +516,32 @@ export function CompanionWorkspace({ initialPanel = 'reminders', library = false
     if (result) { setSelectedMemoryIds(new Set()); setMemorySelectionMode(false) }
   }
   return <section className={library ? "companion-workspace memory-workspace" : "companion-workspace"} aria-labelledby="companion-workspace-title">
-    <div className={library ? "workspace-heading page-heading memory-hub-header" : "workspace-heading"}><div>{library ? <><div className="memory-hub-title-row"><h1 id="companion-workspace-title">{t("记忆")}</h1>{unifiedStats && <div className="memory-hub-stats" aria-label="记忆中心统计"><button type="button" className={`memory-stat-pill${panel === 'knowledge' ? ' is-current' : ''}`} onClick={() => setPanel('knowledge')}>资料 {unifiedStats.knowledgeCount}</button><button type="button" className={`memory-stat-pill${panel === 'memory' ? ' is-current' : ''}`} onClick={() => setPanel('memory')}>记忆 {unifiedStats.memoryCount}</button></div>}</div><p className="library-intro">长期记忆与收藏资料统一检索，随手存下、按需召回。</p></> : <><h3 id="companion-workspace-title">助手工作台</h3><p>管理本地资料、长期记忆和提醒。</p></>}</div>
+    <div className={library ? "workspace-heading page-heading memory-hub-header" : "workspace-heading"}><div>{library ? <><h1 id="companion-workspace-title">{t("记忆")}</h1><p className="library-intro">长期记忆与收藏资料统一检索，随手存下、按需召回。</p></> : <><h3 id="companion-workspace-title">助手工作台</h3><p>管理本地资料、长期记忆和提醒。</p></>}</div>
       <button className="icon-button" type="button" aria-label="刷新助手数据" disabled={busy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={18} /></button></div>
     <div className="workspace-tabs" role="tablist" aria-label="助手工作台分类">
-      {([{ id: 'knowledge', label: '资料', icon: <BookOpen size={17} /> }, { id: 'memory', label: '长期记忆', icon: <Brain size={17} /> }, { id: 'reminders', label: '提醒', icon: <Bell size={17} /> }] as const).map(tab =>
-        <button key={tab.id} id={`companion-workspace-tab-${tab.id}`} role="tab" aria-selected={panel === tab.id} aria-controls={`companion-workspace-panel-${tab.id}`} tabIndex={panel === tab.id ? 0 : -1} type="button" disabled={busy} onClick={() => { setQuery(''); setPanel(tab.id) }}>{tab.icon}{t(tab.label)}</button>)}
+      {([{ id: 'knowledge', label: '资料', icon: <BookOpen size={17} /> }, { id: 'memory', label: '长期记忆', icon: <Brain size={17} /> }, { id: 'reminders', label: '提醒', icon: <Bell size={17} /> }] as const).map(tab => {
+        const count = library && unifiedStats
+          ? (tab.id === 'knowledge' ? unifiedStats.knowledgeCount : tab.id === 'memory' ? unifiedStats.memoryCount : null)
+          : null
+        return (
+          <button
+            key={tab.id}
+            id={`companion-workspace-tab-${tab.id}`}
+            role="tab"
+            aria-label={t(tab.label)}
+            aria-selected={panel === tab.id}
+            aria-controls={`companion-workspace-panel-${tab.id}`}
+            tabIndex={panel === tab.id ? 0 : -1}
+            type="button"
+            disabled={busy}
+            onClick={() => { setQuery(''); setPanel(tab.id) }}
+          >
+            {tab.icon}
+            <span>{t(tab.label)}</span>
+            {count !== null && count > 0 && <span className="workspace-tab-count" aria-hidden="true">{count}</span>}
+          </button>
+        )
+      })}
     </div>
     {message && <p className="workspace-message" role="status" aria-live="polite">{message}</p>}
     {loading && <p className="workspace-hint" role="status">正在读取本地数据…</p>}

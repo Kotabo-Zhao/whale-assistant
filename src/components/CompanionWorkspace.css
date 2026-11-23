@@ -27,38 +27,17 @@
   color: var(--muted);
 }
 
-/* ── Unified Memory Hub Header ── */
-.memory-hub-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.memory-hub-stats {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.memory-stat-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  min-height: 28px;
+.workspace-tab-count {
+  padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-muted);
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  cursor: pointer;
-  transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease;
+  line-height: 1.4;
 }
 
-.memory-stat-pill.is-current,
-.memory-stat-pill:hover {
-  border-color: var(--blue-line, var(--blue));
+.workspace-tabs button[aria-selected=true] .workspace-tab-count {
   background: var(--blue-soft);
   color: var(--blue);
 }
