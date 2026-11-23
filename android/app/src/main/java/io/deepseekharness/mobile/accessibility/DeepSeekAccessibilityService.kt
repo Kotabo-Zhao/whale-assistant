@@ -1048,7 +1048,17 @@ class DeepSeekAccessibilityService : AccessibilityService() {
         val focusedCandidate: Boolean,
         val submit: Boolean,
     ) {
-        companion object {
+        data class DragPickTarget(
+        val packageName: String,
+        val targetKind: String, // "image" | "link" | "text"
+        val mergedContext: String,
+        val bestHitText: String,
+        val extractedUrl: String? = null,
+        val linkTitle: String? = null,
+        val imageBounds: android.graphics.Rect? = null,
+    )
+
+    companion object {
             fun success(
                 method: VirtualScreenTextPolicy.TextMethod,
                 focusedCandidate: Boolean,
@@ -1962,16 +1972,6 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             "ACCESSIBILITY_ACTION_TIMEOUT",
         )
         private val serviceRef = AtomicReference<DeepSeekAccessibilityService?>(null)
-
-        data class DragPickTarget(
-            val packageName: String,
-            val targetKind: String, // "image" | "link" | "text"
-            val mergedContext: String,
-            val bestHitText: String,
-            val extractedUrl: String? = null,
-            val linkTitle: String? = null,
-            val imageBounds: android.graphics.Rect? = null,
-        )
 
         /** 兼容旧调用：返回 (packageName, mergedContext)。 */
         fun extractContextAt(screenX: Int, screenY: Int): Pair<String, String>? =
