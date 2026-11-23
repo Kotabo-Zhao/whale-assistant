@@ -1449,18 +1449,35 @@ class OverlayBallService : Service() {
             ?: "未检测到纯文本（图片、网页或游戏画面），发送后将自动截取坐标 ($dropX, $dropY) 附近画面识别。"
 
         var dialogRef: android.app.AlertDialog? = null
+        var capturedBitmap: android.graphics.Bitmap? = null
+        var attachVisual = true
+
+        fun encodeCapturedImage(): String? = runCatching {
+            val bmp = capturedBitmap ?: return null
+            if (bmp.isRecycled) return null
+            val baos = java.io.ByteArrayOutputStream()
+            bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, baos)
+            "data:image/jpeg;base64," + android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.NO_WRAP)
+        }.getOrNull()
+
         fun dispatchAsk(question: String) {
-            val cleanQ = question.trim().ifEmpty { "请结合我指中的这段屏幕内容，判断我最可能需要什么帮助并直接给出实用解答：" }
+            val imgDataUrl = if (attachVisual) encodeCapturedImage() else null
+            val cleanQ = question.trim().ifEmpty {
+                if (imgDataUrl != null) "请结合这张屏幕画面与内容，判断我最可能需要什么帮助并直接给出实用解答："
+                else "请结合我指中的这段屏幕内容，判断我最可能需要什么帮助并直接给出实用解答："
+            }
             val prompt = if (hit != null) {
                 "$cleanQ\n\n来源应用：$appLabel\n${hit.second}"
+            } else if (imgDataUrl != null) {
+                "$cleanQ（已附上当前屏幕画面，来源：$appLabel）"
             } else {
                 "$cleanQ（请先截取当前屏幕并重点查看坐标 ($dropX, $dropY) 附近的内容）"
             }
             dialogRef?.dismiss()
             runCatching {
-                io.deepseekharness.mobile.companion.WhaleAppControlBus.emit(
-                    org.json.JSONObject().put("action", "ask").put("prompt", prompt),
-                )
+                val payload = org.json.JSONObject().put("action", "ask").put("prompt", prompt)
+                if (imgDataUrl != null) payload.put("image", imgDataUrl)
+                io.deepseekharness.mobile.companion.WhaleAppControlBus.emit(payload)
                 startActivity(
                     Intent(this, MainActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
@@ -1527,7 +1544,53 @@ class OverlayBallService : Service() {
             background = ui.shape(ui.canvas, 14, ui.line)
             setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10))
         }
-        card.addView(previewBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12) })
+        // 2a. 实时捕获的图片/视频画面缩略图 + 附带画面开关
+        val thumbRow = FrameLayout(this).apply {
+            visibility = View.GONE
+            background = ui.shape(ui.canvas, 14, ui.line)
+            clipToOutline = true
+        }
+        val thumbView = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+        }
+        val attachBadge = TextView(this).apply {
+            text = "附带画面 ✓"
+            textSize = 11.5f
+            setTextColor(ui.onPrimary)
+            background = ui.shape(ui.primary, 999)
+            setPadding(ui.dp(10), ui.dp(4), ui.dp(10), ui.dp(4))
+            setOnClickListener {
+                attachVisual = !attachVisual
+                text = if (attachVisual) "附带画面 ✓" else "仅发文字"
+                alpha = if (attachVisual) 1f else 0.55f
+                thumbView.alpha = if (attachVisual) 1f else 0.35f
+            }
+        }
+        thumbRow.addView(thumbView, FrameLayout.LayoutParams(-1, ui.dp(126)))
+        thumbRow.addView(
+            attachBadge,
+            FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.BOTTOM).apply {
+                setMargins(0, 0, ui.dp(8), ui.dp(8))
+            },
+        )
+        card.addView(thumbRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(10) })
+        card.addView(previewBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(10) })
+
+        // 异步截取落点附近的真实画面（支持图片、视频帧、网页与商品卡）
+        DeepSeekAccessibilityService.captureVisualAt(dropX, dropY) { bmp ->
+            if (bmp != null) {
+                hintHandler.post {
+                    if (dialogRef?.isShowing == true) {
+                        capturedBitmap = bmp
+                        thumbView.setImageBitmap(bmp)
+                        thumbRow.visibility = View.VISIBLE
+                        if (hit == null) previewBox.visibility = View.GONE
+                    } else {
+                        bmp.recycle()
+                    }
+                }
+            }
+        }
 
         // 3. 自由追问输入栏 + 发送按钮
         val inputRow = LinearLayout(this).apply {
@@ -1571,6 +1634,7 @@ class OverlayBallService : Service() {
             gravity = Gravity.CENTER_VERTICAL
         }
         val quickChips = listOf(
+            "识图 / 找同款" to { dispatchAsk("请仔细识别这张画面里的物体、商品、视频场景或文字，并帮我分析或查同款：") },
             "翻译解释" to { dispatchAsk("请简明翻译或通俗解释这段屏幕内容：") },
             "高情商回复" to { dispatchAsk("请针对这段内容帮我拟 3 条自然、高情商的回复：") },
             "比价避坑" to { dispatchAsk("请帮我联网核查这段内容的真伪或全网比价避坑：") },
@@ -1631,6 +1695,10 @@ class OverlayBallService : Service() {
             .setCancelable(true)
             .create()
         dialogRef = dialog
+        dialog.setOnDismissListener {
+            capturedBitmap?.let { if (!it.isRecycled) it.recycle() }
+            capturedBitmap = null
+        }
         dialog.window?.apply {
             setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
             setType(

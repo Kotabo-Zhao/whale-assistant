@@ -3881,8 +3881,9 @@ export function App() {
         const prompt = event.prompt.trim()
         if (prompt) {
           setActiveView('whale-chat')
+          const image = typeof event.image === 'string' && event.image.startsWith('data:image/') ? event.image : undefined
           window.setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('whale-miniapp-ask', { detail: prompt }))
+            window.dispatchEvent(new CustomEvent('whale-miniapp-ask', { detail: image ? { prompt, image } : prompt }))
           }, 80)
         }
       } else if (event.action === 'refresh') {

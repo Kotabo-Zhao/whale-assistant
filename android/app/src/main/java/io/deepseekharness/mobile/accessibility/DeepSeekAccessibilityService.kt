@@ -2018,6 +2018,57 @@ class DeepSeekAccessibilityService : AccessibilityService() {
          * 教它做一遍（0 Token 确定性回放）：按三层锚点优先级查找并点击控件
          * 1. resourceId → 2. 语义 text / contentDesc → 3. 归一化屏幕坐标 (rx, ry)。
          */
+        /**
+         * 拖宠即问视觉捕获：利用 Android 11+ 无障碍原生 takeScreenshot（无需额外录屏授权弹窗）
+         * 截取落点附近的图片/视频画面并缩放至 720px 宽，支持图文与视频帧一并分析。
+         */
+        fun captureVisualAt(screenX: Int, screenY: Int, onResult: (android.graphics.Bitmap?) -> Unit) {
+            val svc = serviceRef.get()
+            if (svc == null || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+                onResult(null)
+                return
+            }
+            runCatching {
+                svc.takeScreenshot(
+                    android.view.Display.DEFAULT_DISPLAY,
+                    svc.mainExecutor,
+                    object : android.accessibilityservice.AccessibilityService.TakeScreenshotCallback {
+                        override fun onSuccess(screenshot: android.accessibilityservice.AccessibilityService.ScreenshotResult) {
+                            val bmp = runCatching {
+                                val hb = screenshot.hardwareBuffer
+                                val cs = screenshot.colorSpace
+                                val hw = android.graphics.Bitmap.wrapHardwareBuffer(hb, cs)
+                                val soft = hw?.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                                hw?.recycle()
+                                hb.close()
+                                if (soft == null) return@runCatching null
+                                val fullW = soft.width
+                                val fullH = soft.height
+                                // 截取以落点 Y 为中心的宽幅画框（覆盖整张图片/视频播放器/图文卡片）
+                                val cropH = minOf(fullH, (fullW * 0.95f).toInt().coerceAtLeast(360))
+                                val top = (screenY - cropH / 2).coerceIn(0, (fullH - cropH).coerceAtLeast(0))
+                                val cropped = android.graphics.Bitmap.createBitmap(soft, 0, top, fullW, cropH)
+                                if (cropped !== soft) soft.recycle()
+                                if (cropped.width > 720) {
+                                    val scaledH = (cropped.height * 720f / cropped.width).toInt().coerceAtLeast(1)
+                                    val scaled = android.graphics.Bitmap.createScaledBitmap(cropped, 720, scaledH, true)
+                                    if (scaled !== cropped) cropped.recycle()
+                                    scaled
+                                } else {
+                                    cropped
+                                }
+                            }.getOrNull()
+                            onResult(bmp)
+                        }
+
+                        override fun onFailure(errorCode: Int) {
+                            onResult(null)
+                        }
+                    },
+                )
+            }.onFailure { onResult(null) }
+        }
+
         fun replayMacroStep(resourceId: String, text: String, contentDesc: String, rx: Float, ry: Float): Boolean {
             val svc = serviceRef.get() ?: return false
             val root = svc.rootInActiveWindow

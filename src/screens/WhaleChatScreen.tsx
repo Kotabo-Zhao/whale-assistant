@@ -499,12 +499,15 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
     setRenameDraft('')
   }
 
-  const sendTextRef = useRef<(raw: string) => Promise<void>>(async () => {})
+  const sendTextRef = useRef<(raw: string, overrideImages?: string[]) => Promise<void>>(async () => {})
   useEffect(() => {
     const onMiniAppAsk = (ev: Event) => {
-      const prompt = (ev as CustomEvent<string>).detail
-      if (typeof prompt === 'string' && prompt.trim()) {
-        void sendTextRef.current(prompt.trim())
+      const detail = (ev as CustomEvent<string | { prompt?: string; image?: string }>).detail
+      if (typeof detail === 'string' && detail.trim()) {
+        void sendTextRef.current(detail.trim())
+      } else if (detail && typeof detail === 'object' && typeof detail.prompt === 'string' && detail.prompt.trim()) {
+        const imgs = typeof detail.image === 'string' && detail.image.startsWith('data:image/') ? [detail.image] : undefined
+        void sendTextRef.current(detail.prompt.trim(), imgs)
       }
     }
     window.addEventListener('whale-miniapp-ask', onMiniAppAsk)

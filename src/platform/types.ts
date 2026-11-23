@@ -2413,6 +2413,7 @@ export interface WhaleNativeChatRequest {
 export interface WhaleAppControlEvent {
   action: 'navigate' | 'appearance' | 'language' | 'autonomy' | 'refresh' | 'ask'
   prompt?: string
+  image?: string
   view?: string
   style?: 'simple' | 'cute' | 'usagi'
   theme?: 'system' | 'light' | 'dark'
