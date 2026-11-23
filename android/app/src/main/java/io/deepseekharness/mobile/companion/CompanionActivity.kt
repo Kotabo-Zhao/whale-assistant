@@ -539,18 +539,17 @@ class CompanionActivity : AppCompatActivity() {
                 CompanionPreferencePage.ALERTS, CompanionPreferencePage.DAILY)
             CompanionPreferencePage.PET -> renderPet()
             CompanionPreferencePage.PERMISSIONS -> readinessCard()
-            CompanionPreferencePage.DATA -> links(CompanionPreferencePage.MEMORY, CompanionPreferencePage.LIBRARY, CompanionPreferencePage.BACKUP)
+            CompanionPreferencePage.DATA -> renderDataHub()
             CompanionPreferencePage.MEMORY -> renderMemory()
             CompanionPreferencePage.LIBRARY -> renderLibrary()
             CompanionPreferencePage.BACKUP -> renderBackup()
             CompanionPreferencePage.MAINTENANCE -> renderMaintenance()
-            CompanionPreferencePage.ALERTS -> links(CompanionPreferencePage.NOTIFICATIONS, CompanionPreferencePage.REMINDERS,
-                CompanionPreferencePage.BACKGROUND, CompanionPreferencePage.RECORDS)
+            CompanionPreferencePage.ALERTS -> renderAlertsHub()
             CompanionPreferencePage.NOTIFICATIONS -> renderNotifications()
             CompanionPreferencePage.BACKGROUND -> renderBackground()
             CompanionPreferencePage.REMINDERS -> renderReminders()
             CompanionPreferencePage.RECORDS -> renderHistory()
-            CompanionPreferencePage.DAILY -> links(CompanionPreferencePage.APPS, CompanionPreferencePage.BRIEF)
+            CompanionPreferencePage.DAILY -> renderDailyHub()
             CompanionPreferencePage.APPS -> renderApps()
             CompanionPreferencePage.BRIEF -> renderBrief()
         }
@@ -583,7 +582,51 @@ class CompanionActivity : AppCompatActivity() {
             android.widget.Toast.makeText(this, if (applied) "动态效果已更新。" else "已保存，下次显示悬浮形象时生效。", android.widget.Toast.LENGTH_SHORT).show()
         }
         paragraph("开启后，悬浮鲸鱼娘保持静止可见状态，不播放眨眼、摆动或点击缩放；系统“移除动画”设置同样会停止这些动态效果。")
-        links(CompanionPreferencePage.PERMISSIONS)
+        heading("系统权限与就绪状态")
+        readinessCard()
+    }
+
+    /** 聚合后的「记忆与资料」直达页：核心开关 + 一键备份 + 跳转主应用记忆中心，不再套娃三层子菜单。 */
+    private fun renderDataHub() {
+        val memory = CompanionMemoryStore(this)
+        heading("核心总开关")
+        toggle("启用长期记忆与自动召回", memory.enabled) {
+            memory.enabled = it
+            render()
+        }
+        toggle("允许对话检索与保存资料库", store.knowledgeModelAccess && store.knowledgeModelWrite) { enabled ->
+            store.knowledgeModelAccess = enabled
+            store.knowledgeModelWrite = enabled
+            render()
+        }
+        toggle("从通知自动提炼记忆候选", store.notificationMemorySuggestions) {
+            store.notificationMemorySuggestions = it
+            render()
+        }
+        paragraph("具体条目查看、搜索与清理请直接在主应用「我的 → 记忆中心」统一管理。")
+        button("打开主应用记忆中心") {
+            runCatching {
+                WhaleAppControlBus.emit(org.json.JSONObject().put("action", "navigate").put("view", "assistant-memory"))
+                startActivity(Intent(this, io.deepseekharness.mobile.MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                finish()
+            }
+        }
+        heading("统一备份与恢复")
+        renderBackup()
+    }
+
+    /** 聚合后的「通知与提醒」直达页：通知感知、免打扰与快捷记录一屏直达。 */
+    private fun renderAlertsHub() {
+        renderNotifications()
+        heading("更多与后台")
+        links(CompanionPreferencePage.REMINDERS, CompanionPreferencePage.BACKGROUND, CompanionPreferencePage.RECORDS)
+    }
+
+    /** 聚合后的「日常助手」直达页：日历简报与常用应用合并在一屏管理。 */
+    private fun renderDailyHub() {
+        renderBrief()
+        renderApps()
     }
 
     private fun renderMemory() {
@@ -2514,7 +2557,7 @@ class CompanionActivity : AppCompatActivity() {
         contentDescription = "$label，$detail"
         isFocusable = true
         addView(ImageView(this@CompanionActivity).apply {
-            setImageDrawable(palette.getDrawable(target.icon)); setColorFilter(palette.getColor(R.color.harness_search_focus))
+            setImageDrawable(palette.getDrawable(target.icon)); setColorFilter(PetUi(this@CompanionActivity).accent)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LinearLayout.LayoutParams(dp(22), dp(22)))
         addView(LinearLayout(this@CompanionActivity).apply {

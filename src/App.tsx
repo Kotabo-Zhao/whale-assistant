@@ -1367,7 +1367,7 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
       {!searching && <nav id="account-categories" className="account-sections" data-advanced={advanced} aria-label={t('设置分类')}>
         {SETTINGS_HOME_GROUPS.filter(group => advanced || !['device', 'workspace'].includes(group.id)).map(group => <button key={group.id} type="button" className="account-group-toggle"
           aria-label={t(group.label)} aria-expanded={expanded === group.id} aria-controls={'settings-group-' + group.id} onClick={() => toggleGroup(group.id)}>
-          {interfaceStyle === 'cute'
+          {interfaceStyle !== 'simple'
             ? <CuteIcon name={group.id === 'daily' ? 'memory' : group.id === 'assistant' ? 'assistant' : group.id === 'workspace' ? 'workspace' : group.id === 'models' ? 'models' : group.id === 'notifications' ? 'notifications' : group.id === 'appearance' ? 'appearance' : 'device'} size={24} />
             : (group.id === 'daily' ? <BookOpen size={18}/> : group.id === 'assistant' ? <Bot size={18}/> : group.id === 'workspace' ? <HardDrive size={18}/> : group.id === 'models' ? <KeyRound size={18}/> : group.id === 'notifications' ? <Bell size={18}/> : group.id === 'appearance' ? <Image size={18}/> : <SlidersHorizontal size={18}/>)}
           <strong>{t(group.label)}</strong></button>)}
