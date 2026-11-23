@@ -1438,23 +1438,25 @@ class OverlayBallService : Service() {
         }
     }
 
-    /** 拖宠即问（Drag-to-Ask）：松手后展示意图胶囊，0 Token 直存或一键追问。 */
+    /** 拖宠即问（Drag-to-Ask）：主题原生悬浮追问卡片，支持自由输入任意问题与横向快捷胶囊。 */
     private fun showDragToAskMenu(dropX: Int, dropY: Int) {
+        val ui = io.deepseekharness.mobile.companion.PetUi(this)
         val hit = DeepSeekAccessibilityService.extractContextAt(dropX, dropY)
-        val preview = hit?.second ?: "当前区域未提取到纯文本（可能是图片、网页或游戏画面），点击下方指令将自动看屏分析。"
-        val actions = arrayOf(
-            "翻译 / 解释这段内容",
-            "比价 / 查真伪",
-            "提炼核心重点",
-            "一键存入资料库（0 Token）",
-            "一键转为待办（0 Token）",
-        )
-        fun dispatchAsk(prefix: String) {
+        val appLabel = hit?.first?.let { pkg ->
+            runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrNull()
+        }?.takeIf(String::isNotBlank) ?: if (hit != null) hit.first.substringAfterLast('.') else "视觉看屏"
+        val previewText = hit?.second?.replace("【指中内容】", "")?.trim()
+            ?: "未检测到纯文本（图片、网页或游戏画面），发送后将自动截取坐标 ($dropX, $dropY) 附近画面识别。"
+
+        var dialogRef: android.app.AlertDialog? = null
+        fun dispatchAsk(question: String) {
+            val cleanQ = question.trim().ifEmpty { "请结合我指中的这段屏幕内容，判断我最可能需要什么帮助并直接给出实用解答：" }
             val prompt = if (hit != null) {
-                "$prefix\n\n来源应用：${hit.first}\n${hit.second}"
+                "$cleanQ\n\n来源应用：$appLabel\n${hit.second}"
             } else {
-                "$prefix（请先截取当前屏幕并重点查看坐标 ($dropX, $dropY) 附近的内容）"
+                "$cleanQ（请先截取当前屏幕并重点查看坐标 ($dropX, $dropY) 附近的内容）"
             }
+            dialogRef?.dismiss()
             runCatching {
                 io.deepseekharness.mobile.companion.WhaleAppControlBus.emit(
                     org.json.JSONObject().put("action", "ask").put("prompt", prompt),
@@ -1465,48 +1467,187 @@ class OverlayBallService : Service() {
                 )
             }
         }
-        val themed = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-        val dialog = android.app.AlertDialog.Builder(themed)
-            .setTitle("拖宠即问 · 发现屏幕内容")
-            .setItems(actions) { _, which ->
-                when (which) {
-                    0 -> dispatchAsk("请简明翻译或通俗解释下面这段屏幕内容：")
-                    1 -> dispatchAsk("请帮我联网核查下面内容的真伪或全网比价避坑：")
-                    2 -> dispatchAsk("请帮我用 3 条要点提炼下面内容的核心信息：")
-                    3 -> {
-                        if (hit != null) {
-                            io.deepseekharness.mobile.companion.CompanionKnowledgeStore(applicationContext)
-                                .add("[拖宠即问 · ${hit.first}]\n${hit.second}", source = "shared_text")
-                            Toast.makeText(applicationContext, "已存入资料库", Toast.LENGTH_SHORT).show()
-                        } else {
-                            dispatchAsk("请截取当前屏幕并把核心内容存入资料库")
-                        }
-                    }
-                    4 -> {
-                        if (hit != null) {
-                            val title = hit.second.replace("【指中内容】", "").lineSequence().firstOrNull()?.take(36).orEmpty().ifBlank { "屏幕待办" }
-                            val req = org.json.JSONObject()
-                                .put("action", "create")
-                                .put("operationId", UUID.randomUUID().toString())
-                                .put("title", title)
-                                .put("note", hit.second.take(300))
-                            io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(applicationContext)
-                                .use { it.queue.secretary.execute(req, owner = "whale-drag-ask") }
-                            Toast.makeText(applicationContext, "已加入秘书待办", Toast.LENGTH_SHORT).show()
-                        } else {
-                            dispatchAsk("请截取当前屏幕并提取待办事项")
-                        }
-                    }
-                }
-            }
-            .setNegativeButton("取消", null)
-            .create()
-        dialog.window?.setType(
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE,
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = ui.shape(ui.surface, 24, ui.line)
+            setPadding(ui.dp(18), ui.dp(16), ui.dp(18), ui.dp(16))
+            elevation = ui.dp(12).toFloat()
+        }
+
+        // 1. 顶部栏：桌宠头像 + 标题 + 来源胶囊 + 关闭
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(
+            io.deepseekharness.mobile.companion.PetPortrait(this, ui, R.drawable.ic_pet_whale),
+            LinearLayout.LayoutParams(ui.dp(32), ui.dp(32)).apply { marginEnd = ui.dp(10) },
         )
-        runCatching { dialog.show() }.onFailure {
-            Toast.makeText(applicationContext, preview.take(48), Toast.LENGTH_SHORT).show()
+        header.addView(
+            TextView(this).apply {
+                text = "拖宠即问"
+                textSize = 16.5f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(ui.ink)
+            },
+            LinearLayout.LayoutParams(-2, -2),
+        )
+        header.addView(
+            TextView(this).apply {
+                text = appLabel.take(12)
+                textSize = 11.5f
+                setTextColor(ui.accent)
+                background = ui.shape(ui.soft, 999, ui.line)
+                setPadding(ui.dp(9), ui.dp(3), ui.dp(9), ui.dp(3))
+            },
+            LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) },
+        )
+        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        header.addView(
+            TextView(this).apply {
+                text = "✕"
+                textSize = 15f
+                setTextColor(ui.muted)
+                gravity = Gravity.CENTER
+                setOnClickListener { dialogRef?.dismiss() }
+            },
+            LinearLayout.LayoutParams(ui.dp(32), ui.dp(32)),
+        )
+        card.addView(header, LinearLayout.LayoutParams(-1, -2))
+
+        // 2. 捕获内容预览块
+        val previewBox = TextView(this).apply {
+            text = previewText
+            textSize = 13f
+            setTextColor(ui.muted)
+            maxLines = 3
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setLineSpacing(ui.dp(2).toFloat(), 1f)
+            background = ui.shape(ui.canvas, 14, ui.line)
+            setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10))
+        }
+        card.addView(previewBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12) })
+
+        // 3. 自由追问输入栏 + 发送按钮
+        val inputRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val input = android.widget.EditText(this).apply {
+            hint = "随便问点什么…（留空直接智能解读）"
+            setHintTextColor(ui.muted)
+            setTextColor(ui.ink)
+            textSize = 14f
+            maxLines = 2
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            background = ui.shape(ui.canvas, 16, ui.line)
+            setPadding(ui.dp(13), ui.dp(10), ui.dp(13), ui.dp(10))
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
+                    dispatchAsk(text?.toString().orEmpty())
+                    true
+                } else false
+            }
+        }
+        val sendBtn = TextView(this).apply {
+            text = "发送"
+            textSize = 13.5f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(ui.onPrimary)
+            gravity = Gravity.CENTER
+            background = ui.shape(ui.primary, 16)
+            setPadding(ui.dp(16), ui.dp(10), ui.dp(16), ui.dp(10))
+            setOnClickListener { dispatchAsk(input.text?.toString().orEmpty()) }
+        }
+        inputRow.addView(input, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = ui.dp(8) })
+        inputRow.addView(sendBtn, LinearLayout.LayoutParams(-2, -2))
+        card.addView(inputRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(12) })
+
+        // 4. 横向滚动快捷意图胶囊（不占高度，一键触发）
+        val chipsStrip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val quickChips = listOf(
+            "翻译解释" to { dispatchAsk("请简明翻译或通俗解释这段屏幕内容：") },
+            "高情商回复" to { dispatchAsk("请针对这段内容帮我拟 3 条自然、高情商的回复：") },
+            "比价避坑" to { dispatchAsk("请帮我联网核查这段内容的真伪或全网比价避坑：") },
+            "提炼要点" to { dispatchAsk("请用 3 条精炼要点提炼核心信息：") },
+            "存资料库" to {
+                dialogRef?.dismiss()
+                if (hit != null) {
+                    io.deepseekharness.mobile.companion.CompanionKnowledgeStore(applicationContext)
+                        .add("[拖宠即问 · $appLabel]\n${hit.second}", source = "shared_text")
+                    Toast.makeText(applicationContext, "已存入资料库", Toast.LENGTH_SHORT).show()
+                } else {
+                    dispatchAsk("请截取当前屏幕并把核心内容存入资料库")
+                }
+            },
+            "转待办" to {
+                dialogRef?.dismiss()
+                if (hit != null) {
+                    val title = previewText.lineSequence().firstOrNull()?.take(36).orEmpty().ifBlank { "屏幕待办" }
+                    val req = org.json.JSONObject()
+                        .put("action", "create")
+                        .put("operationId", UUID.randomUUID().toString())
+                        .put("title", title)
+                        .put("note", hit.second.take(300))
+                    io.deepseekharness.mobile.companion.UnifiedUnderstandingStore.open(applicationContext)
+                        .use { it.queue.secretary.execute(req, owner = "whale-drag-ask") }
+                    Toast.makeText(applicationContext, "已加入秘书待办", Toast.LENGTH_SHORT).show()
+                } else {
+                    dispatchAsk("请截取当前屏幕并提取待办事项")
+                }
+            },
+        )
+        quickChips.forEachIndexed { idx, (label, onTap) ->
+            val chip = TextView(this).apply {
+                text = label
+                textSize = 12.5f
+                setTextColor(ui.ink)
+                background = ui.shape(ui.soft, 999, ui.line)
+                setPadding(ui.dp(12), ui.dp(6), ui.dp(12), ui.dp(6))
+                setOnClickListener { onTap() }
+            }
+            chipsStrip.addView(chip, LinearLayout.LayoutParams(-2, -2).apply {
+                if (idx > 0) marginStart = ui.dp(7)
+            })
+        }
+        val chipsScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(chipsStrip, FrameLayout.LayoutParams(-2, -2))
+        }
+        card.addView(chipsScroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ui.dp(11) })
+
+        val wrapper = FrameLayout(this).apply {
+            setPadding(ui.dp(16), ui.dp(12), ui.dp(16), ui.dp(12))
+            addView(card, FrameLayout.LayoutParams(-1, -2))
+        }
+
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setView(wrapper)
+            .setCancelable(true)
+            .create()
+        dialogRef = dialog
+        dialog.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            setType(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE,
+            )
+            setGravity(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+        runCatching {
+            dialog.show()
+            dialog.window?.clearFlags(
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
+            )
+            dialog.window?.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
+        }.onFailure {
+            Toast.makeText(applicationContext, previewText.take(48), Toast.LENGTH_SHORT).show()
         }
     }
 
