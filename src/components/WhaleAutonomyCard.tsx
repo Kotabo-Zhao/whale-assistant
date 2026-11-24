@@ -151,8 +151,17 @@ export function WhaleAutonomyCard({
         })
         .catch(() => undefined)
     }
+
+    const onIslandSync = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ nativeNotif?: boolean; floatingIsland?: boolean }>).detail
+      if (!detail) return
+      if (typeof detail.nativeNotif === 'boolean') setNativeNotifOn(detail.nativeNotif)
+      if (typeof detail.floatingIsland === 'boolean') setFloatingIslandOn(detail.floatingIsland)
+    }
+    window.addEventListener('whale:live-island-prefs', onIslandSync)
     return () => {
       active = false
+      window.removeEventListener('whale:live-island-prefs', onIslandSync)
     }
   }, [])
 
@@ -279,6 +288,7 @@ export function WhaleAutonomyCard({
             onClick={() => {
               const next = !nativeNotifOn
               setNativeNotifOn(next)
+              window.dispatchEvent(new CustomEvent('whale:live-island-prefs', { detail: { nativeNotif: next } }))
               void runtimeBridge.companionDashboard?.({ operation: 'liveIslandPrefs', nativeNotif: next }).catch(() => undefined)
             }}
           >
@@ -291,6 +301,7 @@ export function WhaleAutonomyCard({
             onClick={() => {
               const next = !floatingIslandOn
               setFloatingIslandOn(next)
+              window.dispatchEvent(new CustomEvent('whale:live-island-prefs', { detail: { floatingIsland: next } }))
               void runtimeBridge.companionDashboard?.({ operation: 'liveIslandPrefs', floatingIsland: next }).catch(() => undefined)
             }}
           >

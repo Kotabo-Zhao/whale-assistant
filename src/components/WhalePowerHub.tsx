@@ -328,6 +328,7 @@ export function WhalePowerHub() {
               onClick={() => {
                 const next = !nativeNotifOn
                 setNativeNotifOn(next)
+                window.dispatchEvent(new CustomEvent('whale:live-island-prefs', { detail: { nativeNotif: next } }))
                 void runtimeBridge.companionDashboard({ operation: 'liveIslandPrefs', nativeNotif: next }).catch(() => {})
               }}
             >
@@ -339,6 +340,7 @@ export function WhalePowerHub() {
               onClick={() => {
                 const next = !floatingIslandOn
                 setFloatingIslandOn(next)
+                window.dispatchEvent(new CustomEvent('whale:live-island-prefs', { detail: { floatingIsland: next } }))
                 void runtimeBridge.companionDashboard({ operation: 'liveIslandPrefs', floatingIsland: next }).catch(() => {})
               }}
             >

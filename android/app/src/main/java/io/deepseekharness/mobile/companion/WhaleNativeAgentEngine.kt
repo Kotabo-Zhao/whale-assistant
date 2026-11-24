@@ -165,6 +165,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         require(trimmed.isNotEmpty()) { "请输入内容后再发送" }
 
         // 0. 统一执行模式与后台 Worker 生命周期前置路由（查状态 / 追问透传 / 精准取消 / 清理 / 显式后台派发）
+        var execMode = WhaleExecutionRouter.Mode.FOREGROUND_AGENT
         if (!isWorkerSession) {
             val activeWorkers = WhaleNativeWorkerPool.activeWorkers()
             val recentWorkers = WhaleNativeWorkerPool.recentFinishedWorkers()
@@ -174,6 +175,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 recentFinished = recentWorkers,
                 hasImages = images.isNotEmpty(),
             )
+            execMode = execDecision.mode
             when (execDecision.mode) {
                 WhaleExecutionRouter.Mode.WORKER_STATUS -> {
                     val replyText = WhaleExecutionRouter.formatStatusReply(activeWorkers, recentWorkers, execDecision.targetWorker)
@@ -191,15 +193,14 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         execDecision.targetWorker != null -> {
                             val t = execDecision.targetWorker
                             WhaleNativeWorkerPool.cancel(t.id)
+                            WhaleNativeLiveNotification.clear(app)
                             "已停止后台任务「${t.title}」（`${t.id}`）。"
                         }
                         execDecision.ambiguousWorkers.isNotEmpty() -> {
                             buildString {
-                                append("当前有 **${execDecision.ambiguousWorkers.size}** 个活跃后台任务，请指明要取消哪一个：
-")
+                                append("当前有 **${execDecision.ambiguousWorkers.size}** 个活跃后台任务，请指明要取消哪一个：\n")
                                 execDecision.ambiguousWorkers.forEachIndexed { i, w ->
-                                    append("${i + 1}. **${w.title}**（${w.currentStep}，`${w.id}`）
-")
+                                    append("${i + 1}. **${w.title}**（${w.currentStep}，`${w.id}`）\n")
                                 }
                             }.trim()
                         }
@@ -219,17 +220,14 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         execDecision.targetWorker != null -> {
                             val t = execDecision.targetWorker
                             val (ok, detail) = WhaleNativeWorkerPool.deliverFollowup(t.id, execDecision.payload)
-                            if (ok) "已将补充指令实时透传给后台任务「${t.title}」（`${t.id}`）：
-> ${execDecision.payload}"
+                            if (ok) "已将补充指令实时透传给后台任务「${t.title}」（`${t.id}`）：\n> ${execDecision.payload}"
                             else "透传失败：$detail"
                         }
                         execDecision.ambiguousWorkers.isNotEmpty() -> {
                             buildString {
-                                append("当前有 **${execDecision.ambiguousWorkers.size}** 个活跃后台任务，请告诉我要补充给哪一个：
-")
+                                append("当前有 **${execDecision.ambiguousWorkers.size}** 个活跃后台任务，请告诉我要补充给哪一个：\n")
                                 execDecision.ambiguousWorkers.forEachIndexed { i, w ->
-                                    append("${i + 1}. **${w.title}**（`${w.id}`）
-")
+                                    append("${i + 1}. **${w.title}**（`${w.id}`）\n")
                                 }
                             }.trim()
                         }
@@ -261,24 +259,42 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     val title = execDecision.workerTitle.ifBlank { "后台任务" }
                     val taskPrompt = execDecision.payload.ifBlank { trimmed }
                     val workerCtrl = RunControl()
+                    WhaleNativeLiveNotification.update(app, title = title, subtitle = "后台任务已启动", ongoing = true, indeterminate = true)
                     WhaleNativeWorkerPool.submit(title = title, id = jobId, priorityBy = "launch") {
                         WhaleNativeWorkerPool.attachControl(jobId, workerCtrl)
-                        val res = WhaleNativeAgentEngine(app).send(
-                            userMessage = taskPrompt,
-                            history = emptyList(),
-                            sessionId = "whale-worker-$jobId",
-                            onProgress = { round, step, preview ->
-                                WhaleNativeWorkerPool.updateProgress(jobId, round = round, step = step, preview = preview)
-                            },
-                            control = workerCtrl,
-                        )
-                        res.reply
+                        try {
+                            val res = WhaleNativeAgentEngine(app).send(
+                                userMessage = taskPrompt,
+                                history = emptyList(),
+                                sessionId = "whale-worker-$jobId",
+                                onProgress = { round, step, preview ->
+                                    WhaleNativeWorkerPool.updateProgress(jobId, round = round, step = step, preview = preview)
+                                    WhaleNativeLiveNotification.update(app, title = title, subtitle = step.take(40), ongoing = true, indeterminate = true)
+                                },
+                                control = workerCtrl,
+                            )
+                            WhaleNativeLiveNotification.update(
+                                app,
+                                title = "已完成：$title",
+                                subtitle = res.reply.replace("\n", " ").take(80),
+                                ongoing = false,
+                                indeterminate = false,
+                            )
+                            res.reply
+                        } catch (err: Throwable) {
+                            WhaleNativeLiveNotification.update(
+                                app,
+                                title = "后台任务异常：$title",
+                                subtitle = (err.message ?: err.javaClass.simpleName).take(80),
+                                ongoing = false,
+                                indeterminate = false,
+                            )
+                            throw err
+                        }
                     }
                     val replyText = buildString {
-                        append("已启动独立后台任务：**").append(title).append("**
-")
-                        append("- 任务 ID：`").append(jobId).append("`
-")
+                        append("已启动独立后台任务：**").append(title).append("**\n")
+                        append("- 任务 ID：`").append(jobId).append("`\n")
                         append("- 你可以继续在前台聊其他事；随时对我说「后台任务怎么样了」「给它补充…」「取消这个后台任务」来实时管理它。")
                     }
                     listener?.onDelta(replyText)
@@ -301,7 +317,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val allEndpoints = resolveEndpoints(store, settings)
         val rawEndpoint = allEndpoints.first()
         val budgetProgress = runCatching { WhaleTokenMeter.snapshot(app).progress }.getOrDefault(0f)
-        val routeDecision = WhaleModelRouter.routeWithPrefs(app, rawEndpoint.model, trimmed, images.isNotEmpty(), budgetProgress)
+        val effectiveBudget = if (execMode == WhaleExecutionRouter.Mode.DIRECT_CHAT) maxOf(budgetProgress, 0.90f) else budgetProgress
+        val routeDecision = WhaleModelRouter.routeWithPrefs(app, rawEndpoint.model, trimmed, images.isNotEmpty(), effectiveBudget)
         val endpoint = rawEndpoint.copy(model = routeDecision.model)
         val fallbackEndpoints = allEndpoints.drop(1)
         val expandedCategories = mutableSetOf<String>()
@@ -467,7 +484,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             listener?.onPhase(roundPhase)
             if (!isWorkerSession) {
-                WhaleLiveIslandBus.reportForeground("鲸鱼助手", roundPhase.substringAfter('|').take(22), trimmed.take(80))
+                if (!isWorkerSession) WhaleLiveIslandBus.reportForeground("鲸鱼助手", roundPhase.substringAfter('|').take(22), trimmed.take(80))
             }
             onProgress?.invoke(round + 1, "第 ${round + 1} 轮推理中…", finalReply)
             val streamBridge = if (listener != null || onProgress != null) {
@@ -515,7 +532,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     break
                 }
                 if (control?.steerInterrupt?.getAndSet(false) == true && control.hasPendingSteer()) {
-                    val notes = control.drainSteers()
+                    val notes = control.drainSteers().also { if (it.isNotEmpty() && isWorkerSession) WhaleNativeWorkerPool.markInputsRead(sessionId.removePrefix("whale-worker-")) }
                     repeatGuard.resetOnUserInput()
                     messages.put(JSONObject().put("role", "user").put("content", "[用户中途补充/修正] ${notes.joinToString("\n")}"))
                     listener?.onPhase("restarting")
@@ -528,7 +545,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 break
             }
             if (control?.steerInterrupt?.getAndSet(false) == true || control?.hasPendingSteer() == true) {
-                val notes = control.drainSteers()
+                val notes = control.drainSteers().also { if (it.isNotEmpty() && isWorkerSession) WhaleNativeWorkerPool.markInputsRead(sessionId.removePrefix("whale-worker-")) }
                 if (notes.isNotEmpty() && (turn.toolCalls == null || turn.toolCalls.length() == 0)) {
                     messages.put(JSONObject().put("role", "user").put("content", "[用户中途补充/修正] ${notes.joinToString("\n")}"))
                     listener?.onPhase("restarting")
@@ -709,7 +726,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
                 listener?.onStep(step)
                 if (!isWorkerSession) {
-                    WhaleLiveIslandBus.reportForeground("鲸鱼助手", outcome.label.take(22), "已完成 ${steps.size} 步 · ${p.fnName}（${dt}ms）")
+                    if (!isWorkerSession) WhaleLiveIslandBus.reportForeground("鲸鱼助手", outcome.label.take(22), "已完成 ${steps.size} 步 · ${p.fnName}（${dt}ms）")
                 }
                 onProgress?.invoke(round + 1, "第 ${round + 1} 轮 · ${outcome.label}", "[${p.fnName}] ${outcome.label}（${dt}ms）")
                 roundToolIndices.add(messages.length())
@@ -750,7 +767,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
             if (control?.cancelled?.get() == true) break
             if (control?.hasPendingSteer() == true) {
-                val notes = control.drainSteers()
+                val notes = control.drainSteers().also { if (it.isNotEmpty() && isWorkerSession) WhaleNativeWorkerPool.markInputsRead(sessionId.removePrefix("whale-worker-")) }
                 if (notes.isNotEmpty()) {
                     repeatGuard.resetOnUserInput()
                     messages.put(JSONObject().put("role", "user").put("content", "[用户中途补充/修正] ${notes.joinToString("\n")}"))
@@ -821,8 +838,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             }
         }
         if (!isWorkerSession) {
-            if (wasCancelled) WhaleLiveIslandBus.clearForeground()
-            else WhaleLiveIslandBus.completeForeground(ok = true, summary = cleanReply.take(48))
+            if (!isWorkerSession) {
+                if (wasCancelled) WhaleLiveIslandBus.clearForeground()
+                else WhaleLiveIslandBus.completeForeground(ok = true, summary = cleanReply.take(48))
+            }
         }
         val finalStats = WhaleContextBudgeter.lastTurnStats
         if (finalStats.rawTotalChars > 0) {
