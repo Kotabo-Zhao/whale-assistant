@@ -202,7 +202,7 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           UPLOAD_FILES=()
-          for f in smoke-out/smoke-test-report.txt smoke-out/smoke-home.png smoke-out/smoke-after-tap.png; do
+          for f in smoke-out/smoke-test-report.txt smoke-out/*.png; do
             if [ -f "$f" ]; then UPLOAD_FILES+=("$f"); fi
           done
           if [ "${#UPLOAD_FILES[@]}" -gt 0 ]; then
