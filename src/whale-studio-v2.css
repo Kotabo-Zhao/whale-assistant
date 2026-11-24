@@ -1,0 +1,872 @@
+/* ============================================================================
+ * Whale Assistant — Studio V2 Complete Visual Architecture (2026-11)
+ *
+ * Covers 100% of WebView UI surfaces across 3 unmistakable aesthetic worlds:
+ *   1. simple — Deep-Sea Swiss Instrument (Precision hairlines, sapphire signal)
+ *   2. cute   — Pelagic Porcelain & Glass (Glazed sheen, cerulean + coral glow)
+ *   3. usagi  — Nagano Comic Zine (Butter cream paper, cocoa ink, hard sticker press)
+ *
+ * Loaded LAST in src/main.tsx for clean, conflict-free cascade authority.
+ * ============================================================================ */
+
+/* --------------------------------------------------------------------------
+ * 1. Authoritative Three-World Token System (Light & Dark)
+ * -------------------------------------------------------------------------- */
+:root,
+:root[data-style='simple'] {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-muted: #ebedf2;
+  --surface-hover: #e2e6ee;
+  --surface-sunken: #eef0f4;
+  --header-bg: rgba(244, 245, 247, 0.84);
+  --ink: #0b0f17;
+  --muted: #576071;
+  --field-label: #2c3444;
+  --icon-muted: #647084;
+  --line: rgba(11, 15, 23, 0.085);
+  --line-alt: rgba(11, 15, 23, 0.085);
+  --line-strong: rgba(11, 15, 23, 0.16);
+  --line-faint: rgba(11, 15, 23, 0.045);
+  --blue: #0f52ba;
+  --blue-hover: #0a3f94;
+  --blue-soft: rgba(15, 82, 186, 0.09);
+  --blue-line: rgba(15, 82, 186, 0.24);
+  --accent: #0f52ba;
+  --accent-strong: #0a3f94;
+  --accent-secondary: #0284c7;
+  --on-accent: #ffffff;
+  --brand-bg: #0b0f17;
+  --radius-control: 10px;
+  --radius-inner: 12px;
+  --radius-card: 15px;
+  --radius-dock: 18px;
+  --shadow-card: 0 1px 2px rgba(11, 15, 23, 0.04), 0 0 0 1px rgba(11, 15, 23, 0.03);
+  --shadow-elevated: 0 12px 32px -12px rgba(11, 15, 23, 0.14), 0 2px 6px rgba(11, 15, 23, 0.05);
+  --shadow-dock: 0 -1px 0 rgba(11, 15, 23, 0.07), 0 -10px 28px -18px rgba(11, 15, 23, 0.14);
+  --surface-sheen: none;
+  --card-border-w: 1px;
+  --press-ease: cubic-bezier(0.2, 0, 0, 1);
+  --press-ms: 110ms;
+}
+
+:root[data-theme='dark'],
+:root[data-style='simple'][data-theme='dark'] {
+  --bg: #06080c;
+  --surface: #0e131b;
+  --surface-raised: #151c28;
+  --surface-muted: #17202e;
+  --surface-hover: #1f2b3d;
+  --surface-sunken: #090c12;
+  --header-bg: rgba(6, 8, 12, 0.84);
+  --ink: #edf1f7;
+  --muted: #8a97ab;
+  --field-label: #cad4e3;
+  --icon-muted: #8a97ab;
+  --line: rgba(237, 241, 247, 0.09);
+  --line-alt: rgba(237, 241, 247, 0.09);
+  --line-strong: rgba(237, 241, 247, 0.18);
+  --line-faint: rgba(237, 241, 247, 0.05);
+  --blue: #60a5fa;
+  --blue-hover: #93c5fd;
+  --blue-soft: rgba(96, 165, 250, 0.14);
+  --blue-line: rgba(96, 165, 250, 0.30);
+  --accent: #60a5fa;
+  --accent-strong: #93c5fd;
+  --accent-secondary: #38bdf8;
+  --on-accent: #06080c;
+  --brand-bg: #edf1f7;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 6px 20px -12px rgba(0, 0, 0, 0.65);
+  --shadow-elevated: 0 16px 40px -12px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-dock: 0 -1px 0 rgba(255, 255, 255, 0.08), 0 -14px 32px -12px rgba(0, 0, 0, 0.65);
+  --surface-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* --- 2. CUTE: Pelagic Porcelain & Glass --- */
+:root[data-style='cute'] {
+  --bg: #eef6ff;
+  --surface: rgba(255, 255, 255, 0.94);
+  --surface-raised: #ffffff;
+  --surface-muted: #e3effc;
+  --surface-hover: #d5e7fb;
+  --surface-sunken: #e8f2fd;
+  --header-bg: rgba(238, 246, 255, 0.80);
+  --ink: #12263f;
+  --muted: #587497;
+  --field-label: #29466a;
+  --icon-muted: #5d7ba1;
+  --line: rgba(27, 126, 242, 0.12);
+  --line-alt: rgba(27, 126, 242, 0.12);
+  --line-strong: rgba(27, 126, 242, 0.24);
+  --line-faint: rgba(27, 126, 242, 0.06);
+  --blue: #1b7ef2;
+  --blue-hover: #0e66d1;
+  --blue-soft: rgba(27, 126, 242, 0.11);
+  --blue-line: rgba(27, 126, 242, 0.28);
+  --accent: #1b7ef2;
+  --accent-strong: #0e66d1;
+  --accent-secondary: #ff6b9d;
+  --on-accent: #ffffff;
+  --brand-bg: #1b7ef2;
+  --radius-control: 14px;
+  --radius-inner: 16px;
+  --radius-card: 22px;
+  --radius-dock: 26px;
+  --shadow-card: 0 8px 24px -16px rgba(18, 76, 152, 0.24), 0 1px 2px rgba(18, 76, 152, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --shadow-elevated: 0 16px 36px -14px rgba(18, 76, 152, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --shadow-dock: 0 10px 30px -14px rgba(18, 76, 152, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --surface-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --card-border-w: 1px;
+  --press-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --press-ms: 210ms;
+}
+
+:root[data-style='cute'][data-theme='dark'] {
+  --bg: #08111f;
+  --surface: rgba(16, 30, 52, 0.92);
+  --surface-raised: #172a47;
+  --surface-muted: #142540;
+  --surface-hover: #1c3356;
+  --surface-sunken: #0c1729;
+  --header-bg: rgba(8, 17, 31, 0.80);
+  --ink: #ecf4ff;
+  --muted: #8aa5c9;
+  --field-label: #c2d6f0;
+  --icon-muted: #8aa5c9;
+  --line: rgba(92, 200, 255, 0.14);
+  --line-alt: rgba(92, 200, 255, 0.14);
+  --line-strong: rgba(92, 200, 255, 0.28);
+  --line-faint: rgba(92, 200, 255, 0.07);
+  --blue: #5cc8ff;
+  --blue-hover: #8bd9ff;
+  --blue-soft: rgba(92, 200, 255, 0.15);
+  --blue-line: rgba(92, 200, 255, 0.34);
+  --accent: #5cc8ff;
+  --accent-strong: #8bd9ff;
+  --accent-secondary: #ff8fb8;
+  --on-accent: #071221;
+  --brand-bg: #5cc8ff;
+  --shadow-card: 0 10px 28px -14px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-elevated: 0 18px 42px -12px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  --shadow-dock: 0 14px 36px -12px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --surface-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* --- 3. USAGI: Nagano Comic Zine & Butter Paper --- */
+:root[data-style='usagi'] {
+  --bg: #fffbea;
+  --surface: #fffdf6;
+  --surface-raised: #ffffff;
+  --surface-muted: #fef0c3;
+  --surface-hover: #fde49b;
+  --surface-sunken: #fbf3d5;
+  --header-bg: rgba(255, 251, 234, 0.90);
+  --ink: #3a2312;
+  --muted: #846142;
+  --field-label: #58391e;
+  --icon-muted: #8a633f;
+  --line: #6b4423;
+  --line-alt: rgba(107, 68, 35, 0.32);
+  --line-strong: #5c3a1b;
+  --line-faint: rgba(107, 68, 35, 0.16);
+  --blue: #e08200;
+  --blue-hover: #b86600;
+  --blue-soft: rgba(251, 191, 36, 0.26);
+  --blue-line: #6b4423;
+  --accent: #e08200;
+  --accent-strong: #b86600;
+  --accent-secondary: #ff6b8b;
+  --on-accent: #2b1707;
+  --brand-bg: #f59e0b;
+  --radius-control: 14px;
+  --radius-inner: 16px;
+  --radius-card: 20px;
+  --radius-dock: 22px;
+  --shadow-card: 0 3px 0 rgba(92, 58, 27, 0.22);
+  --shadow-elevated: 0 5px 0 rgba(92, 58, 27, 0.28);
+  --shadow-dock: 0 4px 0 rgba(92, 58, 27, 0.25);
+  --surface-sheen: none;
+  --card-border-w: 1.6px;
+  --press-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --press-ms: 120ms;
+}
+
+:root[data-style='usagi'][data-theme='dark'] {
+  --bg: #18110b;
+  --surface: #241a12;
+  --surface-raised: #302216;
+  --surface-muted: #332417;
+  --surface-hover: #422e1d;
+  --surface-sunken: #1d150e;
+  --header-bg: rgba(24, 17, 11, 0.90);
+  --ink: #fef3c7;
+  --muted: #d5b78c;
+  --field-label: #f6dfaa;
+  --icon-muted: #cfa976;
+  --line: rgba(224, 159, 62, 0.44);
+  --line-alt: rgba(224, 159, 62, 0.28);
+  --line-strong: #e09f3e;
+  --line-faint: rgba(224, 159, 62, 0.14);
+  --blue: #fbbf24;
+  --blue-hover: #fcd34d;
+  --blue-soft: rgba(251, 191, 36, 0.18);
+  --blue-line: rgba(251, 191, 36, 0.48);
+  --accent: #fbbf24;
+  --accent-strong: #fcd34d;
+  --accent-secondary: #f472b6;
+  --on-accent: #241405;
+  --brand-bg: #fbbf24;
+  --shadow-card: 0 3px 0 #0e0905;
+  --shadow-elevated: 0 5px 0 #0c0704;
+  --shadow-dock: 0 4px 0 #0c0704;
+  --surface-sheen: none;
+  --card-border-w: 1.5px;
+}
+
+/* --------------------------------------------------------------------------
+ * 2. Atmospheric Canvas & Typographic Discipline (All Screens)
+ * -------------------------------------------------------------------------- */
+html,
+body {
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root[data-style='cute'] body,
+:root[data-style='cute'] .app-shell,
+:root[data-style='cute'] .whale-chat-screen {
+  background:
+    radial-gradient(120% 55% at 50% -12%, rgba(92, 200, 255, 0.22) 0%, transparent 62%),
+    radial-gradient(75% 45% at 96% 18%, rgba(255, 107, 157, 0.08) 0%, transparent 58%),
+    var(--bg);
+}
+
+:root[data-style='cute'][data-theme='dark'] body,
+:root[data-style='cute'][data-theme='dark'] .app-shell,
+:root[data-style='cute'][data-theme='dark'] .whale-chat-screen {
+  background:
+    radial-gradient(110% 50% at 50% -14%, rgba(56, 189, 248, 0.16) 0%, transparent 62%),
+    radial-gradient(70% 40% at 92% 16%, rgba(255, 143, 184, 0.08) 0%, transparent 56%),
+    var(--bg);
+}
+
+:root[data-style='usagi'] body,
+:root[data-style='usagi'] .app-shell,
+:root[data-style='usagi'] .whale-chat-screen {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(rgba(180, 115, 24, 0.10) 1px, transparent 1px),
+    radial-gradient(110% 45% at 50% -8%, rgba(254, 240, 138, 0.45) 0%, transparent 60%);
+  background-size: 20px 20px, 100% 100%;
+}
+
+:root[data-style='usagi'][data-theme='dark'] body,
+:root[data-style='usagi'][data-theme='dark'] .app-shell,
+:root[data-style='usagi'][data-theme='dark'] .whale-chat-screen {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(rgba(251, 191, 36, 0.065) 1px, transparent 1px),
+    radial-gradient(100% 45% at 50% -10%, rgba(120, 74, 24, 0.28) 0%, transparent 60%);
+  background-size: 22px 22px, 100% 100%;
+}
+
+/* Tabular numbers on every counter, badge, token readout, and status */
+.whale-power-badge,
+.whale-usage-pills span,
+.whale-msg-meta,
+.whale-voice-head span,
+.whale-autonomy-head span,
+.runtime-overview strong,
+.session-meta,
+.status-pill,
+.count-badge {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Crisp editorial headings across all subpages */
+.screen-heading h1,
+.screen-heading h2,
+.page-heading h1,
+.page-heading h2,
+.mobile-header h1,
+.mobile-header h2,
+.workspace-dialog-header h2 {
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+/* --------------------------------------------------------------------------
+ * 3. Floating Navigation Chrome (Mobile Bottom Dock + Desktop Sidebar + Header)
+ * -------------------------------------------------------------------------- */
+.mobile-header {
+  background: var(--header-bg);
+  backdrop-filter: blur(20px) saturate(165%);
+  -webkit-backdrop-filter: blur(20px) saturate(165%);
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.bottom-navigation {
+  background: var(--header-bg);
+  backdrop-filter: blur(22px) saturate(175%);
+  -webkit-backdrop-filter: blur(22px) saturate(175%);
+  border-top: 1px solid var(--line);
+  box-shadow: var(--shadow-dock);
+  padding: 6px 14px calc(6px + env(safe-area-inset-bottom, 0px));
+  gap: 10px;
+}
+
+.bottom-navigation-item {
+  position: relative;
+  border-radius: var(--radius-control);
+  transition: transform var(--press-ms) var(--press-ease), background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.bottom-navigation-item:active {
+  transform: scale(0.94);
+}
+
+/* Simple: Swiss top-rail precision bar */
+:root[data-style='simple'] .bottom-navigation-item.is-active {
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 650;
+}
+
+/* Cute: Luminous floating porcelain pill */
+:root[data-style='cute'] .bottom-navigation {
+  border-top: 1px solid var(--line);
+}
+
+:root[data-style='cute'] .bottom-navigation-item.is-active {
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(27, 126, 242, 0.14) 0%, rgba(255, 107, 157, 0.11) 100%);
+  color: var(--blue);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 4px 14px -8px rgba(27, 126, 242, 0.45);
+  font-weight: 650;
+}
+
+:root[data-style='cute'][data-theme='dark'] .bottom-navigation-item.is-active {
+  background: linear-gradient(135deg, rgba(92, 200, 255, 0.18) 0%, rgba(255, 143, 184, 0.12) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 16px -8px rgba(0, 0, 0, 0.6);
+}
+
+/* Usagi: Comic sticker active tab */
+:root[data-style='usagi'] .bottom-navigation-item.is-active {
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fef08a 0%, #fde047 100%) !important;
+  border: 1.5px solid #5c3a1b !important;
+  box-shadow: 0 2.5px 0 #5c3a1b;
+  color: #3a2312 !important;
+  font-weight: 700;
+}
+
+:root[data-style='usagi'][data-theme='dark'] .bottom-navigation-item.is-active {
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.28) 0%, rgba(217, 119, 6, 0.22) 100%) !important;
+  border: 1.5px solid #e09f3e !important;
+  box-shadow: 0 2.5px 0 #0e0905;
+  color: #fef3c7 !important;
+}
+
+:root[data-style='usagi'] .bottom-navigation-item:active {
+  transform: translate3d(0, 2px, 0);
+}
+
+/* Desktop Sidebar */
+.app-sidebar {
+  background: var(--surface-sunken);
+  border-right: var(--card-border-w) solid var(--line-alt);
+}
+
+.sidebar-item {
+  border-radius: var(--radius-control);
+  transition: transform var(--press-ms) var(--press-ease), background-color 160ms ease, color 160ms ease;
+}
+
+.sidebar-item.is-active {
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 650;
+}
+
+/* --------------------------------------------------------------------------
+ * 4. Universal Cards, Grouped Lists & Settings Surfaces (All Subpages)
+ * -------------------------------------------------------------------------- */
+.settings-section,
+.runtime-overview,
+.detail-section,
+.launch-panel,
+.whale-autonomy-card,
+.whale-power-card,
+.onboarding-card,
+.workspace-dialog,
+.dialog-card,
+.modal-card,
+.automation-card,
+.companion-card,
+.plugin-card,
+.market-card,
+.task-card {
+  border-radius: var(--radius-card);
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition: border-color 180ms ease, box-shadow 200ms ease, background-color 180ms ease;
+}
+
+/* Usagi: Tactile comic outline + hard base shadow on all cards */
+:root[data-style='usagi'] .settings-section,
+:root[data-style='usagi'] .runtime-overview,
+:root[data-style='usagi'] .detail-section,
+:root[data-style='usagi'] .whale-autonomy-card,
+:root[data-style='usagi'] .whale-power-card,
+:root[data-style='usagi'] .workspace-dialog,
+:root[data-style='usagi'] .management-list {
+  border: 1.6px solid var(--line);
+  box-shadow: var(--shadow-card);
+}
+
+/* Inset grouped directory & settings rows */
+.management-list {
+  border-radius: var(--radius-card);
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.management-row {
+  transition: background-color 140ms ease, transform var(--press-ms) var(--press-ease);
+}
+
+.management-row:hover {
+  background: var(--surface-hover);
+}
+
+.management-row:active {
+  transform: scale(0.992);
+}
+
+/* Settings Search Pill */
+.settings-search {
+  border-radius: 999px;
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition: border-color 160ms ease, box-shadow 180ms ease;
+}
+
+.settings-search:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+/* --------------------------------------------------------------------------
+ * 5. Buttons, Segmented Controls, Switches & Form Inputs
+ * -------------------------------------------------------------------------- */
+.button,
+.whale-perm-chip,
+.whale-autonomy-pill,
+.appearance-options button[aria-pressed] {
+  border-radius: var(--radius-control);
+  transition:
+    transform var(--press-ms) var(--press-ease),
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.button:not(:disabled):active,
+.whale-autonomy-pill:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+.button-primary {
+  background: var(--blue);
+  color: var(--on-accent);
+  border: 1px solid transparent;
+  box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--blue) 65%, transparent);
+}
+
+:root[data-style='cute'] .button-primary {
+  background: linear-gradient(135deg, var(--blue) 0%, #3b9cff 100%);
+  box-shadow: 0 8px 20px -8px rgba(27, 126, 242, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+:root[data-style='usagi'] .button-primary {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+  color: #2b1707;
+  border: 1.5px solid #5c3a1b;
+  box-shadow: 0 3px 0 #5c3a1b;
+  font-weight: 700;
+}
+
+:root[data-style='usagi'] .button-primary:not(:disabled):active {
+  transform: translate3d(0, 2px, 0);
+  box-shadow: 0 1px 0 #5c3a1b;
+}
+
+:root[data-style='usagi'] .button-secondary {
+  border: 1.5px solid var(--line);
+  box-shadow: 0 2.5px 0 rgba(92, 58, 27, 0.25);
+}
+
+:root[data-style='usagi'] .button-secondary:not(:disabled):active {
+  transform: translate3d(0, 2px, 0);
+  box-shadow: 0 0.5px 0 rgba(92, 58, 27, 0.25);
+}
+
+/* Segmented Controls & Autonomy Preset Pills */
+.segmented,
+.whale-autonomy-pills {
+  background: var(--surface-muted);
+  border-radius: calc(var(--radius-control) + 4px);
+  padding: 4px;
+  border: 1px solid var(--line-faint);
+}
+
+.segmented button.active,
+.whale-autonomy-pill.is-active {
+  background: var(--surface-raised);
+  color: var(--blue);
+  box-shadow: 0 2px 8px -2px rgba(11, 15, 23, 0.14), 0 0 0 1px var(--line-faint);
+  font-weight: 650;
+}
+
+:root[data-style='cute'] .whale-autonomy-pill.is-active,
+:root[data-style='cute'] .segmented button.active {
+  background: var(--surface-raised);
+  color: var(--blue);
+  box-shadow: 0 4px 12px -4px rgba(27, 126, 242, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+:root[data-style='usagi'] .whale-autonomy-pill.is-active,
+:root[data-style='usagi'] .segmented button.active {
+  background: #fde047;
+  color: #3a2312;
+  border: 1.5px solid #5c3a1b;
+  box-shadow: 0 2px 0 #5c3a1b;
+}
+
+:root[data-style='usagi'][data-theme='dark'] .whale-autonomy-pill.is-active,
+:root[data-style='usagi'][data-theme='dark'] .segmented button.active {
+  background: #fbbf24;
+  color: #241405;
+  border-color: #5c3a1b;
+}
+
+/* Tactile Pill Switches (Accessible & Theme-Native) */
+input[type='checkbox'][role='switch'] {
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+input[type='checkbox'][role='switch']:checked {
+  background-color: var(--blue);
+  border-color: var(--blue);
+}
+
+:root[data-style='cute'] input[type='checkbox'][role='switch']:checked {
+  background: linear-gradient(135deg, var(--blue) 0%, var(--accent-secondary) 135%);
+  box-shadow: 0 3px 10px -3px rgba(27, 126, 242, 0.45);
+}
+
+:root[data-style='usagi'] input[type='checkbox'][role='switch'] {
+  border: 1.5px solid #5c3a1b;
+}
+
+:root[data-style='usagi'] input[type='checkbox'][role='switch']:checked {
+  background: #f59e0b;
+  border-color: #5c3a1b;
+}
+
+/* Quick Live-Island Strip inside WhaleAutonomyCard */
+.whale-island-quickbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-inner);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-faint);
+}
+
+.whale-island-quickbar-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.whale-island-quickbar-label strong {
+  font-size: 0.84rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.whale-island-quickbar-label small {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.whale-island-quickbar-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.whale-island-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--press-ms) var(--press-ease), background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.whale-island-chip.is-on {
+  background: var(--blue-soft);
+  border-color: var(--blue-line);
+  color: var(--blue);
+}
+
+:root[data-style='usagi'] .whale-island-chip {
+  border: 1.5px solid var(--line);
+  box-shadow: 0 2px 0 rgba(92, 58, 27, 0.25);
+}
+
+:root[data-style='usagi'] .whale-island-chip.is-on {
+  background: #fde047;
+  color: #3a2312;
+  border-color: #5c3a1b;
+  box-shadow: 0 2px 0 #5c3a1b;
+}
+
+:root[data-style='usagi'][data-theme='dark'] .whale-island-chip.is-on {
+  background: rgba(251, 191, 36, 0.26);
+  color: #fef3c7;
+  border-color: #e09f3e;
+}
+
+.whale-island-chip:active {
+  transform: scale(0.95);
+}
+
+/* --------------------------------------------------------------------------
+ * 6. Chat Studio — Hero, Bubbles, Markdown, Tool Rail & Floating Composer
+ * -------------------------------------------------------------------------- */
+.whale-chat-header {
+  background: var(--header-bg);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  border: var(--card-border-w) solid var(--line-alt);
+  box-shadow: var(--shadow-elevated);
+}
+
+:root[data-style='usagi'] .whale-chat-header {
+  border: 1.6px solid var(--line);
+  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.26);
+}
+
+/* Empty Hero Stage & Starter Prompts */
+.whale-starter-card {
+  border-radius: var(--radius-inner);
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--press-ms) var(--press-ease), border-color 160ms ease, box-shadow 180ms ease;
+}
+
+.whale-starter-card:active {
+  transform: scale(0.97);
+}
+
+:root[data-style='cute'] .whale-starter-card {
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-style='usagi'] .whale-starter-card {
+  border: 1.5px solid var(--line);
+  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.22);
+  border-radius: 18px;
+}
+
+:root[data-style='usagi'] .whale-starter-card:active {
+  transform: translate3d(0, 2px, 0);
+  box-shadow: 0 1px 0 rgba(92, 58, 27, 0.22);
+}
+
+/* Message Bubbles — Distinct Material per Theme */
+:root[data-style='simple'] .whale-msg-user .whale-msg-bubble {
+  background: var(--blue);
+  color: var(--on-accent);
+  border-radius: 16px 16px 5px 16px;
+  box-shadow: 0 4px 14px -8px rgba(15, 82, 186, 0.45);
+}
+
+:root[data-style='cute'] .whale-msg-user .whale-msg-bubble {
+  background: linear-gradient(135deg, #1b7ef2 0%, #3aa0ff 100%);
+  color: #ffffff;
+  border-radius: 22px 22px 6px 22px;
+  box-shadow: 0 8px 22px -10px rgba(27, 126, 242, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+:root[data-style='cute'] .whale-msg-assistant .whale-msg-bubble {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 22px 22px 22px 6px;
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-style='usagi'] .whale-msg-user .whale-msg-bubble {
+  background: linear-gradient(180deg, #fde68a 0%, #fcd34d 100%);
+  color: #3a2312;
+  border: 1.6px solid #5c3a1b;
+  border-radius: 20px 20px 6px 20px;
+  box-shadow: 0 3px 0 #5c3a1b;
+}
+
+:root[data-style='usagi'][data-theme='dark'] .whale-msg-user .whale-msg-bubble {
+  background: linear-gradient(180deg, #d97706 0%, #b45309 100%);
+  color: #fffbeb;
+  border-color: #fbbf24;
+  box-shadow: 0 3px 0 #0c0704;
+}
+
+:root[data-style='usagi'] .whale-msg-assistant .whale-msg-bubble {
+  background: var(--surface);
+  border: 1.6px solid var(--line);
+  border-radius: 20px 20px 20px 6px;
+  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.18);
+}
+
+/* Editorial Markdown Polish inside Assistant Replies */
+.whale-msg-assistant .whale-msg-content p,
+.whale-msg-assistant .whale-msg-bubble p {
+  line-height: 1.68;
+}
+
+.whale-msg-assistant pre {
+  border-radius: var(--radius-inner);
+  border: 1px solid var(--line);
+  background: var(--terminal-bg, #0d1117);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.whale-msg-assistant code:not(pre code) {
+  padding: 0.12em 0.42em;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  border: 1px solid var(--line-faint);
+  font-size: 0.88em;
+}
+
+.whale-msg-assistant blockquote {
+  margin: 0.65em 0;
+  padding: 0.45em 0.9em;
+  border-left: 3px solid var(--blue);
+  background: var(--blue-soft);
+  border-radius: 0 10px 10px 0;
+}
+
+.whale-msg-assistant table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: var(--radius-inner);
+  overflow: hidden;
+  border: 1px solid var(--line-alt);
+}
+
+.whale-msg-assistant th {
+  background: var(--surface-muted);
+  font-weight: 650;
+}
+
+/* Tool Steps Accordion & Action Receipts */
+.whale-tool-steps,
+.whale-receipt-card {
+  border-radius: var(--radius-inner);
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface-sunken);
+}
+
+:root[data-style='usagi'] .whale-tool-steps,
+:root[data-style='usagi'] .whale-receipt-card {
+  border: 1.5px solid var(--line-alt);
+  box-shadow: 0 2px 0 rgba(92, 58, 27, 0.15);
+}
+
+/* Floating Composer Shell */
+.whale-composer {
+  background: var(--surface-raised);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: var(--card-border-w) solid var(--line-strong);
+  box-shadow: var(--shadow-elevated);
+}
+
+:root[data-style='cute'] .whale-composer {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(27, 126, 242, 0.18);
+  box-shadow: 0 12px 32px -14px rgba(18, 76, 152, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+:root[data-style='cute'][data-theme='dark'] .whale-composer {
+  background: rgba(20, 36, 62, 0.94);
+  border: 1px solid rgba(92, 200, 255, 0.24);
+  box-shadow: 0 14px 36px -12px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+:root[data-style='cute'] .whale-send-btn:not(:disabled):not(.is-stop) {
+  background: linear-gradient(135deg, #1b7ef2 0%, #3aa0ff 65%, #ff6b9d 140%);
+}
+
+/* Sessions Drawer & Modals */
+.whale-sessions-drawer {
+  background: var(--surface);
+  border-right: var(--card-border-w) solid var(--line-alt);
+  box-shadow: var(--shadow-elevated);
+}
+
+.dialog-backdrop,
+.modal-backdrop,
+.whale-drawer-backdrop {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Toast Notifications */
+.toast {
+  border-radius: 999px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-elevated);
+}
+
+:root[data-style='usagi'] .toast {
+  border: 1.5px solid #e09f3e;
+  box-shadow: 0 3px 0 #0e0905;
+}
+
+/* --------------------------------------------------------------------------
+ * 7. Reduced Motion & Eco Safety
+ * -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .bottom-navigation-item,
+  .sidebar-item,
+  .button,
+  .whale-starter-card,
+  .whale-island-chip,
+  .management-row {
+    transition: none !important;
+  }
+}

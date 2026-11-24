@@ -105,6 +105,8 @@ export function WhaleAutonomyCard({
   const [voiceKeyInput, setVoiceKeyInput] = useState('')
   const [voiceStatus, setVoiceStatus] = useState('')
   const [petSizeDp, setPetSizeDp] = useState(88)
+  const [nativeNotifOn, setNativeNotifOn] = useState(true)
+  const [floatingIslandOn, setFloatingIslandOn] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -124,6 +126,16 @@ export function WhaleAutonomyCard({
     if (runtimeBridge.getPetSize) {
       void runtimeBridge.getPetSize()
         .then(res => { if (active && res && typeof res.sizeDp === 'number') setPetSizeDp(res.sizeDp) })
+        .catch(() => undefined)
+    }
+    if (runtimeBridge.companionDashboard) {
+      void runtimeBridge.companionDashboard({ operation: 'liveIslandPrefs' })
+        .then(res => {
+          if (!active || !res || typeof res !== 'object') return
+          const prefs = res as { nativeNotif?: boolean; floatingIsland?: boolean }
+          if (typeof prefs.nativeNotif === 'boolean') setNativeNotifOn(prefs.nativeNotif)
+          if (typeof prefs.floatingIsland === 'boolean') setFloatingIslandOn(prefs.floatingIsland)
+        })
         .catch(() => undefined)
     }
     return () => {
@@ -223,6 +235,39 @@ export function WhaleAutonomyCard({
             />
           </label>
         ))}
+      </div>
+
+      <div className="whale-island-quickbar" aria-label={t('灵动岛与实况通知')}>
+        <div className="whale-island-quickbar-label">
+          <strong>{t('灵动岛与实况进度')}</strong>
+          <small>{t('任务运行时自动弹出，可分别开关')}</small>
+        </div>
+        <div className="whale-island-quickbar-chips">
+          <button
+            type="button"
+            className={'whale-island-chip' + (nativeNotifOn ? ' is-on' : '')}
+            aria-pressed={nativeNotifOn}
+            onClick={() => {
+              const next = !nativeNotifOn
+              setNativeNotifOn(next)
+              void runtimeBridge.companionDashboard?.({ operation: 'liveIslandPrefs', nativeNotif: next }).catch(() => undefined)
+            }}
+          >
+            {nativeNotifOn ? '● ' : '○ '}{t('系统实况通知')}
+          </button>
+          <button
+            type="button"
+            className={'whale-island-chip' + (floatingIslandOn ? ' is-on' : '')}
+            aria-pressed={floatingIslandOn}
+            onClick={() => {
+              const next = !floatingIslandOn
+              setFloatingIslandOn(next)
+              void runtimeBridge.companionDashboard?.({ operation: 'liveIslandPrefs', floatingIsland: next }).catch(() => undefined)
+            }}
+          >
+            {floatingIslandOn ? '● ' : '○ '}{t('自绘顶部岛')}
+          </button>
+        </div>
       </div>
 
       <details className="whale-voice-box whale-collapsible">
