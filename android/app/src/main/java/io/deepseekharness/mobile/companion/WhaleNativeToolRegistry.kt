@@ -1890,9 +1890,19 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_worker_cancel" -> {
                     val id = args.str("id").trim()
                     require(id.isNotEmpty()) { "缺少 Worker ID" }
-                    val cancelled = WhaleNativeWorkerPool.cancel(id)
+                    val poolCancelled = WhaleNativeWorkerPool.cancel(id)
+                    val dashCancelled = runCatching { WorkerDashboardStore(app).forceCancelWorker(id) }.getOrDefault(false)
                     WhaleLongTaskStore.markTerminal(app, id, "cancelled")
-                    ToolOutcome(name, if (cancelled) "已取消后台 Worker" else "未找到运行中的后台 Worker", cancelled, JSONObject().put("id", id).put("cancelled", cancelled).toString(), mutating = true)
+                    if (WhaleNativeWorkerPool.activeCount() == 0) WhaleNativeLiveNotification.cancel(app)
+                    WhaleAppControlBus.emit(JSONObject().put("action", "refresh"))
+                    val ok = poolCancelled || dashCancelled
+                    ToolOutcome(
+                        name,
+                        if (ok) "已停止并回收后台 Worker（$id）" else "未找到对应的后台 Worker（$id）",
+                        ok,
+                        JSONObject().put("id", id).put("cancelled", ok).put("poolCancelled", poolCancelled).put("dashboardCancelled", dashCancelled).toString(),
+                        mutating = true,
+                    )
                 }
                 "whale_worker_followup" -> {
                     val id = args.str("id").trim()
@@ -2356,23 +2366,35 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         "delete" -> {
                             val id = args.str("id").trim()
                             require(id.isNotEmpty()) { "缺少要删除的 Worker ID" }
+                            WhaleNativeWorkerPool.cancel(id)
                             val poolRemoved = WhaleNativeWorkerPool.remove(id)
-                            val dashRemoved = runCatching { dashboard.deleteWorker(id) }.getOrDefault(false)
+                            val dashRemoved = runCatching { dashboard.forceCancelWorker(id) || dashboard.deleteWorker(id) }.getOrDefault(false)
                             JSONObject().put("action", action).put("id", id).put("removed", poolRemoved || dashRemoved)
+                        }
+                        "cancel_all", "force_clear_badge" -> {
+                            val active = WhaleNativeWorkerPool.activeWorkers()
+                            active.forEach { WhaleNativeWorkerPool.cancel(it.id) }
+                            val poolCleared = WhaleNativeWorkerPool.clearFinished()
+                            val dashCleared = dashboard.clearStaleAndFinished(forceAll = true)
+                            WhaleNativeLiveNotification.cancel(app)
+                            JSONObject().put("action", action).put("clearedCount", active.size + poolCleared + dashCleared)
                         }
                         "clear_badge" -> {
                             val inbox = WorkerReportInbox(app)
                             val unseenIds = inbox.unseen().mapNotNull { it.optString("id").takeIf(String::isNotBlank) }
                             if (unseenIds.isNotEmpty()) inbox.markSeen(unseenIds)
-                            val cleared = dashboard.clearStaleAndFinished()
-                            JSONObject().put("action", action).put("clearedCount", cleared + unseenIds.size)
+                            val poolCleared = WhaleNativeWorkerPool.clearFinished()
+                            val cleared = dashboard.clearStaleAndFinished(forceAll = false)
+                            if (WhaleNativeWorkerPool.activeCount() == 0) WhaleNativeLiveNotification.cancel(app)
+                            JSONObject().put("action", action).put("clearedCount", poolCleared + cleared + unseenIds.size)
                         }
                         else -> {
                             val poolCleared = WhaleNativeWorkerPool.clearFinished()
-                            val dashCleared = dashboard.clearStaleAndFinished()
+                            val dashCleared = dashboard.clearStaleAndFinished(forceAll = false)
                             JSONObject().put("action", "clear_completed").put("clearedCount", poolCleared + dashCleared)
                         }
                     }
+                    WhaleAppControlBus.emit(JSONObject().put("action", "refresh"))
                     ToolOutcome(name, "清理后台任务与桌宠徽标", true, out.toString(), mutating = true)
                 }
                 "whale_ui_refresh" -> {

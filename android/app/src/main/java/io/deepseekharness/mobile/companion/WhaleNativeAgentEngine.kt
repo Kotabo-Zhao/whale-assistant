@@ -193,7 +193,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         execDecision.targetWorker != null -> {
                             val t = execDecision.targetWorker
                             WhaleNativeWorkerPool.cancel(t.id)
+                            runCatching { WorkerDashboardStore(app).forceCancelWorker(t.id) }
+                            WhaleLongTaskStore.markTerminal(app, t.id, "cancelled")
                             WhaleNativeLiveNotification.cancel(app)
+                            WhaleAppControlBus.emit(JSONObject().put("action", "refresh"))
                             "已停止后台任务「${t.title}」（`${t.id}`）。"
                         }
                         execDecision.ambiguousWorkers.isNotEmpty() -> {
@@ -243,8 +246,12 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     )
                 }
                 WhaleExecutionRouter.Mode.WORKER_CLEAR -> {
-                    val cleared = WhaleNativeWorkerPool.clearFinished()
-                    val replyText = if (cleared > 0) "已清理 $cleared 条已结束的后台任务记录。" else "当前没有可清理的已结束后台任务。"
+                    val poolCleared = WhaleNativeWorkerPool.clearFinished()
+                    val dashCleared = runCatching { WorkerDashboardStore(app).clearStaleAndFinished(forceAll = false) }.getOrDefault(0)
+                    if (WhaleNativeWorkerPool.activeCount() == 0) WhaleNativeLiveNotification.cancel(app)
+                    WhaleAppControlBus.emit(JSONObject().put("action", "refresh"))
+                    val total = poolCleared + dashCleared
+                    val replyText = if (total > 0) "已回收并清理 $total 条已结束/僵尸后台任务记录，桌宠徽标已刷新归零。" else "当前没有可清理的僵尸或已结束后台任务，徽标已刷新。"
                     listener?.onDelta(replyText)
                     return ChatResult(
                         reply = replyText,

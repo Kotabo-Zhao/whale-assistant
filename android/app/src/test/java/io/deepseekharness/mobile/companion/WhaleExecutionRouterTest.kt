@@ -96,4 +96,10 @@ class WhaleExecutionRouterTest {
         val agent = WhaleExecutionRouter.route("帮我写一个 Python 排序脚本并运行", emptyList())
         assertEquals(WhaleExecutionRouter.Mode.FOREGROUND_AGENT, agent.mode)
     }
+
+    @Test
+    fun `badge cleanup request routes to WORKER_CLEAR`() {
+        val d = WhaleExecutionRouter.route("徽标清掉", emptyList())
+        assertEquals(WhaleExecutionRouter.Mode.WORKER_CLEAR, d.mode)
+    }
 }

@@ -50,7 +50,7 @@ internal object WhaleExecutionRouter {
     )
 
     private val workerNounHints = listOf(
-        "后台任务", "后台工单", "后台工作", "后台线程", "worker", "子代理", "子任务", "后台那个", "异步任务",
+        "后台任务", "后台工单", "后台工作", "后台线程", "worker", "子代理", "子任务", "后台那个", "异步任务", "徽标", "红点", "角标",
     )
     private val statusHints = listOf(
         "怎么样了", "进度", "进展", "状态", "跑完", "完成了吗", "做完了吗", "还在跑", "有哪些", "列表", "查看", "查一下", "status", "progress",
@@ -59,7 +59,7 @@ internal object WhaleExecutionRouter {
         "取消", "停止", "停掉", "终止", "关掉", "别跑了", "不用做了", "cancel", "stop", "abort", "kill",
     )
     private val clearHints = listOf(
-        "清理", "清除", "清空", "删掉历史", "clear",
+        "清理", "清除", "清空", "清掉", "归零", "消掉", "删掉历史", "clear",
     )
     private val followupHints = listOf(
         "补充", "追加", "顺便", "改成", "加上", "再查", "告诉它", "跟它说", "发给后台", "转告", "steer", "followup",

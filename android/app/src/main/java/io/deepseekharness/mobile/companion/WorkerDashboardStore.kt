@@ -38,14 +38,42 @@ internal class WorkerDashboardStore(private val context: Context, private val co
         deleted
     }
 
-    fun clearStaleAndFinished(): Int = synchronized(lock) {
+    /** 强制取消并回收指定 ID（或前缀匹配）的任务卡，解决僵尸 running 卡片导致徽标无法清零的问题。 */
+    fun forceCancelWorker(idOrPrefix: String): Boolean = synchronized(lock) {
+        val key = idOrPrefix.trim()
+        if (key.isEmpty()) return@synchronized false
+        val files = dir.listFiles { file -> file.isFile && file.name.endsWith(".json") && file.name != "commands.json" }.orEmpty()
+        var matched = false
+        for (file in files) {
+            val fileId = file.name.removeSuffix(".json")
+            if (fileId == key || (key.length >= 6 && fileId.startsWith(key, ignoreCase = true))) {
+                WhaleNativeWorkerPool.cancel(fileId)
+                WhaleLongTaskStore.markTerminal(context, fileId, "cancelled")
+                if (file.delete()) matched = true
+                File(dir, "$fileId.upload").delete()
+            }
+        }
+        if (matched) {
+            catalogCache = null
+            listeners.forEach { it() }
+        }
+        matched
+    }
+
+    fun clearStaleAndFinished(forceAll: Boolean = false): Int = synchronized(lock) {
         var cleared = 0
+        val livePoolIds = WhaleNativeWorkerPool.activeIds()
         val files = dir.listFiles { file -> file.isFile && file.name.endsWith(".json") && file.name != "commands.json" }.orEmpty()
         for (file in files) {
+            val fileId = file.name.removeSuffix(".json")
             val row = runCatching { WorkerCardCatalog.full(file) }.getOrNull()
             val state = row?.optString("state").orEmpty()
-            if (row == null || state !in ACTIVE_STATES || state == "waiting" || state == "blocked") {
+            val isZombieRunning = state in ACTIVE_STATES && fileId !in livePoolIds
+            if (forceAll || row == null || state !in ACTIVE_STATES || state == "waiting" || state == "blocked" || isZombieRunning) {
+                if (forceAll) WhaleNativeWorkerPool.cancel(fileId)
+                WhaleLongTaskStore.markTerminal(context, fileId, "cancelled")
                 if (file.delete()) cleared++
+                File(dir, "$fileId.upload").delete()
             }
         }
         synchronized(commandLock) {
