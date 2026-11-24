@@ -1,4 +1,14 @@
-<set xmlns:android="http://schemas.android.com/apk/res/android" android:shareInterpolator="true" android:interpolator="@android:interpolator/fast_out_linear_in">
-    <alpha android:fromAlpha="1" android:toAlpha="0" android:duration="140" />
-    <translate android:fromYDelta="0" android:toYDelta="0.8%p" android:duration="140" />
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shareInterpolator="true"
+    android:interpolator="@android:interpolator/fast_out_linear_in">
+    <alpha android:fromAlpha="1.0" android:toAlpha="0.0" android:duration="135" />
+    <scale
+        android:fromXScale="1.0"
+        android:toXScale="0.97"
+        android:fromYScale="1.0"
+        android:toYScale="0.97"
+        android:pivotX="50%"
+        android:pivotY="48%"
+        android:duration="135" />
+    <translate android:fromYDelta="0" android:toYDelta="0.9%p" android:duration="135" />
 </set>
