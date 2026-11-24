@@ -193,7 +193,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         execDecision.targetWorker != null -> {
                             val t = execDecision.targetWorker
                             WhaleNativeWorkerPool.cancel(t.id)
-                            WhaleNativeLiveNotification.clear(app)
+                            WhaleNativeLiveNotification.cancel(app)
                             "已停止后台任务「${t.title}」（`${t.id}`）。"
                         }
                         execDecision.ambiguousWorkers.isNotEmpty() -> {
