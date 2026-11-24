@@ -270,9 +270,9 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
           <p>{t('立即生效，下次打开仍使用此主题。')}</p>
           <div className="whale-style-picker" role="group" aria-label={t('界面风格')}>
             {([
-              { value: 'simple' as const, title: '极简·类 Grok', desc: '黑白极简 · 锐利线条 · 纯黑省电', thumb: grokMark },
-              { value: 'cute' as const, title: '鲸鱼娘·可爱', desc: '晴海暖白 · 鲸鱼娘头像 · 柔和动效', thumb: whaleChanAvatar },
-              { value: 'usagi' as const, title: '乌萨奇·兔兔', desc: '奶油蜂蜜 · 乌萨奇桌宠与专属动效', thumb: usagiAvatar },
+              { value: 'simple' as const, title: '极简·精密仪器', desc: '冷白/深渊 · 1px 细线 · 宝石蓝信号', thumb: grokMark, swatches: ['#F4F5F7', '#0B0F17', '#0F52BA'] },
+              { value: 'cute' as const, title: '鲸鱼娘·海洋瓷釉', desc: '潮雾琉璃 · 蓝粉渐变 · 悬浮胶囊底栏', thumb: whaleChanAvatar, swatches: ['#EEF6FF', '#1B7EF2', '#FF6B9D'] },
+              { value: 'usagi' as const, title: '乌萨奇·手账漫画', desc: '奶油点阵纸 · 可可描边 · 贴纸硬阴影', thumb: usagiAvatar, swatches: ['#FFFBEA', '#5C3A1B', '#F59E0B'] },
             ]).map(item => (
               <button
                 type="button"
@@ -283,10 +283,15 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
                 aria-pressed={style === item.value}
                 onClick={() => { saveInterfaceStyle(item.value); setStyle(item.value) }}
               >
-                <img className="whale-style-thumb" src={item.thumb} alt="" width={44} height={44} />
+                <img className="whale-style-thumb" src={item.thumb} alt="" width={46} height={46} />
                 <span className="whale-style-copy">
                   <strong>{t(item.title)}</strong>
                   <small>{t(item.desc)}</small>
+                  <span className="whale-style-swatches" aria-hidden="true">
+                    {item.swatches.map(hex => (
+                      <i key={hex} style={{ background: hex }} />
+                    ))}
+                  </span>
                 </span>
               </button>
             ))}

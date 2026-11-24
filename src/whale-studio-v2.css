@@ -1055,6 +1055,246 @@ input[type='checkbox'][role='switch']:checked {
   accent-color: var(--blue);
 }
 
+
+/* --------------------------------------------------------------------------
+ * 6.8. Full-App Deep Coverage (Theme Preview Cards, Chat Hero & Composer,
+ *      Companion Workspace, Workshop/Authored Tools, Files/Terminal,
+ *      Onboarding, Virtual Screen, Plugins, Automation & All Modals)
+ * -------------------------------------------------------------------------- */
+
+/* 1. Appearance Theme Picker — Each card previews its own world */
+.whale-style-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.whale-style-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--press-ms) var(--press-ease), box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.whale-style-card[data-preview='simple'] {
+  background: linear-gradient(135deg, #f8f9fb 0%, #eef1f6 100%);
+  border: 1px solid rgba(11, 15, 23, 0.14);
+  color: #0b0f17;
+}
+
+.whale-style-card[data-preview='cute'] {
+  background: linear-gradient(135deg, #f2f8ff 0%, #e5f1ff 68%, #fff0f6 100%);
+  border: 1px solid rgba(27, 126, 242, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 18px -12px rgba(27, 126, 242, 0.35);
+  color: #12263f;
+}
+
+.whale-style-card[data-preview='usagi'] {
+  background-color: #fffbea;
+  background-image: radial-gradient(rgba(180, 115, 24, 0.14) 1px, transparent 1px);
+  background-size: 14px 14px;
+  border: 1.6px solid #5c3a1b;
+  box-shadow: 0 3px 0 #5c3a1b;
+  color: #3a2312;
+}
+
+.whale-style-card[aria-pressed='true'] {
+  outline: 2.5px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.whale-style-thumb {
+  border-radius: 13px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.22);
+}
+
+.whale-style-card[data-preview='usagi'] .whale-style-thumb {
+  border: 1.5px solid #5c3a1b;
+}
+
+.whale-style-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.whale-style-copy small {
+  opacity: 0.78;
+  font-size: 0.76rem;
+}
+
+.whale-style-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+}
+
+.whale-style-swatches i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+}
+
+/* 2. Chat Empty Hero, Quick Hub Pills, Composer & Session Drawer Authority */
+.whale-chat-composer {
+  border-radius: var(--radius-dock);
+  background: var(--surface-raised);
+  border: var(--card-border-w) solid var(--line-strong);
+  box-shadow: var(--shadow-elevated);
+}
+
+:root[data-style='cute'] .whale-chat-composer {
+  border-radius: 26px;
+  border: 1px solid rgba(27, 126, 242, 0.20);
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  box-shadow: 0 12px 32px -14px rgba(18, 76, 152, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+:root[data-style='usagi'] .whale-chat-composer {
+  border-radius: 22px;
+  border: 1.6px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 3.5px 0 rgba(92, 58, 27, 0.26);
+}
+
+.whale-hub-pill {
+  border-radius: 999px;
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+}
+
+:root[data-style='usagi'] .whale-hub-pill {
+  border: 1.5px solid var(--line);
+  box-shadow: 0 2.5px 0 rgba(92, 58, 27, 0.22);
+}
+
+.whale-session-item {
+  border-radius: var(--radius-inner);
+  border: 1px solid transparent;
+  transition: background-color 140ms ease, border-color 140ms ease, transform var(--press-ms) var(--press-ease);
+}
+
+.whale-session-item.is-active,
+.whale-session-item[aria-current='true'] {
+  background: var(--blue-soft);
+  border-color: var(--blue-line);
+  color: var(--blue);
+}
+
+/* 3. Companion Workspace, Memory Library, Briefings, Workshop & Authored Tools */
+.companion-workspace,
+.authored-tools,
+.virtual-screen-settings,
+.plugin-settings,
+.session-manager,
+.files-screen {
+  color: var(--ink);
+}
+
+.companion-card,
+.memory-card,
+.briefing-card,
+.knowledge-card,
+.capture-card,
+.authored-tool-card,
+.tool-card,
+.virtual-screen-card,
+.plugin-card,
+.session-card,
+.snapshot-card,
+.runtime-check-card,
+.onboarding-card,
+.automation-rule-card {
+  border-radius: var(--radius-card);
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-style='usagi'] .companion-card,
+:root[data-style='usagi'] .memory-card,
+:root[data-style='usagi'] .briefing-card,
+:root[data-style='usagi'] .knowledge-card,
+:root[data-style='usagi'] .authored-tool-card,
+:root[data-style='usagi'] .tool-card,
+:root[data-style='usagi'] .virtual-screen-card,
+:root[data-style='usagi'] .plugin-card,
+:root[data-style='usagi'] .session-card,
+:root[data-style='usagi'] .onboarding-card {
+  border: 1.6px solid var(--line);
+  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.22);
+}
+
+/* 4. Inputs, Textareas, Selects & Appearance Radio Options Across All Subpages */
+input[type='text'],
+input[type='password'],
+input[type='url'],
+input[type='number'],
+input[type='search'],
+textarea,
+select {
+  border-radius: var(--radius-control);
+  border: var(--card-border-w) solid var(--line-strong);
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+  outline: none;
+}
+
+.appearance-option {
+  border-radius: var(--radius-control);
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface);
+  transition: transform var(--press-ms) var(--press-ease), border-color 160ms ease, background-color 160ms ease;
+}
+
+.appearance-option.active {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 650;
+}
+
+:root[data-style='usagi'] .appearance-option.active {
+  background: #fde047;
+  color: #3a2312;
+  border: 1.5px solid #5c3a1b;
+  box-shadow: 0 2px 0 #5c3a1b;
+}
+
+/* 5. Dialogs, Sheets & Onboarding Full-Screen Polish */
+.dialog,
+[role='dialog'] {
+  border-radius: calc(var(--radius-card) + 4px);
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-elevated);
+}
+
+:root[data-style='usagi'] .dialog,
+:root[data-style='usagi'] [role='dialog'] {
+  border: 1.8px solid var(--line);
+  box-shadow: 0 5px 0 rgba(92, 58, 27, 0.30);
+}
+
 /* --------------------------------------------------------------------------
  * 7. Reduced Motion & Eco Safety
  * -------------------------------------------------------------------------- */

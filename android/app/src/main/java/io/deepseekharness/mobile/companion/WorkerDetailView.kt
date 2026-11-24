@@ -57,7 +57,15 @@ internal class WorkerDetailView(context: Context, row: JSONObject) : ScrollView(
             "cancelled" -> "已取消"; "cancelling" -> "正在取消"; else -> "历史工单"
         }
         val mode = when (row.optString("mode")) { "create" -> "创作工具"; "device" -> "设备操作"; else -> "读取整理" }
-        content.addView(text("$state  ·  $mode",13f,muted=true))
+        content.addView(text("●  $state  ·  $mode", 12.5f, bold = true).apply {
+            setTextColor(ui.accent)
+            background = ui.shape(ui.soft, 999, ui.line)
+            setPadding(dp(12), dp(5), dp(12), dp(5))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(6) }
+        })
         for ((key,label) in listOf("question" to "待回答","summary" to "最新结果","progress" to "当前进展","uiError" to "提示","supervisionNote" to "任务监督")) {
             val value = row.optString(key)
             if (value.isNotBlank()) { heading(label); paragraph(value,4,label) }
@@ -114,10 +122,16 @@ internal class WorkerDetailView(context: Context, row: JSONObject) : ScrollView(
             },13f,muted=true))
         }
         row.optJSONObject("budgetUsage")?.let { used ->
-            val limit=row.optJSONObject("budget")
+            val limit = row.optJSONObject("budget")
             heading("本工单资源")
-            content.addView(text("已记录 "+used.optLong("tokens")+" tokens · "+used.optLong("calls")+" 次工具调用 · "+used.optLong("milliseconds")/60000+" 分钟",13f,muted=true))
-            if(limit!=null) content.addView(text("预算 "+limit.optLong("tokens")+" tokens · "+limit.optLong("calls")+" 次 · "+limit.optLong("milliseconds")/60000+" 分钟",13f,muted=true))
+            val card = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                background = ui.shape(ui.soft, if (ui.simple) 12 else 16, ui.line)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                addView(text("已记录 " + used.optLong("tokens") + " tokens · " + used.optLong("calls") + " 次工具调用 · " + used.optLong("milliseconds") / 60000 + " 分钟", 13f, bold = true))
+                if (limit != null) addView(text("预算 " + limit.optLong("tokens") + " tokens · " + limit.optLong("calls") + " 次 · " + limit.optLong("milliseconds") / 60000 + " 分钟", 12.5f, muted = true).apply { setPadding(0, dp(3), 0, 0) })
+            }
+            content.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
         }
         val mandate = row.optString("scope")
         val scope = listOf(row.optString("title").takeUnless { mandate.startsWith(it) }.orEmpty(), mandate,

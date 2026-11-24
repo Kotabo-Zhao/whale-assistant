@@ -4,12 +4,14 @@ import { createRoot } from 'react-dom/client'
 // 样式跟着 TerminalPanel 走才能让首屏 CSS 不包含终端相关的规则。
 import './styles.css'
 import './whale-design.css'
-import './whale-motion.css'
-import './whale-studio-v2.css'
 import { App } from './App'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { applyTheme, applyTextColor, readThemeMode } from './theme'
 import { applyCard, readCard } from './appearance'
+// Studio V2 视觉系统与动效表放在 App 之后引入，确保在 Vite 打包产物中位于所有页面/组件样式表之后，
+// 从而拥有最高级联权威，彻底覆盖对话页、伴侣工作台、工坊、设置与全部子页。
+import './whale-studio-v2.css'
+import './whale-motion.css'
 
 const root = document.getElementById('root')
 

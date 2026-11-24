@@ -95,7 +95,7 @@ internal class PetActionMenu(
         gravity = if (tile) Gravity.CENTER else Gravity.START or Gravity.CENTER_VERTICAL
         setPadding(dp(10), dp(4), dp(10), dp(4))
         setTextColor(if (tile) ui.accent else ui.ink)
-        background = ui.action(if (tile) ui.soft else ui.surface, 12)
+        background = ui.action(if (tile) ui.soft else ui.surface, if (ui.simple) 10 else 15, if (tile || ui.usagi) ui.line else null)
         isFocusable = true
         setOnClickListener { io.deepseekharness.mobile.WhaleMotion.feedback(this); click() }
     }
@@ -143,7 +143,7 @@ internal class PetActionMenu(
         gravity = Gravity.CENTER
         setPadding(dp(10), dp(4), dp(10), dp(4))
         setTextColor(inkColor)
-        background = ui.action(bgColor, 15)
+        background = ui.action(bgColor, if (ui.simple) 12 else 17, if (ui.usagi || !ui.simple) ui.line else null)
         cuteLeadingIcon(cuteIcon, 22)
         isFocusable = true
         setOnClickListener { io.deepseekharness.mobile.WhaleMotion.feedback(this); click() }
