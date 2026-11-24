@@ -488,7 +488,7 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
     window.addEventListener('whale:assistant-push', onAssistantPush)
     void bridge.companionDashboard?.({ operation: 'flushOutbox' }).catch(() => undefined)
     return () => window.removeEventListener('whale:assistant-push', onAssistantPush)
-  }, [activeId])
+  }, [activeId, bridge])
 
   const startNewSession = () => {
     if (sending) {
