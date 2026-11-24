@@ -4953,8 +4953,33 @@ class MobileRuntimePlugin : Plugin() {
         val message = call.getString("message")?.trim().orEmpty()
         val control = if (requestId.isNotEmpty()) activeNativeChats[requestId] else null
         if (control != null && message.isNotEmpty()) {
-            control.steer(message)
-            call.resolve(JSObject().put("ok", true).put("steered", true))
+            when (io.deepseekharness.mobile.companion.WhaleExecutionRouter.routeConcurrent(message)) {
+                io.deepseekharness.mobile.companion.WhaleExecutionRouter.ConcurrentAction.CANCEL -> {
+                    control.cancel()
+                    call.resolve(JSObject().put("ok", true).put("steered", true).put("action", "cancelled"))
+                }
+                io.deepseekharness.mobile.companion.WhaleExecutionRouter.ConcurrentAction.SIDE_LANE -> {
+                    val appCtx = context.applicationContext
+                    Thread({
+                        val reply = runCatching {
+                            io.deepseekharness.mobile.companion.WhaleNativeAgentEngine(appCtx).sideLaneQuickReply(message)
+                        }.getOrDefault("")
+                        if (reply.isNotBlank()) {
+                            io.deepseekharness.mobile.companion.WhaleAppControlBus.emit(
+                                org.json.JSONObject()
+                                    .put("action", "assistant_push")
+                                    .put("source", "side_lane")
+                                    .put("reply", reply),
+                            )
+                        }
+                    }, "whale-side-lane").apply { isDaemon = true }.start()
+                    call.resolve(JSObject().put("ok", true).put("steered", true).put("action", "side_lane"))
+                }
+                io.deepseekharness.mobile.companion.WhaleExecutionRouter.ConcurrentAction.STEER -> {
+                    control.steer(message)
+                    call.resolve(JSObject().put("ok", true).put("steered", true).put("action", "steered"))
+                }
+            }
         } else {
             call.resolve(JSObject().put("ok", true).put("steered", false))
         }

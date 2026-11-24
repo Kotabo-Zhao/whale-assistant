@@ -639,6 +639,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 listOf("action"),
             ))
             array.put(schema("whale_worker_manage", "管理与清理后台 Worker 历史及桌宠红点徽标（解决界面残余数字与历史记录删不掉的问题）。", mapOf("action" to "clear_completed（清理已完成与残留徽标）/ delete（按 id 删除单条）/ clear_badge（仅清零桌宠待办红点）", "id" to "action=delete 时的 Worker ID"), listOf("action")))
+            array.put(schema("whale_context_search", "检索当前会话已被增量折叠归档的历史记忆块（返回 rangeId 与摘要，不消耗大上下文）。", mapOf("query" to "检索关键词", "sessionId" to "可选：会话 ID，默认 whale-main"), listOf("query")))
+            array.put(schema("whale_context_expand", "可逆展开单个已折叠的历史记忆块原文（单轮限展开 1 块，仅作临时核对）。", mapOf("rangeId" to "whale_context_search 返回的记忆块 ID", "sessionId" to "可选：会话 ID，默认 whale-main"), listOf("rangeId")))
             array.put(schema("whale_ui_refresh", "强制刷新鲸鱼助手主界面与悬浮桌宠状态徽标，同步最新数据视图。", emptyMap(), emptyList()))
             array.put(schema("whale_voice_speak", "用硅基流动 CosyVoice2 拟人语音让桌宠大声说出一句话。", mapOf("text" to "要朗读的自然中文或英文内容", "voice" to "可选音色：diana / claire / bella / anna / alex / benjamin"), listOf("text")))
             array.put(schema("whale_voice_config", "修改桌宠语音配置（切换音色、语速或开关自动朗读）。", mapOf("autoSpeakPet" to "可选：true 或 false", "voice" to "可选：diana（欢快女声）/ claire（温柔女声）/ bella（活力女声）/ anna（沉稳女声）/ alex（沉稳男声）", "speed" to "可选语速 0.7-1.5"), emptyList()))
@@ -2357,6 +2359,23 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                                 mutating = true,
                             )
                         }
+                    }
+                }
+                "whale_context_search" -> {
+                    val q = args.str("query").trim()
+                    val sid = args.str("sessionId", "whale-main").trim().ifEmpty { "whale-main" }
+                    val matches = WhaleContextLedger.search(app, sid, q, limit = 5)
+                    ToolOutcome(name, "检索历史折叠记忆块", true, JSONObject().put("sessionId", sid).put("matches", matches).toString())
+                }
+                "whale_context_expand" -> {
+                    val rid = args.str("rangeId").trim()
+                    require(rid.isNotEmpty()) { "缺少 rangeId" }
+                    val sid = args.str("sessionId", "whale-main").trim().ifEmpty { "whale-main" }
+                    val expanded = WhaleContextLedger.expand(app, sid, rid)
+                    if (expanded != null) {
+                        ToolOutcome(name, "临时展开历史记忆块 $rid", true, expanded.toString())
+                    } else {
+                        ToolOutcome(name, "未找到记忆块 $rid", false, JSONObject().put("error", "未找到记忆块 $rid").toString())
                     }
                 }
                 "whale_worker_manage" -> {

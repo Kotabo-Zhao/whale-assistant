@@ -244,4 +244,82 @@ internal object WhaleExecutionRouter {
         val singleLine = task.replace(Regex("\\s+"), " ").trim()
         return if (singleLine.length <= 28) singleLine else singleLine.take(28) + "…"
     }
+
+    /** 前台流式执行期间的并发插话 3 路精准分流：叫停 / 旁路快答 / 实时纠偏。 */
+    enum class ConcurrentAction { CANCEL, SIDE_LANE, STEER }
+
+    private val concurrentCancelRegex = Regex(
+        "^(算了|停|停下|停止|别做了|不用做了|取消|中止|stop|cancel|abort)[！!。.~～\\s]*$",
+        RegexOption.IGNORE_CASE,
+    )
+    private val steeringVerbHints = listOf(
+        "改成", "换成", "加上", "补充", "顺便", "别用", "不要", "改一下", "再加", "重点", "先别", "重新", "调整", "按周", "按天", "用中文", "用英文",
+    )
+    private val sideLaneQuestionHints = listOf(
+        "几点", "星期几", "周几", "天气", "汇率", "翻译", "什么是", "是谁", "怎么读", "啥意思", "什么意思", "帮我算", "等于多少",
+    )
+
+    fun routeConcurrent(userMessage: String): ConcurrentAction {
+        val raw = userMessage.trim()
+        if (raw.isEmpty()) return ConcurrentAction.STEER
+        val lower = raw.lowercase(Locale.US)
+        if (concurrentCancelRegex.matches(raw)) return ConcurrentAction.CANCEL
+        if (steeringVerbHints.any { it in lower }) return ConcurrentAction.STEER
+        if (raw.length <= 42 && (sideLaneQuestionHints.any { it in lower } || raw.endsWith("?") || raw.endsWith("？"))) {
+            return ConcurrentAction.SIDE_LANE
+        }
+        return ConcurrentAction.STEER
+    }
+
+    /**
+     * Super Agent 上行回传与自动回收（Worker -> Router -> Coordinator -> 主对话）：
+     * - 绝不直接把原始 Worker 流水或内部 ID 抛给用户；
+     * - 仅提炼核心结论（<=400 字）与落盘产物指针，经主助手口吻推送回当前主对话；
+     * - 推送后立即自动 GC（清理内存池、磁盘任务台与实况通知），彻底杜绝僵尸任务与残留徽标。
+     */
+    fun onWorkerFinished(
+        context: android.content.Context,
+        workerId: String,
+        title: String,
+        rawReply: String,
+        ok: Boolean,
+    ) {
+        val app = context.applicationContext
+        val artifacts = WhaleContextLedger.extractArtifactPaths(listOf("assistant" to rawReply))
+        val digest = rawReply.trim().replace(Regex("\\n{3,}"), "\n\n").take(900)
+        val coordinatorText = buildString {
+            if (ok) {
+                append("刚才托付给我的「**").append(title).append("**」已经整理好了：\n\n")
+                append(digest.ifBlank { "已完成处理。" })
+                if (artifacts.isNotEmpty()) {
+                    append("\n\n相关产物：`").append(artifacts.joinToString("`、`")).append("`")
+                }
+            } else {
+                append("刚才在后台处理「**").append(title).append("**」时遇到了一点状况：")
+                append(digest.take(240).ifBlank { "执行未能完成" })
+                append("。如果你愿意，直接告诉我怎么调整，我马上继续处理。")
+            }
+        }
+        // 1. 通过应用控制总线静默回流到当前主对话（单一会话无感体验）
+        WhaleAppControlBus.emit(
+            org.json.JSONObject()
+                .put("action", "assistant_push")
+                .put("source", "coordinator_synthesis")
+                .put("title", title)
+                .put("reply", coordinatorText),
+        )
+        // 2. 推送主助手口吻的轻提醒并结束常驻实况进度
+        WhaleNativeLiveNotification.update(
+            app,
+            title = if (ok) "已整理好：$title" else "需要确认：$title",
+            subtitle = digest.replace("\n", " ").take(72),
+            ongoing = false,
+            indeterminate = false,
+        )
+        // 3. 用完即焚自动 GC：从内存池、磁盘任务台与长任务表回收，避免任何残留红点
+        WhaleNativeWorkerPool.remove(workerId)
+        runCatching { WorkerDashboardStore(app).forceCancelWorker(workerId) }
+        WhaleLongTaskStore.markTerminal(app, workerId, if (ok) "completed" else "failed")
+        WhaleAppControlBus.emit(org.json.JSONObject().put("action", "refresh"))
+    }
 }

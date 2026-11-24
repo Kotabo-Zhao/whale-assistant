@@ -102,4 +102,13 @@ class WhaleExecutionRouterTest {
         val d = WhaleExecutionRouter.route("徽标清掉", emptyList())
         assertEquals(WhaleExecutionRouter.Mode.WORKER_CLEAR, d.mode)
     }
+
+    @Test
+    fun `concurrent interruption routes into CANCEL, SIDE_LANE, and STEER accurately`() {
+        assertEquals(WhaleExecutionRouter.ConcurrentAction.CANCEL, WhaleExecutionRouter.routeConcurrent("算了"))
+        assertEquals(WhaleExecutionRouter.ConcurrentAction.CANCEL, WhaleExecutionRouter.routeConcurrent("停止"))
+        assertEquals(WhaleExecutionRouter.ConcurrentAction.SIDE_LANE, WhaleExecutionRouter.routeConcurrent("北京现在几点？"))
+        assertEquals(WhaleExecutionRouter.ConcurrentAction.SIDE_LANE, WhaleExecutionRouter.routeConcurrent("帮我翻译 hello world"))
+        assertEquals(WhaleExecutionRouter.ConcurrentAction.STEER, WhaleExecutionRouter.routeConcurrent("别按天排，改成按周排并加上价格"))
+    }
 }

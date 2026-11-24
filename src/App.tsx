@@ -3877,6 +3877,13 @@ export function App() {
         saveLanguage(event.language)
       } else if (event.action === 'autonomy' && event.preset) {
         try { window.localStorage.setItem('whale.autonomyPreset.v1', event.preset) } catch { /* ignore */ }
+      } else if (event.action === 'assistant_push' && typeof event.reply === 'string') {
+        const reply = event.reply.trim()
+        if (reply) {
+          window.dispatchEvent(new CustomEvent('whale:assistant-push', {
+            detail: { reply, source: event.source, title: event.title },
+          }))
+        }
       } else if (event.action === 'ask' && typeof event.prompt === 'string') {
         const prompt = event.prompt.trim()
         if (prompt) {

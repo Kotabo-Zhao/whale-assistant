@@ -263,10 +263,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
                 WhaleExecutionRouter.Mode.SPAWN_WORKER -> {
                     val jobId = "w-" + UUID.randomUUID().toString().take(8)
-                    val title = execDecision.workerTitle.ifBlank { "后台任务" }
+                    val title = execDecision.workerTitle.ifBlank { "后台整理任务" }
                     val taskPrompt = execDecision.payload.ifBlank { trimmed }
                     val workerCtrl = RunControl()
-                    WhaleNativeLiveNotification.update(app, title = title, subtitle = "后台任务已启动", ongoing = true, indeterminate = true)
+                    WhaleNativeLiveNotification.update(app, title = title, subtitle = "正在后台为你处理…", ongoing = true, indeterminate = true)
                     WhaleNativeWorkerPool.submit(title = title, id = jobId, priorityBy = "launch") {
                         WhaleNativeWorkerPool.attachControl(jobId, workerCtrl)
                         try {
@@ -280,38 +280,27 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                                 },
                                 control = workerCtrl,
                             )
-                            WhaleNativeLiveNotification.update(
-                                app,
-                                title = "已完成：$title",
-                                subtitle = res.reply.replace("\n", " ").take(80),
-                                ongoing = false,
-                                indeterminate = false,
-                            )
+                            WhaleExecutionRouter.onWorkerFinished(app, jobId, title, res.reply, ok = true)
                             res.reply
                         } catch (err: Throwable) {
-                            WhaleNativeLiveNotification.update(
+                            WhaleExecutionRouter.onWorkerFinished(
                                 app,
-                                title = "后台任务异常：$title",
-                                subtitle = (err.message ?: err.javaClass.simpleName).take(80),
-                                ongoing = false,
-                                indeterminate = false,
+                                jobId,
+                                title,
+                                err.message ?: err.javaClass.simpleName,
+                                ok = false,
                             )
                             throw err
                         }
                     }
-                    val replyText = buildString {
-                        append("已启动独立后台任务：**").append(title).append("**\n")
-                        append("- 任务 ID：`").append(jobId).append("`\n")
-                        append("- 你可以继续在前台聊其他事；随时对我说「后台任务怎么样了」「给它补充…」「取消这个后台任务」来实时管理它。")
-                    }
+                    val replyText = "好，我已经在后台为你并行处理「**$title**」，整理好后会直接在这条对话里发给你；期间你随时可以继续聊别的，或者直接发消息让我调整要求。"
                     listener?.onDelta(replyText)
                     return ChatResult(
                         reply = replyText,
-                        steps = listOf(StepRecord("whale_execution_router", "派发后台任务：$title", true, System.currentTimeMillis() - startedAt)),
+                        steps = listOf(StepRecord("whale_execution_router", "已交由后台静默推进：$title", true, System.currentTimeMillis() - startedAt)),
                         model = "execution-router",
                         elapsedMs = System.currentTimeMillis() - startedAt,
                         mode = "execution_router_spawn_worker",
-                        suggestions = listOf("查一下后台任务进度", "取消后台任务 $jobId"),
                     )
                 }
                 WhaleExecutionRouter.Mode.DIRECT_CHAT,
@@ -338,10 +327,16 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             WhaleHarnessCore.PrefixCacheCompactor.clearCheckpoint(app, sessionId)
             WhaleHarnessCore.SessionTodoStore.clear(sessionId, app)
             WhaleAgentBrainEnhancer.DurableTaskCheckpoint.clearState(app, sessionId)
+            WhaleContextLedger.clearSession(app, sessionId)
         }
         // 1. KV 锁死型 Append-Only 历史窗口（绝不因轮次推进二次改写历史消息，保跨轮 85%~95% 前缀缓存命中）
         val rawHistoryChars = history.takeLast(16).sumOf { it.second.length }
-        val recentHistory = WhaleContextBudgeter.normalizeHistoryImmutable(history, maxTurns = 16, blockSlide = 8, perMessageCap = 1_600)
+        val ledgerWindow = if (!isWorkerSession && history.size > WhaleContextLedger.BLOCK_SIZE + WhaleContextLedger.ACTIVE_TAIL_MESSAGES) {
+            WhaleContextLedger.assembleAndPersist(app, sessionId, history)
+        } else null
+        val foldedCards = ledgerWindow?.foldedCards.orEmpty()
+        val effectiveHistoryInput = ledgerWindow?.activeMessages ?: history
+        val recentHistory = WhaleContextBudgeter.normalizeHistoryImmutable(effectiveHistoryInput, maxTurns = 16, blockSlide = 8, perMessageCap = 1_600)
         val compactHistoryChars = recentHistory.sumOf { it.second.length }
         val activePersona = runCatching { CompanionPersonaStore(app).active() }.getOrNull()
 
@@ -364,6 +359,13 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     },
                 ),
         )
+        if (foldedCards.isNotEmpty()) {
+            val cardsText = buildString {
+                append("以下是本会话已增量折叠的历史记忆块（不可变归档；如需逐字原文，可按需调用 whale_context_search 或 whale_context_expand）：\n")
+                foldedCards.forEach { card -> append("- ").append(card.renderCard()).append("\n") }
+            }.trim()
+            messages.put(JSONObject().put("role", "system").put("content", cardsText))
+        }
         recentHistory.forEach { (role, text) ->
             messages.put(JSONObject().put("role", role).put("content", text))
         }
@@ -1441,5 +1443,21 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
         private const val MAX_TOOL_ROUNDS = 20
         private val parallelToolPool = Executors.newFixedThreadPool(4)
+    }
+
+    /** 只读旁路快答通道：前台正在执行长任务时，并行用极速模型秒回无关小问题，完全不打断主任务。 */
+    fun sideLaneQuickReply(userMessage: String): String {
+        val q = userMessage.trim()
+        if (q.isEmpty()) return ""
+        val store = RuntimeStore(app)
+        val settings = store.settings()
+        val rawEp = resolveEndpoints(store, settings).first()
+        val fastModel = WhaleModelRouter.routeForInternalTask(app, rawEp.model)
+        val ep = rawEp.copy(model = fastModel)
+        val msgs = JSONArray()
+            .put(JSONObject().put("role", "system").put("content", "你是鲸鱼助手的旁路快答通道。用户主任务仍在后台推进，请用 1~3 句简洁准确地直接回答这个顺手小问题，不要寒暄也不要提及后台任务。"))
+            .put(JSONObject().put("role", "user").put("content", q))
+        val turn = callModel(ep, msgs, JSONArray(), listener = null, control = null, usageAcc = null)
+        return turn.content.trim()
     }
 }
