@@ -5,7 +5,7 @@ import org.json.JSONObject
 import java.util.Locale
 
 /**
- * 智能三级模型路由器（结合复杂度识别 + 预算自适应）。
+ * 纯模型档位选择器（Model Tier Selector：仅负责选模型与预算/高峰降档；执行模式与 Worker 生命周期调度统一归 [WhaleExecutionRouter]）。
  *
  * - L1 极速省钱档：短问候、轻量提醒、单步查询，或当日预算已超 80% 时的安全降级；
  * - L2 深度推理档：多步规划、代码/工坊创作、长文分析、多模态看图；

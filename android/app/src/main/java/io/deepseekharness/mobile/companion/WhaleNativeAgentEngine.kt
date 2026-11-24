@@ -164,6 +164,138 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val trimmed = userMessage.trim().ifEmpty { if (images.isNotEmpty()) "请帮我看看这张图片并给出实用建议。" else "" }
         require(trimmed.isNotEmpty()) { "请输入内容后再发送" }
 
+        // 0. 统一执行模式与后台 Worker 生命周期前置路由（查状态 / 追问透传 / 精准取消 / 清理 / 显式后台派发）
+        if (!isWorkerSession) {
+            val activeWorkers = WhaleNativeWorkerPool.activeWorkers()
+            val recentWorkers = WhaleNativeWorkerPool.recentFinishedWorkers()
+            val execDecision = WhaleExecutionRouter.route(
+                userMessage = trimmed,
+                activeWorkers = activeWorkers,
+                recentFinished = recentWorkers,
+                hasImages = images.isNotEmpty(),
+            )
+            when (execDecision.mode) {
+                WhaleExecutionRouter.Mode.WORKER_STATUS -> {
+                    val replyText = WhaleExecutionRouter.formatStatusReply(activeWorkers, recentWorkers, execDecision.targetWorker)
+                    listener?.onDelta(replyText)
+                    return ChatResult(
+                        reply = replyText,
+                        steps = emptyList(),
+                        model = "execution-router",
+                        elapsedMs = System.currentTimeMillis() - startedAt,
+                        mode = "execution_router_worker_status",
+                    )
+                }
+                WhaleExecutionRouter.Mode.WORKER_CANCEL -> {
+                    val replyText = when {
+                        execDecision.targetWorker != null -> {
+                            val t = execDecision.targetWorker
+                            WhaleNativeWorkerPool.cancel(t.id)
+                            "已停止后台任务「${t.title}」（`${t.id}`）。"
+                        }
+                        execDecision.ambiguousWorkers.isNotEmpty() -> {
+                            buildString {
+                                append("当前有 **${execDecision.ambiguousWorkers.size}** 个活跃后台任务，请指明要取消哪一个：
+")
+                                execDecision.ambiguousWorkers.forEachIndexed { i, w ->
+                                    append("${i + 1}. **${w.title}**（${w.currentStep}，`${w.id}`）
+")
+                                }
+                            }.trim()
+                        }
+                        else -> "当前没有正在运行的后台任务，无需取消。"
+                    }
+                    listener?.onDelta(replyText)
+                    return ChatResult(
+                        reply = replyText,
+                        steps = emptyList(),
+                        model = "execution-router",
+                        elapsedMs = System.currentTimeMillis() - startedAt,
+                        mode = "execution_router_worker_cancel",
+                    )
+                }
+                WhaleExecutionRouter.Mode.WORKER_FOLLOWUP -> {
+                    val replyText = when {
+                        execDecision.targetWorker != null -> {
+                            val t = execDecision.targetWorker
+                            val (ok, detail) = WhaleNativeWorkerPool.deliverFollowup(t.id, execDecision.payload)
+                            if (ok) "已将补充指令实时透传给后台任务「${t.title}」（`${t.id}`）：
+> ${execDecision.payload}"
+                            else "透传失败：$detail"
+                        }
+                        execDecision.ambiguousWorkers.isNotEmpty() -> {
+                            buildString {
+                                append("当前有 **${execDecision.ambiguousWorkers.size}** 个活跃后台任务，请告诉我要补充给哪一个：
+")
+                                execDecision.ambiguousWorkers.forEachIndexed { i, w ->
+                                    append("${i + 1}. **${w.title}**（`${w.id}`）
+")
+                                }
+                            }.trim()
+                        }
+                        else -> "当前没有运行中的后台任务可接收补充指令。"
+                    }
+                    listener?.onDelta(replyText)
+                    return ChatResult(
+                        reply = replyText,
+                        steps = emptyList(),
+                        model = "execution-router",
+                        elapsedMs = System.currentTimeMillis() - startedAt,
+                        mode = "execution_router_worker_followup",
+                    )
+                }
+                WhaleExecutionRouter.Mode.WORKER_CLEAR -> {
+                    val cleared = WhaleNativeWorkerPool.clearFinished()
+                    val replyText = if (cleared > 0) "已清理 $cleared 条已结束的后台任务记录。" else "当前没有可清理的已结束后台任务。"
+                    listener?.onDelta(replyText)
+                    return ChatResult(
+                        reply = replyText,
+                        steps = emptyList(),
+                        model = "execution-router",
+                        elapsedMs = System.currentTimeMillis() - startedAt,
+                        mode = "execution_router_worker_clear",
+                    )
+                }
+                WhaleExecutionRouter.Mode.SPAWN_WORKER -> {
+                    val jobId = "w-" + UUID.randomUUID().toString().take(8)
+                    val title = execDecision.workerTitle.ifBlank { "后台任务" }
+                    val taskPrompt = execDecision.payload.ifBlank { trimmed }
+                    val workerCtrl = RunControl()
+                    WhaleNativeWorkerPool.submit(title = title, id = jobId, priorityBy = "launch") {
+                        WhaleNativeWorkerPool.attachControl(jobId, workerCtrl)
+                        val res = WhaleNativeAgentEngine(app).send(
+                            userMessage = taskPrompt,
+                            history = emptyList(),
+                            sessionId = "whale-worker-$jobId",
+                            onProgress = { round, step, preview ->
+                                WhaleNativeWorkerPool.updateProgress(jobId, round = round, step = step, preview = preview)
+                            },
+                            control = workerCtrl,
+                        )
+                        res.reply
+                    }
+                    val replyText = buildString {
+                        append("已启动独立后台任务：**").append(title).append("**
+")
+                        append("- 任务 ID：`").append(jobId).append("`
+")
+                        append("- 你可以继续在前台聊其他事；随时对我说「后台任务怎么样了」「给它补充…」「取消这个后台任务」来实时管理它。")
+                    }
+                    listener?.onDelta(replyText)
+                    return ChatResult(
+                        reply = replyText,
+                        steps = listOf(StepRecord("whale_execution_router", "派发后台任务：$title", true, System.currentTimeMillis() - startedAt)),
+                        model = "execution-router",
+                        elapsedMs = System.currentTimeMillis() - startedAt,
+                        mode = "execution_router_spawn_worker",
+                        suggestions = listOf("查一下后台任务进度", "取消后台任务 $jobId"),
+                    )
+                }
+                WhaleExecutionRouter.Mode.DIRECT_CHAT,
+                WhaleExecutionRouter.Mode.FOREGROUND_AGENT -> Unit
+            }
+        }
+
         val store = RuntimeStore(app)
         val settings = store.settings()
         val allEndpoints = resolveEndpoints(store, settings)

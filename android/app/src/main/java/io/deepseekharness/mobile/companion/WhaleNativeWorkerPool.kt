@@ -277,4 +277,36 @@ internal object WhaleNativeWorkerPool {
             }
         }
     }
+
+    fun activeWorkers(): List<WhaleExecutionRouter.WorkerSnapshot> = entries.values
+        .filter { it.state == "running" || it.state == "queued" || it.attention.isNotBlank() }
+        .sortedByDescending { it.startedAtMs }
+        .map { toSnapshot(it) }
+
+    fun recentFinishedWorkers(limit: Int = 6, maxAgeMs: Long = 15 * 60 * 1000L): List<WhaleExecutionRouter.WorkerSnapshot> {
+        val now = System.currentTimeMillis()
+        return entries.values
+            .filter { it.state != "running" && it.state != "queued" && it.attention.isBlank() }
+            .filter { now - (it.finishedAtMs.takeIf { ts -> ts > 0L } ?: it.updatedAtMs) <= maxAgeMs }
+            .sortedByDescending { it.finishedAtMs.takeIf { ts -> ts > 0L } ?: it.updatedAtMs }
+            .take(limit)
+            .map { toSnapshot(it) }
+    }
+
+    private fun toSnapshot(e: WorkerEntry): WhaleExecutionRouter.WorkerSnapshot {
+        val end = if (e.finishedAtMs > 0L) e.finishedAtMs else System.currentTimeMillis()
+        val elapsedSec = ((end - e.startedAtMs) / 1000L).coerceAtLeast(0L)
+        val st = e.stage()
+        return WhaleExecutionRouter.WorkerSnapshot(
+            id = e.id,
+            title = e.title,
+            state = e.state,
+            stageLabel = st.label,
+            currentStep = e.currentStep,
+            elapsedSec = elapsedSec,
+            livePreview = e.summary.ifBlank { e.livePreview }.take(280),
+            attention = e.attention,
+            isActive = e.state == "running" || e.state == "queued" || e.attention.isNotBlank(),
+        )
+    }
 }
