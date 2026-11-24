@@ -469,19 +469,17 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
       const detail = (ev as CustomEvent<{ reply?: string; source?: string; title?: string }>).detail
       const reply = detail?.reply?.trim()
       if (!reply) return
-      const targetId = activeIdRef.current
       const pushed: WhaleChatMessage = {
         id: `push-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         role: 'assistant',
         text: reply,
-        timestamp: Date.now(),
         model: detail?.source === 'side_lane' ? 'side-lane-fast' : 'coordinator',
       }
-      updateSessionMessages(targetId, prev => [...prev, pushed])
+      updateSessionMessages(activeId, prev => [...prev, pushed])
     }
     window.addEventListener('whale:assistant-push', onAssistantPush)
     return () => window.removeEventListener('whale:assistant-push', onAssistantPush)
-  }, [])
+  }, [activeId])
 
   const startNewSession = () => {
     if (sending) {
