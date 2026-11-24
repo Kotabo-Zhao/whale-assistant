@@ -2416,6 +2416,7 @@ export interface WhaleAppControlEvent {
   reply?: string
   source?: string
   title?: string
+  outboxKey?: string
   prompt?: string
   image?: string
   view?: string
