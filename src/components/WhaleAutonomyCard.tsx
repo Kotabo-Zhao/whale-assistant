@@ -107,6 +107,7 @@ export function WhaleAutonomyCard({
   const [petSizeDp, setPetSizeDp] = useState(88)
   const [nativeNotifOn, setNativeNotifOn] = useState(true)
   const [floatingIslandOn, setFloatingIslandOn] = useState(false)
+  const [telemetry, setTelemetry] = useState<{ total: number; cachePct: number; compressPct: number } | null>(null)
 
   useEffect(() => {
     let active = true
@@ -135,6 +136,18 @@ export function WhaleAutonomyCard({
           const prefs = res as { nativeNotif?: boolean; floatingIsland?: boolean }
           if (typeof prefs.nativeNotif === 'boolean') setNativeNotifOn(prefs.nativeNotif)
           if (typeof prefs.floatingIsland === 'boolean') setFloatingIslandOn(prefs.floatingIsland)
+        })
+        .catch(() => undefined)
+    }
+    if (runtimeBridge.companionDashboard) {
+      void runtimeBridge.companionDashboard({ operation: 'usageSummary' })
+        .then(res => {
+          if (!active || !res || typeof res !== 'object') return
+          const u = res as { chatTokens?: number; petTokens?: number; workerTokens?: number; bgTokens?: number; phoneTokens?: number; cacheHitRatio?: number; compressionRatio?: number }
+          const total = (u.chatTokens ?? 0) + (u.petTokens ?? 0) + (u.workerTokens ?? 0) + (u.bgTokens ?? 0) + (u.phoneTokens ?? 0)
+          const cachePct = Math.round((u.cacheHitRatio ?? 0) * 100)
+          const compressPct = Math.round((u.compressionRatio ?? 0) * 100)
+          setTelemetry({ total, cachePct, compressPct })
         })
         .catch(() => undefined)
     }
@@ -219,6 +232,22 @@ export function WhaleAutonomyCard({
         ))}
       </div>
       <p className="whale-autonomy-desc">{t(activeAutonomy.description)}</p>
+      {telemetry && (
+        <div className="whale-telemetry-grid" aria-label={t('实时遥测仪表')}>
+          <div className="whale-telemetry-cell">
+            <strong>{telemetry.total >= 1000 ? `${(telemetry.total / 1000).toFixed(1)}k` : String(telemetry.total)}</strong>
+            <small>{t('累计 Token')}</small>
+          </div>
+          <div className="whale-telemetry-cell">
+            <strong>{telemetry.cachePct}%</strong>
+            <small>{t('缓存命中')}</small>
+          </div>
+          <div className="whale-telemetry-cell">
+            <strong>{telemetry.compressPct > 0 ? `${telemetry.compressPct}%` : '—'}</strong>
+            <small>{t('上下文压缩')}</small>
+          </div>
+        </div>
+      )}
       <div className="whale-master-switches" aria-label={t('核心权限总开关')}>
         {MASTER_SWITCHES.map(item => (
           <label key={item.key} className="whale-master-row">

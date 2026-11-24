@@ -1295,6 +1295,312 @@ select:focus {
   box-shadow: 0 5px 0 rgba(92, 58, 27, 0.30);
 }
 
+
+/* --------------------------------------------------------------------------
+ * 6.9. Concept-Art Pixel-Faithful Authority Layer (Defeats Legacy !important)
+ *      Matches exact real DOM classes in WhaleChatScreen.tsx & AppNavigation.tsx
+ * -------------------------------------------------------------------------- */
+
+/* 1. Top Header Bar (.whale-chat-header.is-minimal) */
+:root[data-style='simple'] .whale-chat-header.is-minimal {
+  background: rgba(244, 245, 247, 0.88) !important;
+  backdrop-filter: blur(20px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+  border-bottom: 1px solid rgba(11, 15, 23, 0.09) !important;
+  border-radius: 0 !important;
+  padding: 10px 14px !important;
+  box-shadow: none !important;
+}
+:root[data-style='simple'][data-theme='dark'] .whale-chat-header.is-minimal {
+  background: rgba(6, 8, 12, 0.88) !important;
+  border-bottom-color: rgba(237, 241, 247, 0.09) !important;
+}
+
+:root[data-style='cute'] .whale-chat-header.is-minimal {
+  background: rgba(238, 246, 255, 0.82) !important;
+  backdrop-filter: blur(22px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(27, 126, 242, 0.14) !important;
+  border-radius: 0 !important;
+  padding: 10px 14px !important;
+  box-shadow: 0 4px 18px -14px rgba(18, 76, 152, 0.25) !important;
+}
+:root[data-style='cute'][data-theme='dark'] .whale-chat-header.is-minimal {
+  background: rgba(8, 17, 31, 0.84) !important;
+  border-bottom-color: rgba(92, 200, 255, 0.16) !important;
+}
+
+:root[data-style='usagi'] .whale-chat-header.is-minimal {
+  background: rgba(255, 251, 234, 0.94) !important;
+  border-bottom: 1.8px solid #5c3a1b !important;
+  border-radius: 0 !important;
+  padding: 10px 14px !important;
+  box-shadow: none !important;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-chat-header.is-minimal {
+  background: rgba(24, 17, 11, 0.94) !important;
+  border-bottom-color: #e09f3e !important;
+}
+
+/* 2. Starter Cards — True 2-Column Concept-Art Material */
+:root[data-style='cute'] .whale-starter-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(236, 245, 255, 0.90) 100%) !important;
+  border: 1px solid rgba(27, 126, 242, 0.16) !important;
+  border-radius: 22px !important;
+  box-shadow: 0 10px 24px -16px rgba(18, 76, 152, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+}
+:root[data-style='cute'][data-theme='dark'] .whale-starter-card {
+  background: linear-gradient(180deg, rgba(22, 40, 68, 0.92) 0%, rgba(14, 26, 46, 0.96) 100%) !important;
+  border-color: rgba(92, 200, 255, 0.22) !important;
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+:root[data-style='usagi'] .whale-starter-card {
+  background: #fffdf6 !important;
+  border: 1.8px solid #5c3a1b !important;
+  border-radius: 18px !important;
+  box-shadow: 0 3.5px 0 #5c3a1b !important;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-starter-card {
+  background: #241a12 !important;
+  border-color: #e09f3e !important;
+  box-shadow: 0 3.5px 0 #0c0704 !important;
+}
+
+/* 3. Chat Bubbles — Unmistakable 3-World Differentiation + Usagi Comic Tails */
+:root[data-style='simple'] .whale-msg-user .whale-msg-bubble {
+  background: #0f52ba !important;
+  color: #ffffff !important;
+  border: 0 !important;
+  border-radius: 16px 16px 4px 16px !important;
+  box-shadow: 0 4px 14px -8px rgba(15, 82, 186, 0.50) !important;
+}
+:root[data-style='simple'][data-theme='dark'] .whale-msg-user .whale-msg-bubble {
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+:root[data-style='simple'] .whale-msg-assistant .whale-msg-bubble {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 2px 0 !important;
+}
+
+:root[data-style='cute'] .whale-msg-user .whale-msg-bubble {
+  background: linear-gradient(135deg, #1b7ef2 0%, #4fb2ff 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  border-radius: 22px 22px 6px 22px !important;
+  box-shadow: 0 10px 24px -10px rgba(27, 126, 242, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+}
+:root[data-style='cute'] .whale-msg-assistant .whale-msg-bubble {
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #12263f !important;
+  border: 1px solid rgba(27, 126, 242, 0.16) !important;
+  border-radius: 22px 22px 22px 6px !important;
+  padding: 12px 15px !important;
+  box-shadow: 0 10px 26px -16px rgba(18, 76, 152, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+}
+:root[data-style='cute'][data-theme='dark'] .whale-msg-assistant .whale-msg-bubble {
+  background: rgba(18, 34, 58, 0.92) !important;
+  color: #ecf4ff !important;
+  border-color: rgba(92, 200, 255, 0.22) !important;
+  box-shadow: 0 12px 28px -14px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+:root[data-style='usagi'] .whale-msg-user .whale-msg-bubble {
+  position: relative;
+  background: #f59e0b !important;
+  color: #2b1707 !important;
+  border: 1.8px solid #5c3a1b !important;
+  border-radius: 20px 20px 4px 20px !important;
+  box-shadow: 0 3.5px 0 #5c3a1b !important;
+  font-weight: 560;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-msg-user .whale-msg-bubble {
+  background: #d97706 !important;
+  color: #fffbeb !important;
+  border-color: #fbbf24 !important;
+  box-shadow: 0 3.5px 0 #0c0704 !important;
+}
+:root[data-style='usagi'] .whale-msg-assistant .whale-msg-bubble {
+  position: relative;
+  background: #fffdf6 !important;
+  color: #3a2312 !important;
+  border: 1.8px solid #5c3a1b !important;
+  border-radius: 20px 20px 20px 4px !important;
+  padding: 12px 15px !important;
+  box-shadow: 0 3.5px 0 #5c3a1b !important;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-msg-assistant .whale-msg-bubble {
+  background: #241a12 !important;
+  color: #fef3c7 !important;
+  border-color: #e09f3e !important;
+  box-shadow: 0 3.5px 0 #0c0704 !important;
+}
+
+/* Usagi Comic Speech-Bubble Little Tails */
+:root[data-style='usagi'] .whale-msg-assistant .whale-msg-bubble::after {
+  content: '';
+  position: absolute;
+  left: -6px;
+  bottom: 8px;
+  width: 10px;
+  height: 10px;
+  background: #fffdf6;
+  border-left: 1.8px solid #5c3a1b;
+  border-bottom: 1.8px solid #5c3a1b;
+  transform: rotate(45deg);
+  border-bottom-left-radius: 2px;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-msg-assistant .whale-msg-bubble::after {
+  background: #241a12;
+  border-color: #e09f3e;
+}
+:root[data-style='usagi'] .whale-msg-user .whale-msg-bubble::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  bottom: 8px;
+  width: 10px;
+  height: 10px;
+  background: #f59e0b;
+  border-right: 1.8px solid #5c3a1b;
+  border-top: 1.8px solid #5c3a1b;
+  transform: rotate(45deg);
+  border-top-right-radius: 2px;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-msg-user .whale-msg-bubble::after {
+  background: #d97706;
+  border-color: #fbbf24;
+}
+
+/* 4. REAL Tool Execution Timeline (.whale-msg-steps) + Usagi Washi-Tape Sticky Note */
+.whale-msg-steps {
+  position: relative;
+  border-radius: var(--radius-inner) !important;
+  border: var(--card-border-w) solid var(--line-alt) !important;
+  background: var(--surface) !important;
+  padding: 8px 12px !important;
+  box-shadow: var(--shadow-card);
+}
+
+.whale-msg-steps ul {
+  position: relative;
+  margin: 8px 0 2px !important;
+  padding-left: 18px !important;
+  list-style: none !important;
+}
+
+.whale-msg-steps ul::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 6px;
+  bottom: 6px;
+  width: 1.5px;
+  background: var(--blue-line);
+  border-radius: 99px;
+}
+
+.whale-msg-steps li {
+  position: relative;
+  padding: 3px 0;
+}
+
+:root[data-style='usagi'] .whale-msg-steps {
+  margin-top: 12px !important;
+  background: #fffdf6 !important;
+  border: 1.8px solid #5c3a1b !important;
+  box-shadow: 0 3px 0 #5c3a1b !important;
+  overflow: visible !important;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-msg-steps {
+  background: #241a12 !important;
+  border-color: #e09f3e !important;
+  box-shadow: 0 3px 0 #0c0704 !important;
+}
+:root[data-style='usagi'] .whale-msg-steps::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 52px;
+  height: 14px;
+  transform: translateX(-50%) rotate(-1.6deg);
+  border-radius: 2px;
+  background: rgba(251, 191, 36, 0.68);
+  border: 1.2px solid rgba(92, 58, 27, 0.42);
+  pointer-events: none;
+}
+
+/* 5. Floating Composer & Send Button (.whale-chat-composer & .whale-send-btn) */
+:root[data-style='cute'] .whale-chat-composer {
+  border-radius: 999px !important;
+  border: 1px solid rgba(27, 126, 242, 0.22) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  box-shadow: 0 12px 32px -12px rgba(18, 76, 152, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+}
+:root[data-style='cute'][data-theme='dark'] .whale-chat-composer {
+  background: rgba(18, 34, 58, 0.92) !important;
+  border-color: rgba(92, 200, 255, 0.24) !important;
+}
+:root[data-style='cute'] .whale-send-btn:not(:disabled):not(.is-stop) {
+  background: linear-gradient(135deg, #1b7ef2 0%, #5cc8ff 55%, #ff6b9d 125%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px -5px rgba(27, 126, 242, 0.55) !important;
+}
+
+:root[data-style='usagi'] .whale-chat-composer {
+  border-radius: 22px !important;
+  border: 1.8px solid #5c3a1b !important;
+  background: #fffdf6 !important;
+  box-shadow: 0 3.5px 0 #5c3a1b !important;
+}
+:root[data-style='usagi'][data-theme='dark'] .whale-chat-composer {
+  background: #241a12 !important;
+  border-color: #e09f3e !important;
+  box-shadow: 0 3.5px 0 #0c0704 !important;
+}
+:root[data-style='usagi'] .whale-send-btn:not(:disabled):not(.is-stop) {
+  background: #f59e0b !important;
+  color: #2b1707 !important;
+  border: 1.6px solid #5c3a1b !important;
+  box-shadow: 0 2.5px 0 #5c3a1b !important;
+}
+
+/* 6. True Floating Pill Bottom Navigation Dock (Beats styles.css media query) */
+@media (max-width: 900px) {
+  :root[data-style='cute'] .bottom-navigation {
+    margin: 4px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 5px 10px !important;
+    border-radius: 999px !important;
+    border: 1px solid rgba(27, 126, 242, 0.20) !important;
+    background: rgba(255, 255, 255, 0.90) !important;
+    backdrop-filter: blur(22px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(180%) !important;
+    box-shadow: 0 12px 30px -10px rgba(18, 76, 152, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+  }
+  :root[data-style='cute'][data-theme='dark'] .bottom-navigation {
+    background: rgba(16, 30, 52, 0.90) !important;
+    border-color: rgba(92, 200, 255, 0.24) !important;
+    box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+  }
+  :root[data-style='usagi'] .bottom-navigation {
+    margin: 4px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 5px 10px !important;
+    border-radius: 22px !important;
+    border: 1.8px solid #5c3a1b !important;
+    background: #fffdf6 !important;
+    box-shadow: 0 3.5px 0 #5c3a1b !important;
+  }
+  :root[data-style='usagi'][data-theme='dark'] .bottom-navigation {
+    background: #241a12 !important;
+    border-color: #e09f3e !important;
+    box-shadow: 0 3.5px 0 #0c0704 !important;
+  }
+}
+
 /* --------------------------------------------------------------------------
  * 7. Reduced Motion & Eco Safety
  * -------------------------------------------------------------------------- */
