@@ -224,7 +224,7 @@ internal class RadialDragAskWheelView(
 
             // 主题阴影：Usagi 硬偏移贴纸底影 / Cute 海蓝柔影 / Simple 克制哑光影
             if (ui.usagi) {
-                shadowPaint.color = withAlpha(ui.line, (if (isPressed) 90 else 190 * alphaFactor.toInt()).coerceIn(0, 255))
+                shadowPaint.color = withAlpha(ui.line, (if (isPressed) 90 else (190 * alphaFactor).toInt()).coerceIn(0, 255))
                 canvas.drawCircle(ix, iy + (if (isPressed) 1f else 3.2f) * dp, r, shadowPaint)
             } else {
                 shadowPaint.color = if (!ui.simple) withAlpha(ui.primary, (46 * alphaFactor).toInt()) else Color.argb((54 * alphaFactor).toInt(), 0, 0, 0)
@@ -502,4 +502,21 @@ internal class RadialDragAskWheelView(
 
     private fun withAlpha(color: Int, alpha: Int): Int =
         Color.argb(alpha.coerceIn(0, 255), Color.red(color), Color.green(color), Color.blue(color))
+
+    private fun drawSparkleStar(canvas: Canvas, x: Float, y: Float, radius: Float, color: Int) {
+        iconFillPaint.color = color
+        val inner = radius * 0.28f
+        val path = Path().apply {
+            moveTo(x, y - radius)
+            lineTo(x + inner, y - inner)
+            lineTo(x + radius, y)
+            lineTo(x + inner, y + inner)
+            lineTo(x, y + radius)
+            lineTo(x - inner, y + inner)
+            lineTo(x - radius, y)
+            lineTo(x - inner, y - inner)
+            close()
+        }
+        canvas.drawPath(path, iconFillPaint)
+    }
 }
