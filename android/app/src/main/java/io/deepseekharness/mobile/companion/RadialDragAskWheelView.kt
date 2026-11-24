@@ -176,9 +176,37 @@ internal class RadialDragAskWheelView(
         scrimPaint.color = Color.argb((118 * alphaFactor).toInt(), 10, 12, 18)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), scrimPaint)
 
-        // 2. 主题色轨道环
-        orbitPaint.color = withAlpha(ui.primary, (110 * alphaFactor).toInt())
+        // 2. 三主题专属轨道环：Simple 罗盘双虚线刻度 / Cute 海洋光晕环 / Usagi 手绘星芒环
+        orbitPaint.color = withAlpha(if (ui.usagi) ui.line else ui.primary, (118 * alphaFactor).toInt())
         canvas.drawCircle(cx, cy, orbitRadius * p, orbitPaint)
+        if (ui.simple) {
+            // Simple: 精密罗盘内圈与 30° 刻度线
+            orbitPaint.color = withAlpha(ui.primary, (58 * alphaFactor).toInt())
+            canvas.drawCircle(cx, cy, orbitRadius * 0.72f * p, orbitPaint)
+            for (deg in 0 until 360 step 30) {
+                val rad = deg * PI / 180.0
+                val r1 = (orbitRadius - 4f * dp) * p
+                val r2 = (orbitRadius + 4f * dp) * p
+                canvas.drawLine(
+                    cx + (cos(rad) * r1).toFloat(),
+                    cy + (sin(rad) * r1).toFloat(),
+                    cx + (cos(rad) * r2).toFloat(),
+                    cy + (sin(rad) * r2).toFloat(),
+                    orbitPaint,
+                )
+            }
+        } else if (ui.usagi && alphaFactor > 0.4f) {
+            // Usagi: 手账四角星芒装饰
+            val starAlpha = (210 * alphaFactor).toInt()
+            val starR = orbitRadius * p + 38f * dp
+            val starAngles = floatArrayOf(-42f, 38f, 142f, 218f)
+            for (deg in starAngles) {
+                val rad = deg * PI / 180.0
+                val sx = cx + (cos(rad) * starR).toFloat()
+                val sy = cy + (sin(rad) * starR).toFloat()
+                drawSparkleStar(canvas, sx, sy, 6.5f * dp, withAlpha(ui.primary, starAlpha))
+            }
+        }
 
         // 3. 外圈 6 个带独立矢量图标的轮盘按键（28ms 顺时针交错绽放 + 磁吸 1.18× 主题光晕聚焦）
         actions.forEachIndexed { idx, action ->
@@ -189,13 +217,19 @@ internal class RadialDragAskWheelView(
             val scale = (if (isPressed) 1.18f else 1f) * itemAlpha.coerceAtLeast(0.01f)
             val r = itemRadius * scale
             if (isPressed) {
-                shadowPaint.color = withAlpha(ui.primary, (86 * itemAlpha).toInt())
-                canvas.drawCircle(ix, iy, r + 7f * dp, shadowPaint)
+                val glowColor = if (!ui.simple && !ui.usagi) ui.rose else ui.primary
+                shadowPaint.color = withAlpha(glowColor, (108 * itemAlpha).toInt())
+                canvas.drawCircle(ix, iy, r + 8f * dp, shadowPaint)
             }
 
-            // 轻阴影
-            shadowPaint.color = Color.argb((54 * alphaFactor).toInt(), 0, 0, 0)
-            canvas.drawCircle(ix, iy + 3f * dp, r + 1.5f * dp, shadowPaint)
+            // 主题阴影：Usagi 硬偏移贴纸底影 / Cute 海蓝柔影 / Simple 克制哑光影
+            if (ui.usagi) {
+                shadowPaint.color = withAlpha(ui.line, (if (isPressed) 90 else 190 * alphaFactor.toInt()).coerceIn(0, 255))
+                canvas.drawCircle(ix, iy + (if (isPressed) 1f else 3.2f) * dp, r, shadowPaint)
+            } else {
+                shadowPaint.color = if (!ui.simple) withAlpha(ui.primary, (46 * alphaFactor).toInt()) else Color.argb((54 * alphaFactor).toInt(), 0, 0, 0)
+                canvas.drawCircle(ix, iy + 3f * dp, r + 1.5f * dp, shadowPaint)
+            }
 
             // 圆形按钮填充与边框
             val bgColor = when {
@@ -215,8 +249,16 @@ internal class RadialDragAskWheelView(
             }
             circleFillPaint.color = withAlpha(bgColor, (250 * alphaFactor).toInt())
             canvas.drawCircle(ix, iy, r, circleFillPaint)
-            circleStrokePaint.color = withAlpha(strokeColor, (220 * alphaFactor).toInt())
+            circleStrokePaint.strokeWidth = if (ui.usagi) 2.1f * dp else 1.4f * dp
+            circleStrokePaint.color = withAlpha(if (ui.usagi) ui.line else strokeColor, (230 * alphaFactor).toInt())
             canvas.drawCircle(ix, iy, r, circleStrokePaint)
+            if (!ui.simple && !ui.usagi) {
+                // Cute: 顶部瓷釉琉璃高光边
+                circleStrokePaint.strokeWidth = 1.2f * dp
+                circleStrokePaint.color = Color.argb((135 * alphaFactor).toInt(), 255, 255, 255)
+                canvas.drawCircle(ix, iy - 0.6f * dp, r - 1.5f * dp, circleStrokePaint)
+            }
+            circleStrokePaint.strokeWidth = 1.4f * dp
 
             // 矢量图标
             drawVectorIcon(canvas, action.icon, ix, iy, 10.5f * dp * scale, withAlpha(fgColor, (255 * alphaFactor).toInt()))

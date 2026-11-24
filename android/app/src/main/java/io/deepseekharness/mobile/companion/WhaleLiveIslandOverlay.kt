@@ -229,11 +229,22 @@ internal class WhaleLiveIslandOverlay(
 
     private fun buildAndAttachWindow() {
         val ui = PetUi(context)
+        val islandBg = when {
+            ui.simple -> Color.parseColor("#0B0F17")
+            else -> ui.surface
+        }
+        val islandInk = if (ui.simple) Color.parseColor("#EDF1F7") else ui.ink
+        val islandMuted = if (ui.simple) Color.parseColor("#94A3B8") else ui.muted
+        val islandStroke = when {
+            ui.usagi -> ui.line
+            ui.simple -> Color.parseColor("#253652")
+            else -> ui.primary
+        }
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            background = ui.shape(ui.surface, 26, ui.primary)
-            setPadding(ui.dp(12), ui.dp(7), ui.dp(12), ui.dp(7))
-            elevation = ui.dp(10).toFloat()
+            background = ui.shape(islandBg, if (ui.simple) 22 else 26, islandStroke)
+            setPadding(ui.dp(13), ui.dp(8), ui.dp(13), ui.dp(8))
+            elevation = ui.dp(12).toFloat()
             alpha = 0f
             scaleX = 0.86f
             scaleY = 0.86f
@@ -252,17 +263,26 @@ internal class WhaleLiveIslandOverlay(
         val compactTitle = TextView(context).apply {
             textSize = 12.2f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(ui.ink)
+            setTextColor(islandInk)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
+        val liveChip = if (ui.usagi) TextView(context).apply {
+            text = "● LIVE"
+            textSize = 9.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#FBBF24"))
+            background = ui.shape(Color.parseColor("#1C140D"), 999)
+            setPadding(ui.dp(7), ui.dp(2), ui.dp(7), ui.dp(2))
+        } else null
         val chevron = TextView(context).apply {
             text = "▾"
             textSize = 11.5f
-            setTextColor(ui.muted)
+            setTextColor(islandMuted)
             setPadding(ui.dp(6), 0, 0, 0)
         }
         compact.addView(indicator, LinearLayout.LayoutParams(ui.dp(16), ui.dp(16)).apply { marginEnd = ui.dp(8) })
+        if (liveChip != null) compact.addView(liveChip, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = ui.dp(7) })
         compact.addView(compactTitle, LinearLayout.LayoutParams(0, -2, 1f))
         compact.addView(chevron, LinearLayout.LayoutParams(-2, -2))
         root.addView(compact, LinearLayout.LayoutParams(-1, -2))
@@ -280,7 +300,7 @@ internal class WhaleLiveIslandOverlay(
         val dTitle = TextView(context).apply {
             textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(ui.ink)
+            setTextColor(islandInk)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
@@ -293,10 +313,21 @@ internal class WhaleLiveIslandOverlay(
         headerRow.addView(dTitle, LinearLayout.LayoutParams(0, -2, 1f))
         headerRow.addView(dBadge, LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
         exp.addView(headerRow, LinearLayout.LayoutParams(-1, -2))
+        val progressTrack = View(context).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                when {
+                    ui.usagi -> intArrayOf(Color.parseColor("#F59E0B"), Color.parseColor("#FF6B8B"))
+                    ui.simple -> intArrayOf(Color.parseColor("#0F52BA"), Color.parseColor("#60A5FA"))
+                    else -> intArrayOf(Color.parseColor("#1B7EF2"), Color.parseColor("#5CC8FF"), Color.parseColor("#FF6B9D"))
+                },
+            ).apply { cornerRadius = ui.dp(99).toFloat() }
+        }
+        exp.addView(progressTrack, LinearLayout.LayoutParams(-1, ui.dp(4)).apply { topMargin = ui.dp(8) })
 
         val dBody = TextView(context).apply {
             textSize = 12f
-            setTextColor(ui.muted)
+            setTextColor(islandMuted)
             maxLines = 3
             ellipsize = android.text.TextUtils.TruncateAt.END
             setLineSpacing(ui.dp(2).toFloat(), 1f)
@@ -327,7 +358,7 @@ internal class WhaleLiveIslandOverlay(
         val btnCollapse = TextView(context).apply {
             text = "收起"
             textSize = 12f
-            setTextColor(ui.muted)
+            setTextColor(islandMuted)
             setPadding(ui.dp(10), ui.dp(6), ui.dp(6), ui.dp(6))
             setOnClickListener { setExpandedState(false) }
         }

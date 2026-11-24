@@ -284,16 +284,28 @@ export function WhalePowerHub() {
             </div>
           )}
           {usage && (
-            <div className="whale-usage-pills">
-              <span>{t('对话')} {fmtTok(usage.chatTokens)}</span>
-              {typeof usage.petTokens === 'number' && usage.petTokens > 0 && <span>{t('桌宠')} {fmtTok(usage.petTokens)}</span>}
-              <span>{t('后台')} {fmtTok(usage.workerTokens + (usage.bgTokens ?? 0))}</span>
-              <span>{t('屏控')} {fmtTok(usage.phoneTokens)}</span>
-              <span>{t('缓存命中')} {Math.round(usage.cacheHitRatio * 100)}%</span>
-              {typeof usage.compressionRatio === 'number' && usage.compressionRatio > 0 && (
-                <span>{t('上下文压缩')} {Math.round(usage.compressionRatio * 100)}%</span>
-              )}
-            </div>
+            <>
+              <div className="whale-telemetry-grid" aria-label={t('核心用量遥测')}>
+                <div className="whale-telemetry-cell">
+                  <strong>{fmtTok(usage.chatTokens + (usage.petTokens ?? 0) + usage.workerTokens + (usage.bgTokens ?? 0) + usage.phoneTokens)}</strong>
+                  <small>{t('累计 Token')}</small>
+                </div>
+                <div className="whale-telemetry-cell">
+                  <strong>{Math.round(usage.cacheHitRatio * 100)}%</strong>
+                  <small>{t('缓存命中')}</small>
+                </div>
+                <div className="whale-telemetry-cell">
+                  <strong>{typeof usage.compressionRatio === 'number' && usage.compressionRatio > 0 ? `${Math.round(usage.compressionRatio * 100)}%` : '—'}</strong>
+                  <small>{t('上下文压缩')}</small>
+                </div>
+              </div>
+              <div className="whale-usage-pills">
+                <span>{t('对话')} {fmtTok(usage.chatTokens)}</span>
+                {typeof usage.petTokens === 'number' && usage.petTokens > 0 && <span>{t('桌宠')} {fmtTok(usage.petTokens)}</span>}
+                <span>{t('后台')} {fmtTok(usage.workerTokens + (usage.bgTokens ?? 0))}</span>
+                <span>{t('屏控')} {fmtTok(usage.phoneTokens)}</span>
+              </div>
+            </>
           )}
           <div className="whale-power-group">
             <label className="whale-power-label">{t('分场景模型（留空则自动路由）')}</label>

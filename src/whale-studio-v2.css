@@ -857,6 +857,204 @@ input[type='checkbox'][role='switch']:checked {
   box-shadow: 0 3px 0 #0e0905;
 }
 
+
+/* --------------------------------------------------------------------------
+ * 6.5. Studio V2.1 Concept-Spec Details (Floating Docks, Timeline, Gauges,
+ *      Polaroid Previews, Jelly Switches, Washi-Tape Tool Cards & Comic Craft)
+ * -------------------------------------------------------------------------- */
+
+/* A. True Floating Pill Bottom Navigation Dock (Cute & Usagi) */
+:root[data-style='cute'] .bottom-navigation {
+  margin: 0 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(27, 126, 242, 0.16);
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  box-shadow: 0 12px 32px -12px rgba(18, 76, 152, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+:root[data-style='cute'][data-theme='dark'] .bottom-navigation {
+  border-color: rgba(92, 200, 255, 0.22);
+  background: rgba(16, 30, 52, 0.88);
+  box-shadow: 0 14px 36px -10px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+:root[data-style='usagi'] .bottom-navigation {
+  margin: 0 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  padding: 6px 10px;
+  border-radius: 22px;
+  border: 1.6px solid #5c3a1b !important;
+  background: var(--surface) !important;
+  box-shadow: 0 3.5px 0 #5c3a1b;
+}
+
+:root[data-style='usagi'][data-theme='dark'] .bottom-navigation {
+  border-color: #e09f3e !important;
+  background: var(--surface) !important;
+  box-shadow: 0 3.5px 0 #0c0704;
+}
+
+/* B. 3-Column Tabular-Nums Telemetry Gauge Grid (WhalePowerHub) */
+.whale-telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.whale-telemetry-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border-radius: var(--radius-inner);
+  border: var(--card-border-w) solid var(--line-alt);
+  background: var(--surface-sunken);
+  text-align: center;
+}
+
+.whale-telemetry-cell strong {
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.whale-telemetry-cell small {
+  font-size: 0.70rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+:root[data-style='cute'] .whale-telemetry-cell {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(232, 242, 253, 0.85) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 4px 12px -8px rgba(18, 76, 152, 0.22);
+}
+
+:root[data-style='cute'][data-theme='dark'] .whale-telemetry-cell {
+  background: linear-gradient(180deg, rgba(23, 42, 71, 0.88) 0%, rgba(16, 30, 52, 0.92) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+:root[data-style='usagi'] .whale-telemetry-cell {
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 2.5px 0 rgba(92, 58, 27, 0.22);
+}
+
+/* C. Vertical Tool-Execution Timeline & Usagi Washi-Tape Sticky Note */
+.whale-tool-steps {
+  position: relative;
+}
+
+.whale-tool-step-list,
+.whale-tool-steps ul {
+  position: relative;
+  padding-left: 16px;
+}
+
+.whale-tool-step-list::before,
+.whale-tool-steps ul::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  bottom: 8px;
+  width: 1.5px;
+  background: var(--line-strong);
+  border-radius: 99px;
+}
+
+:root[data-style='simple'] .whale-step-dot.is-running,
+:root[data-style='simple'] .whale-step-dot.is-active {
+  box-shadow: 0 0 0 3px rgba(15, 82, 186, 0.22), 0 0 8px rgba(15, 82, 186, 0.45);
+}
+
+:root[data-style='cute'] .whale-step-dot {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.85), 0 2px 6px rgba(27, 126, 242, 0.30);
+}
+
+/* Usagi: Washi-Tape Note Strip on top of Tool Steps Accordion */
+:root[data-style='usagi'] .whale-tool-steps {
+  margin-top: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.20);
+  overflow: visible;
+}
+
+:root[data-style='usagi'] .whale-tool-steps::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 48px;
+  height: 13px;
+  transform: translateX(-50%) rotate(-1.5deg);
+  border-radius: 2px;
+  background: rgba(251, 191, 36, 0.58);
+  border: 1px solid rgba(92, 58, 27, 0.32);
+  pointer-events: none;
+}
+
+/* D. Polaroid Photo Attachment Previews */
+.whale-image-preview-item {
+  padding: 3px 3px 9px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 6px 16px -8px rgba(11, 15, 23, 0.28);
+  transform: rotate(-1.6deg);
+  transition: transform 180ms var(--press-ease), box-shadow 180ms ease;
+}
+
+.whale-image-preview-item:nth-child(even) {
+  transform: rotate(1.8deg);
+}
+
+:root[data-theme='dark'] .whale-image-preview-item {
+  background: #1c2432;
+}
+
+:root[data-style='usagi'] .whale-image-preview-item {
+  border: 1.5px solid #5c3a1b;
+  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.28);
+}
+
+/* E. Cute Jelly-Gloss Pill Switches */
+:root[data-style='cute'] input[type='checkbox'][role='switch'] {
+  box-shadow: inset 0 2px 4px rgba(18, 76, 152, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.75);
+}
+
+:root[data-style='cute'] input[type='checkbox'][role='switch']:checked {
+  background: linear-gradient(135deg, #1b7ef2 0%, #5cc8ff 58%, #ff6b9d 140%);
+  box-shadow: 0 4px 12px -4px rgba(27, 126, 242, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.65);
+}
+
+/* F. Usagi Dotted Cocoa Dividers & Notebook-Grid Markdown Tables */
+:root[data-style='usagi'] .management-row + .management-row,
+:root[data-style='usagi'] .whale-power-body {
+  border-top-style: dotted !important;
+  border-top-width: 1.5px !important;
+}
+
+:root[data-style='usagi'] .whale-msg-assistant table {
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 2.5px 0 rgba(92, 58, 27, 0.18);
+}
+
+:root[data-style='usagi'] .whale-msg-assistant th,
+:root[data-style='usagi'] .whale-msg-assistant td {
+  border-color: rgba(107, 68, 35, 0.24);
+}
+
+/* G. Simple Precision Range Slider */
+:root[data-style='simple'] input[type='range'] {
+  accent-color: var(--blue);
+}
+
 /* --------------------------------------------------------------------------
  * 7. Reduced Motion & Eco Safety
  * -------------------------------------------------------------------------- */
