@@ -57,7 +57,7 @@ internal class CompanionDashboard(private val context: Context) {
                 .put("skills", WhaleSkillStore.list(context))
                 .put("mcpServers", WhaleMcpManager.listServers(context))
             "settleOutbox" -> {
-                val key = options.optString("key").trim()
+                val key = request.optString("key").trim()
                 JSONObject().put("ok", true).put("settled", WhaleSuperagentRelay.settleOutbox(context, key))
             }
             "flushOutbox" -> {
