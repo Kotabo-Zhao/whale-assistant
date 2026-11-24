@@ -167,6 +167,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         // 0. 统一执行模式与后台 Worker 生命周期前置路由（查状态 / 追问透传 / 精准取消 / 清理 / 显式后台派发）
         var execMode = WhaleExecutionRouter.Mode.FOREGROUND_AGENT
         if (!isWorkerSession) {
+            WhaleSuperagentRelay.resumeInterruptedIfNeeded(app)
+            WhaleSuperagentRelay.flushPendingRelays(app)
             val activeWorkers = WhaleNativeWorkerPool.activeWorkers()
             val recentWorkers = WhaleNativeWorkerPool.recentFinishedWorkers()
             val execDecision = WhaleExecutionRouter.route(
@@ -193,6 +195,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         execDecision.targetWorker != null -> {
                             val t = execDecision.targetWorker
                             WhaleNativeWorkerPool.cancel(t.id)
+                            WhaleSuperagentRelay.recordWorkerEnded(app, t.id)
                             runCatching { WorkerDashboardStore(app).forceCancelWorker(t.id) }
                             WhaleLongTaskStore.markTerminal(app, t.id, "cancelled")
                             WhaleNativeLiveNotification.cancel(app)
@@ -267,6 +270,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     val taskPrompt = execDecision.payload.ifBlank { trimmed }
                     val workerCtrl = RunControl()
                     WhaleNativeLiveNotification.update(app, title = title, subtitle = "正在后台为你处理…", ongoing = true, indeterminate = true)
+                    WhaleSuperagentRelay.recordWorkerStarted(app, jobId, title, taskPrompt)
                     WhaleNativeWorkerPool.submit(title = title, id = jobId, priorityBy = "launch") {
                         WhaleNativeWorkerPool.attachControl(jobId, workerCtrl)
                         try {
@@ -384,9 +388,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 deferredCustomNames = schemaBundle.deferredCustomNames,
                 deferredMcpNames = schemaBundle.deferredMcpNames,
             )
-            rawDynamicCtxChars = built.first
+            val silentNotices = WhaleSuperagentRelay.formatNoticesForPrompt(WhaleSuperagentRelay.drainNotices(sessionId))
+            rawDynamicCtxChars = built.first + silentNotices.length
             ragSkippedByGate = built.third
-            built.second
+            built.second + silentNotices
         }
         var toolPayloadRawChars = 0
         var toolPayloadCompactChars = 0

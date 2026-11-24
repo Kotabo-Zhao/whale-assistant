@@ -464,11 +464,19 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
     }))
   }
 
+  const settledOutboxRef = useRef<Set<string>>(new Set())
+
   useEffect(() => {
     const onAssistantPush = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ reply?: string; source?: string; title?: string }>).detail
+      const detail = (ev as CustomEvent<{ reply?: string; source?: string; title?: string; outboxKey?: string }>).detail
       const reply = detail?.reply?.trim()
       if (!reply) return
+      const outboxKey = detail?.outboxKey?.trim()
+      if (outboxKey) {
+        if (settledOutboxRef.current.has(outboxKey)) return
+        settledOutboxRef.current.add(outboxKey)
+        void bridge.companionDashboard?.({ operation: 'settleOutbox', key: outboxKey }).catch(() => undefined)
+      }
       const pushed: WhaleChatMessage = {
         id: `push-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         role: 'assistant',
@@ -478,6 +486,7 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
       updateSessionMessages(activeId, prev => [...prev, pushed])
     }
     window.addEventListener('whale:assistant-push', onAssistantPush)
+    void bridge.companionDashboard?.({ operation: 'flushOutbox' }).catch(() => undefined)
     return () => window.removeEventListener('whale:assistant-push', onAssistantPush)
   }, [activeId])
 

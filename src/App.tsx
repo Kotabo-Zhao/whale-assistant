@@ -3881,7 +3881,7 @@ export function App() {
         const reply = event.reply.trim()
         if (reply) {
           window.dispatchEvent(new CustomEvent('whale:assistant-push', {
-            detail: { reply, source: event.source, title: event.title },
+            detail: { reply, source: event.source, title: event.title, outboxKey: event.outboxKey },
           }))
         }
       } else if (event.action === 'ask' && typeof event.prompt === 'string') {

@@ -56,6 +56,14 @@ internal class CompanionDashboard(private val context: Context) {
             "extensionsList" -> JSONObject()
                 .put("skills", WhaleSkillStore.list(context))
                 .put("mcpServers", WhaleMcpManager.listServers(context))
+            "settleOutbox" -> {
+                val key = options.optString("key").trim()
+                JSONObject().put("ok", true).put("settled", WhaleSuperagentRelay.settleOutbox(context, key))
+            }
+            "flushOutbox" -> {
+                WhaleSuperagentRelay.resumeInterruptedIfNeeded(context)
+                JSONObject().put("ok", true).put("flushed", WhaleSuperagentRelay.flushPendingRelays(context))
+            }
             "liveIslandPrefs" -> {
                 if (request.has("floatingIsland")) {
                     WhaleNativeLiveNotification.setFloatingIslandEnabled(context, request.optBoolean("floatingIsland", false))

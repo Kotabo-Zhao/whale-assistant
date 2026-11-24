@@ -285,6 +285,9 @@ internal object WhaleExecutionRouter {
         ok: Boolean,
     ) {
         val app = context.applicationContext
+        val orphanedFollowups = WhaleSuperagentRelay.collectOrphanedFollowups(
+            WhaleNativeWorkerPool.unreadFollowups(workerId),
+        )
         val artifacts = WhaleContextLedger.extractArtifactPaths(listOf("assistant" to rawReply))
         val digest = rawReply.trim().replace(Regex("\\n{3,}"), "\n\n").take(900)
         val coordinatorText = buildString {
@@ -299,16 +302,26 @@ internal object WhaleExecutionRouter {
                 append(digest.take(240).ifBlank { "执行未能完成" })
                 append("。如果你愿意，直接告诉我怎么调整，我马上继续处理。")
             }
+            if (orphanedFollowups.isNotBlank()) {
+                append("\n\n另外，你刚追加的指令到达时本轮刚好收尾，我已保留在主对话上下文里，直接说一声我就接着处理：\n> ")
+                append(orphanedFollowups.replace("\n", "\n> "))
+            }
         }
-        // 1. 通过应用控制总线静默回流到当前主对话（单一会话无感体验）
-        WhaleAppControlBus.emit(
-            org.json.JSONObject()
-                .put("action", "assistant_push")
-                .put("source", "coordinator_synthesis")
-                .put("title", title)
-                .put("reply", coordinatorText),
+        // 1. 经持久化 Outbox 单出口投递（WebView 休眠不丢、前端渲染后 settle 防重）
+        WhaleSuperagentRelay.enqueueRelay(
+            context = app,
+            key = "worker:$workerId",
+            source = "coordinator_synthesis",
+            title = title,
+            reply = coordinatorText,
         )
-        // 2. 推送主助手口吻的轻提醒并结束常驻实况进度
+        // 2. 静默背景通知写入主会话下轮上下文（不额外唤醒模型）
+        WhaleSuperagentRelay.recordNotice(
+            "whale-main",
+            if (orphanedFollowups.isNotBlank()) "后台任务「$title」已汇总并自动回收；另有未读追问待续接：$orphanedFollowups"
+            else "后台任务「$title」已汇总并自动回收。",
+        )
+        // 3. 推送主助手口吻轻提醒并结束常驻实况进度
         WhaleNativeLiveNotification.update(
             app,
             title = if (ok) "已整理好：$title" else "需要确认：$title",
@@ -316,8 +329,9 @@ internal object WhaleExecutionRouter {
             ongoing = false,
             indeterminate = false,
         )
-        // 3. 用完即焚自动 GC：从内存池、磁盘任务台与长任务表回收，避免任何残留红点
+        // 4. 用完即焚自动 GC（内存池 + 磁盘任务台 + 长任务表 + 中断恢复表）
         WhaleNativeWorkerPool.remove(workerId)
+        WhaleSuperagentRelay.recordWorkerEnded(app, workerId)
         runCatching { WorkerDashboardStore(app).forceCancelWorker(workerId) }
         WhaleLongTaskStore.markTerminal(app, workerId, if (ok) "completed" else "failed")
         WhaleAppControlBus.emit(org.json.JSONObject().put("action", "refresh"))

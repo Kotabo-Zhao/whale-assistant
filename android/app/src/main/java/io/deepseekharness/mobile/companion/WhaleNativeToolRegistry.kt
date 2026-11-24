@@ -640,6 +640,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
             array.put(schema("whale_worker_manage", "管理与清理后台 Worker 历史及桌宠红点徽标（解决界面残余数字与历史记录删不掉的问题）。", mapOf("action" to "clear_completed（清理已完成与残留徽标）/ delete（按 id 删除单条）/ clear_badge（仅清零桌宠待办红点）", "id" to "action=delete 时的 Worker ID"), listOf("action")))
             array.put(schema("whale_context_search", "检索当前会话已被增量折叠归档的历史记忆块（返回 rangeId 与摘要，不消耗大上下文）。", mapOf("query" to "检索关键词", "sessionId" to "可选：会话 ID，默认 whale-main"), listOf("query")))
+            array.put(schema("whale_worker_handback", "当后台 Worker 发现收到的用户追问与当前任务无关时，将其退回给 Router 走旁路快答（每个输入限退回一次防循环）。", mapOf("workerId" to "当前 Worker ID", "userMessage" to "被误投递的用户原话", "reason" to "退回原因"), listOf("workerId", "userMessage")))
             array.put(schema("whale_context_expand", "可逆展开单个已折叠的历史记忆块原文（单轮限展开 1 块，仅作临时核对）。", mapOf("rangeId" to "whale_context_search 返回的记忆块 ID", "sessionId" to "可选：会话 ID，默认 whale-main"), listOf("rangeId")))
             array.put(schema("whale_ui_refresh", "强制刷新鲸鱼助手主界面与悬浮桌宠状态徽标，同步最新数据视图。", emptyMap(), emptyList()))
             array.put(schema("whale_voice_speak", "用硅基流动 CosyVoice2 拟人语音让桌宠大声说出一句话。", mapOf("text" to "要朗读的自然中文或英文内容", "voice" to "可选音色：diana / claire / bella / anna / alex / benjamin"), listOf("text")))
@@ -2366,6 +2367,25 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val sid = args.str("sessionId", "whale-main").trim().ifEmpty { "whale-main" }
                     val matches = WhaleContextLedger.search(app, sid, q, limit = 5)
                     ToolOutcome(name, "检索历史折叠记忆块", true, JSONObject().put("sessionId", sid).put("matches", matches).toString())
+                }
+                "whale_worker_handback" -> {
+                    val wid = args.str("workerId").trim()
+                    val msg = args.str("userMessage").trim()
+                    val reason = args.str("reason").trim().ifBlank { "与当前后台任务无关" }
+                    require(wid.isNotEmpty() && msg.isNotEmpty()) { "缺少 workerId 或 userMessage" }
+                    val allowed = WhaleSuperagentRelay.tryMarkHandedBack(wid, msg)
+                    if (!allowed) {
+                        ToolOutcome(name, "该消息已退回过一次，跳过防循环", true, JSONObject().put("handedBack", false).put("reason", "already_handed_back").toString())
+                    } else {
+                        Thread({
+                            val reply = runCatching { WhaleNativeAgentEngine(app).sideLaneQuickReply(msg) }.getOrDefault("")
+                            if (reply.isNotBlank()) {
+                                WhaleSuperagentRelay.enqueueRelay(app, "handback:$wid:${msg.hashCode()}", "side_lane", "旁路快答", reply)
+                            }
+                        }, "whale-handback").apply { isDaemon = true }.start()
+                        WhaleSuperagentRelay.recordNotice("whale-main", "后台任务退回了无关追问（$reason），已自动转旁路回答。")
+                        ToolOutcome(name, "已将无关追问退回主路由处理", true, JSONObject().put("handedBack", true).put("reason", reason).toString(), mutating = true)
+                    }
                 }
                 "whale_context_expand" -> {
                     val rid = args.str("rangeId").trim()

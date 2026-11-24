@@ -413,6 +413,7 @@ export type RuntimeSessionListResult =
 export interface RuntimeSessionWorkspaceEntry {
   id: string
   title?: string
+  outboxKey?: string
   group?: string
   pinned: boolean
   archived: boolean
