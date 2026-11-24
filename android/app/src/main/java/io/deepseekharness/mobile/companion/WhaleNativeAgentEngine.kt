@@ -1462,7 +1462,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val msgs = JSONArray()
             .put(JSONObject().put("role", "system").put("content", "你是鲸鱼助手的旁路快答通道。用户主任务仍在后台推进，请用 1~3 句简洁准确地直接回答这个顺手小问题，不要寒暄也不要提及后台任务。"))
             .put(JSONObject().put("role", "user").put("content", q))
-        val turn = callModel(ep, msgs, JSONArray(), listener = null, control = null, usageAcc = null)
+        val turn = callChatCompletionsWithRetry(ep, msgs, null, listener = null, control = null, fallbacks = emptyList(), usageAcc = null)
         return turn.content.trim()
     }
 }
