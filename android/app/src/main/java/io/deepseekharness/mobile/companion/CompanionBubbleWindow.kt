@@ -512,15 +512,15 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val tip = dp(5).toFloat()
             if (isUser) {
                 view.setPadding(dp(13), dp(9), dp(13), dp(9))
-                view.background = ui.shape(Color.parseColor("#2F8AF5"), 16, null).apply {
+                view.setTextColor(ui.onPrimary); view.background = ui.shape(ui.primary, 18, null).apply {
                     cornerRadii = floatArrayOf(round, round, tip, tip, round, round, round, round)
                 }
                 if (view is TextView) view.setTextColor(Color.WHITE)
             } else {
                 view.setPadding(dp(11), dp(9), dp(11), dp(9))
-                val bgCol = if (ui.usagi) Color.parseColor(if (ui.dark) "#281E14" else "#FFFDF4") else Color.parseColor(if (ui.dark) "#142136" else "#FFFFFF")
-                val strokeCol = if (ui.usagi) Color.parseColor(if (ui.dark) "#574028" else "#F2D48B") else Color.parseColor(if (ui.dark) "#283A57" else "#CBD5E1")
-                val inkCol = if (ui.usagi) Color.parseColor(if (ui.dark) "#FEF3C7" else "#3B2613") else Color.parseColor(if (ui.dark) "#E6EEFC" else "#0F172A")
+                val bgCol = ui.answer
+                val strokeCol: Int? = null
+                val inkCol = ui.ink
                 view.background = ui.shape(bgCol, 16, strokeCol).apply {
                     cornerRadii = floatArrayOf(tip, tip, round, round, round, round, round, round)
                 }

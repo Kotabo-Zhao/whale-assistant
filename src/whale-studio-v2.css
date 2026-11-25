@@ -1,231 +1,223 @@
 /* ============================================================================
- * Whale Assistant — Studio V2 Complete Visual Architecture (2026-11)
+ * Whale Assistant — Quiet Luxury & Borderless Tonal Architecture (V3)
  *
- * Covers 100% of WebView UI surfaces across 3 unmistakable aesthetic worlds:
- *   1. simple — Deep-Sea Swiss Instrument (Precision hairlines, sapphire signal)
- *   2. cute   — Pelagic Porcelain & Glass (Glazed sheen, cerulean + coral glow)
- *   3. usagi  — Nagano Comic Zine (Butter cream paper, cocoa ink, hard sticker press)
- *
- * Loaded LAST in src/main.tsx for clean, conflict-free cascade authority.
+ * Design philosophy (Linear × Things 3 × Apple Frosted Glass × Hobonichi):
+ *   - Eliminate 80% of visible outlines & nested box-in-box borders.
+ *   - Separate hierarchy through tonal surface stepping + diffuse ambient shadow
+ *     + whisper-subtle 0.5px–1px translucent edge light only where needed.
+ *   - Generous vertical breathing room and muted, sophisticated color temperatures:
+ *       1. simple — Quiet Editorial Stone (#F6F6F4 / #090A0D, Ink & Deep Sapphire)
+ *       2. cute   — Frosted Ceramic Glass (#F2F6FB / #09111D, Soft Cerulean & Blush)
+ *       3. usagi  — Hobonichi Warm Paper (#FAF6EC / #15120F, Cream & Muted Caramel)
  * ============================================================================ */
 
 /* --------------------------------------------------------------------------
- * 1. Authoritative Three-World Token System (Light & Dark)
+ * 1. Quiet-Luxury Three-World Token System (Light & Dark)
  * -------------------------------------------------------------------------- */
 :root,
 :root[data-style='simple'] {
-  --bg: #f4f5f7;
+  --bg: #f6f6f4;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-muted: #ebedf2;
-  --surface-hover: #e2e6ee;
-  --surface-sunken: #eef0f4;
-  --header-bg: rgba(244, 245, 247, 0.84);
-  --ink: #0b0f17;
-  --muted: #576071;
-  --field-label: #2c3444;
-  --icon-muted: #647084;
-  --line: rgba(11, 15, 23, 0.085);
-  --line-alt: rgba(11, 15, 23, 0.085);
-  --line-strong: rgba(11, 15, 23, 0.16);
-  --line-faint: rgba(11, 15, 23, 0.045);
-  --blue: #0f52ba;
-  --blue-hover: #0a3f94;
-  --blue-soft: rgba(15, 82, 186, 0.09);
-  --blue-line: rgba(15, 82, 186, 0.24);
-  --accent: #0f52ba;
-  --accent-strong: #0a3f94;
-  --accent-secondary: #0284c7;
+  --surface-muted: #eeefec;
+  --surface-hover: #e7e8e4;
+  --surface-sunken: #f0f1ee;
+  --header-bg: rgba(246, 246, 244, 0.82);
+  --ink: #111318;
+  --muted: #6b7280;
+  --field-label: #374151;
+  --icon-muted: #6b7280;
+  --line: rgba(17, 19, 24, 0.055);
+  --line-alt: rgba(17, 19, 24, 0.05);
+  --line-strong: rgba(17, 19, 24, 0.10);
+  --line-faint: rgba(17, 19, 24, 0.035);
+  --blue: #1d4ed8;
+  --blue-hover: #1e40af;
+  --blue-soft: rgba(29, 78, 216, 0.08);
+  --blue-line: rgba(29, 78, 216, 0.16);
+  --accent: #1d4ed8;
+  --accent-strong: #1e40af;
+  --accent-secondary: #3b82f6;
   --on-accent: #ffffff;
-  --brand-bg: #0b0f17;
-  --radius-control: 10px;
-  --radius-inner: 12px;
-  --radius-card: 15px;
-  --radius-dock: 18px;
-  --shadow-card: 0 1px 2px rgba(11, 15, 23, 0.04), 0 0 0 1px rgba(11, 15, 23, 0.03);
-  --shadow-elevated: 0 12px 32px -12px rgba(11, 15, 23, 0.14), 0 2px 6px rgba(11, 15, 23, 0.05);
-  --shadow-dock: 0 -1px 0 rgba(11, 15, 23, 0.07), 0 -10px 28px -18px rgba(11, 15, 23, 0.14);
-  --surface-sheen: none;
-  --card-border-w: 1px;
+  --brand-bg: #111318;
+  --radius-control: 12px;
+  --radius-inner: 14px;
+  --radius-card: 20px;
+  --radius-dock: 24px;
+  --shadow-card: 0 2px 12px -4px rgba(17, 19, 24, 0.05), 0 1px 2px rgba(17, 19, 24, 0.03);
+  --shadow-elevated: 0 14px 36px -14px rgba(17, 19, 24, 0.12), 0 2px 8px -2px rgba(17, 19, 24, 0.04);
+  --shadow-dock: 0 10px 30px -12px rgba(17, 19, 24, 0.10), 0 1px 3px rgba(17, 19, 24, 0.04);
   --press-ease: cubic-bezier(0.2, 0, 0, 1);
-  --press-ms: 110ms;
+  --press-ms: 120ms;
 }
 
 :root[data-theme='dark'],
 :root[data-style='simple'][data-theme='dark'] {
-  --bg: #06080c;
-  --surface: #0e131b;
-  --surface-raised: #151c28;
-  --surface-muted: #17202e;
-  --surface-hover: #1f2b3d;
-  --surface-sunken: #090c12;
-  --header-bg: rgba(6, 8, 12, 0.84);
-  --ink: #edf1f7;
-  --muted: #8a97ab;
-  --field-label: #cad4e3;
-  --icon-muted: #8a97ab;
-  --line: rgba(237, 241, 247, 0.09);
-  --line-alt: rgba(237, 241, 247, 0.09);
-  --line-strong: rgba(237, 241, 247, 0.18);
-  --line-faint: rgba(237, 241, 247, 0.05);
-  --blue: #60a5fa;
-  --blue-hover: #93c5fd;
-  --blue-soft: rgba(96, 165, 250, 0.14);
-  --blue-line: rgba(96, 165, 250, 0.30);
-  --accent: #60a5fa;
-  --accent-strong: #93c5fd;
-  --accent-secondary: #38bdf8;
-  --on-accent: #06080c;
-  --brand-bg: #edf1f7;
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 6px 20px -12px rgba(0, 0, 0, 0.65);
-  --shadow-elevated: 0 16px 40px -12px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --shadow-dock: 0 -1px 0 rgba(255, 255, 255, 0.08), 0 -14px 32px -12px rgba(0, 0, 0, 0.65);
-  --surface-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --bg: #090a0d;
+  --surface: #12141a;
+  --surface-raised: #171a22;
+  --surface-muted: #1b1f29;
+  --surface-hover: #222734;
+  --surface-sunken: #0e1015;
+  --header-bg: rgba(9, 10, 13, 0.80);
+  --ink: #eef0f4;
+  --muted: #8b92a1;
+  --field-label: #c8ceda;
+  --icon-muted: #8b92a1;
+  --line: rgba(255, 255, 255, 0.055);
+  --line-alt: rgba(255, 255, 255, 0.045);
+  --line-strong: rgba(255, 255, 255, 0.10);
+  --line-faint: rgba(255, 255, 255, 0.03);
+  --blue: #6b9eff;
+  --blue-hover: #8cb5ff;
+  --blue-soft: rgba(107, 158, 255, 0.12);
+  --blue-line: rgba(107, 158, 255, 0.22);
+  --accent: #6b9eff;
+  --accent-strong: #8cb5ff;
+  --accent-secondary: #60a5fa;
+  --on-accent: #090a0d;
+  --brand-bg: #eef0f4;
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 24px -14px rgba(0, 0, 0, 0.60);
+  --shadow-elevated: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 44px -14px rgba(0, 0, 0, 0.72);
+  --shadow-dock: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 36px -12px rgba(0, 0, 0, 0.68);
 }
 
-/* --- 2. CUTE: Pelagic Porcelain & Glass --- */
+/* --- 2. CUTE: Frosted Ceramic Glass (Low-Saturation Pelagic Porcelain) --- */
 :root[data-style='cute'] {
-  --bg: #eef6ff;
-  --surface: rgba(255, 255, 255, 0.94);
+  --bg: #f2f6fb;
+  --surface: rgba(255, 255, 255, 0.92);
   --surface-raised: #ffffff;
-  --surface-muted: #e3effc;
-  --surface-hover: #d5e7fb;
-  --surface-sunken: #e8f2fd;
-  --header-bg: rgba(238, 246, 255, 0.80);
-  --ink: #12263f;
-  --muted: #587497;
-  --field-label: #29466a;
-  --icon-muted: #5d7ba1;
-  --line: rgba(27, 126, 242, 0.12);
-  --line-alt: rgba(27, 126, 242, 0.12);
-  --line-strong: rgba(27, 126, 242, 0.24);
-  --line-faint: rgba(27, 126, 242, 0.06);
-  --blue: #1b7ef2;
-  --blue-hover: #0e66d1;
-  --blue-soft: rgba(27, 126, 242, 0.11);
-  --blue-line: rgba(27, 126, 242, 0.28);
-  --accent: #1b7ef2;
-  --accent-strong: #0e66d1;
-  --accent-secondary: #ff6b9d;
+  --surface-muted: #e8f0f9;
+  --surface-hover: #dfeaf7;
+  --surface-sunken: #ebf2fa;
+  --header-bg: rgba(242, 246, 251, 0.78);
+  --ink: #162438;
+  --muted: #647b99;
+  --field-label: #324a6b;
+  --icon-muted: #677f9e;
+  --line: rgba(22, 36, 56, 0.05);
+  --line-alt: rgba(22, 36, 56, 0.045);
+  --line-strong: rgba(22, 36, 56, 0.09);
+  --line-faint: rgba(22, 36, 56, 0.03);
+  --blue: #2e7cf6;
+  --blue-hover: #1d6ae5;
+  --blue-soft: rgba(46, 124, 246, 0.09);
+  --blue-line: rgba(46, 124, 246, 0.18);
+  --accent: #2e7cf6;
+  --accent-strong: #1d6ae5;
+  --accent-secondary: #f27aa3;
   --on-accent: #ffffff;
-  --brand-bg: #1b7ef2;
+  --brand-bg: #2e7cf6;
+  --radius-control: 14px;
+  --radius-inner: 16px;
+  --radius-card: 22px;
+  --radius-dock: 999px;
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.92), 0 8px 26px -14px rgba(28, 68, 128, 0.12), 0 1px 3px rgba(28, 68, 128, 0.04);
+  --shadow-elevated: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 16px 40px -14px rgba(28, 68, 128, 0.16), 0 2px 8px rgba(28, 68, 128, 0.05);
+  --shadow-dock: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 12px 32px -12px rgba(28, 68, 128, 0.16);
+  --press-ease: cubic-bezier(0.34, 1.48, 0.64, 1);
+  --press-ms: 190ms;
+}
+
+:root[data-style='cute'][data-theme='dark'] {
+  --bg: #09111d;
+  --surface: rgba(17, 29, 48, 0.88);
+  --surface-raised: #172742;
+  --surface-muted: #142238;
+  --surface-hover: #1c2e4b;
+  --surface-sunken: #0d1726;
+  --header-bg: rgba(9, 17, 29, 0.78);
+  --ink: #eaf1fb;
+  --muted: #8aa2c2;
+  --field-label: #c2d3eb;
+  --icon-muted: #8aa2c2;
+  --line: rgba(180, 216, 255, 0.07);
+  --line-alt: rgba(180, 216, 255, 0.055);
+  --line-strong: rgba(180, 216, 255, 0.12);
+  --line-faint: rgba(180, 216, 255, 0.035);
+  --blue: #67b8ff;
+  --blue-hover: #8fcaff;
+  --blue-soft: rgba(103, 184, 255, 0.12);
+  --blue-line: rgba(103, 184, 255, 0.22);
+  --accent: #67b8ff;
+  --accent-strong: #8fcaff;
+  --accent-secondary: #f59bb9;
+  --on-accent: #09111d;
+  --brand-bg: #67b8ff;
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px -14px rgba(0, 0, 0, 0.62);
+  --shadow-elevated: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 44px -12px rgba(0, 0, 0, 0.72);
+  --shadow-dock: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 36px -12px rgba(0, 0, 0, 0.68);
+}
+
+/* --- 3. USAGI: Hobonichi Warm Paper & Velvet Cocoa (Zero Heavy Outlines!) --- */
+:root[data-style='usagi'] {
+  --bg: #faf6ec;
+  --surface: #fffdf9;
+  --surface-raised: #ffffff;
+  --surface-muted: #f4ecda;
+  --surface-hover: #ede2ca;
+  --surface-sunken: #f5efe0;
+  --header-bg: rgba(250, 246, 236, 0.82);
+  --ink: #2f2319;
+  --muted: #826e5a;
+  --field-label: #52402f;
+  --icon-muted: #87715c;
+  --line: rgba(120, 86, 48, 0.08);
+  --line-alt: rgba(120, 86, 48, 0.065);
+  --line-strong: rgba(120, 86, 48, 0.14);
+  --line-faint: rgba(120, 86, 48, 0.045);
+  --blue: #d98b24;
+  --blue-hover: #bf7617;
+  --blue-soft: rgba(217, 139, 36, 0.11);
+  --blue-line: rgba(217, 139, 36, 0.22);
+  --accent: #d98b24;
+  --accent-strong: #bf7617;
+  --accent-secondary: #e87a90;
+  --on-accent: #ffffff;
+  --brand-bg: #d98b24;
   --radius-control: 14px;
   --radius-inner: 16px;
   --radius-card: 22px;
   --radius-dock: 26px;
-  --shadow-card: 0 8px 24px -16px rgba(18, 76, 152, 0.24), 0 1px 2px rgba(18, 76, 152, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  --shadow-elevated: 0 16px 36px -14px rgba(18, 76, 152, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  --shadow-dock: 0 10px 30px -14px rgba(18, 76, 152, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.95);
-  --surface-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  --card-border-w: 1px;
-  --press-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --press-ms: 210ms;
-}
-
-:root[data-style='cute'][data-theme='dark'] {
-  --bg: #08111f;
-  --surface: rgba(16, 30, 52, 0.92);
-  --surface-raised: #172a47;
-  --surface-muted: #142540;
-  --surface-hover: #1c3356;
-  --surface-sunken: #0c1729;
-  --header-bg: rgba(8, 17, 31, 0.80);
-  --ink: #ecf4ff;
-  --muted: #8aa5c9;
-  --field-label: #c2d6f0;
-  --icon-muted: #8aa5c9;
-  --line: rgba(92, 200, 255, 0.14);
-  --line-alt: rgba(92, 200, 255, 0.14);
-  --line-strong: rgba(92, 200, 255, 0.28);
-  --line-faint: rgba(92, 200, 255, 0.07);
-  --blue: #5cc8ff;
-  --blue-hover: #8bd9ff;
-  --blue-soft: rgba(92, 200, 255, 0.15);
-  --blue-line: rgba(92, 200, 255, 0.34);
-  --accent: #5cc8ff;
-  --accent-strong: #8bd9ff;
-  --accent-secondary: #ff8fb8;
-  --on-accent: #071221;
-  --brand-bg: #5cc8ff;
-  --shadow-card: 0 10px 28px -14px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --shadow-elevated: 0 18px 42px -12px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.10);
-  --shadow-dock: 0 14px 36px -12px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --surface-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-/* --- 3. USAGI: Nagano Comic Zine & Butter Paper --- */
-:root[data-style='usagi'] {
-  --bg: #fffbea;
-  --surface: #fffdf6;
-  --surface-raised: #ffffff;
-  --surface-muted: #fef0c3;
-  --surface-hover: #fde49b;
-  --surface-sunken: #fbf3d5;
-  --header-bg: rgba(255, 251, 234, 0.90);
-  --ink: #3a2312;
-  --muted: #846142;
-  --field-label: #58391e;
-  --icon-muted: #8a633f;
-  --line: #6b4423;
-  --line-alt: rgba(107, 68, 35, 0.32);
-  --line-strong: #5c3a1b;
-  --line-faint: rgba(107, 68, 35, 0.16);
-  --blue: #e08200;
-  --blue-hover: #b86600;
-  --blue-soft: rgba(251, 191, 36, 0.26);
-  --blue-line: #6b4423;
-  --accent: #e08200;
-  --accent-strong: #b86600;
-  --accent-secondary: #ff6b8b;
-  --on-accent: #2b1707;
-  --brand-bg: #f59e0b;
-  --radius-control: 14px;
-  --radius-inner: 16px;
-  --radius-card: 20px;
-  --radius-dock: 22px;
-  --shadow-card: 0 3px 0 rgba(92, 58, 27, 0.22);
-  --shadow-elevated: 0 5px 0 rgba(92, 58, 27, 0.28);
-  --shadow-dock: 0 4px 0 rgba(92, 58, 27, 0.25);
-  --surface-sheen: none;
-  --card-border-w: 1.6px;
+  --shadow-card: 0 6px 24px -12px rgba(110, 74, 34, 0.10), 0 1px 3px rgba(110, 74, 34, 0.04);
+  --shadow-elevated: 0 16px 40px -14px rgba(110, 74, 34, 0.14), 0 2px 8px rgba(110, 74, 34, 0.05);
+  --shadow-dock: 0 12px 32px -12px rgba(110, 74, 34, 0.14);
   --press-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --press-ms: 120ms;
+  --press-ms: 140ms;
 }
 
 :root[data-style='usagi'][data-theme='dark'] {
-  --bg: #18110b;
-  --surface: #241a12;
-  --surface-raised: #302216;
-  --surface-muted: #332417;
-  --surface-hover: #422e1d;
-  --surface-sunken: #1d150e;
-  --header-bg: rgba(24, 17, 11, 0.90);
-  --ink: #fef3c7;
-  --muted: #d5b78c;
-  --field-label: #f6dfaa;
-  --icon-muted: #cfa976;
-  --line: rgba(224, 159, 62, 0.44);
-  --line-alt: rgba(224, 159, 62, 0.28);
-  --line-strong: #e09f3e;
-  --line-faint: rgba(224, 159, 62, 0.14);
-  --blue: #fbbf24;
-  --blue-hover: #fcd34d;
-  --blue-soft: rgba(251, 191, 36, 0.18);
-  --blue-line: rgba(251, 191, 36, 0.48);
-  --accent: #fbbf24;
-  --accent-strong: #fcd34d;
-  --accent-secondary: #f472b6;
-  --on-accent: #241405;
-  --brand-bg: #fbbf24;
-  --shadow-card: 0 3px 0 #0e0905;
-  --shadow-elevated: 0 5px 0 #0c0704;
-  --shadow-dock: 0 4px 0 #0c0704;
-  --surface-sheen: none;
-  --card-border-w: 1.5px;
+  --bg: #15120f;
+  --surface: #1f1a15;
+  --surface-raised: #27201a;
+  --surface-muted: #2a231c;
+  --surface-hover: #332a22;
+  --surface-sunken: #191511;
+  --header-bg: rgba(21, 18, 15, 0.82);
+  --ink: #f5ecdc;
+  --muted: #ad9a82;
+  --field-label: #dfd0ba;
+  --icon-muted: #ad9a82;
+  --line: rgba(245, 224, 190, 0.07);
+  --line-alt: rgba(245, 224, 190, 0.055);
+  --line-strong: rgba(245, 224, 190, 0.12);
+  --line-faint: rgba(245, 224, 190, 0.035);
+  --blue: #eab354;
+  --blue-hover: #f3c471;
+  --blue-soft: rgba(234, 179, 84, 0.14);
+  --blue-line: rgba(234, 179, 84, 0.24);
+  --accent: #eab354;
+  --accent-strong: #f3c471;
+  --accent-secondary: #eb8da0;
+  --on-accent: #1d150c;
+  --brand-bg: #eab354;
+  --shadow-card: inset 0 1px 0 rgba(255, 240, 215, 0.05), 0 10px 28px -14px rgba(0, 0, 0, 0.65);
+  --shadow-elevated: inset 0 1px 0 rgba(255, 240, 215, 0.07), 0 18px 44px -12px rgba(0, 0, 0, 0.75);
+  --shadow-dock: inset 0 1px 0 rgba(255, 240, 215, 0.06), 0 14px 36px -12px rgba(0, 0, 0, 0.70);
 }
 
 /* --------------------------------------------------------------------------
- * 2. Atmospheric Canvas & Typographic Discipline (All Screens)
+ * 2. Atmospheric Canvas & Typographic Breathing Room
  * -------------------------------------------------------------------------- */
 html,
 body {
@@ -233,45 +225,29 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+:root[data-style='simple'] body,
+:root[data-style='simple'] .app-shell,
+:root[data-style='simple'] .whale-chat-screen {
+  background: var(--bg) !important;
+}
+
 :root[data-style='cute'] body,
 :root[data-style='cute'] .app-shell,
 :root[data-style='cute'] .whale-chat-screen {
   background:
-    radial-gradient(120% 55% at 50% -12%, rgba(92, 200, 255, 0.22) 0%, transparent 62%),
-    radial-gradient(75% 45% at 96% 18%, rgba(255, 107, 157, 0.08) 0%, transparent 58%),
-    var(--bg);
-}
-
-:root[data-style='cute'][data-theme='dark'] body,
-:root[data-style='cute'][data-theme='dark'] .app-shell,
-:root[data-style='cute'][data-theme='dark'] .whale-chat-screen {
-  background:
-    radial-gradient(110% 50% at 50% -14%, rgba(56, 189, 248, 0.16) 0%, transparent 62%),
-    radial-gradient(70% 40% at 92% 16%, rgba(255, 143, 184, 0.08) 0%, transparent 56%),
-    var(--bg);
+    radial-gradient(110% 48% at 50% -14%, rgba(103, 184, 255, 0.15) 0%, transparent 62%),
+    radial-gradient(65% 38% at 95% 12%, rgba(242, 122, 163, 0.06) 0%, transparent 55%),
+    var(--bg) !important;
 }
 
 :root[data-style='usagi'] body,
 :root[data-style='usagi'] .app-shell,
 :root[data-style='usagi'] .whale-chat-screen {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(rgba(180, 115, 24, 0.10) 1px, transparent 1px),
-    radial-gradient(110% 45% at 50% -8%, rgba(254, 240, 138, 0.45) 0%, transparent 60%);
-  background-size: 20px 20px, 100% 100%;
+  background:
+    radial-gradient(110% 45% at 50% -12%, rgba(234, 179, 84, 0.10) 0%, transparent 60%),
+    var(--bg) !important;
 }
 
-:root[data-style='usagi'][data-theme='dark'] body,
-:root[data-style='usagi'][data-theme='dark'] .app-shell,
-:root[data-style='usagi'][data-theme='dark'] .whale-chat-screen {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(rgba(251, 191, 36, 0.065) 1px, transparent 1px),
-    radial-gradient(100% 45% at 50% -10%, rgba(120, 74, 24, 0.28) 0%, transparent 60%);
-  background-size: 22px 22px, 100% 100%;
-}
-
-/* Tabular numbers on every counter, badge, token readout, and status */
 .whale-power-badge,
 .whale-usage-pills span,
 .whale-msg-meta,
@@ -284,7 +260,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Crisp editorial headings across all subpages */
 .screen-heading h1,
 .screen-heading h2,
 .page-heading h1,
@@ -293,104 +268,89 @@ body {
 .mobile-header h2,
 .workspace-dialog-header h2 {
   letter-spacing: -0.025em;
-  line-height: 1.2;
+  line-height: 1.24;
 }
 
 /* --------------------------------------------------------------------------
- * 3. Floating Navigation Chrome (Mobile Bottom Dock + Desktop Sidebar + Header)
+ * 3. Edge-less Top Header & Soft Floating Navigation Dock (Zero Harsh Lines)
  * -------------------------------------------------------------------------- */
-.mobile-header {
-  background: var(--header-bg);
-  backdrop-filter: blur(20px) saturate(165%);
-  -webkit-backdrop-filter: blur(20px) saturate(165%);
-  border-bottom: 1px solid var(--line-faint);
+.mobile-header,
+.whale-chat-header.is-minimal {
+  background: var(--header-bg) !important;
+  backdrop-filter: blur(22px) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(165%) !important;
+  border: 0 !important;
+  border-bottom: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 10px 16px !important;
 }
 
+.whale-icon-chip {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  border-radius: 999px !important;
+}
+.whale-icon-chip:hover,
+.whale-icon-chip.is-active {
+  background: var(--surface-muted) !important;
+  color: var(--ink) !important;
+}
+.whale-icon-chip.is-active {
+  background: var(--blue-soft) !important;
+  color: var(--blue) !important;
+}
+
+/* Floating Borderless Pill Bottom Navigation (All 3 Themes) */
 .bottom-navigation {
-  background: var(--header-bg);
-  backdrop-filter: blur(22px) saturate(175%);
-  -webkit-backdrop-filter: blur(22px) saturate(175%);
-  border-top: 1px solid var(--line);
-  box-shadow: var(--shadow-dock);
-  padding: 6px 14px calc(6px + env(safe-area-inset-bottom, 0px));
-  gap: 10px;
+  background: color-mix(in srgb, var(--surface-raised) 84%, transparent) !important;
+  backdrop-filter: blur(24px) saturate(175%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(175%) !important;
+  border: 1px solid var(--line-faint) !important;
+  box-shadow: var(--shadow-dock) !important;
+}
+
+@media (max-width: 900px) {
+  .bottom-navigation {
+    margin: 4px 18px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 5px 8px !important;
+    border-radius: 999px !important;
+    gap: 6px !important;
+  }
 }
 
 .bottom-navigation-item {
-  position: relative;
-  border-radius: var(--radius-control);
-  transition: transform var(--press-ms) var(--press-ease), background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 999px !important;
+  color: var(--muted) !important;
+  transition: transform var(--press-ms) var(--press-ease), background-color 180ms ease, color 180ms ease;
+}
+
+.bottom-navigation-item.is-active {
+  background: var(--blue-soft) !important;
+  color: var(--blue) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  font-weight: 650 !important;
+}
+
+.bottom-navigation-item.is-active::before {
+  display: none !important;
 }
 
 .bottom-navigation-item:active {
-  transform: scale(0.94);
+  transform: scale(0.95);
 }
 
-/* Simple: Swiss top-rail precision bar */
-:root[data-style='simple'] .bottom-navigation-item.is-active {
-  background: var(--blue-soft);
-  color: var(--blue);
-  font-weight: 650;
-}
-
-/* Cute: Luminous floating porcelain pill */
-:root[data-style='cute'] .bottom-navigation {
-  border-top: 1px solid var(--line);
-}
-
-:root[data-style='cute'] .bottom-navigation-item.is-active {
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgba(27, 126, 242, 0.14) 0%, rgba(255, 107, 157, 0.11) 100%);
-  color: var(--blue);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 4px 14px -8px rgba(27, 126, 242, 0.45);
-  font-weight: 650;
-}
-
-:root[data-style='cute'][data-theme='dark'] .bottom-navigation-item.is-active {
-  background: linear-gradient(135deg, rgba(92, 200, 255, 0.18) 0%, rgba(255, 143, 184, 0.12) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 16px -8px rgba(0, 0, 0, 0.6);
-}
-
-/* Usagi: Comic sticker active tab */
-:root[data-style='usagi'] .bottom-navigation-item.is-active {
-  border-radius: 16px;
-  background: linear-gradient(180deg, #fef08a 0%, #fde047 100%) !important;
-  border: 1.5px solid #5c3a1b !important;
-  box-shadow: 0 2.5px 0 #5c3a1b;
-  color: #3a2312 !important;
-  font-weight: 700;
-}
-
-:root[data-style='usagi'][data-theme='dark'] .bottom-navigation-item.is-active {
-  background: linear-gradient(180deg, rgba(251, 191, 36, 0.28) 0%, rgba(217, 119, 6, 0.22) 100%) !important;
-  border: 1.5px solid #e09f3e !important;
-  box-shadow: 0 2.5px 0 #0e0905;
-  color: #fef3c7 !important;
-}
-
-:root[data-style='usagi'] .bottom-navigation-item:active {
-  transform: translate3d(0, 2px, 0);
-}
-
-/* Desktop Sidebar */
 .app-sidebar {
   background: var(--surface-sunken);
-  border-right: var(--card-border-w) solid var(--line-alt);
-}
-
-.sidebar-item {
-  border-radius: var(--radius-control);
-  transition: transform var(--press-ms) var(--press-ease), background-color 160ms ease, color 160ms ease;
-}
-
-.sidebar-item.is-active {
-  background: var(--blue-soft);
-  color: var(--blue);
-  font-weight: 650;
+  border-right: 1px solid var(--line-faint);
 }
 
 /* --------------------------------------------------------------------------
- * 4. Universal Cards, Grouped Lists & Settings Surfaces (All Subpages)
+ * 4. Borderless Tonal Cards & Clean Grouped Lists (All Subpages)
  * -------------------------------------------------------------------------- */
 .settings-section,
 .runtime-overview,
@@ -404,192 +364,114 @@ body {
 .modal-card,
 .automation-card,
 .companion-card,
+.memory-card,
+.briefing-card,
+.knowledge-card,
+.capture-card,
+.authored-tool-card,
+.tool-card,
+.virtual-screen-card,
 .plugin-card,
+.session-card,
+.snapshot-card,
+.runtime-check-card,
 .market-card,
-.task-card {
-  border-radius: var(--radius-card);
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-  transition: border-color 180ms ease, box-shadow 200ms ease, background-color 180ms ease;
-}
-
-/* Usagi: Tactile comic outline + hard base shadow on all cards */
-:root[data-style='usagi'] .settings-section,
-:root[data-style='usagi'] .runtime-overview,
-:root[data-style='usagi'] .detail-section,
-:root[data-style='usagi'] .whale-autonomy-card,
-:root[data-style='usagi'] .whale-power-card,
-:root[data-style='usagi'] .workspace-dialog,
-:root[data-style='usagi'] .management-list {
-  border: 1.6px solid var(--line);
-  box-shadow: var(--shadow-card);
-}
-
-/* Inset grouped directory & settings rows */
+.task-card,
 .management-list {
-  border-radius: var(--radius-card);
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-card) !important;
+  border: 1px solid var(--line-faint) !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+.management-list {
   overflow: hidden;
 }
 
 .management-row {
-  transition: background-color 140ms ease, transform var(--press-ms) var(--press-ease);
+  border-bottom: 0 !important;
+  transition: background-color 140ms ease;
 }
-
+.management-row + .management-row {
+  border-top: 1px solid var(--line-faint) !important;
+}
 .management-row:hover {
   background: var(--surface-hover);
 }
 
-.management-row:active {
-  transform: scale(0.992);
-}
-
-/* Settings Search Pill */
 .settings-search {
-  border-radius: 999px;
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-  transition: border-color 160ms ease, box-shadow 180ms ease;
+  border-radius: 999px !important;
+  border: 1px solid var(--line-faint) !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-card) !important;
 }
-
 .settings-search:focus-within {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px var(--blue-soft);
+  border-color: var(--blue-line) !important;
+  box-shadow: 0 0 0 3px var(--blue-soft), var(--shadow-card) !important;
 }
 
 /* --------------------------------------------------------------------------
- * 5. Buttons, Segmented Controls, Switches & Form Inputs
+ * 5. Refined Controls: Buttons, Segmented Pills, Switches, Telemetry & Island Bar
  * -------------------------------------------------------------------------- */
 .button,
 .whale-perm-chip,
 .whale-autonomy-pill,
-.appearance-options button[aria-pressed] {
-  border-radius: var(--radius-control);
-  transition:
-    transform var(--press-ms) var(--press-ease),
-    background-color 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    color 160ms ease;
-}
-
-.button:not(:disabled):active,
-.whale-autonomy-pill:not(:disabled):active {
-  transform: scale(0.96);
+.whale-island-chip,
+.whale-next-chip,
+.whale-hub-pill {
+  border-radius: 999px !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  transition: transform var(--press-ms) var(--press-ease), background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .button-primary {
-  background: var(--blue);
-  color: var(--on-accent);
-  border: 1px solid transparent;
-  box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--blue) 65%, transparent);
+  background: var(--blue) !important;
+  color: var(--on-accent) !important;
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--blue) 55%, transparent) !important;
 }
 
-:root[data-style='cute'] .button-primary {
-  background: linear-gradient(135deg, var(--blue) 0%, #3b9cff 100%);
-  box-shadow: 0 8px 20px -8px rgba(27, 126, 242, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+.button-secondary,
+.whale-perm-chip,
+.whale-next-chip,
+.whale-hub-pill {
+  background: var(--surface-muted) !important;
+  color: var(--ink) !important;
 }
 
-:root[data-style='usagi'] .button-primary {
-  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
-  color: #2b1707;
-  border: 1.5px solid #5c3a1b;
-  box-shadow: 0 3px 0 #5c3a1b;
-  font-weight: 700;
-}
-
-:root[data-style='usagi'] .button-primary:not(:disabled):active {
-  transform: translate3d(0, 2px, 0);
-  box-shadow: 0 1px 0 #5c3a1b;
-}
-
-:root[data-style='usagi'] .button-secondary {
-  border: 1.5px solid var(--line);
-  box-shadow: 0 2.5px 0 rgba(92, 58, 27, 0.25);
-}
-
-:root[data-style='usagi'] .button-secondary:not(:disabled):active {
-  transform: translate3d(0, 2px, 0);
-  box-shadow: 0 0.5px 0 rgba(92, 58, 27, 0.25);
-}
-
-/* Segmented Controls & Autonomy Preset Pills */
 .segmented,
 .whale-autonomy-pills {
-  background: var(--surface-muted);
-  border-radius: calc(var(--radius-control) + 4px);
-  padding: 4px;
-  border: 1px solid var(--line-faint);
+  background: var(--surface-muted) !important;
+  border-radius: 999px !important;
+  padding: 4px !important;
+  border: 0 !important;
+}
+
+.segmented button,
+.whale-autonomy-pill {
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--muted) !important;
 }
 
 .segmented button.active,
 .whale-autonomy-pill.is-active {
-  background: var(--surface-raised);
-  color: var(--blue);
-  box-shadow: 0 2px 8px -2px rgba(11, 15, 23, 0.14), 0 0 0 1px var(--line-faint);
-  font-weight: 650;
+  background: var(--surface-raised) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 2px 10px -3px rgba(0, 0, 0, 0.12) !important;
+  font-weight: 650 !important;
 }
 
-:root[data-style='cute'] .whale-autonomy-pill.is-active,
-:root[data-style='cute'] .segmented button.active {
-  background: var(--surface-raised);
-  color: var(--blue);
-  box-shadow: 0 4px 12px -4px rgba(27, 126, 242, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-}
-
-:root[data-style='usagi'] .whale-autonomy-pill.is-active,
-:root[data-style='usagi'] .segmented button.active {
-  background: #fde047;
-  color: #3a2312;
-  border: 1.5px solid #5c3a1b;
-  box-shadow: 0 2px 0 #5c3a1b;
-}
-
-:root[data-style='usagi'][data-theme='dark'] .whale-autonomy-pill.is-active,
-:root[data-style='usagi'][data-theme='dark'] .segmented button.active {
-  background: #fbbf24;
-  color: #241405;
-  border-color: #5c3a1b;
-}
-
-/* Tactile Pill Switches (Accessible & Theme-Native) */
-input[type='checkbox'][role='switch'] {
-  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
-}
-
-input[type='checkbox'][role='switch']:checked {
-  background-color: var(--blue);
-  border-color: var(--blue);
-}
-
-:root[data-style='cute'] input[type='checkbox'][role='switch']:checked {
-  background: linear-gradient(135deg, var(--blue) 0%, var(--accent-secondary) 135%);
-  box-shadow: 0 3px 10px -3px rgba(27, 126, 242, 0.45);
-}
-
-:root[data-style='usagi'] input[type='checkbox'][role='switch'] {
-  border: 1.5px solid #5c3a1b;
-}
-
-:root[data-style='usagi'] input[type='checkbox'][role='switch']:checked {
-  background: #f59e0b;
-  border-color: #5c3a1b;
-}
-
-/* Quick Live-Island Strip inside WhaleAutonomyCard */
+/* Quick Live-Island Strip & 3-Column Telemetry inside WhaleAutonomyCard */
 .whale-island-quickbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 12px 14px;
   border-radius: var(--radius-inner);
   background: var(--surface-sunken);
-  border: 1px solid var(--line-faint);
+  border: 0;
 }
 
 .whale-island-quickbar-label {
@@ -598,13 +480,11 @@ input[type='checkbox'][role='switch']:checked {
   gap: 2px;
   min-width: 0;
 }
-
 .whale-island-quickbar-label strong {
-  font-size: 0.84rem;
-  font-weight: 650;
+  font-size: 0.85rem;
+  font-weight: 620;
   color: var(--ink);
 }
-
 .whale-island-quickbar-label small {
   font-size: 0.72rem;
   color: var(--muted);
@@ -618,283 +498,18 @@ input[type='checkbox'][role='switch']:checked {
 }
 
 .whale-island-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  color: var(--muted);
+  padding: 6px 12px;
+  background: var(--surface) !important;
+  color: var(--muted) !important;
   font-size: 0.76rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform var(--press-ms) var(--press-ease), background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
-
 .whale-island-chip.is-on {
-  background: var(--blue-soft);
-  border-color: var(--blue-line);
-  color: var(--blue);
+  background: var(--blue-soft) !important;
+  color: var(--blue) !important;
 }
 
-:root[data-style='usagi'] .whale-island-chip {
-  border: 1.5px solid var(--line);
-  box-shadow: 0 2px 0 rgba(92, 58, 27, 0.25);
-}
-
-:root[data-style='usagi'] .whale-island-chip.is-on {
-  background: #fde047;
-  color: #3a2312;
-  border-color: #5c3a1b;
-  box-shadow: 0 2px 0 #5c3a1b;
-}
-
-:root[data-style='usagi'][data-theme='dark'] .whale-island-chip.is-on {
-  background: rgba(251, 191, 36, 0.26);
-  color: #fef3c7;
-  border-color: #e09f3e;
-}
-
-.whale-island-chip:active {
-  transform: scale(0.95);
-}
-
-/* --------------------------------------------------------------------------
- * 6. Chat Studio — Hero, Bubbles, Markdown, Tool Rail & Floating Composer
- * -------------------------------------------------------------------------- */
-.whale-chat-header {
-  background: var(--header-bg);
-  backdrop-filter: blur(20px) saturate(170%);
-  -webkit-backdrop-filter: blur(20px) saturate(170%);
-  border: var(--card-border-w) solid var(--line-alt);
-  box-shadow: var(--shadow-elevated);
-}
-
-:root[data-style='usagi'] .whale-chat-header {
-  border: 1.6px solid var(--line);
-  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.26);
-}
-
-/* Empty Hero Stage & Starter Prompts */
-.whale-starter-card {
-  border-radius: var(--radius-inner);
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-  transition: transform var(--press-ms) var(--press-ease), border-color 160ms ease, box-shadow 180ms ease;
-}
-
-.whale-starter-card:active {
-  transform: scale(0.97);
-}
-
-:root[data-style='cute'] .whale-starter-card {
-  border-radius: 18px;
-  box-shadow: var(--shadow-card);
-}
-
-:root[data-style='usagi'] .whale-starter-card {
-  border: 1.5px solid var(--line);
-  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.22);
-  border-radius: 18px;
-}
-
-:root[data-style='usagi'] .whale-starter-card:active {
-  transform: translate3d(0, 2px, 0);
-  box-shadow: 0 1px 0 rgba(92, 58, 27, 0.22);
-}
-
-/* Message Bubbles — Distinct Material per Theme */
-:root[data-style='simple'] .whale-msg-user .whale-msg-bubble {
-  background: var(--blue);
-  color: var(--on-accent);
-  border-radius: 16px 16px 5px 16px;
-  box-shadow: 0 4px 14px -8px rgba(15, 82, 186, 0.45);
-}
-
-:root[data-style='cute'] .whale-msg-user .whale-msg-bubble {
-  background: linear-gradient(135deg, #1b7ef2 0%, #3aa0ff 100%);
-  color: #ffffff;
-  border-radius: 22px 22px 6px 22px;
-  box-shadow: 0 8px 22px -10px rgba(27, 126, 242, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-}
-
-:root[data-style='cute'] .whale-msg-assistant .whale-msg-bubble {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 22px 22px 22px 6px;
-  box-shadow: var(--shadow-card);
-}
-
-:root[data-style='usagi'] .whale-msg-user .whale-msg-bubble {
-  background: linear-gradient(180deg, #fde68a 0%, #fcd34d 100%);
-  color: #3a2312;
-  border: 1.6px solid #5c3a1b;
-  border-radius: 20px 20px 6px 20px;
-  box-shadow: 0 3px 0 #5c3a1b;
-}
-
-:root[data-style='usagi'][data-theme='dark'] .whale-msg-user .whale-msg-bubble {
-  background: linear-gradient(180deg, #d97706 0%, #b45309 100%);
-  color: #fffbeb;
-  border-color: #fbbf24;
-  box-shadow: 0 3px 0 #0c0704;
-}
-
-:root[data-style='usagi'] .whale-msg-assistant .whale-msg-bubble {
-  background: var(--surface);
-  border: 1.6px solid var(--line);
-  border-radius: 20px 20px 20px 6px;
-  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.18);
-}
-
-/* Editorial Markdown Polish inside Assistant Replies */
-.whale-msg-assistant .whale-msg-content p,
-.whale-msg-assistant .whale-msg-bubble p {
-  line-height: 1.68;
-}
-
-.whale-msg-assistant pre {
-  border-radius: var(--radius-inner);
-  border: 1px solid var(--line);
-  background: var(--terminal-bg, #0d1117);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.whale-msg-assistant code:not(pre code) {
-  padding: 0.12em 0.42em;
-  border-radius: 6px;
-  background: var(--surface-muted);
-  border: 1px solid var(--line-faint);
-  font-size: 0.88em;
-}
-
-.whale-msg-assistant blockquote {
-  margin: 0.65em 0;
-  padding: 0.45em 0.9em;
-  border-left: 3px solid var(--blue);
-  background: var(--blue-soft);
-  border-radius: 0 10px 10px 0;
-}
-
-.whale-msg-assistant table {
-  border-collapse: separate;
-  border-spacing: 0;
-  border-radius: var(--radius-inner);
-  overflow: hidden;
-  border: 1px solid var(--line-alt);
-}
-
-.whale-msg-assistant th {
-  background: var(--surface-muted);
-  font-weight: 650;
-}
-
-/* Tool Steps Accordion & Action Receipts */
-.whale-tool-steps,
-.whale-receipt-card {
-  border-radius: var(--radius-inner);
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface-sunken);
-}
-
-:root[data-style='usagi'] .whale-tool-steps,
-:root[data-style='usagi'] .whale-receipt-card {
-  border: 1.5px solid var(--line-alt);
-  box-shadow: 0 2px 0 rgba(92, 58, 27, 0.15);
-}
-
-/* Floating Composer Shell */
-.whale-composer {
-  background: var(--surface-raised);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  border: var(--card-border-w) solid var(--line-strong);
-  box-shadow: var(--shadow-elevated);
-}
-
-:root[data-style='cute'] .whale-composer {
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(27, 126, 242, 0.18);
-  box-shadow: 0 12px 32px -14px rgba(18, 76, 152, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.95);
-}
-
-:root[data-style='cute'][data-theme='dark'] .whale-composer {
-  background: rgba(20, 36, 62, 0.94);
-  border: 1px solid rgba(92, 200, 255, 0.24);
-  box-shadow: 0 14px 36px -12px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-:root[data-style='cute'] .whale-send-btn:not(:disabled):not(.is-stop) {
-  background: linear-gradient(135deg, #1b7ef2 0%, #3aa0ff 65%, #ff6b9d 140%);
-}
-
-/* Sessions Drawer & Modals */
-.whale-sessions-drawer {
-  background: var(--surface);
-  border-right: var(--card-border-w) solid var(--line-alt);
-  box-shadow: var(--shadow-elevated);
-}
-
-.dialog-backdrop,
-.modal-backdrop,
-.whale-drawer-backdrop {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-/* Toast Notifications */
-.toast {
-  border-radius: 999px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: var(--shadow-elevated);
-}
-
-:root[data-style='usagi'] .toast {
-  border: 1.5px solid #e09f3e;
-  box-shadow: 0 3px 0 #0e0905;
-}
-
-
-/* --------------------------------------------------------------------------
- * 6.5. Studio V2.1 Concept-Spec Details (Floating Docks, Timeline, Gauges,
- *      Polaroid Previews, Jelly Switches, Washi-Tape Tool Cards & Comic Craft)
- * -------------------------------------------------------------------------- */
-
-/* A. True Floating Pill Bottom Navigation Dock (Cute & Usagi) */
-:root[data-style='cute'] .bottom-navigation {
-  margin: 0 14px calc(10px + env(safe-area-inset-bottom, 0px));
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(27, 126, 242, 0.16);
-  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
-  box-shadow: 0 12px 32px -12px rgba(18, 76, 152, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-}
-
-:root[data-style='cute'][data-theme='dark'] .bottom-navigation {
-  border-color: rgba(92, 200, 255, 0.22);
-  background: rgba(16, 30, 52, 0.88);
-  box-shadow: 0 14px 36px -10px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.10);
-}
-
-:root[data-style='usagi'] .bottom-navigation {
-  margin: 0 14px calc(10px + env(safe-area-inset-bottom, 0px));
-  padding: 6px 10px;
-  border-radius: 22px;
-  border: 1.6px solid #5c3a1b !important;
-  background: var(--surface) !important;
-  box-shadow: 0 3.5px 0 #5c3a1b;
-}
-
-:root[data-style='usagi'][data-theme='dark'] .bottom-navigation {
-  border-color: #e09f3e !important;
-  background: var(--surface) !important;
-  box-shadow: 0 3.5px 0 #0c0704;
-}
-
-/* B. 3-Column Tabular-Nums Telemetry Gauge Grid (WhalePowerHub) */
 .whale-telemetry-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -906,338 +521,37 @@ input[type='checkbox'][role='switch']:checked {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 10px 8px;
+  gap: 3px;
+  padding: 12px 8px;
   border-radius: var(--radius-inner);
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface-sunken);
+  border: 0 !important;
+  background: var(--surface-sunken) !important;
+  box-shadow: none !important;
   text-align: center;
 }
-
 .whale-telemetry-cell strong {
-  font-size: 1.02rem;
-  font-weight: 700;
+  font-size: 1.04rem;
+  font-weight: 680;
   letter-spacing: -0.02em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
-
 .whale-telemetry-cell small {
   font-size: 0.70rem;
   color: var(--muted);
-  white-space: nowrap;
 }
 
-:root[data-style='cute'] .whale-telemetry-cell {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(232, 242, 253, 0.85) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 4px 12px -8px rgba(18, 76, 152, 0.22);
+/* Soft Modern Switches (No Hard Borders) */
+input[type='checkbox'][role='switch'] {
+  border: 0 !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.10) !important;
+}
+input[type='checkbox'][role='switch']:checked {
+  background: var(--blue) !important;
+  box-shadow: 0 3px 10px -4px color-mix(in srgb, var(--blue) 55%, transparent) !important;
 }
 
-:root[data-style='cute'][data-theme='dark'] .whale-telemetry-cell {
-  background: linear-gradient(180deg, rgba(23, 42, 71, 0.88) 0%, rgba(16, 30, 52, 0.92) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-:root[data-style='usagi'] .whale-telemetry-cell {
-  border: 1.5px solid var(--line);
-  background: var(--surface);
-  box-shadow: 0 2.5px 0 rgba(92, 58, 27, 0.22);
-}
-
-/* C. Vertical Tool-Execution Timeline & Usagi Washi-Tape Sticky Note */
-.whale-tool-steps {
-  position: relative;
-}
-
-.whale-tool-step-list,
-.whale-tool-steps ul {
-  position: relative;
-  padding-left: 16px;
-}
-
-.whale-tool-step-list::before,
-.whale-tool-steps ul::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 8px;
-  bottom: 8px;
-  width: 1.5px;
-  background: var(--line-strong);
-  border-radius: 99px;
-}
-
-:root[data-style='simple'] .whale-step-dot.is-running,
-:root[data-style='simple'] .whale-step-dot.is-active {
-  box-shadow: 0 0 0 3px rgba(15, 82, 186, 0.22), 0 0 8px rgba(15, 82, 186, 0.45);
-}
-
-:root[data-style='cute'] .whale-step-dot {
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.85), 0 2px 6px rgba(27, 126, 242, 0.30);
-}
-
-/* Usagi: Washi-Tape Note Strip on top of Tool Steps Accordion */
-:root[data-style='usagi'] .whale-tool-steps {
-  margin-top: 10px;
-  border: 1.5px solid var(--line);
-  background: var(--surface);
-  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.20);
-  overflow: visible;
-}
-
-:root[data-style='usagi'] .whale-tool-steps::before {
-  content: '';
-  position: absolute;
-  top: -7px;
-  left: 50%;
-  width: 48px;
-  height: 13px;
-  transform: translateX(-50%) rotate(-1.5deg);
-  border-radius: 2px;
-  background: rgba(251, 191, 36, 0.58);
-  border: 1px solid rgba(92, 58, 27, 0.32);
-  pointer-events: none;
-}
-
-/* D. Polaroid Photo Attachment Previews */
-.whale-image-preview-item {
-  padding: 3px 3px 9px;
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: 0 6px 16px -8px rgba(11, 15, 23, 0.28);
-  transform: rotate(-1.6deg);
-  transition: transform 180ms var(--press-ease), box-shadow 180ms ease;
-}
-
-.whale-image-preview-item:nth-child(even) {
-  transform: rotate(1.8deg);
-}
-
-:root[data-theme='dark'] .whale-image-preview-item {
-  background: #1c2432;
-}
-
-:root[data-style='usagi'] .whale-image-preview-item {
-  border: 1.5px solid #5c3a1b;
-  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.28);
-}
-
-/* E. Cute Jelly-Gloss Pill Switches */
-:root[data-style='cute'] input[type='checkbox'][role='switch'] {
-  box-shadow: inset 0 2px 4px rgba(18, 76, 152, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.75);
-}
-
-:root[data-style='cute'] input[type='checkbox'][role='switch']:checked {
-  background: linear-gradient(135deg, #1b7ef2 0%, #5cc8ff 58%, #ff6b9d 140%);
-  box-shadow: 0 4px 12px -4px rgba(27, 126, 242, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.65);
-}
-
-/* F. Usagi Dotted Cocoa Dividers & Notebook-Grid Markdown Tables */
-:root[data-style='usagi'] .management-row + .management-row,
-:root[data-style='usagi'] .whale-power-body {
-  border-top-style: dotted !important;
-  border-top-width: 1.5px !important;
-}
-
-:root[data-style='usagi'] .whale-msg-assistant table {
-  border: 1.5px solid var(--line);
-  background: var(--surface);
-  box-shadow: 0 2.5px 0 rgba(92, 58, 27, 0.18);
-}
-
-:root[data-style='usagi'] .whale-msg-assistant th,
-:root[data-style='usagi'] .whale-msg-assistant td {
-  border-color: rgba(107, 68, 35, 0.24);
-}
-
-/* G. Simple Precision Range Slider */
-:root[data-style='simple'] input[type='range'] {
-  accent-color: var(--blue);
-}
-
-
-/* --------------------------------------------------------------------------
- * 6.8. Full-App Deep Coverage (Theme Preview Cards, Chat Hero & Composer,
- *      Companion Workspace, Workshop/Authored Tools, Files/Terminal,
- *      Onboarding, Virtual Screen, Plugins, Automation & All Modals)
- * -------------------------------------------------------------------------- */
-
-/* 1. Appearance Theme Picker — Each card previews its own world */
-.whale-style-picker {
-  display: grid;
-  gap: 10px;
-}
-
-.whale-style-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 18px;
-  text-align: left;
-  position: relative;
-  overflow: hidden;
-  transition: transform var(--press-ms) var(--press-ease), box-shadow 180ms ease, border-color 180ms ease;
-}
-
-.whale-style-card[data-preview='simple'] {
-  background: linear-gradient(135deg, #f8f9fb 0%, #eef1f6 100%);
-  border: 1px solid rgba(11, 15, 23, 0.14);
-  color: #0b0f17;
-}
-
-.whale-style-card[data-preview='cute'] {
-  background: linear-gradient(135deg, #f2f8ff 0%, #e5f1ff 68%, #fff0f6 100%);
-  border: 1px solid rgba(27, 126, 242, 0.24);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 18px -12px rgba(27, 126, 242, 0.35);
-  color: #12263f;
-}
-
-.whale-style-card[data-preview='usagi'] {
-  background-color: #fffbea;
-  background-image: radial-gradient(rgba(180, 115, 24, 0.14) 1px, transparent 1px);
-  background-size: 14px 14px;
-  border: 1.6px solid #5c3a1b;
-  box-shadow: 0 3px 0 #5c3a1b;
-  color: #3a2312;
-}
-
-.whale-style-card[aria-pressed='true'] {
-  outline: 2.5px solid var(--blue);
-  outline-offset: 2px;
-}
-
-.whale-style-thumb {
-  border-radius: 13px;
-  object-fit: cover;
-  flex-shrink: 0;
-  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.22);
-}
-
-.whale-style-card[data-preview='usagi'] .whale-style-thumb {
-  border: 1.5px solid #5c3a1b;
-}
-
-.whale-style-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.whale-style-copy small {
-  opacity: 0.78;
-  font-size: 0.76rem;
-}
-
-.whale-style-swatches {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 3px;
-}
-
-.whale-style-swatches i {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.16);
-}
-
-/* 2. Chat Empty Hero, Quick Hub Pills, Composer & Session Drawer Authority */
-.whale-chat-composer {
-  border-radius: var(--radius-dock);
-  background: var(--surface-raised);
-  border: var(--card-border-w) solid var(--line-strong);
-  box-shadow: var(--shadow-elevated);
-}
-
-:root[data-style='cute'] .whale-chat-composer {
-  border-radius: 26px;
-  border: 1px solid rgba(27, 126, 242, 0.20);
-  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
-  box-shadow: 0 12px 32px -14px rgba(18, 76, 152, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-}
-
-:root[data-style='usagi'] .whale-chat-composer {
-  border-radius: 22px;
-  border: 1.6px solid var(--line);
-  background: var(--surface);
-  box-shadow: 0 3.5px 0 rgba(92, 58, 27, 0.26);
-}
-
-.whale-hub-pill {
-  border-radius: 999px;
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-  color: var(--ink);
-}
-
-:root[data-style='usagi'] .whale-hub-pill {
-  border: 1.5px solid var(--line);
-  box-shadow: 0 2.5px 0 rgba(92, 58, 27, 0.22);
-}
-
-.whale-session-item {
-  border-radius: var(--radius-inner);
-  border: 1px solid transparent;
-  transition: background-color 140ms ease, border-color 140ms ease, transform var(--press-ms) var(--press-ease);
-}
-
-.whale-session-item.is-active,
-.whale-session-item[aria-current='true'] {
-  background: var(--blue-soft);
-  border-color: var(--blue-line);
-  color: var(--blue);
-}
-
-/* 3. Companion Workspace, Memory Library, Briefings, Workshop & Authored Tools */
-.companion-workspace,
-.authored-tools,
-.virtual-screen-settings,
-.plugin-settings,
-.session-manager,
-.files-screen {
-  color: var(--ink);
-}
-
-.companion-card,
-.memory-card,
-.briefing-card,
-.knowledge-card,
-.capture-card,
-.authored-tool-card,
-.tool-card,
-.virtual-screen-card,
-.plugin-card,
-.session-card,
-.snapshot-card,
-.runtime-check-card,
-.onboarding-card,
-.automation-rule-card {
-  border-radius: var(--radius-card);
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-}
-
-:root[data-style='usagi'] .companion-card,
-:root[data-style='usagi'] .memory-card,
-:root[data-style='usagi'] .briefing-card,
-:root[data-style='usagi'] .knowledge-card,
-:root[data-style='usagi'] .authored-tool-card,
-:root[data-style='usagi'] .tool-card,
-:root[data-style='usagi'] .virtual-screen-card,
-:root[data-style='usagi'] .plugin-card,
-:root[data-style='usagi'] .session-card,
-:root[data-style='usagi'] .onboarding-card {
-  border: 1.6px solid var(--line);
-  box-shadow: 0 3px 0 rgba(92, 58, 27, 0.22);
-}
-
-/* 4. Inputs, Textareas, Selects & Appearance Radio Options Across All Subpages */
+/* Clean Borderless Inputs */
 input[type='text'],
 input[type='password'],
 input[type='url'],
@@ -1246,256 +560,149 @@ input[type='search'],
 textarea,
 select {
   border-radius: var(--radius-control);
-  border: var(--card-border-w) solid var(--line-strong);
+  border: 1px solid var(--line) !important;
   background: var(--surface-sunken);
   color: var(--ink);
 }
-
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px var(--blue-soft);
+  border-color: var(--blue-line) !important;
+  box-shadow: 0 0 0 3px var(--blue-soft) !important;
   outline: none;
 }
 
-.appearance-option {
-  border-radius: var(--radius-control);
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface);
-  transition: transform var(--press-ms) var(--press-ease), border-color 160ms ease, background-color 160ms ease;
-}
-
-.appearance-option.active {
-  border-color: var(--blue);
-  background: var(--blue-soft);
-  color: var(--blue);
-  font-weight: 650;
-}
-
-:root[data-style='usagi'] .appearance-option.active {
-  background: #fde047;
-  color: #3a2312;
-  border: 1.5px solid #5c3a1b;
-  box-shadow: 0 2px 0 #5c3a1b;
-}
-
-/* 5. Dialogs, Sheets & Onboarding Full-Screen Polish */
-.dialog,
-[role='dialog'] {
-  border-radius: calc(var(--radius-card) + 4px);
-  border: var(--card-border-w) solid var(--line-alt);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-elevated);
-}
-
-:root[data-style='usagi'] .dialog,
-:root[data-style='usagi'] [role='dialog'] {
-  border: 1.8px solid var(--line);
-  box-shadow: 0 5px 0 rgba(92, 58, 27, 0.30);
-}
-
-
 /* --------------------------------------------------------------------------
- * 6.9. Concept-Art Pixel-Faithful Authority Layer (Defeats Legacy !important)
- *      Matches exact real DOM classes in WhaleChatScreen.tsx & AppNavigation.tsx
+ * 6. Chat Studio — Editorial Borderless Replies, Soft Bubbles & Glass Composer
  * -------------------------------------------------------------------------- */
-
-/* 1. Top Header Bar (.whale-chat-header.is-minimal) */
-:root[data-style='simple'] .whale-chat-header.is-minimal {
-  background: rgba(244, 245, 247, 0.88) !important;
-  backdrop-filter: blur(20px) saturate(160%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
-  border-bottom: 1px solid rgba(11, 15, 23, 0.09) !important;
-  border-radius: 0 !important;
-  padding: 10px 14px !important;
-  box-shadow: none !important;
-}
-:root[data-style='simple'][data-theme='dark'] .whale-chat-header.is-minimal {
-  background: rgba(6, 8, 12, 0.88) !important;
-  border-bottom-color: rgba(237, 241, 247, 0.09) !important;
+.whale-starter-card {
+  border: 1px solid var(--line-faint) !important;
+  border-radius: 20px !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-card) !important;
+  padding: 14px 15px !important;
 }
 
-:root[data-style='cute'] .whale-chat-header.is-minimal {
-  background: rgba(238, 246, 255, 0.82) !important;
-  backdrop-filter: blur(22px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(22px) saturate(180%) !important;
-  border-bottom: 1px solid rgba(27, 126, 242, 0.14) !important;
-  border-radius: 0 !important;
-  padding: 10px 14px !important;
-  box-shadow: 0 4px 18px -14px rgba(18, 76, 152, 0.25) !important;
-}
-:root[data-style='cute'][data-theme='dark'] .whale-chat-header.is-minimal {
-  background: rgba(8, 17, 31, 0.84) !important;
-  border-bottom-color: rgba(92, 200, 255, 0.16) !important;
-}
-
-:root[data-style='usagi'] .whale-chat-header.is-minimal {
-  background: rgba(255, 251, 234, 0.94) !important;
-  border-bottom: 1.8px solid #5c3a1b !important;
-  border-radius: 0 !important;
-  padding: 10px 14px !important;
-  box-shadow: none !important;
-}
-:root[data-style='usagi'][data-theme='dark'] .whale-chat-header.is-minimal {
-  background: rgba(24, 17, 11, 0.94) !important;
-  border-bottom-color: #e09f3e !important;
-}
-
-/* 2. Starter Cards — True 2-Column Concept-Art Material */
-:root[data-style='cute'] .whale-starter-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(236, 245, 255, 0.90) 100%) !important;
-  border: 1px solid rgba(27, 126, 242, 0.16) !important;
-  border-radius: 22px !important;
-  box-shadow: 0 10px 24px -16px rgba(18, 76, 152, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
-}
-:root[data-style='cute'][data-theme='dark'] .whale-starter-card {
-  background: linear-gradient(180deg, rgba(22, 40, 68, 0.92) 0%, rgba(14, 26, 46, 0.96) 100%) !important;
-  border-color: rgba(92, 200, 255, 0.22) !important;
-  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-}
-
-:root[data-style='usagi'] .whale-starter-card {
-  background: #fffdf6 !important;
-  border: 1.8px solid #5c3a1b !important;
-  border-radius: 18px !important;
-  box-shadow: 0 3.5px 0 #5c3a1b !important;
-}
-:root[data-style='usagi'][data-theme='dark'] .whale-starter-card {
-  background: #241a12 !important;
-  border-color: #e09f3e !important;
-  box-shadow: 0 3.5px 0 #0c0704 !important;
-}
-
-/* 3. Chat Bubbles — Unmistakable 3-World Differentiation + Usagi Comic Tails */
+/* User Bubbles: Refined Muted Accents, Zero Heavy Outlines */
 :root[data-style='simple'] .whale-msg-user .whale-msg-bubble {
-  background: #0f52ba !important;
+  background: #17191f !important;
   color: #ffffff !important;
   border: 0 !important;
-  border-radius: 16px 16px 4px 16px !important;
-  box-shadow: 0 4px 14px -8px rgba(15, 82, 186, 0.50) !important;
+  border-radius: 20px 20px 6px 20px !important;
+  box-shadow: 0 6px 18px -10px rgba(0, 0, 0, 0.28) !important;
 }
 :root[data-style='simple'][data-theme='dark'] .whale-msg-user .whale-msg-bubble {
   background: #2563eb !important;
   color: #ffffff !important;
 }
-:root[data-style='simple'] .whale-msg-assistant .whale-msg-bubble {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  padding: 2px 0 !important;
-}
 
 :root[data-style='cute'] .whale-msg-user .whale-msg-bubble {
-  background: linear-gradient(135deg, #1b7ef2 0%, #4fb2ff 100%) !important;
+  background: linear-gradient(135deg, #2e7cf6 0%, #5ea4ff 100%) !important;
   color: #ffffff !important;
-  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  border: 0 !important;
   border-radius: 22px 22px 6px 22px !important;
-  box-shadow: 0 10px 24px -10px rgba(27, 126, 242, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
-}
-:root[data-style='cute'] .whale-msg-assistant .whale-msg-bubble {
-  background: rgba(255, 255, 255, 0.96) !important;
-  color: #12263f !important;
-  border: 1px solid rgba(27, 126, 242, 0.16) !important;
-  border-radius: 22px 22px 22px 6px !important;
-  padding: 12px 15px !important;
-  box-shadow: 0 10px 26px -16px rgba(18, 76, 152, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
-}
-:root[data-style='cute'][data-theme='dark'] .whale-msg-assistant .whale-msg-bubble {
-  background: rgba(18, 34, 58, 0.92) !important;
-  color: #ecf4ff !important;
-  border-color: rgba(92, 200, 255, 0.22) !important;
-  box-shadow: 0 12px 28px -14px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 8px 22px -10px rgba(46, 124, 246, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.30) !important;
 }
 
 :root[data-style='usagi'] .whale-msg-user .whale-msg-bubble {
-  position: relative;
-  background: #f59e0b !important;
-  color: #2b1707 !important;
-  border: 1.8px solid #5c3a1b !important;
-  border-radius: 20px 20px 4px 20px !important;
-  box-shadow: 0 3.5px 0 #5c3a1b !important;
-  font-weight: 560;
+  background: linear-gradient(135deg, #e29b36 0%, #eab258 100%) !important;
+  color: #ffffff !important;
+  border: 0 !important;
+  border-radius: 22px 22px 6px 22px !important;
+  box-shadow: 0 8px 22px -10px rgba(190, 120, 30, 0.32) !important;
 }
 :root[data-style='usagi'][data-theme='dark'] .whale-msg-user .whale-msg-bubble {
-  background: #d97706 !important;
-  color: #fffbeb !important;
-  border-color: #fbbf24 !important;
-  box-shadow: 0 3.5px 0 #0c0704 !important;
-}
-:root[data-style='usagi'] .whale-msg-assistant .whale-msg-bubble {
-  position: relative;
-  background: #fffdf6 !important;
-  color: #3a2312 !important;
-  border: 1.8px solid #5c3a1b !important;
-  border-radius: 20px 20px 20px 4px !important;
-  padding: 12px 15px !important;
-  box-shadow: 0 3.5px 0 #5c3a1b !important;
-}
-:root[data-style='usagi'][data-theme='dark'] .whale-msg-assistant .whale-msg-bubble {
-  background: #241a12 !important;
-  color: #fef3c7 !important;
-  border-color: #e09f3e !important;
-  box-shadow: 0 3.5px 0 #0c0704 !important;
+  background: linear-gradient(135deg, #c98627 0%, #dea043 100%) !important;
+  color: #1c140b !important;
+  font-weight: 560;
 }
 
-/* Usagi Comic Speech-Bubble Little Tails */
-:root[data-style='usagi'] .whale-msg-assistant .whale-msg-bubble::after {
-  content: '';
-  position: absolute;
-  left: -6px;
-  bottom: 8px;
-  width: 10px;
-  height: 10px;
-  background: #fffdf6;
-  border-left: 1.8px solid #5c3a1b;
-  border-bottom: 1.8px solid #5c3a1b;
-  transform: rotate(45deg);
-  border-bottom-left-radius: 2px;
-}
-:root[data-style='usagi'][data-theme='dark'] .whale-msg-assistant .whale-msg-bubble::after {
-  background: #241a12;
-  border-color: #e09f3e;
-}
-:root[data-style='usagi'] .whale-msg-user .whale-msg-bubble::after {
-  content: '';
-  position: absolute;
-  right: -6px;
-  bottom: 8px;
-  width: 10px;
-  height: 10px;
-  background: #f59e0b;
-  border-right: 1.8px solid #5c3a1b;
-  border-top: 1.8px solid #5c3a1b;
-  transform: rotate(45deg);
-  border-top-right-radius: 2px;
-}
-:root[data-style='usagi'][data-theme='dark'] .whale-msg-user .whale-msg-bubble::after {
-  background: #d97706;
-  border-color: #fbbf24;
+/* Assistant Replies: Borderless Editorial Flow Across All Themes */
+.whale-msg-assistant .whale-msg-bubble {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 4px 2px !important;
+  color: var(--ink) !important;
 }
 
-/* 4. REAL Tool Execution Timeline (.whale-msg-steps) + Usagi Washi-Tape Sticky Note */
-.whale-msg-steps {
-  position: relative;
-  border-radius: var(--radius-inner) !important;
-  border: var(--card-border-w) solid var(--line-alt) !important;
+:root[data-style='cute'] .whale-msg-assistant .whale-msg-bubble {
   background: var(--surface) !important;
-  padding: 8px 12px !important;
-  box-shadow: var(--shadow-card);
+  border-radius: 22px 22px 22px 6px !important;
+  padding: 13px 16px !important;
+  box-shadow: var(--shadow-card) !important;
 }
 
+:root[data-style='usagi'] .whale-msg-assistant .whale-msg-bubble {
+  background: var(--surface) !important;
+  border-radius: 22px 22px 22px 6px !important;
+  padding: 13px 16px !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+/* Remove any leftover comic bubble tails */
+.whale-msg-assistant .whale-msg-bubble::after,
+.whale-msg-user .whale-msg-bubble::after {
+  display: none !important;
+}
+
+/* Editorial Markdown Polish */
+.whale-msg-assistant .whale-msg-bubble p {
+  line-height: 1.72;
+}
+.whale-msg-assistant pre {
+  border-radius: 14px !important;
+  border: 0 !important;
+  background: #0d1017 !important;
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.42);
+}
+.whale-msg-assistant code:not(pre code) {
+  padding: 0.14em 0.44em;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  border: 0;
+  font-size: 0.88em;
+}
+.whale-msg-assistant blockquote {
+  margin: 0.7em 0;
+  padding: 0.5em 1em;
+  border-left: 2.5px solid var(--blue);
+  background: var(--blue-soft);
+  border-radius: 0 12px 12px 0;
+}
+.whale-msg-assistant table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.whale-msg-assistant th {
+  background: var(--surface-muted);
+  font-weight: 620;
+}
+
+/* Tool Execution Steps — Quiet Hairline Rail, Zero Clunky Borders */
+.whale-msg-steps {
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: var(--surface-sunken) !important;
+  padding: 8px 12px !important;
+  box-shadow: none !important;
+}
+.whale-msg-steps::before {
+  display: none !important;
+}
 .whale-msg-steps ul {
   position: relative;
   margin: 8px 0 2px !important;
-  padding-left: 18px !important;
+  padding-left: 16px !important;
   list-style: none !important;
 }
-
 .whale-msg-steps ul::before {
   content: '';
   position: absolute;
-  left: 5px;
+  left: 4px;
   top: 6px;
   bottom: 6px;
   width: 1.5px;
@@ -1503,102 +710,117 @@ select:focus {
   border-radius: 99px;
 }
 
-.whale-msg-steps li {
-  position: relative;
-  padding: 3px 0;
+/* Floating Borderless Frosted-Glass Composer */
+.whale-chat-composer {
+  border-radius: 26px !important;
+  border: 1px solid var(--line-faint) !important;
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent) !important;
+  backdrop-filter: blur(22px) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(165%) !important;
+  box-shadow: var(--shadow-elevated) !important;
+}
+.whale-chat-composer:focus-within {
+  border-color: var(--blue-line) !important;
+  box-shadow: 0 0 0 3px var(--blue-soft), var(--shadow-elevated) !important;
 }
 
-:root[data-style='usagi'] .whale-msg-steps {
-  margin-top: 12px !important;
-  background: #fffdf6 !important;
-  border: 1.8px solid #5c3a1b !important;
-  box-shadow: 0 3px 0 #5c3a1b !important;
-  overflow: visible !important;
-}
-:root[data-style='usagi'][data-theme='dark'] .whale-msg-steps {
-  background: #241a12 !important;
-  border-color: #e09f3e !important;
-  box-shadow: 0 3px 0 #0c0704 !important;
-}
-:root[data-style='usagi'] .whale-msg-steps::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  width: 52px;
-  height: 14px;
-  transform: translateX(-50%) rotate(-1.6deg);
-  border-radius: 2px;
-  background: rgba(251, 191, 36, 0.68);
-  border: 1.2px solid rgba(92, 58, 27, 0.42);
-  pointer-events: none;
-}
-
-/* 5. Floating Composer & Send Button (.whale-chat-composer & .whale-send-btn) */
-:root[data-style='cute'] .whale-chat-composer {
-  border-radius: 999px !important;
-  border: 1px solid rgba(27, 126, 242, 0.22) !important;
-  background: rgba(255, 255, 255, 0.94) !important;
-  box-shadow: 0 12px 32px -12px rgba(18, 76, 152, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
-}
-:root[data-style='cute'][data-theme='dark'] .whale-chat-composer {
-  background: rgba(18, 34, 58, 0.92) !important;
-  border-color: rgba(92, 200, 255, 0.24) !important;
+.whale-send-btn:not(:disabled):not(.is-stop) {
+  border: 0 !important;
+  background: var(--blue) !important;
+  color: var(--on-accent) !important;
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--blue) 55%, transparent) !important;
 }
 :root[data-style='cute'] .whale-send-btn:not(:disabled):not(.is-stop) {
-  background: linear-gradient(135deg, #1b7ef2 0%, #5cc8ff 55%, #ff6b9d 125%) !important;
-  color: #ffffff !important;
-  box-shadow: 0 6px 18px -5px rgba(27, 126, 242, 0.55) !important;
+  background: linear-gradient(135deg, #2e7cf6 0%, #66aef8 68%, #f27aa3 135%) !important;
 }
 
-:root[data-style='usagi'] .whale-chat-composer {
-  border-radius: 22px !important;
-  border: 1.8px solid #5c3a1b !important;
-  background: #fffdf6 !important;
-  box-shadow: 0 3.5px 0 #5c3a1b !important;
+/* Appearance Theme Picker Cards — Clean Borderless Swatch Cards */
+.whale-style-picker {
+  display: grid;
+  gap: 10px;
 }
-:root[data-style='usagi'][data-theme='dark'] .whale-chat-composer {
-  background: #241a12 !important;
-  border-color: #e09f3e !important;
-  box-shadow: 0 3.5px 0 #0c0704 !important;
+.whale-style-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border-radius: 20px !important;
+  border: 1px solid transparent !important;
+  text-align: left;
+  transition: transform var(--press-ms) var(--press-ease), box-shadow 180ms ease;
 }
-:root[data-style='usagi'] .whale-send-btn:not(:disabled):not(.is-stop) {
-  background: #f59e0b !important;
-  color: #2b1707 !important;
-  border: 1.6px solid #5c3a1b !important;
-  box-shadow: 0 2.5px 0 #5c3a1b !important;
+.whale-style-card[data-preview='simple'] {
+  background: linear-gradient(135deg, #f8f8f6 0%, #eeefec 100%) !important;
+  box-shadow: 0 4px 16px -8px rgba(17, 19, 24, 0.12) !important;
+  color: #111318 !important;
+}
+.whale-style-card[data-preview='cute'] {
+  background: linear-gradient(135deg, #f4f8fd 0%, #e9f2fc 72%, #fdf1f6 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 20px -10px rgba(46, 124, 246, 0.18) !important;
+  color: #162438 !important;
+}
+.whale-style-card[data-preview='usagi'] {
+  background: linear-gradient(135deg, #fdfaf2 0%, #f5ecda 100%) !important;
+  box-shadow: 0 6px 20px -10px rgba(130, 92, 42, 0.18) !important;
+  color: #2f2319 !important;
+}
+.whale-style-card[aria-pressed='true'] {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.whale-style-thumb {
+  border-radius: 14px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 0 !important;
+}
+.whale-style-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.whale-style-copy small {
+  opacity: 0.74;
+  font-size: 0.76rem;
+}
+.whale-style-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+}
+.whale-style-swatches i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
 }
 
-/* 6. True Floating Pill Bottom Navigation Dock (Beats styles.css media query) */
-@media (max-width: 900px) {
-  :root[data-style='cute'] .bottom-navigation {
-    margin: 4px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
-    padding: 5px 10px !important;
-    border-radius: 999px !important;
-    border: 1px solid rgba(27, 126, 242, 0.20) !important;
-    background: rgba(255, 255, 255, 0.90) !important;
-    backdrop-filter: blur(22px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(22px) saturate(180%) !important;
-    box-shadow: 0 12px 30px -10px rgba(18, 76, 152, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
-  }
-  :root[data-style='cute'][data-theme='dark'] .bottom-navigation {
-    background: rgba(16, 30, 52, 0.90) !important;
-    border-color: rgba(92, 200, 255, 0.24) !important;
-    box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
-  }
-  :root[data-style='usagi'] .bottom-navigation {
-    margin: 4px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
-    padding: 5px 10px !important;
-    border-radius: 22px !important;
-    border: 1.8px solid #5c3a1b !important;
-    background: #fffdf6 !important;
-    box-shadow: 0 3.5px 0 #5c3a1b !important;
-  }
-  :root[data-style='usagi'][data-theme='dark'] .bottom-navigation {
-    background: #241a12 !important;
-    border-color: #e09f3e !important;
-    box-shadow: 0 3.5px 0 #0c0704 !important;
-  }
+/* Modals, Drawers & Toasts */
+.dialog,
+[role='dialog'],
+.whale-sessions-drawer {
+  border-radius: 24px !important;
+  border: 1px solid var(--line-faint) !important;
+  background: var(--surface-raised) !important;
+  box-shadow: var(--shadow-elevated) !important;
+}
+
+.dialog-backdrop,
+.modal-backdrop,
+.whale-drawer-backdrop {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.toast {
+  border-radius: 999px !important;
+  border: 1px solid var(--line-faint) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--shadow-elevated) !important;
 }
 
 /* --------------------------------------------------------------------------

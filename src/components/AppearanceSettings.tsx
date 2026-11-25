@@ -270,9 +270,9 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
           <p>{t('立即生效，下次打开仍使用此主题。')}</p>
           <div className="whale-style-picker" role="group" aria-label={t('界面风格')}>
             {([
-              { value: 'simple' as const, title: '极简·精密仪器', desc: '冷白/深渊 · 1px 细线 · 宝石蓝信号', thumb: grokMark, swatches: ['#F4F5F7', '#0B0F17', '#0F52BA'] },
-              { value: 'cute' as const, title: '鲸鱼娘·海洋瓷釉', desc: '潮雾琉璃 · 蓝粉渐变 · 悬浮胶囊底栏', thumb: whaleChanAvatar, swatches: ['#EEF6FF', '#1B7EF2', '#FF6B9D'] },
-              { value: 'usagi' as const, title: '乌萨奇·手账漫画', desc: '奶油点阵纸 · 可可描边 · 贴纸硬阴影', thumb: usagiAvatar, swatches: ['#FFFBEA', '#5C3A1B', '#F59E0B'] },
+              { value: 'simple' as const, title: '极简·静奢编辑', desc: '暖石白/深曜石 · 无框排版 · 克制留白', thumb: grokMark, swatches: ['#F4F5F7', '#0B0F17', '#0F52BA'] },
+              { value: 'cute' as const, title: '鲸鱼娘·雾面瓷白', desc: '低饱和冰雾瓷 · 柔雾玻璃 · 悬浮胶囊', thumb: whaleChanAvatar, swatches: ['#EEF6FF', '#1B7EF2', '#FF6B9D'] },
+              { value: 'usagi' as const, title: '乌萨奇·温润手账', desc: '羊皮纸米白/黑巧丝绒 · 去粗边柔影', thumb: usagiAvatar, swatches: ['#FFFBEA', '#5C3A1B', '#F59E0B'] },
             ]).map(item => (
               <button
                 type="button"
