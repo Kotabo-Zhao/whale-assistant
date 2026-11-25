@@ -38,14 +38,22 @@ internal object WhaleMemoryTaxonomy {
         return Category.values().firstOrNull { it.key == clean || it.label == raw?.trim() }
     }
 
-    /** 零延迟自动分类，使历史存量记忆也立即拥有准确的领域归属。 */
+    /** 零延迟自动分类（硬约束优先，其余按命中词数择优），使复合句也能准确归类。 */
     fun classify(text: String): Category {
         val lower = text.trim().lowercase(Locale.ROOT)
         if (lower.isEmpty()) return Category.PROFILE
-        for ((cat, cues) in categoryRules) {
-            if (cues.any { lower.contains(it) }) return cat
+        val constraintCues = categoryRules.first().second
+        if (constraintCues.any { lower.contains(it) }) return Category.CONSTRAINT
+        var bestCat: Category? = null
+        var bestHits = 0
+        for ((cat, cues) in categoryRules.drop(1)) {
+            val hits = cues.count { lower.contains(it) }
+            if (hits > bestHits) {
+                bestHits = hits
+                bestCat = cat
+            }
         }
-        return Category.PREFERENCE
+        return bestCat ?: Category.PREFERENCE
     }
 
     /** 轻量提取 2–4 个高辨识度实体/关键词标签（不含泛词）。 */
