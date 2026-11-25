@@ -86,8 +86,30 @@ def _ensure_thread_local_hooks():
         sys.stderr = _ThreadLocalStream("stderr", sys.stderr)
         builtins.open = _thread_scoped_builtins_open
         io.open = _thread_scoped_io_open
+        _install_android_safe_shutil()
         _configure_android_matplotlib_fonts()
         _HOOKS_INSTALLED = True
+
+
+def _install_android_safe_shutil():
+    """Guard shutil.copystat/copy2 against Android SELinux xattr PermissionError in no_backup dirs."""
+    try:
+        import shutil
+        _orig_copystat = shutil.copystat
+
+        def _safe_copystat(src, dst, *, follow_symlinks=True):
+            try:
+                return _orig_copystat(src, dst, follow_symlinks=follow_symlinks)
+            except (PermissionError, OSError):
+                try:
+                    st = os.stat(src, follow_symlinks=follow_symlinks)
+                    os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns))
+                except Exception:
+                    pass
+
+        shutil.copystat = _safe_copystat
+    except Exception:
+        pass
 
 
 def _configure_android_matplotlib_fonts():
@@ -295,10 +317,9 @@ def run_code(
     tmp_dir = os.path.join(resolved_dir, ".tmp")
     os.makedirs(tmp_dir, exist_ok=True)
 
-    # Ensure process-level cwd / tempdir are never left pointing at read-only Android "/"
+    # Always align cwd with resolved_dir so glob/os.listdir/Path(".") match scratch/project WORK_DIR
     try:
-        if os.getcwd() == "/":
-            os.chdir(resolved_dir)
+        os.chdir(resolved_dir)
     except Exception:
         pass
     os.environ["TMPDIR"] = tmp_dir
@@ -386,21 +407,44 @@ def run_code(
         inspect_block = "\n".join(inspected)
         out_text = (out_text + "\n" + inspect_block).strip() if out_text.strip() else inspect_block
 
+    stdout_total = len(out_text)
+    stdout_truncated = stdout_total > 24000
+    stdout_file = ""
+    if stdout_truncated:
+        try:
+            spill_path = os.path.join(resolved_dir, ".last_stdout.txt")
+            with _ORIG_BUILTINS_OPEN(spill_path, "w", encoding="utf-8") as sf:
+                sf.write(out_text)
+            stdout_file = ".last_stdout.txt"
+        except Exception:
+            stdout_file = ""
+        omitted = stdout_total - 23000
+        stdout_inline = (
+            out_text[:18000]
+            + f"\n...[已省略中间 {omitted} 字符，完整 {stdout_total} 字符已保存至 {stdout_file or '.last_stdout.txt'}，可直接 open('.last_stdout.txt').read() 分段读取]...\n"
+            + out_text[-5000:]
+        )
+    else:
+        stdout_inline = out_text
+
     elapsed_ms = int((time.monotonic() - t0) * 1000)
-    return json.dumps(
-        {
-            "ok": ok,
-            "stdout": out_text[:12000],
-            "stderr": stderr_buf.getvalue()[:4000],
-            "error": error_text[:4000],
-            "subCalls": proxy.calls,
-            "workDir": resolved_dir,
-            "sessionId": str(session_id or "").strip(),
-            "elapsedMs": elapsed_ms,
-            "pythonVersion": sys.version.split()[0],
-        },
-        ensure_ascii=False,
-    )
+    res_obj = {
+        "ok": ok,
+        "stdout": stdout_inline,
+        "stderr": stderr_buf.getvalue()[:6000],
+        "error": error_text[:6000],
+        "subCalls": proxy.calls,
+        "workDir": resolved_dir,
+        "sessionId": str(session_id or "").strip(),
+        "elapsedMs": elapsed_ms,
+        "pythonVersion": sys.version.split()[0],
+    }
+    if stdout_truncated:
+        res_obj["stdoutTruncated"] = True
+        res_obj["stdoutTotalChars"] = stdout_total
+        if stdout_file:
+            res_obj["stdoutFile"] = stdout_file
+    return json.dumps(res_obj, ensure_ascii=False)
 
 
 def _parse_requires_dist(metadata_text: str) -> list:

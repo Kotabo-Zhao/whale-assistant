@@ -416,7 +416,10 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         if (includeKnowledgeAdmin) {
             array.put(schema("whale_knowledge_save", "将整理好的文字笔记或摘要保存到本地资料库。", mapOf("text" to "完整正文"), listOf("text")))
             array.put(schema("whale_knowledge_read", "按 ID 读取本地资料库某条笔记/文档的完整正文。", mapOf("id" to "资料记录 ID"), listOf("id")))
-            array.put(schema("whale_knowledge_delete", "按 ID 删除本地资料库中的过期或重复记录（可撤销）。", mapOf("id" to "资料记录 ID"), listOf("id")))
+            array.put(schema("whale_knowledge_list", "分页列出本地资料库记录（含 ID、来源、标题与正文预览，避免手写 SQLite）。", mapOf("offset" to "分页偏移量，默认 0", "limit" to "返回条数，默认 20，最大 50", "source" to "可选来源筛选"), emptyList()))
+            array.put(schema("whale_knowledge_edit", "按 ID 原生修改本地资料库记录正文，并自动同步 FTS4 全文检索索引。", mapOf("id" to "资料记录 ID", "text" to "修改后的完整正文"), listOf("id", "text")))
+            array.put(schema("whale_knowledge_delete", "按 ID 删除本地资料库中的过期或重复记录（可撤销并自动同步 FTS4 索引）。", mapOf("id" to "资料记录 ID"), listOf("id")))
+            array.put(schema("whale_knowledge_rebuild_index", "立即重建本地资料库 FTS4 全文检索索引，无需重启应用。", emptyMap(), emptyList()))
         }
         array.put(schema("whale_secretary_list", "查询用户的未完成秘书事项与待办列表。", mapOf("query" to "可选筛选关键词"), emptyList()))
         array.put(schema("whale_secretary_add", "为用户新增一条秘书事项/待办记录。", mapOf("title" to "事项标题", "note" to "可选补充说明"), listOf("title")))
@@ -893,7 +896,9 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         "whale_memory_save",
         "whale_memory_update",
         "whale_memory_purge_noise",
+        "whale_knowledge_edit",
         "whale_knowledge_delete",
+        "whale_knowledge_rebuild_index",
         "whale_calendar_create",
         "whale_alarm_set",
         "whale_timer_set",
@@ -1405,6 +1410,43 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .put("text", text.take(16000))
                     ToolOutcome(name, "读取资料全文", true, out.toString())
                 }
+                "whale_knowledge_list" -> {
+                    val offset = args.optInt("offset", 0).coerceAtLeast(0)
+                    val limit = args.optInt("limit", 20).coerceIn(1, 50)
+                    val source = args.str("source", "").trim().takeIf { it.isNotEmpty() }
+                    val store = CompanionKnowledgeStore(app)
+                    val page = if (source != null) store.searchPage("", offset, limit, source = source).first else store.recent(offset, limit)
+                    val items = JSONArray()
+                    for (i in 0 until page.length()) {
+                        val row = page.optJSONObject(i) ?: continue
+                        val txt = row.optString("text", "")
+                        items.put(
+                            JSONObject()
+                                .put("id", row.optString("id"))
+                                .put("source", row.optString("source"))
+                                .put("displayName", row.optString("displayName"))
+                                .put("length", txt.length)
+                                .put("preview", txt.take(220))
+                                .put("createdAt", row.optLong("createdAt")),
+                        )
+                    }
+                    ToolOutcome(
+                        name,
+                        "列出本地资料（${items.length()} 条）",
+                        true,
+                        JSONObject().put("ok", true).put("total", store.count()).put("offset", offset).put("items", items).toString(),
+                    )
+                }
+                "whale_knowledge_edit" -> {
+                    val id = args.str("id", "").trim()
+                    val newText = args.str("text", "").trim()
+                    require(id.isNotEmpty() && newText.isNotEmpty()) { "修改资料需要提供 id 与 text" }
+                    val store = CompanionKnowledgeStore(app)
+                    val row = store.findById(id)
+                        ?: throw IllegalArgumentException("未找到该资料记录：$id")
+                    val edited = store.edit(id, row.optString("text", ""), newText)
+                    ToolOutcome(name, "修改本地资料并同步索引", edited, JSONObject().put("ok", edited).put("id", id).toString(), mutating = true)
+                }
                 "whale_knowledge_delete" -> {
                     val id = args.str("id", "").trim()
                     require(id.isNotEmpty()) { "请提供要删除的资料记录 id" }
@@ -1413,6 +1455,10 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         ?: throw IllegalArgumentException("未找到该资料记录：$id")
                     val removed = store.remove(id, row.optString("text", ""))
                     ToolOutcome(name, "删除本地资料", removed, JSONObject().put("id", id).put("removed", removed).toString(), mutating = true)
+                }
+                "whale_knowledge_rebuild_index" -> {
+                    val total = CompanionKnowledgeStore(app).rebuildIndex()
+                    ToolOutcome(name, "重建资料库全文索引", true, JSONObject().put("ok", true).put("indexedRecords", total).toString(), mutating = true)
                 }
                 "whale_routine_manage" -> {
                     val action = args.str("action", "list").trim().lowercase()

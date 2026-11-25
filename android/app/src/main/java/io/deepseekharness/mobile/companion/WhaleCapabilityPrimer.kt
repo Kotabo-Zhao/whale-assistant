@@ -55,6 +55,11 @@ internal object WhaleCapabilityPrimer {
             snippet = "- 长对话原文回溯：`whale_call(tool=\"whale_context_search\", argsJson=\"{\\\"query\\\":\\\"关键词\\\"}\")`、`whale_call(tool=\"whale_context_expand\", argsJson=\"{\\\"rangeId\\\":\\\"...\\\"}\")`（每轮最多展开 1 段）。",
         ),
         DomainRule(
+            id = "knowledge_crud",
+            cues = listOf("资料库", "知识库", "knowledge", "索引", "fts", "清理资料", "删除资料", "修改资料", "笔记"),
+            snippet = "- 本地资料库原生读写与索引维护（严禁手写 sqlite3 破坏 FTS4 同步）：`whale_call(tool=\"whale_knowledge_list\", argsJson=\"{\\\"offset\\\":0,\\\"limit\\\":20}\")`、`whale_call(tool=\"whale_knowledge_read\", argsJson=\"{\\\"id\\\":\\\"...\\\"}\")`、`whale_call(tool=\"whale_knowledge_edit\", argsJson=\"{\\\"id\\\":\\\"...\\\",\\\"text\\\":\\\"...\\\"}\")`、`whale_call(tool=\"whale_knowledge_delete\", argsJson=\"{\\\"id\\\":\\\"...\\\"}\")`、`whale_call(tool=\"whale_knowledge_rebuild_index\", argsJson=\"{}\")`。",
+        ),
+        DomainRule(
             id = "memory_proactive",
             cues = listOf("记住", "记忆", "画像", "偏好", "关注项", "别忘了", "提醒我", "我喜欢", "我平时"),
             snippet = "- 结构化记忆与主动关注：`whale_call(tool=\"whale_memory_digest\", argsJson=\"{}\")`、`whale_call(tool=\"whale_memory_search\", argsJson=\"{\\\"query\\\":\\\"...\\\",\\\"category\\\":\\\"project|preference|profile|people|routine|constraint\\\"}\")`、`whale_call(tool=\"whale_proactive_watchlist\", argsJson=\"{\\\"action\\\":\\\"list\\\"}\")`。",

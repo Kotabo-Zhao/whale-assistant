@@ -757,13 +757,15 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 roundToolIndices.add(messages.length())
                 val rawOut = outcome.payload
                 val compactedOut = WhaleContextBudgeter.compactToolPayload(rawOut)
+                val isLongOutputTool = p.fnName in setOf("whale_code_run", "whale_knowledge_read", "whale_knowledge_list") ||
+                    (p.fnName == "whale_call" && (p.argsJson.contains("whale_code_run") || p.argsJson.contains("whale_knowledge_read")))
                 val boundedOut = WhaleHarnessCore.SpillAndPruneManager.boundToolOutput(
                     context = app,
                     toolName = p.fnName,
                     rawPayload = compactedOut,
-                    maxInlineChars = WhaleContextBudgeter.TOOL_INLINE_MAX_CHARS,
-                    headPoints = WhaleContextBudgeter.TOOL_INLINE_HEAD_POINTS,
-                    tailPoints = WhaleContextBudgeter.TOOL_INLINE_TAIL_POINTS,
+                    maxInlineChars = if (isLongOutputTool) 14_000 else WhaleContextBudgeter.TOOL_INLINE_MAX_CHARS,
+                    headPoints = if (isLongOutputTool) 9_000 else WhaleContextBudgeter.TOOL_INLINE_HEAD_POINTS,
+                    tailPoints = if (isLongOutputTool) 4_000 else WhaleContextBudgeter.TOOL_INLINE_TAIL_POINTS,
                 )
                 toolPayloadRawChars += rawOut.length
                 toolPayloadCompactChars += boundedOut.length

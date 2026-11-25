@@ -41,6 +41,17 @@ internal class UnifiedKnowledgeDatabase(context: Context, legacy: () -> JSONArra
         }
     }
     fun count(): Long = android.database.DatabaseUtils.queryNumEntries(db, "knowledge_records")
+
+    fun rebuildTextIndex(): Long {
+        db.beginTransaction()
+        try {
+            KnowledgeTextIndex.rebuildAfterRestore(db)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return count()
+    }
     fun exactPage(query: String, offset: Int, limit: Int, accepts: (JSONObject) -> Boolean): CompanionMemorySearch.Result? {
         var count = 0
         val items = mutableListOf<JSONObject>()

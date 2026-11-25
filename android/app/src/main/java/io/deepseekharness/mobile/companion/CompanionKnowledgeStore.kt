@@ -24,6 +24,11 @@ internal class CompanionKnowledgeStore(context: Context) {
 
     fun search(query: String): JSONArray = synchronized(lock) { CompanionKnowledgeData.search(load(), query) }
     fun count(): Long = synchronized(lock) { UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.count() } }
+    fun rebuildIndex(): Long = synchronized(lock) {
+        val total = UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.rebuildTextIndex() }
+        scheduleSemantic()
+        total
+    }
     fun exactPage(query: String, offset: Int, limit: Int, accepts: (JSONObject) -> Boolean) = synchronized(lock) {
         UnifiedKnowledgeDatabase(app, ::loadLegacy).use { it.exactPage(query, offset, limit, accepts) }
     }
