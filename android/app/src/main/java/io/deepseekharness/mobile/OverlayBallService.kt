@@ -1263,6 +1263,7 @@ class OverlayBallService : Service() {
             return
         }
         drawable.ambientTickAllowed = true
+        drawable.resumeLiveTick()
         val resumedAt=SystemClock.uptimeMillis()
         if(!wasRunning && resumeTimeline) {
             petActing.resume(resumedAt,drawable.currentPose)
@@ -1320,7 +1321,7 @@ class OverlayBallService : Service() {
                     val old = petDrawable
                     companionFrame?.let(hintHandler::removeCallbacks);companionFrame=null
                     petDrawable = next
-                    if (old != null) next.retainVisibleFrom(old)
+                    if (old != null && old.isUsagiTheme == next.isUsagiTheme) next.retainVisibleFrom(old)
                     next.onAtlasReady = {
                         if (petDrawable === next && companionSurfaceVisible() && companionMotionEnabled()) wakePetMotion()
                     }
@@ -2754,6 +2755,14 @@ class OverlayBallService : Service() {
                     (child.background as? GradientDrawable)?.setColor(overlayColor(R.color.overlay_resize_background))
                 }
             }
+        }
+        val wantUsagi = getSharedPreferences("whale-interface", 0).getString("style", "cute") == "usagi"
+        val curView = ballView
+        if (curView != null && ballAttached && petDrawable?.isUsagiTheme != wantUsagi) {
+            val sizePx = maxOf(curView.width, curView.height, dp(64))
+            loadCompanionAvatar(curView, sizePx)
+        } else {
+            petDrawable?.resumeLiveTick()
         }
         actionMenu?.let { showPetMenu(it.page) }
         refreshControlPose()

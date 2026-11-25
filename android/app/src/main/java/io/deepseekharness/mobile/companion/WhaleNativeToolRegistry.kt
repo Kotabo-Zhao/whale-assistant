@@ -974,6 +974,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val payload = JSONObject().put("action", "appearance")
                     if (style in setOf("simple", "cute", "usagi")) {
                         app.getSharedPreferences("whale-interface", Context.MODE_PRIVATE).edit().putString("style", style).apply()
+                        runCatching { io.deepseekharness.mobile.OverlayBallService.refreshAppearance() }
                         payload.put("style", style)
                     }
                     if (theme in setOf("system", "light", "dark")) {

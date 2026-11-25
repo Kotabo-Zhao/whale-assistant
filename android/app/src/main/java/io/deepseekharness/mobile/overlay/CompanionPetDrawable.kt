@@ -41,7 +41,14 @@ internal class CompanionPetDrawable(
     private var displayed: Bitmap
     private var retainedCel: Bitmap? = null
     var onAtlasReady: (() -> Unit)? = null
+    val isUsagiTheme get() = usagiTheme
     val displayedClipName get() = displayedClip
+
+    fun resumeLiveTick() {
+        if (closed || pose.reduced || !ambientTickAllowed) return
+        main.removeCallbacks(liveTick)
+        invalidateSelf()
+    }
     val cachedAtlasCount get() = cache.size
     val cachedBitmapBytes get() = cache.values.sumOf { it.allocationByteCount.toLong() }
     // Reserve one idle plus four active clips (drag/touch/reading/return) so first drag is always warm.
@@ -117,6 +124,9 @@ internal class CompanionPetDrawable(
             if (assetKey(name) in cache) true else { request(name); false }
         }
         cache[assetKey(currentCel.clip)]?.let { show(it, currentCel) }
+        if (usagiTheme && !pose.reduced && ambientTickAllowed) {
+            invalidateSelf()
+        }
         playback.nextAtlas?.let { name ->
             if (assetKey(name) !in cache) { wanted = name; request(name) }
         }
@@ -169,7 +179,10 @@ internal class CompanionPetDrawable(
                     if (assetKey(wanted) !in cache) request(wanted)
                 }
             }
-            if (!posted) bitmap?.recycle()
+            if (!posted) {
+                decoding = false
+                bitmap?.recycle()
+            }
         }
     }
 
@@ -219,7 +232,8 @@ internal class CompanionPetDrawable(
 
     private fun displayedSource(): Rect {
         retainedCel?.let { source.set(0, 0, it.width, it.height); return source }
-        val rows = PetCels.clips.getValue(displayedClip).rows
+        val cellW = (displayed.width / PetCels.COLUMNS).coerceAtLeast(1)
+        val rows = (displayed.height / cellW).coerceAtLeast(1)
         val totalCells = (PetCels.COLUMNS * rows).coerceAtLeast(1)
         val effectiveFrame = if (usagiTheme && !pose.reduced) {
             val stepMs = when (pose.action) {
@@ -230,8 +244,7 @@ internal class CompanionPetDrawable(
         } else {
             displayedFrame.coerceIn(0, totalCells - 1)
         }
-        val cellW = displayed.width / PetCels.COLUMNS
-        val cellH = displayed.height / rows
+        val cellH = (displayed.height / rows).coerceAtLeast(1)
         val col = effectiveFrame % PetCels.COLUMNS
         val row = effectiveFrame / PetCels.COLUMNS
         source.set(col * cellW, row * cellH, (col + 1) * cellW, (row + 1) * cellH)
