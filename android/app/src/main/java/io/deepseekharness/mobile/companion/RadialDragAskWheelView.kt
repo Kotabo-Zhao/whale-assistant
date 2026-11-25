@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.DashPathEffect
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
@@ -18,16 +17,18 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.animation.OvershootInterpolator
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
 /**
- * 拖宠即问主题原生轮盘菜单（Radial Action Wheel）。
+ * 拖宠即问「方向盘式一体精密轮盘」（Steering-Wheel Ring Dial）。
  *
- * - 跟随 [PetUi] 自动适配「极简·类Grok / 鲸鱼娘·可爱 / 乌萨奇·兔兔」及明暗主题；
- * - 中心轮毂展示提取到的完整图片圆形实时预览 / 链接域名 / 应用徽章；
- * - 外圈 6 个带独立手绘矢量图标的快捷操作按键，支持弹性绽放动效与触觉反馈。
+ * - 紧凑一体环形结构（总直径仅 ~216dp，比离散圆球紧凑 30%）；
+ * - 外环按操作数均分为无缝弧形扇区，图标与文字精致内嵌于每个扇区内，彻底消除杂乱外挂胶囊；
+ * - 中心轮毂展示完整图片实时预览或内容徽章，与外环之间留有精密凹槽与微光倒角；
+ * - 支持单拇指极坐标滑动选区与每扇区边界触觉刻度反馈。
  */
 internal class RadialDragAskWheelView(
     context: Context,
@@ -65,10 +66,10 @@ internal class RadialDragAskWheelView(
     )
 
     private val dp = resources.displayMetrics.density
-    private val orbitRadius = 110f * dp
-    private val centerRadius = 46f * dp
-    private val itemRadius = 27f * dp
-    private val safeMargin = orbitRadius + itemRadius + 28f * dp
+    private val outerRadius = 108f * dp
+    private val ringInnerRadius = 46f * dp
+    private val centerRadius = 41f * dp
+    private val safeMargin = outerRadius + 16f * dp
 
     private var cx = anchorX
     private var cy = anchorY
@@ -76,65 +77,55 @@ internal class RadialDragAskWheelView(
     private var pressedIndex = -1
 
     private val scrimPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val orbitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.6f * dp
-        pathEffect = DashPathEffect(floatArrayOf(6f * dp, 6f * dp), 0f)
-    }
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val circleFillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val circleStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val sectorFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val rimStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val spokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1.4f * dp
+        strokeWidth = 1.2f * dp
+        strokeCap = Paint.Cap.ROUND
     }
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
-        strokeWidth = 2.0f * dp
+        strokeWidth = 1.85f * dp
     }
-    private val iconFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-    }
+    private val iconFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
-        textSize = 11.5f * dp
+        textSize = 10.2f * dp
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     private val badgeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val centerTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
-        textSize = 11.5f * dp
+        textSize = 11f * dp
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     private val centerSubPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
-        textSize = 10f * dp
+        textSize = 8.8f * dp
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
     private var thumbShader: BitmapShader? = null
     private val thumbMatrix = Matrix()
     private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val sectorPath = Path()
+    private val outerRect = RectF()
+    private val innerRect = RectF()
 
     private val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-        duration = 340L
-        interpolator = android.view.animation.DecelerateInterpolator(1.5f)
+        duration = 260L
+        interpolator = OvershootInterpolator(1.08f)
         addUpdateListener {
-            bloomProgress = it.animatedValue as Float
+            bloomProgress = (it.animatedValue as Float).coerceAtLeast(0f)
             invalidate()
         }
     }
 
-    private fun staggeredProgress(index: Int): Float {
-        val delay = index * 0.08f
-        val local = ((bloomProgress - delay) / (1f - delay).coerceAtLeast(0.25f)).coerceIn(0f, 1f)
-        // 轻弹性过冲曲线（Overshoot）
-        val t = local - 1f
-        return (t * t * (2.2f * t + 1.2f) + 1f).coerceIn(0f, 1.16f)
-    }
-
     init {
-        isClickable = true
         isFocusable = true
         isFocusableInTouchMode = true
         if (previewBitmap != null && !previewBitmap.isRecycled) {
@@ -156,178 +147,144 @@ internal class RadialDragAskWheelView(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         cx = anchorX.coerceIn(safeMargin, (w - safeMargin).coerceAtLeast(safeMargin))
-        cy = anchorY.coerceIn(safeMargin + 16f * dp, (h - safeMargin - 24f * dp).coerceAtLeast(safeMargin))
+        cy = anchorY.coerceIn(safeMargin + 12f * dp, (h - safeMargin - 16f * dp).coerceAtLeast(safeMargin))
     }
 
-    private fun itemCenter(index: Int, progress: Float = 1f): Pair<Float, Float> {
-        val count = actions.size.coerceAtLeast(1)
-        val angleDeg = -90.0 + index * (360.0 / count)
-        val rad = angleDeg * PI / 180.0
-        val r = orbitRadius * progress
-        return (cx + (cos(rad) * r).toFloat()) to (cy + (sin(rad) * r).toFloat())
+    private fun buildSectorPath(startDeg: Float, sweepDeg: Float, innerR: Float, outerR: Float) {
+        sectorPath.reset()
+        outerRect.set(cx - outerR, cy - outerR, cx + outerR, cy + outerR)
+        innerRect.set(cx - innerR, cy - innerR, cx + innerR, cy + innerR)
+        sectorPath.arcTo(outerRect, startDeg, sweepDeg, true)
+        sectorPath.arcTo(innerRect, startDeg + sweepDeg, -sweepDeg, false)
+        sectorPath.close()
+    }
+
+    private fun blendColor(base: Int, tint: Int, ratio: Float): Int {
+        val inv = 1f - ratio
+        val r = (Color.red(base) * inv + Color.red(tint) * ratio).toInt().coerceIn(0, 255)
+        val g = (Color.green(base) * inv + Color.green(tint) * ratio).toInt().coerceIn(0, 255)
+        val b = (Color.blue(base) * inv + Color.blue(tint) * ratio).toInt().coerceIn(0, 255)
+        return Color.rgb(r, g, b)
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val p = bloomProgress.coerceIn(0f, 1.3f)
+        val scaleP = (0.72f + 0.28f * bloomProgress).coerceIn(0.1f, 1.15f)
         val alphaFactor = bloomProgress.coerceIn(0f, 1f)
+        val count = actions.size.coerceAtLeast(1)
+        val sweep = 360f / count
+        val gapDeg = 1.6f
 
-        // 1. 柔和暗色遮罩层
-        scrimPaint.color = Color.argb((118 * alphaFactor).toInt(), 10, 12, 18)
+        val curOuterR = outerRadius * scaleP
+        val curInnerR = ringInnerRadius * scaleP
+        val curCenterR = centerRadius * scaleP
+
+        // 1. 柔和暗色氛围遮罩
+        scrimPaint.color = Color.argb((110 * alphaFactor).toInt(), 8, 11, 18)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), scrimPaint)
 
-        // 2. 三主题专属轨道环：Simple 罗盘双虚线刻度 / Cute 海洋光晕环 / Usagi 手绘星芒环
-        orbitPaint.color = withAlpha(if (ui.usagi) ui.line else ui.primary, (118 * alphaFactor).toInt())
-        canvas.drawCircle(cx, cy, orbitRadius * p, orbitPaint)
-        if (ui.simple) {
-            // Simple: 精密罗盘内圈与 30° 刻度线
-            orbitPaint.color = withAlpha(ui.primary, (58 * alphaFactor).toInt())
-            canvas.drawCircle(cx, cy, orbitRadius * 0.72f * p, orbitPaint)
-            for (deg in 0 until 360 step 30) {
-                val rad = deg * PI / 180.0
-                val r1 = (orbitRadius - 4f * dp) * p
-                val r2 = (orbitRadius + 4f * dp) * p
-                canvas.drawLine(
-                    cx + (cos(rad) * r1).toFloat(),
-                    cy + (sin(rad) * r1).toFloat(),
-                    cx + (cos(rad) * r2).toFloat(),
-                    cy + (sin(rad) * r2).toFloat(),
-                    orbitPaint,
-                )
-            }
-        } else if (ui.usagi && alphaFactor > 0.4f) {
-            // Usagi: 手账四角星芒装饰
-            val starAlpha = (210 * alphaFactor).toInt()
-            val starR = orbitRadius * p + 38f * dp
-            val starAngles = floatArrayOf(-42f, 38f, 142f, 218f)
-            for (deg in starAngles) {
-                val rad = deg * PI / 180.0
-                val sx = cx + (cos(rad) * starR).toFloat()
-                val sy = cy + (sin(rad) * starR).toFloat()
-                drawSparkleStar(canvas, sx, sy, 6.5f * dp, withAlpha(ui.primary, starAlpha))
-            }
-        }
+        // 2. 方向盘一体外环统一弥散阴影
+        shadowPaint.color = Color.argb((68 * alphaFactor).toInt(), 0, 0, 0)
+        canvas.drawCircle(cx, cy + 4f * dp, curOuterR + 3f * dp, shadowPaint)
 
-        // 3. 外圈 6 个带独立矢量图标的轮盘按键（28ms 顺时针交错绽放 + 磁吸 1.18× 主题光晕聚焦）
+        // 3. 方向盘暗色底托环（让扇区之间的极细辐条呈现精密机械间隙感）
+        sectorFillPaint.color = withAlpha(ui.canvas, (218 * alphaFactor).toInt())
+        canvas.drawCircle(cx, cy, curOuterR + 1.2f * dp, sectorFillPaint)
+
+        // 4. 6 等分无缝弧形扇区（图标 + 紧凑文字内嵌于每个扇区内）
+        val midR = (curInnerR + curOuterR) * 0.505f
         actions.forEachIndexed { idx, action ->
-            val sp = staggeredProgress(idx)
-            val itemAlpha = sp.coerceIn(0f, 1f)
-            val (ix, iy) = itemCenter(idx, sp)
+            val centerDeg = -90f + idx * sweep
+            val startDeg = centerDeg - sweep / 2f + gapDeg / 2f
+            val arcSweep = (sweep - gapDeg).coerceAtLeast(6f)
             val isPressed = idx == pressedIndex
-            val scale = (if (isPressed) 1.18f else 1f) * itemAlpha.coerceAtLeast(0.01f)
-            val r = itemRadius * scale
-            if (isPressed) {
-                val glowColor = if (!ui.simple && !ui.usagi) ui.rose else ui.primary
-                shadowPaint.color = withAlpha(glowColor, (108 * itemAlpha).toInt())
-                canvas.drawCircle(ix, iy, r + 8f * dp, shadowPaint)
-            }
+            val sectorOuter = if (isPressed) curOuterR + 4.5f * dp else curOuterR
 
-            // 主题阴影：Usagi 硬偏移贴纸底影 / Cute 海蓝柔影 / Simple 克制哑光影
-            if (ui.usagi) {
-                shadowPaint.color = withAlpha(ui.line, (if (isPressed) 90 else (190 * alphaFactor).toInt()).coerceIn(0, 255))
-                canvas.drawCircle(ix, iy + (if (isPressed) 1f else 3.2f) * dp, r, shadowPaint)
-            } else {
-                shadowPaint.color = if (!ui.simple) withAlpha(ui.primary, (46 * alphaFactor).toInt()) else Color.argb((54 * alphaFactor).toInt(), 0, 0, 0)
-                canvas.drawCircle(ix, iy + 3f * dp, r + 1.5f * dp, shadowPaint)
-            }
+            buildSectorPath(startDeg, arcSweep, curInnerR, sectorOuter)
 
-            // 圆形按钮填充与边框
-            val bgColor = when {
+            val fillBase = when {
                 isPressed -> ui.primary
-                action.primary -> ui.primary
-                action.muted -> ui.canvas
+                action.primary -> blendColor(ui.surface, ui.primary, if (ui.dark) 0.26f else 0.14f)
+                action.muted -> ui.soft
                 else -> ui.surface
             }
+            sectorFillPaint.color = withAlpha(fillBase, (246 * alphaFactor).toInt())
+            canvas.drawPath(sectorPath, sectorFillPaint)
+
+            // 选中态外缘高光弧线
+            if (isPressed || action.primary) {
+                rimStrokePaint.strokeWidth = (if (isPressed) 2.2f else 1.4f) * dp
+                rimStrokePaint.color = withAlpha(ui.primary, ((if (isPressed) 255 else 155) * alphaFactor).toInt())
+                outerRect.set(cx - sectorOuter, cy - sectorOuter, cx + sectorOuter, cy + sectorOuter)
+                canvas.drawArc(outerRect, startDeg + 2f, (arcSweep - 4f).coerceAtLeast(2f), false, rimStrokePaint)
+            }
+
+            // 扇区中心点坐标：图标居上、紧凑文字紧贴下方，完全收入环内
+            val rad = centerDeg * PI / 180.0
+            val sx = cx + (cos(rad) * midR).toFloat()
+            val sy = cy + (sin(rad) * midR).toFloat()
+
             val fgColor = when {
-                isPressed || action.primary -> ui.onPrimary
+                isPressed -> ui.onPrimary
+                action.primary -> ui.accent
                 action.muted -> ui.muted
                 else -> ui.ink
             }
-            val strokeColor = when {
-                isPressed || action.primary -> ui.primary
-                else -> ui.line
-            }
-            circleFillPaint.color = withAlpha(bgColor, (250 * alphaFactor).toInt())
-            canvas.drawCircle(ix, iy, r, circleFillPaint)
-            circleStrokePaint.strokeWidth = if (ui.usagi) 2.1f * dp else 1.4f * dp
-            circleStrokePaint.color = withAlpha(if (ui.usagi) ui.line else strokeColor, (230 * alphaFactor).toInt())
-            canvas.drawCircle(ix, iy, r, circleStrokePaint)
-            if (!ui.simple && !ui.usagi) {
-                // Cute: 顶部瓷釉琉璃高光边
-                circleStrokePaint.strokeWidth = 1.2f * dp
-                circleStrokePaint.color = Color.argb((135 * alphaFactor).toInt(), 255, 255, 255)
-                canvas.drawCircle(ix, iy - 0.6f * dp, r - 1.5f * dp, circleStrokePaint)
-            }
-            circleStrokePaint.strokeWidth = 1.4f * dp
+            drawVectorIcon(canvas, action.icon, sx, sy - 6.5f * dp, 8.6f * dp * (if (isPressed) 1.08f else 1f), withAlpha(fgColor, (255 * alphaFactor).toInt()))
 
-            // 矢量图标
-            drawVectorIcon(canvas, action.icon, ix, iy, 10.5f * dp * scale, withAlpha(fgColor, (255 * alphaFactor).toInt()))
-
-            // 下方精致标签胶囊
-            if (alphaFactor > 0.35f) {
-                val labelAlpha = ((alphaFactor - 0.35f) / 0.65f).coerceIn(0f, 1f)
-                val labelY = iy + r + 14f * dp
-                val textW = labelPaint.measureText(action.label)
-                val pillRect = RectF(
-                    ix - textW / 2f - 7f * dp,
-                    labelY - 10.5f * dp,
-                    ix + textW / 2f + 7f * dp,
-                    labelY + 4f * dp,
-                )
-                badgeBgPaint.color = withAlpha(ui.surface, (232 * labelAlpha).toInt())
-                canvas.drawRoundRect(pillRect, 99f * dp, 99f * dp, badgeBgPaint)
-                circleStrokePaint.color = withAlpha(ui.line, (160 * labelAlpha).toInt())
-                canvas.drawRoundRect(pillRect, 99f * dp, 99f * dp, circleStrokePaint)
-
-                labelPaint.color = withAlpha(if (action.primary) ui.primary else ui.ink, (255 * labelAlpha).toInt())
-                canvas.drawText(action.label, ix, labelY, labelPaint)
-            }
+            labelPaint.color = withAlpha(fgColor, (245 * alphaFactor).toInt())
+            canvas.drawText(action.label.take(4), sx, sy + 13.5f * dp, labelPaint)
         }
 
-        // 4. 中心轮毂：图片缩略图 / 链接或内容预览
-        val cr = centerRadius * (0.65f + 0.35f * p)
-        shadowPaint.color = Color.argb((72 * alphaFactor).toInt(), 0, 0, 0)
-        canvas.drawCircle(cx, cy + 4f * dp, cr + 2f * dp, shadowPaint)
+        // 5. 外圈与内圈精密微光倒角细环（方向盘质感核心）
+        rimStrokePaint.strokeWidth = 1.0f * dp
+        rimStrokePaint.color = Color.argb((if (ui.dark) 38 else 72 * alphaFactor.toInt()).coerceIn(0, 90), 255, 255, 255)
+        canvas.drawCircle(cx, cy, curOuterR, rimStrokePaint)
 
-        circleFillPaint.color = withAlpha(ui.surface, (252 * alphaFactor).toInt())
-        canvas.drawCircle(cx, cy, cr, circleFillPaint)
+        spokePaint.color = withAlpha(ui.line, (150 * alphaFactor).toInt())
+        canvas.drawCircle(cx, cy, curInnerR, spokePaint)
+
+        // 6. 中心轮毂（图片预览 / 标题 + 凹槽高光）
+        shadowPaint.color = Color.argb((74 * alphaFactor).toInt(), 0, 0, 0)
+        canvas.drawCircle(cx, cy + 2f * dp, curCenterR + 1.5f * dp, shadowPaint)
+
+        sectorFillPaint.color = withAlpha(ui.surface, (254 * alphaFactor).toInt())
+        canvas.drawCircle(cx, cy, curCenterR, sectorFillPaint)
 
         val bmp = previewBitmap
         if (bmp != null && !bmp.isRecycled && thumbShader != null) {
             val bw = bmp.width.toFloat().coerceAtLeast(1f)
             val bh = bmp.height.toFloat().coerceAtLeast(1f)
-            val scale = maxOf((cr * 2f) / bw, (cr * 2f) / bh)
+            val s = maxOf((curCenterR * 2f) / bw, (curCenterR * 2f) / bh)
             thumbMatrix.reset()
-            thumbMatrix.setScale(scale, scale)
-            thumbMatrix.postTranslate(cx - bw * scale / 2f, cy - bh * scale / 2f)
+            thumbMatrix.setScale(s, s)
+            thumbMatrix.postTranslate(cx - bw * s / 2f, cy - bh * s / 2f)
             thumbShader?.setLocalMatrix(thumbMatrix)
             thumbPaint.alpha = (255 * alphaFactor).toInt()
-            canvas.drawCircle(cx, cy, cr - 2.5f * dp, thumbPaint)
+            canvas.drawCircle(cx, cy, curCenterR - 1.8f * dp, thumbPaint)
+
+            // 将尺寸小标精致内嵌在中心轮毂底缘内，不再和下方扇区打架
+            if (centerSubtitle.isNotBlank() && alphaFactor > 0.5f) {
+                val subText = centerSubtitle.take(12)
+                val sw = centerSubPaint.measureText(subText)
+                val pillY = cy + curCenterR - 7.5f * dp
+                val subRect = RectF(cx - sw / 2f - 5.5f * dp, pillY - 7.5f * dp, cx + sw / 2f + 5.5f * dp, pillY + 2.8f * dp)
+                badgeBgPaint.color = Color.argb((188 * alphaFactor).toInt(), 12, 16, 24)
+                canvas.drawRoundRect(subRect, 99f * dp, 99f * dp, badgeBgPaint)
+                centerSubPaint.color = Color.argb((245 * alphaFactor).toInt(), 255, 255, 255)
+                canvas.drawText(subText, cx, pillY, centerSubPaint)
+            }
         } else {
-            // 无缩略图时在中心绘精致标题/副标题
-            centerTitlePaint.color = withAlpha(ui.primary, (255 * alphaFactor).toInt())
-            canvas.drawText(centerTitle.take(6), cx, cy - 2f * dp, centerTitlePaint)
+            centerTitlePaint.color = withAlpha(ui.accent, (255 * alphaFactor).toInt())
+            canvas.drawText(centerTitle.take(6), cx, cy - 1.5f * dp, centerTitlePaint)
             centerSubPaint.color = withAlpha(ui.muted, (235 * alphaFactor).toInt())
-            canvas.drawText(centerSubtitle.take(9), cx, cy + 13f * dp, centerSubPaint)
+            canvas.drawText(centerSubtitle.take(9), cx, cy + 12f * dp, centerSubPaint)
         }
 
-        // 中心外圈主题高光环
-        circleStrokePaint.strokeWidth = 2.4f * dp
-        circleStrokePaint.color = withAlpha(ui.primary, (240 * alphaFactor).toInt())
-        canvas.drawCircle(cx, cy, cr, circleStrokePaint)
-        circleStrokePaint.strokeWidth = 1.4f * dp
-
-        // 中心下方内容类型小胶囊（例如「完整图片 1080×1440」或「mp.weixin.qq.com」）
-        if (previewBitmap != null && !previewBitmap.isRecycled && centerSubtitle.isNotBlank() && alphaFactor > 0.5f) {
-            val subText = centerSubtitle.take(16)
-            val sw = centerSubPaint.measureText(subText)
-            val subY = cy + cr + 13f * dp
-            val subRect = RectF(cx - sw / 2f - 7f * dp, subY - 9.5f * dp, cx + sw / 2f + 7f * dp, subY + 3.5f * dp)
-            badgeBgPaint.color = withAlpha(ui.primary, (235 * alphaFactor).toInt())
-            canvas.drawRoundRect(subRect, 99f * dp, 99f * dp, badgeBgPaint)
-            centerSubPaint.color = withAlpha(ui.onPrimary, (255 * alphaFactor).toInt())
-            canvas.drawText(subText, cx, subY, centerSubPaint)
-        }
+        // 中心轮毂极细主题光环
+        rimStrokePaint.strokeWidth = 1.6f * dp
+        rimStrokePaint.color = withAlpha(ui.primary, (215 * alphaFactor).toInt())
+        canvas.drawCircle(cx, cy, curCenterR, rimStrokePaint)
     }
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
@@ -358,7 +315,6 @@ internal class RadialDragAskWheelView(
                 } else {
                     val distCenter = hypot((event.x - cx).toDouble(), (event.y - cy).toDouble()).toFloat()
                     if (distCenter <= centerRadius) {
-                        // 点击中心轮毂默认触发第 0 项主操作
                         actions.firstOrNull()?.let(onSelect)
                     } else {
                         onDismiss()
@@ -375,13 +331,18 @@ internal class RadialDragAskWheelView(
         return super.onTouchEvent(event)
     }
 
+    /** 极坐标扇区命中：手指在环带内任意滑动即可像转方向盘一样顺滑切选扇区。 */
     private fun hitTestAction(x: Float, y: Float): Int {
-        val hitR = itemRadius + 14f * dp
-        actions.forEachIndexed { idx, _ ->
-            val (ix, iy) = itemCenter(idx, 1f)
-            if (hypot((x - ix).toDouble(), (y - iy).toDouble()) <= hitR) return idx
-        }
-        return -1
+        val count = actions.size
+        if (count == 0) return -1
+        val dist = hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
+        if (dist < centerRadius || dist > outerRadius + 24f * dp) return -1
+        val sweep = 360.0 / count
+        var deg = Math.toDegrees(atan2((y - cy).toDouble(), (x - cx).toDouble()))
+        // 将 0 号扇区中心（-90°）左移半格作为 0° 起点
+        deg = (deg + 90.0 + sweep / 2.0) % 360.0
+        if (deg < 0.0) deg += 360.0
+        return (deg / sweep).toInt().coerceIn(0, count - 1)
     }
 
     private fun drawVectorIcon(canvas: Canvas, kind: IconKind, x: Float, y: Float, s: Float, color: Int) {
