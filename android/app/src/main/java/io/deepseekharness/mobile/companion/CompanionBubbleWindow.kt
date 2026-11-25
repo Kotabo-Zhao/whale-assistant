@@ -512,7 +512,7 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             val tip = dp(5).toFloat()
             if (isUser) {
                 view.setPadding(dp(13), dp(9), dp(13), dp(9))
-                view.setTextColor(ui.onPrimary); view.background = ui.shape(ui.primary, 18, null).apply {
+                view.background = ui.shape(ui.primary, 18, null).apply {
                     cornerRadii = floatArrayOf(round, round, tip, tip, round, round, round, round)
                 }
                 if (view is TextView) view.setTextColor(Color.WHITE)
