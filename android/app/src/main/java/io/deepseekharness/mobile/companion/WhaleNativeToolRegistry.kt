@@ -924,6 +924,16 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
     )
 
     fun execute(name: String, argsJson: String, callerSessionId: String = "whale-main"): ToolOutcome {
+        val startedAtMs = System.currentTimeMillis()
+        val outcome = executeInternal(name, argsJson, callerSessionId)
+        if (name != "whale_call") {
+            val errHint = if (outcome.ok) "" else outcome.label
+            WhaleToolTelemetry.record(name, outcome.ok, System.currentTimeMillis() - startedAtMs, errHint)
+        }
+        return outcome
+    }
+
+    private fun executeInternal(name: String, argsJson: String, callerSessionId: String): ToolOutcome {
         val args = runCatching { JSONObject(argsJson.ifBlank { "{}" }) }.getOrElse { JSONObject() }
         return try {
             when (name) {
@@ -2289,83 +2299,21 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     ToolOutcome(name, "唤起系统分享", true, JSONObject().put("sharedChars", text.length).toString(), mutating = true)
                 }
                 "whale_phone_vision" -> {
-                    val service = DeepSeekAccessibilityService.current()
-                        ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
-                    val question = args.str("question", "").trim()
-                    val cap = withPhoneControlNotice("正在看图识屏…") { service.captureScreenJpeg(annotateRefs = true) }
-                    if (!cap.ok || cap.jpeg == null) {
-                        ToolOutcome(name, "看图识屏受限", false, JSONObject().put("error", cap.error ?: "截屏失败").toString())
-                    } else {
-                        val uiTree = runCatching { service.fastControl("fastTree", "").takeIf { it.ok }?.text.orEmpty() }.getOrDefault("")
-                        val analysis = WhaleVisionScreenAnalyzer.analyzeScreen(
-                            context = app,
-                            jpeg = cap.jpeg,
-                            screenWidth = cap.width,
-                            screenHeight = cap.height,
-                            packageName = cap.packageName,
-                            question = question,
-                            locateTarget = false,
-                            uiTreeSummary = uiTree,
-                        )
-                        ToolOutcome(
-                            name,
-                            if (analysis.ok) "多模态看图识屏完成" else "视觉识屏失败",
-                            analysis.ok,
-                            JSONObject()
-                                .put("packageName", cap.packageName)
-                                .put("screenWidth", cap.width)
-                                .put("screenHeight", cap.height)
-                                .put("provider", analysis.provider)
-                                .put("model", analysis.model)
-                                .put("analysis", analysis.text)
-                                .toString(),
-                        )
-                    }
+                    WhaleVisionToolHandlers.handlePhoneVision(
+                        app = app,
+                        name = name,
+                        question = args.str("question", "").trim(),
+                        withNotice = { label, block -> withPhoneControlNotice(label, block) },
+                    )
                 }
                 "whale_phone_vision_click" -> {
-                    val service = DeepSeekAccessibilityService.current()
-                        ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
-                    val target = args.str("target").trim()
-                    require(target.isNotEmpty()) { "缺少要视觉定位点击的目标 target" }
-                    val cap = withPhoneControlNotice("视觉定位「${target.take(10)}」…") { service.captureScreenJpeg(annotateRefs = true) }
-                    if (!cap.ok || cap.jpeg == null) {
-                        ToolOutcome(name, "视觉截屏受限", false, JSONObject().put("error", cap.error ?: "截屏失败").toString(), mutating = true)
-                    } else {
-                        val uiTree = runCatching { service.fastControl("fastTree", "").takeIf { it.ok }?.text.orEmpty() }.getOrDefault("")
-                        val loc = WhaleVisionScreenAnalyzer.analyzeScreen(
-                            context = app,
-                            jpeg = cap.jpeg,
-                            screenWidth = cap.width,
-                            screenHeight = cap.height,
-                            packageName = cap.packageName,
-                            question = target,
-                            locateTarget = true,
-                            uiTreeSummary = uiTree,
-                        )
-                        if (!loc.ok || (loc.ref == null && (loc.x == null || loc.y == null))) {
-                            ToolOutcome(name, "未能在画面中找到目标", false, JSONObject().put("error", loc.text).put("provider", loc.provider).put("model", loc.model).toString(), mutating = true)
-                        } else {
-                            val tapJson = JSONObject().put("action", "click")
-                            if (loc.ref != null) tapJson.put("ref", loc.ref)
-                            if (loc.x != null && loc.y != null) tapJson.put("x", loc.x).put("y", loc.y)
-                            val tapRes = withPhoneControlNotice("视觉点击「${loc.text.take(10)}」") { service.fastControl("fastAct", tapJson.toString()) }
-                            val posDesc = if (loc.ref != null) "#${loc.ref}" else "(${loc.x},${loc.y})"
-                            ToolOutcome(
-                                name,
-                                "视觉点击「${loc.text}」$posDesc",
-                                tapRes.ok,
-                                JSONObject()
-                                    .put("clicked", tapRes.ok)
-                                    .put("label", loc.text)
-                                    .put("ref", loc.ref ?: JSONObject.NULL)
-                                    .put("x", loc.x ?: JSONObject.NULL)
-                                    .put("y", loc.y ?: JSONObject.NULL)
-                                    .put("detail", tapRes.text)
-                                    .toString(),
-                                mutating = true,
-                            )
-                        }
-                    }
+                    WhaleVisionToolHandlers.handlePhoneVisionClick(
+                        app = app,
+                        name = name,
+                        target = args.str("target").trim(),
+                        withCaptureNotice = { label, block -> withPhoneControlNotice(label, block) },
+                        withTapNotice = { label, block -> withPhoneControlNotice(label, block) },
+                    )
                 }
                 "whale_context_search" -> {
                     val q = args.str("query").trim()
@@ -2626,7 +2574,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         if (b64.isBlank()) {
                             ToolOutcome(name, "读取副屏状态", true, res.text)
                         } else {
-                            val jpeg = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                            val rawJpeg = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                            val jpeg = WhaleVisionToolHandlers.overlayNormalizedGrid(rawJpeg)
                             val w = state.optInt("widthPx", 720).coerceAtLeast(1)
                             val h = state.optInt("heightPx", 1280).coerceAtLeast(1)
                             val analysis = WhaleVisionScreenAnalyzer.analyzeScreen(
@@ -2694,6 +2643,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                         .put("activeRoutines", routines)
                         .put("environment", envDiag)
                         .put("contextCompression", WhaleContextBudgeter.lastTurnStats.json())
+                        .put("toolTelemetry", WhaleToolTelemetry.snapshot())
                     ToolOutcome(name, "自检自身能力与环境状态", true, out.toString())
                 }
                 "whale_tool_catalog", "whale_tools_expand" -> {

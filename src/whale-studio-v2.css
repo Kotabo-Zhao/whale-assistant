@@ -836,3 +836,51 @@ select:focus {
     transition: none !important;
   }
 }
+
+/* === 主聊天顶栏实时心境与羁绊轻胶囊 === */
+.whale-chat-mood-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface-muted) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+  transition: transform 220ms ease, border-color 220ms ease, color 220ms ease;
+}
+.whale-chat-mood-pill small {
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 0.7rem;
+}
+.whale-chat-mood-pill.is-levelup {
+  color: var(--ink);
+  border-color: var(--blue);
+  transform: scale(1.05);
+}
+.whale-mood-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #6366f1;
+}
+.whale-mood-dot.is-happy { background: #f59e0b; }
+.whale-mood-dot.is-playful { background: #ec4899; }
+.whale-mood-dot.is-caring { background: #10b981; }
+.whale-mood-dot.is-focused { background: #3b82f6; }
+.whale-mood-dot.is-calm { background: #6366f1; }
+.whale-mood-dot.is-concerned { background: #f97316; }
+
+/* === 二级设置页静奢 V3 质感统一（去硬边框与重阴影） === */
+.virtual-screen-screen .settings-subsection,
+.automation-rule-form,
+.authored-tools-card {
+  border-color: color-mix(in srgb, var(--line) 50%, transparent);
+  box-shadow: none;
+  border-radius: var(--radius-card, 18px);
+}

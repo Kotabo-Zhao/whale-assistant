@@ -49,17 +49,31 @@ internal object WhaleCapabilityPrimer {
             cues = listOf("性格", "心情", "情绪", "羁绊", "好感", "人设", "角色卡", "称呼", "口癖", "温柔一点", "直接一点", "活泼一点"),
             snippet = "- 角色卡与情感养成：`whale_call(tool=\"whale_emotion_state\", argsJson=\"{\\\"action\\\":\\\"get\\\"}\")`、`whale_call(tool=\"whale_emotion_state\", argsJson=\"{\\\"action\\\":\\\"note_growth\\\",\\\"note\\\":\\\"...\\\"}\")`、`whale_call(tool=\"whale_persona_manage\", argsJson=\"{\\\"action\\\":\\\"refine\\\",\\\"appendPersonality\\\":\\\"...\\\"}\")`。",
         ),
+        DomainRule(
+            id = "context_ledger",
+            cues = listOf("刚才说过", "前面提过", "历史原文", "翻一下之前", "回溯", "上次聊", "之前发的"),
+            snippet = "- 长对话原文回溯：`whale_call(tool=\"whale_context_search\", argsJson=\"{\\\"query\\\":\\\"关键词\\\"}\")`、`whale_call(tool=\"whale_context_expand\", argsJson=\"{\\\"rangeId\\\":\\\"...\\\"}\")`（每轮最多展开 1 段）。",
+        ),
+        DomainRule(
+            id = "background_worker",
+            cues = listOf("后台跑", "异步", "深度调研", "长任务", "取消任务", "清掉徽标", "任务进度"),
+            snippet = "- 后台长任务编排：`whale_call(tool=\"whale_worker_submit\", argsJson=\"{\\\"title\\\":\\\"...\\\",\\\"task\\\":\\\"...\\\"}\")`、`whale_call(tool=\"whale_worker_manage\", argsJson=\"{\\\"action\\\":\\\"list\\\"}\")`、`whale_call(tool=\"whale_worker_cancel\", argsJson=\"{\\\"id\\\":\\\"...\\\"}\")`。",
+        ),
     )
 
     /** 按本轮用户消息匹配最多 2 个最相关域，生成极简精确参数速查卡。 */
     fun buildPrimer(userQuery: String): String {
         val lower = userQuery.trim().lowercase(Locale.US)
         if (lower.isEmpty()) return ""
-        val matched = rules.filter { rule -> rule.cues.any { cue -> lower.contains(cue) } }.take(2)
+        val matched = rules.filter { rule -> rule.cues.any { cue -> lower.contains(cue) } }.take(3)
         if (matched.isEmpty()) return ""
+        val ids = matched.map { it.id }.toSet()
         return buildString {
             append("[本轮精准能力速查（直接经 whale_call 调用，无需盲猜参数）]\n")
             matched.forEach { append(it.snippet).append("\n") }
+            if ("phone" in ids && "python_docs" in ids) {
+                append("- 跨步联动提示：可先用 `whale_phone_vision` 读取屏幕信息，再把提取的数据交给 `whale_code_run` 生成表格/文档或图表。\n")
+            }
         }.trim()
     }
 

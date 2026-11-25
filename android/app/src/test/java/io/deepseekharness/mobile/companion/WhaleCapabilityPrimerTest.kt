@@ -35,4 +35,20 @@ class WhaleCapabilityPrimerTest {
         assertEquals(630, x)
         assertEquals(700, y)
     }
+
+    @Test
+    fun `composite phone and excel request injects cross-step chaining hint`() {
+        val primer = WhaleCapabilityPrimer.buildPrimer("帮我截屏读取微信账单并做成 Excel 表格")
+        assertTrue(primer.contains("whale_phone_vision"))
+        assertTrue(primer.contains("whale_code_run"))
+        assertTrue(primer.contains("跨步联动提示"))
+    }
+
+    @Test
+    fun `context ledger and background worker cues inject exact tool signatures`() {
+        val ctx = WhaleCapabilityPrimer.buildPrimer("帮我回溯刚才说过的内容")
+        assertTrue(ctx.contains("whale_context_search"))
+        val bg = WhaleCapabilityPrimer.buildPrimer("放后台跑一个深度调研任务")
+        assertTrue(bg.contains("whale_worker_submit"))
+    }
 }

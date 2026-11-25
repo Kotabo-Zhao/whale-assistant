@@ -270,4 +270,40 @@ internal object WhaleEmotionEngine {
             append("｜相处默契：").append(state.growthNotes.takeLast(2).joinToString("；"))
         }
     }
+
+    /** 每满 12 轮有效互动触发一次后台轻量模型深度复盘，提炼个性化相处默契。 */
+    fun shouldRunDeepReflection(state: EmotionState): Boolean =
+        state.interactions > 0 && state.interactions % 12 == 0
+
+    fun buildReflectionPrompt(
+        personaName: String,
+        recentUserMessages: List<String>,
+        state: EmotionState,
+    ): String = buildString {
+        append("你是角色「").append(personaName.ifBlank { "鲸鱼娘" }).append("」的性格养成复盘模块。
+")
+        append("请根据以下最近几条用户消息，提炼 1 条具体的「主人沟通偏好或相处默契」（18~42 个中文字，直白自然，不要包含数值、编号或引号）。
+")
+        if (state.growthNotes.isNotEmpty()) {
+            append("已有默契（请避免重复）：").append(state.growthNotes.takeLast(4).joinToString("；")).append("
+")
+        }
+        append("近期用户消息：
+")
+        recentUserMessages.takeLast(8).forEachIndexed { idx, msg ->
+            append("${idx + 1}. ").append(msg.trim().take(120)).append("
+")
+        }
+        append("若近期消息过短或无明显新偏好，请只输出 NONE。")
+    }
+
+    fun parseReflectionNote(raw: String): String? {
+        val clean = raw.trim()
+            .lineSequence()
+            .map { it.trim().trim('"', '“', '”', '「', '」', '-', '•', '*') }
+            .firstOrNull { it.isNotBlank() }
+            ?: return null
+        if (clean.equals("NONE", ignoreCase = true) || clean.length < 6) return null
+        return clean.take(64)
+    }
 }

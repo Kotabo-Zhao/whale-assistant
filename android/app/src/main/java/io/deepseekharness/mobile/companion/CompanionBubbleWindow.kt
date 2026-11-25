@@ -406,7 +406,13 @@ internal class CompanionBubbleWindow(private val context: Context, private val w
             topMargin = dp(8)
             bottomMargin = dp(2)
         })
-        val subtitle: String? = null
+        val activeCard = runCatching { CompanionPersonaStore(context).active() }.getOrNull()
+        val petEmotion = runCatching {
+            val pid = activeCard?.optString("id")?.ifBlank { "default" } ?: "default"
+            val pname = activeCard?.optString("name")?.ifBlank { if (ui.usagi) "乌萨奇" else "鲸鱼娘" } ?: "鲸鱼娘"
+            WhaleEmotionEngine.load(context, pid, pname)
+        }.getOrNull()
+        val subtitle: String? = petEmotion?.let { "${it.mood.label} · 羁绊 Lv.${it.bondLevel}" }
         panel.addView(ui.header(if (ui.usagi) "乌萨奇" else ui.string(R.string.pet_ui_name), subtitle, headingEnd))
         panel.addView(ui.divider())
         val shortcuts = LinearLayout(context).apply {

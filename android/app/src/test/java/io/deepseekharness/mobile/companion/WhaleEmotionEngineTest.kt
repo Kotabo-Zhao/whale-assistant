@@ -1,6 +1,8 @@
 package io.deepseekharness.mobile.companion
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,5 +53,22 @@ class WhaleEmotionEngineTest {
         assertEquals(WhaleEmotionEngine.Mood.CALM, next.mood)
         assertEquals(base.empathy, next.empathy)
         assertEquals(base.playfulness, next.playfulness)
+    }
+
+    @Test
+    fun `deep reflection triggers every 12 turns and parses clean growth notes`() {
+        val base = WhaleEmotionEngine.defaultState("default", "鲸鱼娘")
+        assertFalse(WhaleEmotionEngine.shouldRunDeepReflection(base.copy(interactions = 0)))
+        assertFalse(WhaleEmotionEngine.shouldRunDeepReflection(base.copy(interactions = 11)))
+        assertTrue(WhaleEmotionEngine.shouldRunDeepReflection(base.copy(interactions = 12)))
+        assertTrue(WhaleEmotionEngine.shouldRunDeepReflection(base.copy(interactions = 24)))
+
+        val prompt = WhaleEmotionEngine.buildReflectionPrompt("鲸鱼娘", listOf("帮我直接看报错", "简洁点"), base)
+        assertTrue(prompt.contains("鲸鱼娘"))
+        assertTrue(prompt.contains("帮我直接看报错"))
+
+        assertEquals("主人排查代码问题时喜欢先给根因再给补丁", WhaleEmotionEngine.parseReflectionNote("「主人排查代码问题时喜欢先给根因再给补丁」"))
+        assertNull(WhaleEmotionEngine.parseReflectionNote("NONE"))
+        assertNull(WhaleEmotionEngine.parseReflectionNote("   "))
     }
 }

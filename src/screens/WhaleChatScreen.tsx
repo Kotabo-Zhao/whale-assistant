@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import MarkdownIt from 'markdown-it'
 import texmath from 'markdown-it-texmath'
 import katex from 'katex'
@@ -319,6 +319,35 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
   const [activeId, setActiveId] = useState<string>(() => loadActiveSessionId(loadSessions()))
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const [liveMood, setLiveMood] = useState<{ mood: string; moodLabel: string; bondLevel: number; interactions: number } | null>(null)
+  const [bondUpNotice, setBondUpNotice] = useState(false)
+  const refreshLiveMood = useCallback(async () => {
+    if (!bridge.companionDashboard) return
+    try {
+      const res = await bridge.companionDashboard({ operation: 'personaEmotionActive' })
+      const emo = res.emotion as { mood?: unknown; moodLabel?: unknown; bondLevel?: unknown; interactions?: unknown } | undefined
+      if (emo && typeof emo.moodLabel === 'string' && typeof emo.bondLevel === 'number') {
+        const nextMood = {
+          mood: typeof emo.mood === 'string' ? emo.mood : 'CALM',
+          moodLabel: emo.moodLabel,
+          bondLevel: emo.bondLevel,
+          interactions: typeof emo.interactions === 'number' ? emo.interactions : 0,
+        }
+        setLiveMood(prev => {
+          if (prev && nextMood.bondLevel > prev.bondLevel) {
+            setBondUpNotice(true)
+            window.setTimeout(() => setBondUpNotice(false), 2600)
+          }
+          return nextMood
+        })
+      }
+    } catch {
+      // ignore if native bridge unavailable in web preview
+    }
+  }, [bridge])
+  useEffect(() => {
+    void refreshLiveMood()
+  }, [refreshLiveMood])
   const [slashOpen, setSlashOpen] = useState(false)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
@@ -837,6 +866,7 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
       setStreamingSteps([])
       setStreamingPhase('')
       setSending(false)
+      void refreshLiveMood()
       if (pendingFollowUpRef.current.length > 0) {
         const queued = pendingFollowUpRef.current.join('\n')
         pendingFollowUpRef.current = []
@@ -944,6 +974,16 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
         <div className="whale-chat-brand">
           <img src={activeAvatar} alt="" className="whale-chat-brand-avatar" />
           <span className="whale-chat-brand-name">{isUsagi ? t('乌萨奇') : t('鲸鱼娘')}</span>
+          {liveMood && (
+            <span
+              className={`whale-chat-mood-pill${bondUpNotice ? ' is-levelup' : ''}`}
+              title={`${liveMood.moodLabel} · 羁绊 Lv.${liveMood.bondLevel}（已互动 ${liveMood.interactions} 轮）`}
+            >
+              <i className={`whale-mood-dot is-${liveMood.mood.toLowerCase()}`} aria-hidden="true" />
+              <span>{liveMood.moodLabel}</span>
+              <small>Lv.{liveMood.bondLevel}</small>
+            </span>
+          )}
         </div>
         <div className="whale-chat-shortcuts" aria-label={t('常用功能入口')}>
           <button

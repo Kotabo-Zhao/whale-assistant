@@ -392,6 +392,10 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             val pid = activePersona?.optString("id")?.ifBlank { "default" } ?: "default"
             val pname = activePersona?.optString("name")?.ifBlank { "鲸鱼娘" } ?: "鲸鱼娘"
             val emotionState = runCatching { WhaleEmotionEngine.observeTurn(app, pid, pname, trimmed) }.getOrNull()
+            if (emotionState != null && WhaleEmotionEngine.shouldRunDeepReflection(emotionState)) {
+                val recentUserMsgs = recentHistory.filter { it.first == "user" }.map { it.second }.takeLast(7) + trimmed
+                scheduleEmotionReflection(pid, pname, recentUserMsgs, emotionState)
+            }
             val emotionPrompt = if (emotionState != null) "\n" + WhaleEmotionEngine.buildDynamicPrompt(emotionState) else ""
             val primerPrompt = WhaleCapabilityPrimer.buildPrimer(trimmed).let { if (it.isNotBlank()) "\n" + it else "" }
             rawDynamicCtxChars = built.first + silentNotices.length + emotionPrompt.length + primerPrompt.length
@@ -1478,5 +1482,31 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             .put(JSONObject().put("role", "user").put("content", q))
         val turn = callChatCompletionsWithRetry(ep, msgs, null, listener = null, control = null, fallbacks = emptyList(), usageAcc = null)
         return turn.content.trim()
+    }
+
+    /** 后台零阻塞情感复盘：每 12 轮用轻量快模型提炼 1 条专属相处默契写入角色卡情感档案。 */
+    private fun scheduleEmotionReflection(
+        personaId: String,
+        personaName: String,
+        recentUserMessages: List<String>,
+        state: WhaleEmotionEngine.EmotionState,
+    ) {
+        if (recentUserMessages.size < 3) return
+        Thread({
+            runCatching {
+                val store = RuntimeStore(app)
+                val settings = store.settings()
+                val rawEp = resolveEndpoints(store, settings).firstOrNull() ?: return@runCatching
+                val fastModel = WhaleModelRouter.routeForInternalTask(app, rawEp.model)
+                val ep = rawEp.copy(model = fastModel)
+                val prompt = WhaleEmotionEngine.buildReflectionPrompt(personaName, recentUserMessages, state)
+                val msgs = JSONArray().put(JSONObject().put("role", "user").put("content", prompt))
+                val turn = callChatCompletionsWithRetry(ep, msgs, null, listener = null, control = null, fallbacks = emptyList(), usageAcc = null)
+                val note = WhaleEmotionEngine.parseReflectionNote(turn.content)
+                if (!note.isNullOrBlank()) {
+                    WhaleEmotionEngine.addGrowthNote(app, personaId, personaName, note)
+                }
+            }
+        }, "whale-emotion-reflect").apply { isDaemon = true }.start()
     }
 }

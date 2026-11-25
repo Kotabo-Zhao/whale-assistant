@@ -18,7 +18,7 @@ export type CompanionRequest =
   | { operation: 'screenWatchSet'; enabled: boolean }
   | { operation: 'workerControl'; id: string; action: 'cancel' | 'resume' | 'reply' | 'add'; task: string }
   | { operation: 'workerControl'; id: string; action: 'recover'; recoveryAcknowledged: true; recoveryIncident?: string; goalRecoveryIncident?: string }
-  | { operation: 'personaList' | 'assistantBriefings' }
+  | { operation: 'personaList' | 'personaEmotionActive' | 'assistantBriefings' }
   | { operation: 'personaActivate' | 'personaDelete'; id: string }
   | { operation: 'personaEmotionGet' | 'personaEmotionReset'; id: string; name?: string }
   | { operation: 'personaEmotionNote'; id: string; name?: string; note: string }

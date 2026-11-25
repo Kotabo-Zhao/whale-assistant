@@ -62,6 +62,16 @@ internal class CompanionDashboard(private val context: Context) {
                 }
                 res.put("emotions", emotions)
             }
+            "personaEmotionActive" -> {
+                val active = CompanionPersonaStore(context).active()
+                val id = active.optString("id").ifBlank { "default" }
+                val name = active.optString("name").ifBlank { "鲸鱼娘" }
+                JSONObject()
+                    .put("ok", true)
+                    .put("id", id)
+                    .put("name", name)
+                    .put("emotion", WhaleEmotionEngine.load(context, id, name).json())
+            }
             "personaEmotionGet" -> {
                 val id = text("id").trim()
                 val name = request.optString("name").trim()
