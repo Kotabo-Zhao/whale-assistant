@@ -23,7 +23,7 @@ internal object WhaleMacroEngine {
     private const val PREFS = "whale_macros_v1"
     private const val KEY_MACROS = "macros_json"
     private const val MAX_MACROS = 24
-    private const val MAX_STEPS = 30
+    private const val MAX_STEPS = 60
 
     private val HIGH_RISK_REGEX = Regex("支付|付款|转账|确认下单|立即购买|删除|注销|清空|发送|确认提交")
 

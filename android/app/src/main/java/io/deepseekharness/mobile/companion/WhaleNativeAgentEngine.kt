@@ -450,7 +450,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         var lastCompactedRound = -4
         var maskedUpToRound = 0
 
-        for (round in 0 until MAX_TOOL_ROUNDS) {
+        val maxRounds = if (isWorkerSession) MAX_WORKER_TOOL_ROUNDS else MAX_TOOL_ROUNDS
+        for (round in 0 until maxRounds) {
             // 4. KV Prefix Cache 优先策略：上下文未达 20k 高水位前严禁原地篡改历史 tool 消息（保 85%~95% 前缀缓存命中）；
             //    仅超水位时对更早轮次（0 until round-1）做一次性批量观察掩码裁剪，兼顾缓存命中与极低内存/Token。
             val currentMsgChars = WhaleHarnessCore.PrefixCacheCompactor.estimateMessagesChars(messages)
@@ -727,7 +728,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
                 val step = StepRecord(p.fnName, outcome.label, outcome.ok, dt)
                 steps += step
-                if (!outcome.ok && !outcome.payload.contains("REPEAT_LOOP_ABORTED") && round < MAX_TOOL_ROUNDS - 2) {
+                if (!outcome.ok && !outcome.payload.contains("REPEAT_LOOP_ABORTED") && round < maxRounds - 2) {
                     val knownLesson = runCatching { WhaleAgentBrainEnhancer.ReflexionLessonStore.matchForTool(app, p.fnName) }.getOrNull()
                     val hintMsg = if (!knownLesson.isNullOrBlank()) {
                         "提示：工具 ${p.fnName} 本次未成功。历史避坑经验：$knownLesson 。请直接换路解决后再交付。"
@@ -758,7 +759,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val rawOut = outcome.payload
                 val compactedOut = WhaleContextBudgeter.compactToolPayload(rawOut)
                 val isLongOutputTool = p.fnName in setOf("whale_code_run", "whale_knowledge_read", "whale_knowledge_list") ||
-                    (p.fnName == "whale_call" && (p.argsJson.contains("whale_code_run") || p.argsJson.contains("whale_knowledge_read")))
+                    (p.fnName == "whale_call" && (p.fnArgs.contains("whale_code_run") || p.fnArgs.contains("whale_knowledge_read")))
                 val boundedOut = WhaleHarnessCore.SpillAndPruneManager.boundToolOutput(
                     context = app,
                     toolName = p.fnName,
@@ -1459,7 +1460,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 else -> listOf("好的，按你建议做", "再详细说说", "先这样")
             }
         }
-        private const val MAX_TOOL_ROUNDS = 20
+        private const val MAX_TOOL_ROUNDS = 48
+        private const val MAX_WORKER_TOOL_ROUNDS = 64
         private val parallelToolPool = Executors.newFixedThreadPool(4)
     }
 

@@ -339,7 +339,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
             dependsOn: List<String> = emptyList(),
             publishCallback: (String, String) -> Unit,
         ) {
-            val maxStages = 3
+            val maxStages = 6
             var cp = WhaleLongTaskStore.Checkpoint(
                 id = commandId,
                 title = workerTitle,

@@ -1785,7 +1785,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val result = if (lang == "sh" || lang == "shell") {
                         WhaleCodeRunner.runShell(projectDir, scriptCode, timeoutSec = timeoutSec.coerceAtMost(120L))
                     } else {
-                        val ptcGuard = WhaleHarnessCore.RepeatToolGuard(thresholds = setOf(3, 5), hardStopThreshold = 6)
+                        val ptcGuard = WhaleHarnessCore.RepeatToolGuard(thresholds = setOf(12, 18), hardStopThreshold = 24)
                         val ptcLedger = UnifiedExecutionLedger(app)
                         val ptcBridge = WhaleCodeRunner.ToolBridge { subTool, subArgsJson ->
                             val decision = ptcGuard.observe(subTool, subArgsJson)

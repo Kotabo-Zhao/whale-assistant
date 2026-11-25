@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference
 internal object WhaleCustomToolEngine {
     private const val STORE_FILENAME = "whale_custom_tools.json"
     private const val MAX_TOOLS = 40
-    private const val MAX_STEPS = 10
+    private const val MAX_STEPS = 25
     private const val MAX_JS_CHARS = 8_000
     private const val MAX_HTTP_BYTES = 65_536
     private const val HTTP_TIMEOUT_MS = 15_000

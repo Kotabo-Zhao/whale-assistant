@@ -17,7 +17,7 @@ import urllib.request
 import zipfile
 from collections import OrderedDict
 
-MAX_PTC_SUB_CALLS = 16
+MAX_PTC_SUB_CALLS = 48
 MAX_REPL_SESSIONS = 12
 MAX_WHEEL_BYTES = 25 * 1024 * 1024
 
