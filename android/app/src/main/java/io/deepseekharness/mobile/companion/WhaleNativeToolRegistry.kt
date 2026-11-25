@@ -319,6 +319,13 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
         // 精简核心常驻：记忆召回、记忆保存、待办查询/新增
         array.put(schema("whale_recall", "并行混合语义检索用户的长期记忆、习惯规则与本地资料库。", mapOf("query" to "检索关键词", "scope" to "all(默认)/memory/knowledge"), listOf("query")))
         array.put(schema("whale_memory_save", "将用户明确表达的偏好或长期事实保存到本地长期记忆。", mapOf("text" to "简明完整的记忆内容"), listOf("text")))
+        array.put(schema("whale_memory_digest", "按 6 大语义域（画像/偏好/项目/人际/作息/约束）一次返回高权重长期记忆全貌速览。", emptyMap(), emptyList()))
+        array.put(schema(
+            "whale_proactive_watchlist",
+            "查看或管理事件驱动的主动关注事项（隐式承诺、截止日跟进）。",
+            mapOf("action" to "list / done / snooze / dismiss", "id" to "操作单条关注项时的 ID"),
+            emptyList(),
+        ))
         if (includeMemoryAdmin) {
             array.put(schema(
                 "whale_memory_update",
@@ -1179,16 +1186,43 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 }
                 "whale_memory_search" -> {
                     val query = args.str("query", "").trim()
-                    val hybrid = if (query.isNotEmpty()) {
-                        runCatching {
-                            SemanticMemorySearch.execute(app, JSONObject().put("query", query).put("limit", 6).toString())
-                        }.getOrNull()
-                    } else null
-                    val result = hybrid ?: CompanionMemoryStore(app).execute(
-                        JSONObject().put("op", "search").put("query", query).toString(),
-                        fromPetTurn = true,
-                    )
-                    ToolOutcome(name, if (hybrid != null) "混合语义检索记忆" else "检索本地记忆", true, result)
+                    val category = args.str("category", "").trim().takeIf { it.isNotEmpty() }
+                    val tag = args.str("tag", "").trim().takeIf { it.isNotEmpty() }
+                    val includeExpired = args.optBoolean("includeExpired", false)
+                    if (category != null || tag != null) {
+                        val structured = CompanionMemoryStore(app).searchStructured(
+                            query = query,
+                            category = category,
+                            tag = tag,
+                            includeExpired = includeExpired,
+                            limit = 10,
+                        )
+                        ToolOutcome(name, "按领域/标签检索记忆", true, structured.toString())
+                    } else {
+                        val hybrid = if (query.isNotEmpty()) {
+                            runCatching {
+                                SemanticMemorySearch.execute(app, JSONObject().put("query", query).put("limit", 6).toString())
+                            }.getOrNull()
+                        } else null
+                        val result = hybrid ?: CompanionMemoryStore(app).searchStructured(query = query, includeExpired = includeExpired, limit = 10).toString()
+                        ToolOutcome(name, if (hybrid != null) "混合语义检索记忆" else "结构化重排检索记忆", true, result)
+                    }
+                }
+                "whale_memory_digest" -> {
+                    val digest = CompanionMemoryStore(app).digestForAgent()
+                    ToolOutcome(name, "读取 6 域长期记忆全貌", true, digest.toString())
+                }
+                "whale_proactive_watchlist" -> {
+                    val action = args.str("action", "list").trim().lowercase().ifEmpty { "list" }
+                    val id = args.str("id", "").trim()
+                    val res = if (action == "list") {
+                        JSONObject().put("ok", true).put("items", JSONArray().apply {
+                            WhaleProactiveEngine.list(app).forEach { put(it.json()) }
+                        })
+                    } else {
+                        WhaleProactiveEngine.act(app, id, action)
+                    }
+                    ToolOutcome(name, "主动关注项：$action", res.optBoolean("ok", true), res.toString(), mutating = action != "list")
                 }
                 "whale_memory_save" -> {
                     val req = JSONObject().put("op", "save").put("text", args.str("text", "").trim())

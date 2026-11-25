@@ -255,6 +255,75 @@ class CompanionMemoryStore(context: Context) {
         write(kept)
         selected.size
     }
+    fun updateMetadataForUser(
+        id: String,
+        category: String? = null,
+        pinned: Boolean? = null,
+        salience: Int? = null,
+    ): Boolean = synchronized(lock) {
+        val rows = load()
+        var updated = false
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            if (row.optString("id") != id) continue
+            WhaleMemoryTaxonomy.enrichRow(row)
+            if (!category.isNullOrBlank()) {
+                val parsed = WhaleMemoryTaxonomy.parseCategory(category)
+                if (parsed != null) {
+                    row.put("category", parsed.key)
+                    row.put("categoryLabel", parsed.label)
+                }
+            }
+            if (pinned != null) {
+                row.put("pinned", pinned)
+                if (salience == null) row.put("salience", if (pinned) 5 else 3)
+            }
+            if (salience != null) {
+                row.put("salience", salience.coerceIn(1, 5))
+            }
+            row.put("updatedAt", System.currentTimeMillis())
+            updated = true
+            break
+        }
+        if (updated) write(rows)
+        updated
+    }
+
+    fun searchStructured(
+        query: String = "",
+        category: String? = null,
+        tag: String? = null,
+        includeExpired: Boolean = false,
+        limit: Int = 10,
+    ): JSONObject = synchronized(lock) {
+        val all = load()
+        val list = buildList {
+            for (i in 0 until all.length()) all.optJSONObject(i)?.let(::add)
+        }
+        val ranked = WhaleMemoryTaxonomy.hybridRank(
+            rows = list,
+            query = query,
+            category = category,
+            tag = tag,
+            includeExpired = includeExpired,
+            limit = limit,
+        )
+        val arr = JSONArray()
+        ranked.forEach { arr.put(it) }
+        JSONObject()
+            .put("ok", true)
+            .put("count", arr.length())
+            .put("items", arr)
+    }
+
+    fun digestForAgent(): JSONObject = synchronized(lock) {
+        val all = load()
+        val list = buildList {
+            for (i in 0 until all.length()) all.optJSONObject(i)?.let(::add)
+        }
+        WhaleMemoryTaxonomy.buildDigest(list)
+    }
+
     fun clearForUser() = synchronized(lock) {
         val rows = load()
         val blocked = prefs.getStringSet("memory_deleted_hashes", emptySet()).orEmpty().toMutableSet()

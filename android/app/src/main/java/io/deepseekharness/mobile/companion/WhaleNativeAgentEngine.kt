@@ -397,10 +397,12 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 scheduleEmotionReflection(pid, pname, recentUserMsgs, emotionState)
             }
             val emotionPrompt = if (emotionState != null) "\n" + WhaleEmotionEngine.buildDynamicPrompt(emotionState) else ""
+            runCatching { WhaleProactiveEngine.observeAndCapture(app, trimmed) }
+            val watchPrompt = runCatching { WhaleProactiveEngine.buildDynamicWatchlistPrompt(app) }.getOrDefault("").let { if (it.isNotBlank()) "\n" + it else "" }
             val primerPrompt = WhaleCapabilityPrimer.buildPrimer(trimmed).let { if (it.isNotBlank()) "\n" + it else "" }
-            rawDynamicCtxChars = built.first + silentNotices.length + emotionPrompt.length + primerPrompt.length
+            rawDynamicCtxChars = built.first + silentNotices.length + emotionPrompt.length + watchPrompt.length + primerPrompt.length
             ragSkippedByGate = built.third
-            built.second + silentNotices + emotionPrompt + primerPrompt
+            built.second + silentNotices + emotionPrompt + watchPrompt + primerPrompt
         }
         var toolPayloadRawChars = 0
         var toolPayloadCompactChars = 0

@@ -318,12 +318,31 @@ internal class CompanionDashboard(private val context: Context) {
                 val suggestions = if (store.notificationMemorySuggestions)
                     CompanionMemorySuggestions.fromRecords(store.read(), store.excludedPackages(), store.dismissedMemorySuggestions()) else emptyList()
                 val page = if (memory.usesDatabase()) memory.pageForUser(null, null) else null
-                JSONObject().put("items", reviewedRows(page?.rows ?: memory.listForUser())).put("suggestions", JSONArray().apply {
+                val enrichedItems = reviewedRows(page?.rows ?: memory.listForUser())
+                for (i in 0 until enrichedItems.length()) {
+                    enrichedItems.optJSONObject(i)?.let { WhaleMemoryTaxonomy.enrichRow(it) }
+                }
+                val watchArr = JSONArray().apply {
+                    WhaleProactiveEngine.list(context).forEach { put(it.json()) }
+                }
+                JSONObject().put("items", enrichedItems).put("watchlist", watchArr).put("suggestions", JSONArray().apply {
                     suggestions.forEach { put(JSONObject().put("id", it.id).put("text", it.excerpt).put("source", it.packageName).put("time", it.time)) }
                 }).apply {
                     if (page != null) { put("nextBefore", page.next ?: JSONObject.NULL); put("revision", page.revision) }
                 }
             }
+            "memoryUpdateMeta" -> {
+                val id = text("id").trim()
+                val cat = request.optString("category").takeIf { it.isNotBlank() }
+                val pinned = if (request.has("pinned")) request.optBoolean("pinned") else null
+                val salience = if (request.has("salience")) request.optInt("salience") else null
+                JSONObject().put("ok", memory.updateMetadataForUser(id, cat, pinned, salience))
+            }
+            "memoryDigest" -> JSONObject().put("ok", true).put("digest", memory.digestForAgent())
+            "proactiveList" -> JSONObject().put("ok", true).put("items", JSONArray().apply {
+                WhaleProactiveEngine.list(context).forEach { put(it.json()) }
+            })
+            "proactiveAct" -> WhaleProactiveEngine.act(context, text("id").trim(), text("action").trim())
             "memoryPage" -> {
                 require(memory.usesDatabase()) { "记忆数据库不可用" }
                 val before = request.opt("before") as? Number ?: throw IllegalArgumentException("记忆分页参数无效")

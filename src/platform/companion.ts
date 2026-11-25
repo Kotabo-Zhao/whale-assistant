@@ -39,6 +39,9 @@ export type CompanionRequest =
   | { operation: 'memoryBatchDelete'; entries: Array<{ id: string; expected: string }> }
   | { operation: 'knowledgeBatchDelete'; entries: Array<{ id: string; expectedText: string }> }
   | { operation: 'memoryClear'; confirmed: true }
+  | { operation: 'memoryUpdateMeta'; id: string; category?: string; pinned?: boolean; salience?: number }
+  | { operation: 'memoryDigest' | 'proactiveList' }
+  | { operation: 'proactiveAct'; id: string; action: 'done' | 'snooze' | 'dismiss' }
   | { operation: 'knowledgeAdd'; text: string }
   | { operation: 'knowledgeEdit'; id: string; expectedText: string; text: string }
   | { operation: 'knowledgeUndoDelete'; id: string }

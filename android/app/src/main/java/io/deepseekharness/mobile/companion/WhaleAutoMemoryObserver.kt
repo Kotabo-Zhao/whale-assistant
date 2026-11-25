@@ -52,16 +52,32 @@ internal object WhaleAutoMemoryObserver {
         return lower.contains("screenshot") || lower.contains("截屏") || lower.contains("screen_shot")
     }
 
+    private val LOW_SIGNAL_OR_SENSITIVE_REGEX = Regex(
+        """验证码|校验码|动态码|付款码|收款码|支付密码|银行卡号|身份证号|CVV|otp\s*[:：]?\s*\d{4,8}|^\d{4,12}$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    internal fun isLowSignalOrSensitiveText(text: String): Boolean {
+        val clean = text.trim()
+        if (clean.length < 4) return true
+        return LOW_SIGNAL_OR_SENSITIVE_REGEX.containsMatchIn(clean)
+    }
+
     internal fun extractMeaningfulSummary(fragments: List<String>, maxChars: Int = 1400): String {
         val seen = LinkedHashSet<String>()
-        val out = StringBuilder()
+        val filtered = ArrayList<String>()
         for (raw in fragments) {
-            val clean = raw.replace(Regex("[\\r\\n\\t]+"), " ").replace(Regex(" {2,}"), " ").trim()
-            if (clean.length < 4) continue
-            if (clean.length <= 6 && clean in setOf("返回", "分享", "评论", "点赞", "收藏", "关注", "更多", "首页", "我的", "取消", "确定")) continue
-            if (!seen.add(clean)) continue
+            val clean = raw.replace(Regex("[\r\n\t]+"), " ").replace(Regex(" {2,}"), " ").trim()
+            if (clean.length < 4 || isLowSignalOrSensitiveText(clean)) continue
+            if (clean.length <= 6 && clean in setOf("返回", "分享", "评论", "点赞", "收藏", "关注", "更多", "首页", "我的", "取消", "确定", "热评", "推荐", "广告")) continue
+            if (seen.add(clean)) filtered.add(clean)
+        }
+        // 优先保留信息密度更高的正文/标题段，减少底部导航与短评论干扰
+        val prioritized = filtered.sortedByDescending { if (it.length >= 16) 1 else 0 }
+        val out = StringBuilder()
+        for (line in prioritized) {
             if (out.isNotEmpty()) out.append("\n")
-            out.append(clean)
+            out.append(line)
             if (out.length >= maxChars) break
         }
         return out.toString().take(maxChars).trim()

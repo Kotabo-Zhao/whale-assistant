@@ -884,3 +884,72 @@ select:focus {
   box-shadow: none;
   border-radius: var(--radius-card, 18px);
 }
+
+/* === 结构化记忆 V2 分类条与主动关注项卡片 === */
+.memory-domain-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 12px;
+}
+.memory-domain-chip {
+  min-height: 32px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-muted);
+  border: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+  cursor: pointer;
+}
+.memory-domain-chip.is-active {
+  color: var(--blue);
+  background: var(--blue-soft);
+  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+}
+.proactive-watchlist-card {
+  margin: 10px 0 14px;
+  padding: 13px 15px;
+  border-radius: var(--radius-inner, 16px);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+  display: grid;
+  gap: 10px;
+}
+.proactive-watchlist-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+.proactive-watchlist-head small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.proactive-watchlist-list {
+  display: grid;
+  gap: 8px;
+}
+.proactive-watchlist-item {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: var(--radius-control, 12px);
+  background: var(--surface-sunken);
+}
+.proactive-watchlist-item > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+.proactive-watchlist-item strong {
+  font-size: 0.86rem;
+}
+.proactive-watchlist-item small {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
