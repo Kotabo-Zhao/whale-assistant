@@ -18,6 +18,112 @@ type Card = {
   lastRefinedAt?: number
 }
 
+type EmotionTraits = {
+  warmth: number
+  playfulness: number
+  proactivity: number
+  directness: number
+  empathy: number
+  trust: number
+}
+
+type EmotionState = {
+  personaId: string
+  mood: string
+  moodLabel: string
+  energy: number
+  bondLevel: number
+  interactions: number
+  traits: EmotionTraits
+  growthNotes: string[]
+  updatedAtMs?: number
+}
+
+const TRAIT_META: { key: keyof EmotionTraits; label: string }[] = [
+  { key: 'warmth', label: '温暖' },
+  { key: 'playfulness', label: '俏皮' },
+  { key: 'proactivity', label: '主动' },
+  { key: 'directness', label: '干脆' },
+  { key: 'empathy', label: '共情' },
+  { key: 'trust', label: '信任' },
+]
+
+const MOOD_ACCENT: Record<string, string> = {
+  HAPPY: '#f59e0b',
+  PLAYFUL: '#ec4899',
+  CARING: '#10b981',
+  FOCUSED: '#3b82f6',
+  CALM: '#6366f1',
+  CONCERNED: '#f97316',
+}
+
+function isEmotionState(value: unknown): value is EmotionState {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Partial<EmotionState>
+  return typeof v.personaId === 'string' && typeof v.moodLabel === 'string' && typeof v.bondLevel === 'number' && !!v.traits
+}
+
+function parseEmotionMap(raw: unknown): Record<string, EmotionState> {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, EmotionState> = {}
+  for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (isEmotionState(val)) out[key] = val
+  }
+  return out
+}
+
+function EmotionRadarSvg({ traits }: { traits: EmotionTraits }) {
+  const cx = 110
+  const cy = 100
+  const maxR = 64
+  const levels = [0.33, 0.66, 1]
+
+  const pointAt = (index: number, ratio: number): [number, number] => {
+    const angle = (-Math.PI / 2) + (index * Math.PI * 2) / TRAIT_META.length
+    return [cx + Math.cos(angle) * maxR * ratio, cy + Math.sin(angle) * maxR * ratio]
+  }
+
+  const polygonPoints = (ratios: number[]) =>
+    ratios.map((r, i) => pointAt(i, r).map(n => n.toFixed(1)).join(',')).join(' ')
+
+  const values = TRAIT_META.map(t => Math.max(0.1, Math.min(1, (traits[t.key] ?? 50) / 100)))
+
+  return (
+    <svg className="emotion-radar-svg" viewBox="0 0 220 200" role="img" aria-label="六维性格成长雷达图">
+      {levels.map(level => (
+        <polygon
+          key={level}
+          className="emotion-radar-grid"
+          points={polygonPoints(TRAIT_META.map(() => level))}
+        />
+      ))}
+      {TRAIT_META.map((item, idx) => {
+        const [x, y] = pointAt(idx, 1)
+        const [lx, ly] = pointAt(idx, 1.28)
+        return (
+          <g key={item.key}>
+            <line className="emotion-radar-axis" x1={cx} y1={cy} x2={x} y2={y} />
+            <text
+              className="emotion-radar-label"
+              x={lx}
+              y={ly}
+              textAnchor="middle"
+              dominantBaseline="central"
+            >
+              {item.label}
+            </text>
+          </g>
+        )
+      })}
+      <polygon className="emotion-radar-area" points={polygonPoints(values)} />
+      {values.map((r, idx) => {
+        const [x, y] = pointAt(idx, r)
+        return <circle key={TRAIT_META[idx].key} className="emotion-radar-dot" cx={x} cy={y} r={3.2} />
+      })}
+    </svg>
+  )
+}
+
 const blank = (): Card => ({
   id: '',
   name: '',
@@ -55,6 +161,7 @@ const fields: { key: keyof Omit<Card, 'id' | 'lastRefineReason' | 'lastRefinedAt
 export function CompanionPersona({ onBack }: { onBack: () => void }) {
   const [cards, setCards] = useState<Card[]>([])
   const [activeId, setActiveId] = useState('')
+  const [emotions, setEmotions] = useState<Record<string, EmotionState>>({})
   const [draft, setDraft] = useState<Card>(blank)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,6 +170,7 @@ export function CompanionPersona({ onBack }: { onBack: () => void }) {
   const [tab, setTab] = useState<'cards' | 'transfer'>('cards')
   const [wbKeys, setWbKeys] = useState('')
   const [wbContent, setWbContent] = useState('')
+  const [growthNoteInput, setGrowthNoteInput] = useState('')
 
   const load = async (selected?: string) => {
     const result = await runtimeBridge.companionDashboard({ operation: 'personaList' })
@@ -70,6 +178,7 @@ export function CompanionPersona({ onBack }: { onBack: () => void }) {
     const next = (result.cards as Card[]).map(card => ({ ...blank(), ...card }))
     setCards(next)
     setActiveId(result.activeId)
+    setEmotions(parseEmotionMap(result.emotions))
     setDraft(next.find(card => card.id === (selected ?? result.activeId)) ?? next[0] ?? blank())
   }
 
@@ -98,6 +207,38 @@ export function CompanionPersona({ onBack }: { onBack: () => void }) {
     if (result.ok !== true || !saved?.id) throw new Error('save failed')
     await load(saved.id)
   }, '角色卡已保存。')
+
+  const addGrowthNote = () => {
+    const note = growthNoteInput.trim()
+    if (!draft.id || !note) return
+    void action(async () => {
+      const result = await runtimeBridge.companionDashboard({
+        operation: 'personaEmotionNote',
+        id: draft.id,
+        name: draft.name,
+        note,
+      })
+      if (result.ok !== true || !isEmotionState(result.emotion)) throw new Error('note failed')
+      const updated = result.emotion
+      setEmotions(prev => ({ ...prev, [draft.id]: updated }))
+      setGrowthNoteInput('')
+    }, '已记录一条相处默契。')
+  }
+
+  const resetEmotion = () => {
+    if (!draft.id) return
+    if (!window.confirm(`重置「${draft.name || '当前角色'}」的情感与性格养成数据？`)) return
+    void action(async () => {
+      const result = await runtimeBridge.companionDashboard({
+        operation: 'personaEmotionReset',
+        id: draft.id,
+        name: draft.name,
+      })
+      if (result.ok !== true || !isEmotionState(result.emotion)) throw new Error('reset failed')
+      const updated = result.emotion
+      setEmotions(prev => ({ ...prev, [draft.id]: updated }))
+    }, '已重置当前角色的性格养成状态。')
+  }
 
   const appendTrait = (trait: string) => {
     setDraft(prev => {
@@ -209,6 +350,8 @@ export function CompanionPersona({ onBack }: { onBack: () => void }) {
     setMessage('JSON 已生成，可复制保存。')
   }
 
+  const currentEmotion = draft.id ? emotions[draft.id] : undefined
+
   return (
     <section className="persona-page" aria-labelledby="persona-title">
       <header className="persona-hero page-heading">
@@ -239,19 +382,101 @@ export function CompanionPersona({ onBack }: { onBack: () => void }) {
               </div>
 
               <div className="persona-cards">
-                {cards.map(card => (
-                  <button
-                    type="button"
-                    key={card.id}
-                    className={draft.id === card.id ? 'is-selected' : ''}
-                    onClick={() => setDraft({ ...card })}
-                  >
-                    <span className="persona-avatar">{card.name.slice(0, 1)}</span>
-                    <strong>{card.name}</strong>
-                    <small>{activeId === card.id ? '● 使用中' : '选择编辑'}</small>
-                  </button>
-                ))}
+                {cards.map(card => {
+                  const emo = emotions[card.id]
+                  const statusBase = activeId === card.id ? '● 使用中' : '选择编辑'
+                  return (
+                    <button
+                      type="button"
+                      key={card.id}
+                      className={draft.id === card.id ? 'is-selected' : ''}
+                      onClick={() => setDraft({ ...card })}
+                    >
+                      <span className="persona-avatar">{card.name.slice(0, 1)}</span>
+                      <strong>{card.name}</strong>
+                      <small>{emo ? `${statusBase} · Lv.${emo.bondLevel} ${emo.moodLabel}` : statusBase}</small>
+                    </button>
+                  )
+                })}
               </div>
+
+              {currentEmotion && (
+                <section className="persona-emotion-card" aria-label="情感与性格养成">
+                  <div className="emotion-card-head">
+                    <div className="emotion-card-title">
+                      <h3>情感与性格养成</h3>
+                      <span className="emotion-mood-pill">
+                        <i
+                          className="emotion-mood-dot"
+                          style={{ background: MOOD_ACCENT[currentEmotion.mood] ?? '#6366f1' }}
+                          aria-hidden="true"
+                        />
+                        {currentEmotion.moodLabel}
+                      </span>
+                    </div>
+                    <div className="emotion-card-meta">
+                      <span className="emotion-bond-badge">羁绊 Lv.{currentEmotion.bondLevel}</span>
+                      <span>活力 {currentEmotion.energy}%</span>
+                      <span>已互动 {currentEmotion.interactions} 轮</span>
+                    </div>
+                  </div>
+
+                  <div className="emotion-card-body">
+                    <div className="emotion-radar-wrap">
+                      <EmotionRadarSvg traits={currentEmotion.traits} />
+                    </div>
+                    <div className="emotion-bars">
+                      {TRAIT_META.map(item => {
+                        const score = currentEmotion.traits[item.key] ?? 50
+                        return (
+                          <div className="emotion-bar-row" key={item.key}>
+                            <div className="emotion-bar-head">
+                              <span>{item.label}</span>
+                              <strong>{score}</strong>
+                            </div>
+                            <div className="emotion-bar-track" role="progressbar" aria-valuenow={score} aria-valuemin={0} aria-valuemax={100} aria-label={item.label}>
+                              <div className="emotion-bar-fill" style={{ width: `${Math.min(100, Math.max(0, score))}%` }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="emotion-notes-block">
+                    <div className="emotion-notes-head">
+                      <strong>相处默契里程碑</strong>
+                      <button type="button" className="emotion-reset-btn" disabled={busy} onClick={resetEmotion}>
+                        重置养成
+                      </button>
+                    </div>
+                    {currentEmotion.growthNotes.length > 0 ? (
+                      <ul className="emotion-notes-list">
+                        {currentEmotion.growthNotes.map(note => (
+                          <li key={note}>{note}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="emotion-notes-empty">随着日常聊天，TA 会自动记住你的沟通偏好并沉淀默契；你也可以手动写一条。</p>
+                    )}
+                    <div className="emotion-note-form">
+                      <input
+                        value={growthNoteInput}
+                        maxLength={120}
+                        placeholder="手动记一条默契（例如：深夜工作时语气温柔一点）"
+                        onChange={event => setGrowthNoteInput(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        disabled={busy || !growthNoteInput.trim()}
+                        onClick={addGrowthNote}
+                      >
+                        记录默契
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              )}
 
               {draft.lastRefineReason && (
                 <p className="persona-notice" role="note">

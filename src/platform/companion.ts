@@ -20,6 +20,8 @@ export type CompanionRequest =
   | { operation: 'workerControl'; id: string; action: 'recover'; recoveryAcknowledged: true; recoveryIncident?: string; goalRecoveryIncident?: string }
   | { operation: 'personaList' | 'assistantBriefings' }
   | { operation: 'personaActivate' | 'personaDelete'; id: string }
+  | { operation: 'personaEmotionGet' | 'personaEmotionReset'; id: string; name?: string }
+  | { operation: 'personaEmotionNote'; id: string; name?: string; note: string }
   | { operation: 'personaSave'; card: { id: string; name: string; description: string; personality: string; scenario: string; examples: string; greeting: string; systemPrompt: string; postHistory: string; worldBook: string } }
   | { operation: 'memoryList' | 'reminderList' | 'taskList' | 'executionList'; query?: string; offset?: number }
   | { operation: 'taskUpdate'; id: string; expectedState: 'candidate' | 'open' | 'done' | 'cancelled'; expectedRevision: string; state: 'open' | 'done' | 'cancelled' }

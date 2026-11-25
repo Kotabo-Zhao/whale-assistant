@@ -40,3 +40,41 @@ it('导入角色卡附加指引和世界书并保存', async () => {
       postHistory: '继续扮演', worldBook: expect.stringContaining('灯塔') as unknown }) as unknown,
   })))
 })
+
+it('展示情感与性格养成雷达并支持记录默契里程碑', async () => {
+  const initial = { id: 'default', name: '鲸鱼娘', description: '', personality: '', scenario: '', examples: '', greeting: '' }
+  const emotion = {
+    personaId: 'default',
+    mood: 'HAPPY',
+    moodLabel: '开心雀跃',
+    energy: 88,
+    bondLevel: 4,
+    interactions: 12,
+    traits: { warmth: 84, playfulness: 70, proactivity: 74, directness: 66, empathy: 80, trust: 42 },
+    growthNotes: ['主人偏好干脆利落、直给结论的沟通风格'],
+  }
+  bridge.companionDashboard.mockImplementation((request: { operation: string; note?: string }) => {
+    if (request.operation === 'personaList') return Promise.resolve({ cards: [initial], activeId: 'default', emotions: { default: emotion } })
+    if (request.operation === 'personaEmotionNote') {
+      return Promise.resolve({
+        ok: true,
+        emotion: { ...emotion, growthNotes: [...emotion.growthNotes, request.note ?? ''] },
+      })
+    }
+    return Promise.resolve({ ok: true })
+  })
+  render(<CompanionPersona onBack={() => {}} />)
+  expect(await screen.findByText('情感与性格养成')).toBeInTheDocument()
+  expect(screen.getByText('开心雀跃')).toBeInTheDocument()
+  expect(screen.getByText('羁绊 Lv.4')).toBeInTheDocument()
+  expect(screen.getByText('已互动 12 轮')).toBeInTheDocument()
+  expect(screen.getByRole('img', { name: '六维性格成长雷达图' })).toBeInTheDocument()
+  fireEvent.change(screen.getByPlaceholderText(/手动记一条默契/), { target: { value: '深夜加班时轻声鼓励' } })
+  fireEvent.click(screen.getByRole('button', { name: '记录默契' }))
+  await waitFor(() => expect(bridge.companionDashboard).toHaveBeenCalledWith(expect.objectContaining({
+    operation: 'personaEmotionNote',
+    id: 'default',
+    note: '深夜加班时轻声鼓励',
+  })))
+  expect(await screen.findByText('深夜加班时轻声鼓励')).toBeInTheDocument()
+})

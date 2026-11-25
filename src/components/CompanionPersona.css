@@ -45,3 +45,191 @@
 .persona-trait-chip:active { transform: scale(0.96); }
 .persona-wb-quick { display: grid; gap: 8px; padding: 12px; margin: 10px 0; border-radius: 12px; border: 1px dashed var(--line); background: var(--surface-muted); }
 .persona-wb-quick strong { font-size: 0.85rem; }
+
+/* 情感与性格养成面板（Quiet Luxury V3 轻层级、无硬边框） */
+.persona-emotion-card {
+  margin: 14px 0 18px;
+  padding: 16px 18px;
+  border-radius: var(--radius-inner);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  display: grid;
+  gap: 14px;
+}
+.emotion-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.emotion-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.emotion-card-title h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.emotion-mood-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+.emotion-mood-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.emotion-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.emotion-bond-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.emotion-card-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 230px) 1fr;
+  gap: 16px;
+  align-items: center;
+}
+@media (max-width: 600px) {
+  .emotion-card-body { grid-template-columns: 1fr; }
+}
+.emotion-radar-wrap {
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border-radius: var(--radius-inner);
+  background: var(--surface-sunken);
+}
+.emotion-radar-svg {
+  width: 100%;
+  max-width: 210px;
+  height: auto;
+  overflow: visible;
+}
+.emotion-radar-grid {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.9;
+  opacity: 0.7;
+}
+.emotion-radar-axis {
+  stroke: var(--line);
+  stroke-width: 0.8;
+  opacity: 0.6;
+}
+.emotion-radar-area {
+  fill: color-mix(in srgb, var(--blue) 22%, transparent);
+  stroke: var(--blue);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+.emotion-radar-dot {
+  fill: var(--blue);
+}
+.emotion-radar-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.emotion-bars {
+  display: grid;
+  gap: 9px;
+}
+.emotion-bar-row {
+  display: grid;
+  gap: 4px;
+}
+.emotion-bar-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.emotion-bar-head strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.emotion-bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.emotion-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--blue);
+  transition: width 260ms ease;
+}
+.emotion-notes-block {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+}
+.emotion-notes-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+.persona-page .emotion-reset-btn {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+.persona-page .emotion-reset-btn:hover {
+  color: var(--ink);
+  background: var(--surface-muted);
+}
+.emotion-notes-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.84rem;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.emotion-notes-empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.emotion-note-form {
+  display: flex;
+  gap: 8px;
+}
+.emotion-note-form input {
+  flex: 1;
+  min-width: 0;
+}
+.emotion-note-form button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}

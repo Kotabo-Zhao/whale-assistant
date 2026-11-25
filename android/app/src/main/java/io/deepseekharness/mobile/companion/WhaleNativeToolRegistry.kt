@@ -2884,7 +2884,33 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     if (customOutcome != null) {
                         ToolOutcome(name, customOutcome.label, customOutcome.ok, customOutcome.payload, mutating = true)
                     } else {
-                        ToolOutcome(name, "未知工具", false, JSONObject().put("error", "UNKNOWN_TOOL").toString())
+                        val allSchemas = buildDynamicBaselineSchemas(
+                            userText = "",
+                            expandedCategories = setOf("all"),
+                            isWorker = false,
+                            explicitDynamicNames = emptySet(),
+                            includeAllDynamic = true,
+                        ).schemas
+                        val candidates = buildList {
+                            for (i in 0 until allSchemas.length()) {
+                                val tName = allSchemas.optJSONObject(i)?.optJSONObject("function")?.optString("name", "").orEmpty().trim()
+                                if (tName.isNotEmpty()) add(tName)
+                            }
+                        }
+                        val suggestions = WhaleCapabilityPrimer.suggestClosestTools(name, candidates, limit = 3)
+                        val errPayload = JSONObject()
+                            .put("error", "UNKNOWN_TOOL")
+                            .put("requestedTool", name)
+                            .put("didYouMean", JSONArray(suggestions))
+                            .put(
+                                "hint",
+                                if (suggestions.isNotEmpty()) {
+                                    "未找到工具 $name，请直接改用 didYouMean 中的精确工具名通过 whale_call 重试。"
+                                } else {
+                                    "未找到工具 $name，请先调用 whale_tool_catalog 检索精确工具名。"
+                                },
+                            )
+                        ToolOutcome(name, "未知工具", false, errPayload.toString())
                     }
                 }
             }

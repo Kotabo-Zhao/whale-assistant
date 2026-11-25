@@ -49,7 +49,39 @@ internal class CompanionDashboard(private val context: Context) {
         }
         return when (op) {
             "assistantBriefings" -> JSONObject().put("items", JSONArray(WorkerReportInbox(context).briefings().takeLast(20).reversed()))
-            "personaList" -> CompanionPersonaStore(context).list()
+            "personaList" -> {
+                val res = CompanionPersonaStore(context).list()
+                val cards = res.optJSONArray("cards") ?: JSONArray()
+                val emotions = JSONObject()
+                for (i in 0 until cards.length()) {
+                    val card = cards.optJSONObject(i) ?: continue
+                    val cid = card.optString("id").trim()
+                    if (cid.isNotEmpty()) {
+                        emotions.put(cid, WhaleEmotionEngine.load(context, cid, card.optString("name")).json())
+                    }
+                }
+                res.put("emotions", emotions)
+            }
+            "personaEmotionGet" -> {
+                val id = text("id").trim()
+                val name = request.optString("name").trim()
+                JSONObject().put("ok", true).put("emotion", WhaleEmotionEngine.load(context, id, name).json())
+            }
+            "personaEmotionNote" -> {
+                val id = text("id").trim()
+                val name = request.optString("name").trim()
+                val note = text("note").trim()
+                require(note.isNotEmpty()) { "默契记录不能为空" }
+                val next = WhaleEmotionEngine.addGrowthNote(context, id, name, note)
+                JSONObject().put("ok", true).put("emotion", next.json())
+            }
+            "personaEmotionReset" -> {
+                val id = text("id").trim()
+                val name = request.optString("name").trim()
+                val reset = WhaleEmotionEngine.defaultState(id, name)
+                WhaleEmotionEngine.save(context, reset)
+                JSONObject().put("ok", true).put("emotion", reset.json())
+            }
             "personaSave" -> JSONObject().put("ok", true).put("card", CompanionPersonaStore(context).save(request.getJSONObject("card")))
             "personaActivate" -> { CompanionPersonaStore(context).activate(text("id")); JSONObject().put("ok", true) }
             "personaDelete" -> { CompanionPersonaStore(context).delete(text("id")); JSONObject().put("ok", true) }
