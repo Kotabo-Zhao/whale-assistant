@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import io.deepseekharness.mobile.accessibility.DeepSeekAccessibilityService
+import io.deepseekharness.mobile.accessibility.WhaleFastPhoneController
+import io.deepseekharness.mobile.shizuku.DeviceCommandResult
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
@@ -21,7 +23,7 @@ internal object WhaleVisionToolHandlers {
         app: Context,
         name: String,
         question: String,
-        withNotice: (String, () -> DeepSeekAccessibilityService.ScreenCaptureResult) -> DeepSeekAccessibilityService.ScreenCaptureResult,
+        withNotice: (String, () -> WhaleFastPhoneController.ScreenCaptureResult) -> WhaleFastPhoneController.ScreenCaptureResult,
     ): WhaleNativeToolRegistry.ToolOutcome {
         val service = DeepSeekAccessibilityService.current()
             ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
@@ -64,8 +66,8 @@ internal object WhaleVisionToolHandlers {
         app: Context,
         name: String,
         target: String,
-        withCaptureNotice: (String, () -> DeepSeekAccessibilityService.ScreenCaptureResult) -> DeepSeekAccessibilityService.ScreenCaptureResult,
-        withTapNotice: (String, () -> io.deepseekharness.mobile.accessibility.DeviceCommandResult) -> io.deepseekharness.mobile.accessibility.DeviceCommandResult,
+        withCaptureNotice: (String, () -> WhaleFastPhoneController.ScreenCaptureResult) -> WhaleFastPhoneController.ScreenCaptureResult,
+        withTapNotice: (String, () -> DeviceCommandResult) -> DeviceCommandResult,
     ): WhaleNativeToolRegistry.ToolOutcome {
         val service = DeepSeekAccessibilityService.current()
             ?: throw IllegalStateException("无障碍服务未开启，请先在「我的 → 手机能力」中开启鲸鱼助手无障碍服务")
