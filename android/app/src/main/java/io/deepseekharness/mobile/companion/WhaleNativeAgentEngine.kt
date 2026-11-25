@@ -389,9 +389,14 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 deferredMcpNames = schemaBundle.deferredMcpNames,
             )
             val silentNotices = WhaleSuperagentRelay.formatNoticesForPrompt(WhaleSuperagentRelay.drainNotices(sessionId))
+            val pid = activePersona?.optString("id")?.ifBlank { "default" } ?: "default"
+            val pname = activePersona?.optString("name")?.ifBlank { "鲸鱼娘" } ?: "鲸鱼娘"
+            val emotionState = runCatching { WhaleEmotionEngine.observeTurn(app, pid, pname, trimmed) }.getOrNull()
+            val emotionPrompt = if (emotionState != null) "\n" + WhaleEmotionEngine.buildDynamicPrompt(emotionState) else ""
+            val primerPrompt = WhaleCapabilityPrimer.buildPrimer(trimmed).let { if (it.isNotBlank()) "\n" + it else "" }
             rawDynamicCtxChars = built.first + silentNotices.length
             ragSkippedByGate = built.third
-            built.second + silentNotices
+            built.second + silentNotices + emotionPrompt + primerPrompt
         }
         var toolPayloadRawChars = 0
         var toolPayloadCompactChars = 0

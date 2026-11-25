@@ -640,6 +640,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             ))
             array.put(schema("whale_worker_manage", "管理与清理后台 Worker 历史及桌宠红点徽标（解决界面残余数字与历史记录删不掉的问题）。", mapOf("action" to "clear_completed（清理已完成与残留徽标）/ delete（按 id 删除单条）/ clear_badge（仅清零桌宠待办红点）", "id" to "action=delete 时的 Worker ID"), listOf("action")))
             array.put(schema("whale_context_search", "检索当前会话已被增量折叠归档的历史记忆块（返回 rangeId 与摘要，不消耗大上下文）。", mapOf("query" to "检索关键词", "sessionId" to "可选：会话 ID，默认 whale-main"), listOf("query")))
+            array.put(schema("whale_emotion_state", "读取或更新当前角色卡的情感与性格养成状态（6 维性格、实时心境、羁绊等级与成长里程碑）。", mapOf("action" to "get（查询当前性格与心境）/ note_growth（记录一条新的相处默契里程碑）", "note" to "action=note_growth 时的简短里程碑说明"), listOf("action")))
             array.put(schema("whale_worker_handback", "当后台 Worker 发现收到的用户追问与当前任务无关时，将其退回给 Router 走旁路快答（每个输入限退回一次防循环）。", mapOf("workerId" to "当前 Worker ID", "userMessage" to "被误投递的用户原话", "reason" to "退回原因"), listOf("workerId", "userMessage")))
             array.put(schema("whale_context_expand", "可逆展开单个已折叠的历史记忆块原文（单轮限展开 1 块，仅作临时核对）。", mapOf("rangeId" to "whale_context_search 返回的记忆块 ID", "sessionId" to "可选：会话 ID，默认 whale-main"), listOf("rangeId")))
             array.put(schema("whale_ui_refresh", "强制刷新鲸鱼助手主界面与悬浮桌宠状态徽标，同步最新数据视图。", emptyMap(), emptyList()))
@@ -2367,6 +2368,20 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val sid = args.str("sessionId", "whale-main").trim().ifEmpty { "whale-main" }
                     val matches = WhaleContextLedger.search(app, sid, q, limit = 5)
                     ToolOutcome(name, "检索历史折叠记忆块", true, JSONObject().put("sessionId", sid).put("matches", matches).toString())
+                }
+                "whale_emotion_state" -> {
+                    val action = args.str("action", "get").trim().lowercase()
+                    val card = runCatching { CompanionPersonaStore(app).active() }.getOrNull()
+                    val pid = card?.optString("id")?.ifBlank { "default" } ?: "default"
+                    val pname = card?.optString("name")?.ifBlank { "鲸鱼娘" } ?: "鲸鱼娘"
+                    val state = if (action == "note_growth") {
+                        val note = args.str("note").trim()
+                        require(note.isNotEmpty()) { "缺少 note 说明" }
+                        WhaleEmotionEngine.addGrowthNote(app, pid, pname, note)
+                    } else {
+                        WhaleEmotionEngine.load(app, pid, pname)
+                    }
+                    ToolOutcome(name, "读取/更新角色情感与性格状态", true, state.json().toString(), mutating = action == "note_growth")
                 }
                 "whale_worker_handback" -> {
                     val wid = args.str("workerId").trim()

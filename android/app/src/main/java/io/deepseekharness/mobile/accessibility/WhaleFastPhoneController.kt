@@ -590,6 +590,26 @@ internal class WhaleFastPhoneController(private val service: DeepSeekAccessibili
         val sx = bitmap.width.toFloat() / screenW.toFloat()
         val sy = bitmap.height.toFloat() / screenH.toFloat()
         val canvas = android.graphics.Canvas(bitmap)
+        // 叠加极淡 10×10 归一化坐标网格（0–1000），显著提升视觉模型点击定位精度
+        val gridPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = 1f
+            color = android.graphics.Color.argb(42, 255, 255, 255)
+        }
+        val tickPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = 16f
+            color = android.graphics.Color.argb(130, 255, 230, 120)
+        }
+        for (step in 1..9) {
+            val gx = bitmap.width * step / 10f
+            val gy = bitmap.height * step / 10f
+            canvas.drawLine(gx, 0f, gx, bitmap.height.toFloat(), gridPaint)
+            canvas.drawLine(0f, gy, bitmap.width.toFloat(), gy, gridPaint)
+            if (step == 2 || step == 5 || step == 8) {
+                canvas.drawText("${step * 100}", gx + 2f, 18f, tickPaint)
+                canvas.drawText("${step * 100}", 4f, gy - 3f, tickPaint)
+            }
+        }
         val boxPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             style = android.graphics.Paint.Style.STROKE
             strokeWidth = 2.5f

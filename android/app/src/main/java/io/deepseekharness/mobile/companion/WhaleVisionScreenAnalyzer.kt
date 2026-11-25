@@ -29,6 +29,7 @@ internal object WhaleVisionScreenAnalyzer {
         packageName: String,
         question: String,
         locateTarget: Boolean = false,
+        uiTreeSummary: String = "",
     ): VisionResult {
         val app = context.applicationContext
         val endpoint = resolveVisionEndpoint(app)
@@ -41,11 +42,16 @@ internal object WhaleVisionScreenAnalyzer {
 
         val b64 = Base64.encodeToString(jpeg, Base64.NO_WRAP)
         val dataUrl = "data:image/jpeg;base64,$b64"
+        val treeHint = if (uiTreeSummary.isNotBlank()) "\n当前页面精简控件树（优先匹配对应 #ref 编号）：\n${uiTreeSummary.take(1600)}" else ""
         val prompt = if (locateTarget) {
-            """你是 Android 手机视觉定位助手。当前应用包名：$packageName，屏幕真实像素尺寸：宽 $screenWidth × 高 $screenHeight（左上角为 (0,0)，右下角为 ($screenWidth,$screenHeight)）。
-请在截图中精准定位用户要点击的目标：「$question」。
-请严格输出一段 JSON（不要 Markdown 代码块，不要多余解释）：
-{"found": true或false, "ref": 若画面上标有红色#编号框则填整数编号否则填null, "x": 目标中心X像素整数, "y": 目标中心Y像素整数, "label": "识别到的图标或文字说明", "reason": "简短说明"}"""
+            """你是 Android 手机高精度视觉定位助手。当前应用包名：$packageName。
+图片叠加了 0–1000 归一化坐标网格（左上角 (0,0)，右下角 (1000,1000)）以及可点击控件的红色 #ref 编号框。$treeHint
+请精准定位用户要点击的目标：「$question」。
+规则：
+1. 若目标已被红色 #ref 框标出，优先填对应整数 ref；
+2. 同时务必给出目标中心的归一化坐标 nx（0~1000，水平）和 ny（0~1000，垂直），不要猜原始像素。
+严格只输出一段 JSON（不要 Markdown 代码块）：
+{"found": true或false, "ref": 整数编号或null, "nx": 0到1000整数, "ny": 0到1000整数, "label": "目标说明", "reason": "简短说明"}"""
         } else {
             """你是 Android 手机多模态看图识屏助手。当前应用包名：$packageName，屏幕真实像素尺寸：宽 $screenWidth × 高 $screenHeight。
 请结合截图回答用户问题或描述关键画面/图标/文字；如果涉及可操作按钮或图标，请顺带给出对应的屏幕中心像素坐标 (x, y) 方便后续直接点击。
@@ -103,8 +109,7 @@ internal object WhaleVisionScreenAnalyzer {
             val parsed = extractJsonObject(text)
             val found = parsed?.optBoolean("found", false) == true
             val ref = parsed?.optInt("ref", -1)?.takeIf { it > 0 }
-            val x = parsed?.optInt("x", -1)?.takeIf { it in 1 until screenWidth }
-            val y = parsed?.optInt("y", -1)?.takeIf { it in 1 until screenHeight }
+            val (x, y) = resolveCoordinates(parsed, screenWidth, screenHeight)
             if (found && (ref != null || (x != null && y != null))) {
                 VisionResult(true, parsed.optString("label", question).ifBlank { question }, endpoint.model, endpoint.provider, x, y, ref)
             } else {
@@ -164,5 +169,20 @@ internal object WhaleVisionScreenAnalyzer {
             return VisionEndpoint("deepseek", "https://api.deepseek.com/chat/completions", dsKey, "deepseek-flash")
         }
         return null
+    }
+
+    /** 将视觉模型输出的 [0..1000] 归一化坐标精确映射回真实屏幕像素（兼容旧模型直接输出 x/y）。 */
+    internal fun resolveCoordinates(parsed: JSONObject?, screenWidth: Int, screenHeight: Int): Pair<Int?, Int?> {
+        if (parsed == null || screenWidth <= 0 || screenHeight <= 0) return null to null
+        val nx = parsed.optDouble("nx", Double.NaN)
+        val ny = parsed.optDouble("ny", Double.NaN)
+        if (!nx.isNaN() && !ny.isNaN() && nx in 0.0..1000.0 && ny in 0.0..1000.0) {
+            val px = ((nx / 1000.0) * screenWidth).toInt().coerceIn(1, (screenWidth - 1).coerceAtLeast(1))
+            val py = ((ny / 1000.0) * screenHeight).toInt().coerceIn(1, (screenHeight - 1).coerceAtLeast(1))
+            return px to py
+        }
+        val x = parsed.optInt("x", -1).takeIf { it in 1 until screenWidth }
+        val y = parsed.optInt("y", -1).takeIf { it in 1 until screenHeight }
+        return x to y
     }
 }
