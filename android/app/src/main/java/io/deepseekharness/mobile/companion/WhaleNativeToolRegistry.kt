@@ -2296,6 +2296,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     if (!cap.ok || cap.jpeg == null) {
                         ToolOutcome(name, "看图识屏受限", false, JSONObject().put("error", cap.error ?: "截屏失败").toString())
                     } else {
+                        val uiTree = runCatching { service.fastControl("fastTree", "").takeIf { it.ok }?.text.orEmpty() }.getOrDefault("")
                         val analysis = WhaleVisionScreenAnalyzer.analyzeScreen(
                             context = app,
                             jpeg = cap.jpeg,
@@ -2304,6 +2305,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             packageName = cap.packageName,
                             question = question,
                             locateTarget = false,
+                            uiTreeSummary = uiTree,
                         )
                         ToolOutcome(
                             name,
@@ -2329,6 +2331,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     if (!cap.ok || cap.jpeg == null) {
                         ToolOutcome(name, "视觉截屏受限", false, JSONObject().put("error", cap.error ?: "截屏失败").toString(), mutating = true)
                     } else {
+                        val uiTree = runCatching { service.fastControl("fastTree", "").takeIf { it.ok }?.text.orEmpty() }.getOrDefault("")
                         val loc = WhaleVisionScreenAnalyzer.analyzeScreen(
                             context = app,
                             jpeg = cap.jpeg,
@@ -2337,6 +2340,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                             packageName = cap.packageName,
                             question = target,
                             locateTarget = true,
+                            uiTreeSummary = uiTree,
                         )
                         if (!loc.ok || (loc.ref == null && (loc.x == null || loc.y == null))) {
                             ToolOutcome(name, "未能在画面中找到目标", false, JSONObject().put("error", loc.text).put("provider", loc.provider).put("model", loc.model).toString(), mutating = true)

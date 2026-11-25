@@ -39,4 +39,17 @@ class WhaleEmotionEngineTest {
         assertTrue(prompt.contains("当前情感与性格养成状态"))
         assertTrue(prompt.contains("专注高效"))
     }
+
+    @Test
+    fun `polite requests and neutral words do not false-trigger tired or frustrated mood`() {
+        val base = WhaleEmotionEngine.defaultState("default", "鲸鱼娘")
+        val next = WhaleEmotionEngine.evolveFromTurn(
+            base,
+            "麻烦帮我查一下累计电费和玩具订单乱码的问题",
+            hourOfDay = 14,
+        )
+        assertEquals(WhaleEmotionEngine.Mood.CALM, next.mood)
+        assertEquals(base.empathy, next.empathy)
+        assertEquals(base.playfulness, next.playfulness)
+    }
 }

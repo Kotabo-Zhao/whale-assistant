@@ -84,7 +84,7 @@ internal class CompanionDashboard(private val context: Context) {
             }
             "personaSave" -> JSONObject().put("ok", true).put("card", CompanionPersonaStore(context).save(request.getJSONObject("card")))
             "personaActivate" -> { CompanionPersonaStore(context).activate(text("id")); JSONObject().put("ok", true) }
-            "personaDelete" -> { CompanionPersonaStore(context).delete(text("id")); JSONObject().put("ok", true) }
+            "personaDelete" -> { val id = text("id"); CompanionPersonaStore(context).delete(id); WhaleEmotionEngine.delete(context, id); JSONObject().put("ok", true) }
             "extensionsList" -> JSONObject()
                 .put("skills", WhaleSkillStore.list(context))
                 .put("mcpServers", WhaleMcpManager.listServers(context))

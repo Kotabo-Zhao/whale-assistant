@@ -68,11 +68,11 @@ internal object WhaleEmotionEngine {
     private const val PREFS = "whale_emotion_engine_v1"
     private const val MAX_GROWTH_NOTES = 8
 
-    private val praiseCues = listOf("谢谢", "感谢", "厉害", "棒", "漂亮", "好评", "喜欢", "爱你", "贴心", "舒服", "给力", "不错", "nice", "thanks", "great")
-    private val tiredOrSadCues = listOf("累", "崩溃", "难受", "烦", "焦虑", "压力", "失眠", "难过", "委屈", "加班", "头疼", "郁闷", "撑不住", "tired", "stressed")
-    private val playfulCues = listOf("哈哈", "笑死", "呀哈", "摸摸", "贴贴", "夸夸", "逗", "玩", "段子", "可爱", "嘿嘿", "233", "hh")
+    private val praiseCues = listOf("谢谢", "感谢", "厉害", "真棒", "好棒", "太棒", "超棒", "漂亮", "好评", "喜欢", "爱你", "贴心", "舒服", "给力", "不错", "nice", "thanks", "great")
+    private val tiredOrSadCues = listOf("好累", "太累", "真累", "累死", "累了", "疲惫", "崩溃", "难受", "好烦", "烦死", "心烦", "烦躁", "焦虑", "压力大", "失眠", "难过", "委屈", "加班", "头疼", "郁闷", "撑不住", "tired", "stressed")
+    private val playfulCues = listOf("哈哈", "笑死", "呀哈", "摸摸", "贴贴", "夸夸", "逗我", "好玩", "陪我玩", "开玩笑", "段子", "可爱", "嘿嘿", "233", "hh")
     private val directWorkCues = listOf("直接", "简短", "别废话", "只要结论", "快点", "代码", "报错", "修复", "重构", "分析", "对比", "排错")
-    private val frustrationCues = listOf("不行", "太差", "又报错", "笨", "丑", "不对", "失败", "没用", "乱")
+    private val frustrationCues = listOf("不行", "太差", "又报错", "笨", "丑", "不对", "失败", "没用", "好乱", "太乱", "乱套", "乱七八糟")
 
     fun defaultState(personaId: String, personaName: String = ""): EmotionState {
         val n = personaName.lowercase(Locale.US)
@@ -223,6 +223,14 @@ internal object WhaleEmotionEngine {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString("state_${state.personaId}", state.json().toString())
+            .apply()
+    }
+
+    fun delete(context: Context, personaId: String) {
+        if (personaId.isBlank()) return
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove("state_$personaId")
             .apply()
     }
 

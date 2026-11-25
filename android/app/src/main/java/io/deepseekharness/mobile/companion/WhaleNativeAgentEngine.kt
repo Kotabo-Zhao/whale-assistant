@@ -394,7 +394,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             val emotionState = runCatching { WhaleEmotionEngine.observeTurn(app, pid, pname, trimmed) }.getOrNull()
             val emotionPrompt = if (emotionState != null) "\n" + WhaleEmotionEngine.buildDynamicPrompt(emotionState) else ""
             val primerPrompt = WhaleCapabilityPrimer.buildPrimer(trimmed).let { if (it.isNotBlank()) "\n" + it else "" }
-            rawDynamicCtxChars = built.first + silentNotices.length
+            rawDynamicCtxChars = built.first + silentNotices.length + emotionPrompt.length + primerPrompt.length
             ragSkippedByGate = built.third
             built.second + silentNotices + emotionPrompt + primerPrompt
         }
@@ -1461,11 +1461,20 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         if (q.isEmpty()) return ""
         val store = RuntimeStore(app)
         val settings = store.settings()
-        val rawEp = resolveEndpoints(store, settings).first()
+        val rawEp = resolveEndpoints(store, settings).firstOrNull()
+            ?: return "尚未配置可用模型密钥，请先在「设置 → 模型与密钥」中配置后再试。"
         val fastModel = WhaleModelRouter.routeForInternalTask(app, rawEp.model)
         val ep = rawEp.copy(model = fastModel)
+        val persona = runCatching { CompanionPersonaStore(app).active() }.getOrNull()
+        val pName = persona?.optString("name")?.ifBlank { "鲸鱼助手" } ?: "鲸鱼助手"
+        val pId = persona?.optString("id")?.ifBlank { "default" } ?: "default"
+        val moodHint = runCatching { WhaleEmotionEngine.load(app, pId, pName).mood.toneHint }.getOrDefault("")
+        val sideSys = buildString {
+            append("你是").append(pName).append("的旁路快答通道。用户主任务仍在后台推进，请用 1~3 句简洁准确地直接回答这个顺手小问题，不要寒暄也不要提及后台任务。")
+            if (moodHint.isNotBlank()) append("语气参考：").append(moodHint).append("。")
+        }
         val msgs = JSONArray()
-            .put(JSONObject().put("role", "system").put("content", "你是鲸鱼助手的旁路快答通道。用户主任务仍在后台推进，请用 1~3 句简洁准确地直接回答这个顺手小问题，不要寒暄也不要提及后台任务。"))
+            .put(JSONObject().put("role", "system").put("content", sideSys))
             .put(JSONObject().put("role", "user").put("content", q))
         val turn = callChatCompletionsWithRetry(ep, msgs, null, listener = null, control = null, fallbacks = emptyList(), usageAcc = null)
         return turn.content.trim()
