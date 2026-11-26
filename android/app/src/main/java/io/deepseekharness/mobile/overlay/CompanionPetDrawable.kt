@@ -5,9 +5,19 @@ import android.graphics.*
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.view.Choreographer
+import java.util.Calendar
 import java.util.concurrent.Executor
 
-/** Complete illustrated cels. Never meshes, bone interpolation, detached hands or face stickers. */
+/**
+ * 桌宠 60fps 渲染核心（支持鲸鱼娘 & 乌萨奇）：
+ * - Vsync 同步 `Choreographer` 60fps 帧循环（无 Handler 抖动）；
+ * - 180ms 缓出交叉淡化溶图（Crossfade）+ 阻尼弹簧微挤压弹性过渡，彻底消除状态硬切；
+ * - 每段动作独立本地时钟（`clipStartedAtMs`），切动作始终从第 0 帧完整起播；
+ * - 乌萨奇 6 幕自主待机剧场（28 秒循环 + 深夜自动切换趴睡）与全 9 套图集后台预热；
+ * - 实时拖动速度物理摆动 + 落地 Q 弹挤压回弹。
+ */
 internal class CompanionPetDrawable(
     private val resources: Resources,
     private val targetSize: Int,
@@ -16,17 +26,35 @@ internal class CompanionPetDrawable(
     private val usagiTheme: Boolean = false,
 ) : Drawable(), AutoCloseable {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val prevPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
+    private val prevSource = Rect()
     private val destination = RectF()
-    private val cache = LinkedHashMap<String, Bitmap>(10, .75f, true)
-    private var curSx = 1f
-    private var curSy = 1f
-    private var curDy = 0f
-    private var curRot = 0f
-    private var curPivotFrac = 0.94f
+    private val cache = LinkedHashMap<String, Bitmap>(12, .75f, true)
+    private val motion = PetMotionDirector()
+
     private var lastDrawMs = 0L
+    private var clipStartedAtMs = SystemClock.uptimeMillis()
+    private var idleReelStartedAtMs = SystemClock.uptimeMillis()
+    private var activeUsagiIdleClip = "idle"
+
+    // 180ms 平滑溶图过渡状态（禁止强行回收正处于淡出中的 prevBitmap）
+    private var prevBitmap: Bitmap? = null
+    private var transitionStartMs = 0L
+    private var drawAlpha = 255
+
     @Volatile var ambientTickAllowed = true
-    private val liveTick = Runnable { if (!closed && !pose.reduced && ambientTickAllowed) invalidateSelf() }
+    private var vsyncPosted = false
+    private val choreographerCallback = Choreographer.FrameCallback {
+        vsyncPosted = false
+        if (!closed && !pose.reduced && ambientTickAllowed) {
+            invalidateSelf()
+        }
+    }
+    private val fallbackTick = Runnable {
+        if (!closed && !pose.reduced && ambientTickAllowed) invalidateSelf()
+    }
+
     private var decoding = false
     private val failed = mutableSetOf<String>()
     @Volatile private var closed = false
@@ -43,18 +71,49 @@ internal class CompanionPetDrawable(
     var onAtlasReady: (() -> Unit)? = null
     val isUsagiTheme get() = usagiTheme
     val displayedClipName get() = displayedClip
+    val cachedAtlasCount get() = cache.size
+    val cachedBitmapBytes get() = cache.values.sumOf { it.allocationByteCount.toLong() }
+    val cacheLimitBytes = minOf(MAX_BITMAP_BYTES, targetSize.coerceIn(96, PetCels.CELL).toLong().let { side ->
+        side * side * 4 * (PetCels.clips.getValue("idle").cells + 5 * PetCels.clips.values.maxOf { it.cells })
+    })
+
+    fun setDragVelocity(vxPxPerSec: Float) {
+        motion.setDragVelocity(vxPxPerSec)
+    }
+
+    fun clearDragVelocity() {
+        motion.clearDragVelocity()
+    }
+
+    fun triggerLandingBounce() {
+        motion.triggerLandingBounce()
+        resumeLiveTick()
+    }
 
     fun resumeLiveTick() {
         if (closed || pose.reduced || !ambientTickAllowed) return
-        main.removeCallbacks(liveTick)
-        invalidateSelf()
+        main.removeCallbacks(fallbackTick)
+        scheduleNextFrame(immediate = true)
     }
-    val cachedAtlasCount get() = cache.size
-    val cachedBitmapBytes get() = cache.values.sumOf { it.allocationByteCount.toLong() }
-    // Reserve one idle plus four active clips (drag/touch/reading/return) so first drag is always warm.
-    val cacheLimitBytes = minOf(MAX_BITMAP_BYTES, targetSize.coerceIn(96, PetCels.CELL).toLong().let { side ->
-        side * side * 4 * (PetCels.clips.getValue("idle").cells + 4 * PetCels.clips.values.maxOf { it.cells })
-    })
+
+    private fun scheduleNextFrame(immediate: Boolean = false) {
+        if (closed || pose.reduced || !ambientTickAllowed) return
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            if (!vsyncPosted) {
+                vsyncPosted = true
+                runCatching {
+                    Choreographer.getInstance().postFrameCallback(choreographerCallback)
+                }.onFailure {
+                    vsyncPosted = false
+                    main.removeCallbacks(fallbackTick)
+                    main.postDelayed(fallbackTick, if (immediate) 0L else 16L)
+                }
+            }
+        } else {
+            main.removeCallbacks(fallbackTick)
+            main.postDelayed(fallbackTick, if (immediate) 0L else 16L)
+        }
+    }
 
     private fun assetKey(name: String): String {
         val rows = PetCels.clips.getValue(name).rows
@@ -62,7 +121,6 @@ internal class CompanionPetDrawable(
     }
 
     init {
-        // Constructor is called on the avatar executor. One idle atlas is enough to attach.
         displayed = decode("idle")
         cache[assetKey("idle")] = displayed
         prewarmHotAtlases()
@@ -90,8 +148,6 @@ internal class CompanionPetDrawable(
         val rows = if (usagiTheme && assetPath.endsWith("_32.webp")) 8 else clipRows
         val raw = resources.assets.open(assetPath).use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply {
-                // Bake density scaling during the off-main decode. A 264px avatar should
-                // not keep every 320px source cel resident after doubling its frame count.
                 inScaled = true; inDensity = PetCels.CELL; inTargetDensity = cellSize
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             })
@@ -122,7 +178,32 @@ internal class CompanionPetDrawable(
 
     fun setAnimatedPose(next: PetPose, playback: PetPlayback, now: Long, quietIdle: Boolean) {
         if (closed) return
+        val actionChanged = next.action != pose.action
         pose = next
+        if (actionChanged && next.action == PetAction.IDLE) {
+            idleReelStartedAtMs = now
+        }
+
+        // 乌萨奇待机 6 幕自主剧场：28 秒自然串联不同招牌动作，不再死板重复同一段
+        if (usagiTheme && next.action == PetAction.IDLE && !quietIdle && !next.reduced) {
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            val reelClip = PetMotionDirector.resolveUsagiIdleClip(now - idleReelStartedAtMs, hour)
+            if (reelClip != activeUsagiIdleClip) {
+                activeUsagiIdleClip = reelClip
+            }
+            val reelSample = PetCelSample(reelClip, 0, 120L)
+            currentCel = reelSample
+            wanted = reelClip
+            val loaded = cache[assetKey(reelClip)]
+            if (loaded != null) {
+                show(loaded, reelSample)
+            } else {
+                request(reelClip)
+            }
+            if (ambientTickAllowed) scheduleNextFrame(immediate = true)
+            return
+        }
+
         val visible = PetCelSample(displayedClip, displayedFrame, currentCel.nextMs)
         currentCel = playback.sample(next, now, quietIdle, visible) { name ->
             wanted = name
@@ -130,14 +211,13 @@ internal class CompanionPetDrawable(
         }
         cache[assetKey(currentCel.clip)]?.let { show(it, currentCel) }
         if (usagiTheme && !pose.reduced && ambientTickAllowed) {
-            invalidateSelf()
+            scheduleNextFrame(immediate = true)
         }
         playback.nextAtlas?.let { name ->
             if (assetKey(name) !in cache) { wanted = name; request(name) }
         }
     }
 
-    /** A resized window keeps the actual previous cel until its new-size atlas is ready. */
     fun retainVisibleFrom(other: CompanionPetDrawable) {
         val rect = other.displayedSource()
         val pixels = other.retainedCel ?: other.displayed
@@ -150,10 +230,26 @@ internal class CompanionPetDrawable(
     }
 
     private fun show(bitmap: Bitmap, cel: PetCelSample) {
-        if (retainedCel == null && displayed === bitmap && displayedClip == cel.clip && displayedFrame == cel.frame) return
+        val atlasChanged = displayed !== bitmap
+        if (!atlasChanged && retainedCel == null && displayedClip == cel.clip && displayedFrame == cel.frame) return
+
+        // 不同图集/状态切换时：捕获当前帧做 180ms 缓出溶图 + 弹性微挤压脉冲，彻底消除生硬跳切
+        if (atlasChanged && !pose.reduced && retainedCel == null && !displayed.isRecycled) {
+            prevSource.set(displayedSource())
+            prevBitmap = displayed
+            transitionStartMs = SystemClock.uptimeMillis()
+            clipStartedAtMs = transitionStartMs
+            motion.triggerTransitionPop(if (pose.action == PetAction.TOUCH || pose.action == PetAction.CELEBRATE) 1.15f else 0.85f)
+        } else if (atlasChanged) {
+            clipStartedAtMs = SystemClock.uptimeMillis()
+            prevBitmap = null
+        }
+
         retainedCel?.recycle()
         retainedCel = null
-        displayed = bitmap; displayedClip = cel.clip; displayedFrame = cel.frame
+        displayed = bitmap
+        displayedClip = cel.clip
+        displayedFrame = cel.frame
         invalidateSelf()
     }
 
@@ -162,7 +258,6 @@ internal class CompanionPetDrawable(
         if (closed || decoding || key in failed || key in cache) return
         decoding = true
         decoder.execute {
-            // Rapid business-state changes must not decode every obsolete state in the queue.
             val result = if (!closed && assetKey(wanted) == key) runCatching { decode(name) } else null
             val bitmap = result?.getOrNull()
             val posted = main.post {
@@ -180,7 +275,6 @@ internal class CompanionPetDrawable(
                         failed.add(key)
                         android.util.Log.w("WhalePet", "Could not decode animation $name", result.exceptionOrNull())
                     }
-                    // Only one decode/result may be outstanding. Coalesce all intervening states.
                     if (assetKey(wanted) !in cache) request(wanted)
                 }
             }
@@ -192,11 +286,10 @@ internal class CompanionPetDrawable(
     }
 
     private fun prewarmHotAtlases() {
-        // 优先预热拖动与轻点图集，彻底消除首次拖动时同步解码与纹理上传导致的卡顿
         val hot = if (usagiTheme) {
-            listOf("drag", "touch", "celebrate", "drink", "reading", "writing")
+            listOf("drag", "touch", "celebrate", "control", "drink", "reading", "writing", "paused")
         } else {
-            listOf("drag_enter", "drag", "touch_enter", "touch", "reading")
+            listOf("drag_enter", "drag", "touch_enter", "touch", "reading", "celebrate")
         }
         decoder.execute {
             val seenKeys = HashSet<String>()
@@ -220,13 +313,12 @@ internal class CompanionPetDrawable(
         val entries = cache.entries.iterator()
         while ((cache.size > MAX_ATLASES || cachedBitmapBytes > cacheLimitBytes) && entries.hasNext()) {
             val entry = entries.next()
-            if (entry.value === displayed) continue
+            if (entry.value === displayed || entry.value === prevBitmap) continue
             entry.value.recycle()
             entries.remove()
         }
     }
 
-    /** Test/export preparation only; never called by draw() or the live overlay's UI thread. */
     fun prepareForExport(action: PetAction, elapsed: Long = 0) {
         val name = PetCels.sample(PetPose(action, elapsed)).clip
         val key = assetKey(name)
@@ -241,12 +333,14 @@ internal class CompanionPetDrawable(
         val rows = (displayed.height / cellW).coerceAtLeast(1)
         val totalCells = (PetCels.COLUMNS * rows).coerceAtLeast(1)
         val effectiveFrame = if (usagiTheme && !pose.reduced) {
-            val stepMs = when (pose.action) {
-                PetAction.PAUSED, PetAction.STOPPED -> 52L
-                PetAction.IDLE, PetAction.WAIT -> 36L
-                else -> 24L
+            val stepMs = when {
+                displayedClip in setOf("paused", "stopped", "sleep") -> 46L
+                pose.action == PetAction.IDLE && displayedClip == "idle" -> 34L
+                else -> 22L
             }
-            ((android.os.SystemClock.uptimeMillis() / stepMs) % totalCells).toInt()
+            // 使用每段动作独立本地时钟，切状态始终从第 0 帧完整起播
+            val localElapsed = (SystemClock.uptimeMillis() - clipStartedAtMs).coerceAtLeast(0L)
+            ((localElapsed / stepMs) % totalCells).toInt()
         } else {
             displayedFrame.coerceIn(0, totalCells - 1)
         }
@@ -264,89 +358,74 @@ internal class CompanionPetDrawable(
         val y = bounds.exactCenterY() - side / 2
         destination.set(x, y, x + side, y + side)
 
-        val now = android.os.SystemClock.uptimeMillis()
-        val dt = if (lastDrawMs == 0L) 0.016f else ((now - lastDrawMs).coerceIn(4L, 50L) / 1000f)
+        val now = SystemClock.uptimeMillis()
+        val dt = if (lastDrawMs == 0L) 0.016f else ((now - lastDrawMs).coerceIn(4L, 45L) / 1000f)
         lastDrawMs = now
 
-        var targetSx = 1f
-        var targetSy = 1f
-        var targetDy = 0f
-        var targetRot = 0f
-        var targetPivot = 0.94f
+        val tr = motion.step(pose.action, now, dt, pose.reduced)
+        val pivotY = y + side * tr.pivotYFrac
 
-        if (!pose.reduced) {
-            val sec = (now % 60_000L) / 1000.0
-            when (pose.action) {
-                PetAction.IDLE, PetAction.WAIT -> {
-                    val b = kotlin.math.sin(sec * 2.0 * Math.PI / 3.2).toFloat()
-                    targetSx = 1f - 0.009f * b
-                    targetSy = 1f + 0.014f * b
-                    targetDy = -side * 0.007f * b
-                }
-                PetAction.PAUSED, PetAction.STOPPED -> {
-                    val b = kotlin.math.sin(sec * 2.0 * Math.PI / 4.0).toFloat()
-                    targetSx = 1f + 0.011f * b
-                    targetSy = 1f - 0.010f * b
-                }
-                PetAction.DRAG -> {
-                    val swing = kotlin.math.sin(sec * 2.0 * Math.PI / 1.05).toFloat()
-                    targetPivot = 0.16f
-                    targetRot = 6.5f * swing
-                }
-                PetAction.CELEBRATE, PetAction.TOUCH -> {
-                    val hop = kotlin.math.abs(kotlin.math.sin(sec * 2.0 * Math.PI / 0.85)).toFloat()
-                    targetSx = 1f - 0.012f * hop
-                    targetSy = 1f + 0.018f * hop
-                    targetDy = -side * 0.016f * hop
-                }
-                else -> {
-                    val b = kotlin.math.sin(sec * 2.0 * Math.PI / 2.6).toFloat()
-                    targetSx = 1f - 0.007f * b
-                    targetSy = 1f + 0.010f * b
-                }
-            }
+        val outBmp = prevBitmap
+        val fadeProgress = if (outBmp != null && !outBmp.isRecycled) {
+            PetMotionDirector.crossfadeProgress(now - transitionStartMs)
+        } else {
+            1f
+        }
+        if (fadeProgress >= 1f && prevBitmap != null) {
+            prevBitmap = null
         }
 
-        val alpha = if (pose.reduced) 1f else (1f - kotlin.math.exp(-9.5f * dt))
-        curSx += (targetSx - curSx) * alpha
-        curSy += (targetSy - curSy) * alpha
-        curDy += (targetDy - curDy) * alpha
-        curRot += (targetRot - curRot) * alpha
-        curPivotFrac += (targetPivot - curPivotFrac) * alpha
-        val pivotY = y + side * curPivotFrac
-
         canvas.save()
-        canvas.translate(0f, curDy)
-        canvas.rotate(curRot, x + side * 0.5f, pivotY)
-        canvas.scale(curSx, curSy, x + side * 0.5f, pivotY)
-        canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
+        canvas.translate(0f, tr.offsetYFrac * side)
+        canvas.rotate(tr.rotationDeg, x + side * 0.5f, pivotY)
+        canvas.scale(tr.scaleX, tr.scaleY, x + side * 0.5f, pivotY)
+
+        if (outBmp != null && !outBmp.isRecycled && fadeProgress < 1f) {
+            prevPaint.alpha = ((1f - fadeProgress) * drawAlpha).toInt().coerceIn(0, 255)
+            canvas.drawBitmap(outBmp, prevSource, destination, prevPaint)
+            paint.alpha = (fadeProgress * drawAlpha).toInt().coerceIn(0, 255)
+            canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
+            paint.alpha = drawAlpha
+        } else {
+            paint.alpha = drawAlpha
+            canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
+        }
         canvas.restore()
 
         if (!pose.reduced && ambientTickAllowed) {
-            val isResting = pose.action == PetAction.IDLE || pose.action == PetAction.WAIT ||
-                pose.action == PetAction.PAUSED || pose.action == PetAction.STOPPED
-            val tickMs = if (usagiTheme) (if (isResting) 20L else 16L) else (if (isResting) 42L else 16L)
-            main.removeCallbacks(liveTick)
-            main.postDelayed(liveTick, tickMs)
+            scheduleNextFrame(immediate = false)
         }
     }
 
     override fun getIntrinsicWidth() = PetCels.CELL
     override fun getIntrinsicHeight() = PetCels.CELL
-    override fun setAlpha(alpha: Int) { if (paint.alpha != alpha) { paint.alpha = alpha; invalidateSelf() } }
-    override fun setColorFilter(colorFilter: ColorFilter?) { paint.colorFilter = colorFilter; invalidateSelf() }
+    override fun setAlpha(alpha: Int) {
+        if (drawAlpha != alpha) {
+            drawAlpha = alpha
+            paint.alpha = alpha
+            invalidateSelf()
+        }
+    }
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        paint.colorFilter = colorFilter
+        prevPaint.colorFilter = colorFilter
+        invalidateSelf()
+    }
     @Deprecated("Deprecated in Android") override fun getOpacity() = PixelFormat.TRANSLUCENT
     override fun close() {
         closed = true
         onAtlasReady = null
-        main.removeCallbacks(liveTick)
+        vsyncPosted = false
+        runCatching { Choreographer.getInstance().removeFrameCallback(choreographerCallback) }
+        main.removeCallbacks(fallbackTick)
+        prevBitmap = null
         retainedCel?.recycle()
         retainedCel = null
         cache.values.forEach { if (!it.isRecycled) it.recycle() }
         cache.clear()
     }
     companion object {
-        const val MAX_ATLASES = 10
-        const val MAX_BITMAP_BYTES = 48L * 1024 * 1024
+        const val MAX_ATLASES = 12
+        const val MAX_BITMAP_BYTES = 56L * 1024 * 1024
     }
 }

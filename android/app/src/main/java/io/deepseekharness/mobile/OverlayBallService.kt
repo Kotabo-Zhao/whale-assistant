@@ -2063,6 +2063,10 @@ class OverlayBallService : Service() {
                         petActing.dragging = true
                         wakePetMotion()
                     }
+                    dragVelocityTracker?.let { vt ->
+                        vt.computeCurrentVelocity(1000)
+                        petDrawable?.setDragVelocity(vt.xVelocity)
+                    }
                     val metrics = resources.displayMetrics
                     val (x, y) = OverlayBallPolicy.clampPosition(
                         initialX + deltaX.toInt(),
@@ -2142,8 +2146,11 @@ class OverlayBallService : Service() {
                     view.findViewById<android.widget.TextView>(R.id.companion_drop_hint)?.visibility = View.GONE
                     return true
                 }
+                val wasDraggingPet = petActing.dragging
                 petActing.dragging = false
                 dragLayoutPending = false
+                petDrawable?.clearDragVelocity()
+                if (wasDraggingPet) petDrawable?.triggerLandingBounce()
                 wakePetMotion()
                 val deltaX = event.rawX - touchStartX
                 val deltaY = event.rawY - touchStartY
