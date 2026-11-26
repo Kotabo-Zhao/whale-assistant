@@ -2077,10 +2077,20 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                     val w = rect.width()
                     val h = rect.height()
                     val area = w.toLong() * h.toLong()
-                    // 精确捕捉落点命中的完整图片/媒体节点边界（排除过小图标与整屏根布局）
-                    val plausibleMediaRect = w >= 120 && h >= 120 && area < (screenArea * 0.94).toLong()
-                    val looksLikePhoto = isImageLikeClass(cls) ||
-                        (txt.isEmpty() && (desc.contains("图片") || desc.contains("照片") || desc.contains("视频") || desc.contains("photo", true) || desc.contains("image", true)))
+                    // 精确捕捉落点命中的完整图片/媒体节点边界（支持全屏看图器、WebView/自定义图容器与 resId 识别）
+                    val explicitImageClass = isImageLikeClass(cls)
+                    val imageResIdHint = txt.isEmpty() && (
+                        resId.contains("image") || resId.contains("img") || resId.contains("photo") ||
+                            resId.contains("pic") || resId.contains("cover") || resId.contains("poster") ||
+                            resId.contains("gallery") || resId.contains("media") || resId.contains("video")
+                        )
+                    val imageDescHint = txt.isEmpty() && (
+                        desc.contains("图片") || desc.contains("照片") || desc.contains("视频") ||
+                            desc.contains("photo", true) || desc.contains("image", true) || desc.contains("picture", true)
+                        )
+                    val looksLikePhoto = explicitImageClass || imageResIdHint || imageDescHint
+                    val maxAllowedArea = if (explicitImageClass || imageDescHint) screenArea else (screenArea * 0.94).toLong()
+                    val plausibleMediaRect = w >= 100 && h >= 100 && area <= maxAllowedArea
                     if (plausibleMediaRect && looksLikePhoto && area in 1L..bestImageArea) {
                         bestImageArea = area
                         bestImageBounds = android.graphics.Rect(rect)
@@ -2147,7 +2157,10 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                     cardTexts.any { it.contains("小红书") || it.contains("微信公众号") || it.contains("哔哩哔哩") || it.contains("知乎") || it.contains("阅读") }
                 )
 
+            val hitLooksLikeDirectLink = bestHit.contains("http", ignoreCase = true) ||
+                bestHit.contains("链接") || bestHit.contains("公众号") || bestHit.contains("小程序")
             val targetKind = when {
+                bestImageBounds != null && !hitLooksLikeDirectLink -> "image"
                 onScreenUrls.isNotEmpty() || linkCardCue -> "link"
                 bestImageBounds != null -> "image"
                 primaryUrl != null && bestHit.isEmpty() -> "link"
@@ -2200,6 +2213,7 @@ class DeepSeekAccessibilityService : AccessibilityService() {
             screenX: Int,
             screenY: Int,
             exactBounds: android.graphics.Rect? = null,
+            retryAttempt: Int = 0,
             onResult: (android.graphics.Bitmap?) -> Unit,
         ) {
             val svc = serviceRef.get()
@@ -2260,7 +2274,14 @@ class DeepSeekAccessibilityService : AccessibilityService() {
                         }
 
                         override fun onFailure(errorCode: Int) {
-                            onResult(null)
+                            if (retryAttempt == 0) {
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                                    { captureVisualAt(screenX, screenY, exactBounds, retryAttempt = 1, onResult = onResult) },
+                                    420L,
+                                )
+                            } else {
+                                onResult(null)
+                            }
                         }
                     },
                 )

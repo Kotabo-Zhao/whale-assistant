@@ -1554,10 +1554,11 @@ class OverlayBallService : Service() {
     ) {
         dismissRadialWheel()
         val ui = io.deepseekharness.mobile.companion.PetUi(this)
+        val hasCapturedBmp = capturedBitmap != null && !capturedBitmap.isRecycled
         val kind = when {
-            target?.targetKind == "link" -> "link"
             target?.targetKind == "image" -> "image"
-            target == null && capturedBitmap != null && !capturedBitmap.isRecycled -> "image"
+            target?.targetKind == "link" -> "link"
+            hasCapturedBmp && (target == null || target.bestHitText.isBlank()) -> "image"
             else -> "text"
         }
         val appLabel = target?.packageName?.let { pkg ->
