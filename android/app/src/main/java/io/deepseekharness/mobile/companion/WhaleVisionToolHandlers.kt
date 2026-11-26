@@ -116,6 +116,11 @@ internal object WhaleVisionToolHandlers {
             screenChanged = beforeTree.isBlank() || afterTree.isBlank() || afterTree != beforeTree
             if (!screenChanged) {
                 verifyHint = "点击手势已派发，但 450ms 后页面控件树未检测到变化（可能被遮挡、目标不可点或坐标略有偏移），建议重新看屏确认。"
+                if (cap.packageName.isNotBlank()) {
+                    runCatching {
+                        WhaleMobileAppTipsStore.recordTip(app, cap.packageName, "点击「${loc.text.take(18)}」后页面未立即变化，需注意弹窗遮挡或先刷新控件树")
+                    }
+                }
             }
         }
         val posDesc = if (loc.ref != null) "#${loc.ref}" else "(${loc.x},${loc.y})"

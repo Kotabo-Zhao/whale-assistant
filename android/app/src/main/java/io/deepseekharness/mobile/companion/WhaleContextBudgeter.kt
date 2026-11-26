@@ -309,6 +309,29 @@ internal object WhaleContextBudgeter {
      *   对超长数组（>12 项）保留前 10 项 + 末 2 项并附加 `_omittedItems` 计数；
      * - 纯文本：折叠连续空行与多余空格。
      */
+    private val EXPLORATORY_TOOLS = setOf(
+        "whale_tool_catalog",
+        "whale_tools_expand",
+        "whale_phone_screen",
+        "whale_phone_vision",
+        "whale_web_search",
+        "whale_self_capabilities",
+    )
+
+    /**
+     * 源自 ActKV (arXiv:2609.31395) 的「动作导向探索输出折叠」：
+     * 一次性探索类工具（目录检索/旧截屏/搜索列表）在下一轮即可激进折叠为 1 行摘要，
+     * 保留关键代码产物与资料正文，大幅压缩 48–64 轮长轨迹 Token。
+     */
+    fun pruneExploratoryToolMessage(toolName: String, content: String): String? {
+        if (content.length <= 420) return null
+        val isExploratory = toolName in EXPLORATORY_TOOLS || content.contains(""""error":"UNKNOWN_TOOL"""") || content.contains("UNKNOWN_TOOL")
+        if (!isExploratory) return null
+        val head = content.replace(Regex("""[
+]+"""), " ").take(180).trim()
+        return "[ActKV 折叠旧探索输出 · $toolName · 原长 ${content.length} 字] $head…"
+    }
+
     fun compactToolPayload(rawPayload: String): String {
         val trimmed = rawPayload.trim()
         if (trimmed.length < 180) return trimmed

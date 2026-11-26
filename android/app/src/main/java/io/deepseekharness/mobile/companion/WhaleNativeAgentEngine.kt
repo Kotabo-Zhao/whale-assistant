@@ -397,7 +397,11 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 scheduleEmotionReflection(pid, pname, recentUserMsgs, emotionState)
             }
             val emotionPrompt = if (emotionState != null) "\n" + WhaleEmotionEngine.buildDynamicPrompt(emotionState) else ""
-            runCatching { WhaleProactiveEngine.observeAndCapture(app, trimmed) }
+            runCatching {
+                val recentTexts = recentHistory.takeLast(5).map { it.second } + trimmed
+                WhaleProactiveEngine.reconsiderBeforeFire(app, recentTexts)
+                WhaleProactiveEngine.observeAndCapture(app, trimmed)
+            }
             val watchPrompt = runCatching { WhaleProactiveEngine.buildDynamicWatchlistPrompt(app) }.getOrDefault("").let { if (it.isNotBlank()) "\n" + it else "" }
             val primerPrompt = WhaleCapabilityPrimer.buildPrimer(trimmed).let { if (it.isNotBlank()) "\n" + it else "" }
             rawDynamicCtxChars = built.first + silentNotices.length + emotionPrompt.length + watchPrompt.length + primerPrompt.length
@@ -455,6 +459,19 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
             // 4. KV Prefix Cache 优先策略：上下文未达 20k 高水位前严禁原地篡改历史 tool 消息（保 85%~95% 前缀缓存命中）；
             //    仅超水位时对更早轮次（0 until round-1）做一次性批量观察掩码裁剪，兼顾缓存命中与极低内存/Token。
             val currentMsgChars = WhaleHarnessCore.PrefixCacheCompactor.estimateMessagesChars(messages)
+            // ActKV 动作导向裁剪：上下文超过 10k 时，优先把 1 轮前的一次性探索输出折叠为 1 行摘要
+            if (round >= 2 && currentMsgChars > 10_000 && toolMsgIndicesByRound.size >= round - 1) {
+                val prevRoundIdx = round - 2
+                if (prevRoundIdx in toolMsgIndicesByRound.indices) {
+                    for (msgIdx in toolMsgIndicesByRound[prevRoundIdx]) {
+                        val m = messages.optJSONObject(msgIdx) ?: continue
+                        val c = m.optString("content", "")
+                        val toolGuess = steps.getOrNull(msgIdx)?.tool.orEmpty()
+                        val pruned = WhaleContextBudgeter.pruneExploratoryToolMessage(toolGuess, c)
+                        if (pruned != null) m.put("content", pruned)
+                    }
+                }
+            }
             if (round >= 2 && currentMsgChars > WhaleContextBudgeter.KV_OBSERVATION_MASK_HIGH_WATER_CHARS) {
                 val maskEnd = (round - 1).coerceAtMost(toolMsgIndicesByRound.size)
                 for (rIdx in maskedUpToRound until maskEnd) {

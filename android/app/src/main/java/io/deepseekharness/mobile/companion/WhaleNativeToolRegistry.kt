@@ -2402,6 +2402,17 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     val matches = WhaleContextLedger.search(app, sid, q, limit = 5)
                     ToolOutcome(name, "检索历史折叠记忆块", true, JSONObject().put("sessionId", sid).put("matches", matches).toString())
                 }
+                "whale_phone_app_tips" -> {
+                    val action = args.str("action", "get").trim().lowercase().ifEmpty { "get" }
+                    val pkg = args.str("packageName", "").trim()
+                    require(pkg.isNotEmpty()) { "请提供目标应用包名 packageName" }
+                    val res = when (action) {
+                        "add_tip" -> WhaleMobileAppTipsStore.recordTip(app, pkg, args.str("tip", ""))
+                        "add_shortcut" -> WhaleMobileAppTipsStore.recordShortcut(app, pkg, args.str("name", ""), args.str("steps", ""))
+                        else -> WhaleMobileAppTipsStore.load(app, pkg)
+                    }
+                    ToolOutcome(name, "应用操作经验：$pkg", true, res.json().toString(), mutating = action != "get")
+                }
                 "whale_emotion_state" -> {
                     val action = args.str("action", "get").trim().lowercase()
                     val card = runCatching { CompanionPersonaStore(app).active() }.getOrNull()

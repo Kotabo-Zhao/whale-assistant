@@ -52,4 +52,22 @@ class WhaleMemoryTaxonomyTest {
         assertTrue(cats.has("preference"))
         assertTrue(cats.has("project"))
     }
+
+    @Test
+    fun `consolidateOnWrite supersedes conflicting facts and creates 1-hop links`() {
+        val now = 1_700_000_000_000L
+        val oldPref = JSONObject().put("id", "m1").put("text", "平时喜欢喝冰美式咖啡")
+        val relatedProj = JSONObject().put("id", "m2").put("text", "正在研究 Makalu 5G 基带项目")
+        val relatedPeople = JSONObject().put("id", "m3").put("text", "同事小李一起做 Makalu 基带联调")
+
+        val newPref = JSONObject().put("id", "m4").put("text", "现在改成喜欢喝热拿铁咖啡")
+        val superseded = WhaleMemoryTaxonomy.consolidateOnWrite(newPref, listOf(oldPref, relatedProj), now)
+        assertTrue("Conflicting preference should supersede m1", "m1" in superseded)
+        assertEquals("m4", oldPref.optString("supersededBy"))
+
+        val newProj = JSONObject().put("id", "m5").put("text", "本周重点推进 Makalu 仿真验证")
+        WhaleMemoryTaxonomy.consolidateOnWrite(newProj, listOf(relatedPeople), now)
+        val expanded = WhaleMemoryTaxonomy.expandOneHopLinks(listOf(newProj), listOf(newProj, relatedPeople), now)
+        assertTrue(expanded.any { it.optString("id") == "m3" })
+    }
 }

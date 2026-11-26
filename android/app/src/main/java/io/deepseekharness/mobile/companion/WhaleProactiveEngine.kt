@@ -178,6 +178,48 @@ internal object WhaleProactiveEngine {
         }.trim()
     }
 
+    private val completionCues = listOf(
+        "搞定了", "做完了", "办完了", "交了", "考完了", "面完了", "结束了", "取消了",
+        "已经发了", "买好了", "不用提醒", "已解决", "完成了", "done",
+    )
+
+    /**
+     * 源自 Proactive AI (arXiv:2610.05159) 的「可重规划时间线重估」：
+     * 在主动关注项真正触发前，结合最近几轮对话重新评估；若用户已明确办完或取消，自动静默撤回为 done。
+     */
+    fun reconsiderItems(
+        items: List<WatchItem>,
+        recentMessages: List<String>,
+    ): Pair<List<WatchItem>, List<String>> {
+        if (items.isEmpty() || recentMessages.isEmpty()) return items to emptyList()
+        val recentLower = recentMessages.takeLast(6).map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        if (recentLower.isEmpty()) return items to emptyList()
+        val retractedIds = mutableListOf<String>()
+        val updated = items.map { item ->
+            if (item.status !in setOf("open", "snoozed")) return@map item
+            val titleKeywords = commitmentCues.filter { item.title.lowercase().contains(it) } +
+                WhaleMemoryTaxonomy.extractTags(item.title, limit = 3).map { it.lowercase() }
+            val matchedDone = recentLower.any { msg ->
+                completionCues.any { cue -> msg.contains(cue) } &&
+                    titleKeywords.any { kw -> kw.length >= 2 && msg.contains(kw) }
+            }
+            if (matchedDone) {
+                retractedIds.add(item.id)
+                item.copy(status = "done")
+            } else {
+                item
+            }
+        }
+        return updated to retractedIds
+    }
+
+    fun reconsiderBeforeFire(context: Context, recentMessages: List<String>): Int {
+        val all = list(context, includeClosed = true)
+        val (updated, retracted) = reconsiderItems(all, recentMessages)
+        if (retracted.isNotEmpty()) persist(context, updated)
+        return retracted.size
+    }
+
     private fun persist(context: Context, items: List<WatchItem>) {
         val arr = JSONArray()
         items.forEach { arr.put(it.json()) }

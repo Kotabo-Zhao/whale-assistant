@@ -215,4 +215,82 @@ internal object WhaleMemoryTaxonomy {
             .put("activeSummaryCount", activeTotal)
             .put("categories", grouped)
     }
+
+    /**
+     * 源自 A-MEM (arXiv:2502.12110) + Mem0/Zep (arXiv:2504.19413 / 2501.13956)：
+     * 写入新记忆时自动计算双向关联 `linkedIds`（Top-3 共享标签/语义邻接），
+     * 并对同域高冲突旧事实标记 `supersededBy` + `validUntilMs`，避免新旧事实自相矛盾。
+     */
+    fun consolidateOnWrite(
+        newRow: JSONObject,
+        existingRows: List<JSONObject>,
+        nowMs: Long = System.currentTimeMillis(),
+    ): List<String> {
+        enrichRow(newRow)
+        val newId = newRow.optString("id").trim()
+        val newText = newRow.optString("text").trim().lowercase(Locale.ROOT)
+        val newCat = newRow.optString("category")
+        val newTags = extractTags(newText).map { it.lowercase(Locale.ROOT) }.toSet()
+        val newBigrams = if (newText.length >= 2) (0 until newText.length - 1).map { newText.substring(it, it + 2) }.toSet() else emptySet()
+        val updateCue = listOf("改成", "换成", "现在住", "搬到", "不再", "已经改", "更新为").any { newText.contains(it) }
+
+        val linkScores = mutableListOf<Pair<String, Double>>()
+        val supersededIds = mutableListOf<String>()
+
+        for (old in existingRows) {
+            val oldId = old.optString("id").trim()
+            if (oldId.isEmpty() || oldId == newId || isExpiredOrSuperseded(old, nowMs)) continue
+            enrichRow(old)
+            val oldText = old.optString("text").trim().lowercase(Locale.ROOT)
+            val oldCat = old.optString("category")
+            val oldTags = extractTags(oldText).map { it.lowercase(Locale.ROOT) }.toSet()
+            val oldBigrams = if (oldText.length >= 2) (0 until oldText.length - 1).map { oldText.substring(it, it + 2) }.toSet() else emptySet()
+
+            val tagOverlap = if (newTags.isEmpty() || oldTags.isEmpty()) 0.0
+            else newTags.intersect(oldTags).size.toDouble() / minOf(newTags.size, oldTags.size).toDouble()
+            val bigramSim = if (newBigrams.isEmpty() || oldBigrams.isEmpty()) 0.0
+            else newBigrams.intersect(oldBigrams).size.toDouble() / maxOf(newBigrams.size, oldBigrams.size).toDouble()
+
+            val isConflict = oldCat == newCat && (
+                bigramSim >= 0.58 || (updateCue && (tagOverlap >= 0.5 || bigramSim >= 0.28))
+            )
+            if (isConflict && newId.isNotEmpty()) {
+                old.put("supersededBy", newId)
+                old.put("validUntilMs", nowMs)
+                supersededIds.add(oldId)
+            } else {
+                val relScore = tagOverlap * 0.65 + bigramSim * 0.35
+                if (relScore >= 0.25) linkScores.add(oldId to relScore)
+            }
+        }
+
+        val topLinks = linkScores.sortedByDescending { it.second }.take(3).map { it.first }
+        if (topLinks.isNotEmpty()) {
+            newRow.put("linkedIds", JSONArray(topLinks))
+        }
+        return supersededIds
+    }
+
+    /** 1 跳关联扩展：按命中记忆的 `linkedIds` 顺带带出相邻的人物/约束上下文。 */
+    fun expandOneHopLinks(
+        hits: List<JSONObject>,
+        allRows: List<JSONObject>,
+        nowMs: Long = System.currentTimeMillis(),
+        limit: Int = 4,
+    ): List<JSONObject> {
+        val hitIds = hits.mapNotNull { it.optString("id").takeIf(String::isNotBlank) }.toSet()
+        val wantedIds = LinkedHashSet<String>()
+        for (h in hits.take(3)) {
+            val arr = h.optJSONArray("linkedIds") ?: continue
+            for (i in 0 until arr.length()) {
+                val lid = arr.optString(i).trim()
+                if (lid.isNotEmpty() && lid !in hitIds) wantedIds.add(lid)
+            }
+        }
+        if (wantedIds.isEmpty()) return emptyList()
+        return allRows
+            .filter { it.optString("id") in wantedIds && !isExpiredOrSuperseded(it, nowMs) }
+            .take(limit)
+            .map { enrichRow(JSONObject(it.toString())) }
+    }
 }

@@ -33,4 +33,16 @@ class WhaleProactiveEngineTest {
         assertFalse(WhaleProactiveEngine.shouldIntervene(eventValue = 80, isUserBusy = false, minutesSinceLastPrompt = 240, dismissedStreak = 0, isQuietHours = true))
         assertTrue(WhaleProactiveEngine.shouldIntervene(eventValue = 95, isUserBusy = false, minutesSinceLastPrompt = 240, dismissedStreak = 0, isQuietHours = true))
     }
+
+    @Test
+    fun `reconsiderItems silently retracts commitments already finished in recent dialogue`() {
+        val now = 1_700_000_000_000L
+        val item = WhaleProactiveEngine.extractCommitment("明天上午要参加芯片架构面试", now)!!
+        val (updated, retracted) = WhaleProactiveEngine.reconsiderItems(
+            listOf(item),
+            listOf("刚才芯片架构面试已经面完了，感觉很稳！"),
+        )
+        assertEquals(listOf(item.id), retracted)
+        assertEquals("done", updated.single().status)
+    }
 }

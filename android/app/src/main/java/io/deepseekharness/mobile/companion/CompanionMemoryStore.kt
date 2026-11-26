@@ -310,10 +310,14 @@ class CompanionMemoryStore(context: Context) {
         )
         val arr = JSONArray()
         ranked.forEach { arr.put(it) }
+        val related = WhaleMemoryTaxonomy.expandOneHopLinks(ranked, list)
+        val relArr = JSONArray()
+        related.forEach { relArr.put(it) }
         JSONObject()
             .put("ok", true)
             .put("count", arr.length())
             .put("items", arr)
+            .apply { if (relArr.length() > 0) put("relatedLinks", relArr) }
     }
 
     fun digestForAgent(): JSONObject = synchronized(lock) {
