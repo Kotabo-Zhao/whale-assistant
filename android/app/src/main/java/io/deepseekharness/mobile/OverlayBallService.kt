@@ -2064,8 +2064,10 @@ class OverlayBallService : Service() {
                         wakePetMotion()
                     }
                     dragVelocityTracker?.let { vt ->
-                        vt.computeCurrentVelocity(1000)
-                        petDrawable?.setDragVelocity(vt.xVelocity)
+                        runCatching {
+                            vt.computeCurrentVelocity(1000)
+                            petDrawable?.setDragVelocity(vt.xVelocity)
+                        }
                     }
                     val metrics = resources.displayMetrics
                     val (x, y) = OverlayBallPolicy.clampPosition(
@@ -2223,7 +2225,7 @@ class OverlayBallService : Service() {
                 }
                 return true
             }
-            MotionEvent.ACTION_CANCEL -> {cancelHoverPick(view);pinching=false;dragLayoutPending=false;longPressFired=false;petActing.dragging=false;wakePetMotion();return true}
+            MotionEvent.ACTION_CANCEL -> {cancelHoverPick(view);dragVelocityTracker?.recycle();dragVelocityTracker=null;petDrawable?.clearDragVelocity();pinching=false;dragLayoutPending=false;longPressFired=false;petActing.dragging=false;wakePetMotion();return true}
         }
         return false
     }

@@ -96,22 +96,30 @@ internal class CompanionPetDrawable(
         scheduleNextFrame(immediate = true)
     }
 
+    private fun isHighRateActive(): Boolean {
+        if (prevBitmap != null) return true
+        return pose.action != PetAction.IDLE && pose.action != PetAction.WAIT &&
+            pose.action != PetAction.PAUSED && pose.action != PetAction.STOPPED
+    }
+
     private fun scheduleNextFrame(immediate: Boolean = false) {
         if (closed || pose.reduced || !ambientTickAllowed) return
-        if (Looper.myLooper() == Looper.getMainLooper()) {
+        val highRate = immediate || isHighRateActive()
+        if (highRate && Looper.myLooper() == Looper.getMainLooper()) {
+            main.removeCallbacks(fallbackTick)
             if (!vsyncPosted) {
                 vsyncPosted = true
                 runCatching {
                     Choreographer.getInstance().postFrameCallback(choreographerCallback)
                 }.onFailure {
                     vsyncPosted = false
-                    main.removeCallbacks(fallbackTick)
                     main.postDelayed(fallbackTick, if (immediate) 0L else 16L)
                 }
             }
         } else {
             main.removeCallbacks(fallbackTick)
-            main.postDelayed(fallbackTick, if (immediate) 0L else 16L)
+            val delayMs = if (immediate) 0L else if (highRate) 16L else 33L
+            main.postDelayed(fallbackTick, delayMs)
         }
     }
 
@@ -142,7 +150,8 @@ internal class CompanionPetDrawable(
     }
 
     private fun decode(name: String): Bitmap {
-        val cellSize = targetSize.coerceIn(96, PetCels.CELL)
+        val maxSide = if (usagiTheme) 192 else PetCels.CELL
+        val cellSize = targetSize.coerceIn(96, maxSide)
         val clipRows = PetCels.clips.getValue(name).rows
         val assetPath = if (usagiTheme) usagiAtlasPath(name, clipRows) else "pet-cels/$name.webp"
         val rows = if (usagiTheme && assetPath.endsWith("_32.webp")) 8 else clipRows
@@ -310,11 +319,14 @@ internal class CompanionPetDrawable(
     }
 
     private fun trim() {
+        val dragKey = assetKey("drag")
+        val idleKey = assetKey("idle")
         val entries = cache.entries.iterator()
         while ((cache.size > MAX_ATLASES || cachedBitmapBytes > cacheLimitBytes) && entries.hasNext()) {
             val entry = entries.next()
             if (entry.value === displayed || entry.value === prevBitmap) continue
-            entry.value.recycle()
+            if (entry.key == dragKey || entry.key == idleKey) continue
+            // 仅从缓存移除交由 NativeAllocationRegistry/GC 回收，避免 RenderThread 正在渲染 DisplayList 时触发 recycled bitmap 闪退
             entries.remove()
         }
     }
@@ -380,15 +392,18 @@ internal class CompanionPetDrawable(
         canvas.rotate(tr.rotationDeg, x + side * 0.5f, pivotY)
         canvas.scale(tr.scaleX, tr.scaleY, x + side * 0.5f, pivotY)
 
-        if (outBmp != null && !outBmp.isRecycled && fadeProgress < 1f) {
-            prevPaint.alpha = ((1f - fadeProgress) * drawAlpha).toInt().coerceIn(0, 255)
-            canvas.drawBitmap(outBmp, prevSource, destination, prevPaint)
-            paint.alpha = (fadeProgress * drawAlpha).toInt().coerceIn(0, 255)
-            canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
-            paint.alpha = drawAlpha
-        } else {
-            paint.alpha = drawAlpha
-            canvas.drawBitmap(retainedCel ?: displayed, displayedSource(), destination, paint)
+        val activeBmp = retainedCel?.takeIf { !it.isRecycled } ?: displayed.takeIf { !it.isRecycled }
+        if (activeBmp != null) {
+            if (outBmp != null && !outBmp.isRecycled && fadeProgress < 1f) {
+                prevPaint.alpha = ((1f - fadeProgress) * drawAlpha).toInt().coerceIn(0, 255)
+                canvas.drawBitmap(outBmp, prevSource, destination, prevPaint)
+                paint.alpha = (fadeProgress * drawAlpha).toInt().coerceIn(0, 255)
+                canvas.drawBitmap(activeBmp, displayedSource(), destination, paint)
+                paint.alpha = drawAlpha
+            } else {
+                paint.alpha = drawAlpha
+                canvas.drawBitmap(activeBmp, displayedSource(), destination, paint)
+            }
         }
         canvas.restore()
 
@@ -419,9 +434,7 @@ internal class CompanionPetDrawable(
         runCatching { Choreographer.getInstance().removeFrameCallback(choreographerCallback) }
         main.removeCallbacks(fallbackTick)
         prevBitmap = null
-        retainedCel?.recycle()
         retainedCel = null
-        cache.values.forEach { if (!it.isRecycled) it.recycle() }
         cache.clear()
     }
     companion object {
