@@ -325,10 +325,9 @@ internal object WhaleContextBudgeter {
      */
     fun pruneExploratoryToolMessage(toolName: String, content: String): String? {
         if (content.length <= 420) return null
-        val isExploratory = toolName in EXPLORATORY_TOOLS || content.contains(""""error":"UNKNOWN_TOOL"""") || content.contains("UNKNOWN_TOOL")
+        val isExploratory = toolName in EXPLORATORY_TOOLS || content.contains("UNKNOWN_TOOL")
         if (!isExploratory) return null
-        val head = content.replace(Regex("""[
-]+"""), " ").take(180).trim()
+        val head = content.replace(Regex("\\s+"), " ").take(180).trim()
         return "[ActKV 折叠旧探索输出 · $toolName · 原长 ${content.length} 字] $head…"
     }
 
