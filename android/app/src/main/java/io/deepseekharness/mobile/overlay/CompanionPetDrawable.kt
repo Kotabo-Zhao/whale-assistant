@@ -68,21 +68,26 @@ internal class CompanionPetDrawable(
         prewarmHotAtlases()
     }
 
-    private fun usagiAtlasPath(name: String, rows: Int): String {
-        if (rows <= 4) return "pet-cels-usagi/idle_16.webp"
+    private fun usagiAtlasPath(name: String, @Suppress("UNUSED_PARAMETER") rows: Int): String {
         val base = name.removeSuffix("_enter").removeSuffix("_return")
         return when (base) {
-            "writing", "drink" -> "pet-cels-usagi/writing_32.webp"
-            "control", "drag", "touch" -> "pet-cels-usagi/control_32.webp"
+            "drag" -> "pet-cels-usagi/drag_32.webp"
+            "touch" -> "pet-cels-usagi/touch_32.webp"
+            "paused", "stopped", "sleep" -> "pet-cels-usagi/sleep_32.webp"
+            "drink" -> "pet-cels-usagi/drink_32.webp"
+            "writing" -> "pet-cels-usagi/writing_32.webp"
+            "control" -> "pet-cels-usagi/control_32.webp"
             "celebrate", "accept", "reply", "notice" -> "pet-cels-usagi/celebrate_32.webp"
-            else -> "pet-cels-usagi/reading_32.webp"
+            "reading" -> "pet-cels-usagi/reading_32.webp"
+            else -> "pet-cels-usagi/idle_32.webp"
         }
     }
 
     private fun decode(name: String): Bitmap {
         val cellSize = targetSize.coerceIn(96, PetCels.CELL)
-        val rows = PetCels.clips.getValue(name).rows
-        val assetPath = if (usagiTheme) usagiAtlasPath(name, rows) else "pet-cels/$name.webp"
+        val clipRows = PetCels.clips.getValue(name).rows
+        val assetPath = if (usagiTheme) usagiAtlasPath(name, clipRows) else "pet-cels/$name.webp"
+        val rows = if (usagiTheme && assetPath.endsWith("_32.webp")) 8 else clipRows
         val raw = resources.assets.open(assetPath).use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply {
                 // Bake density scaling during the off-main decode. A 264px avatar should
@@ -189,7 +194,7 @@ internal class CompanionPetDrawable(
     private fun prewarmHotAtlases() {
         // 优先预热拖动与轻点图集，彻底消除首次拖动时同步解码与纹理上传导致的卡顿
         val hot = if (usagiTheme) {
-            listOf("drag", "celebrate", "reading", "writing")
+            listOf("drag", "touch", "celebrate", "drink", "reading", "writing")
         } else {
             listOf("drag_enter", "drag", "touch_enter", "touch", "reading")
         }
@@ -237,8 +242,9 @@ internal class CompanionPetDrawable(
         val totalCells = (PetCels.COLUMNS * rows).coerceAtLeast(1)
         val effectiveFrame = if (usagiTheme && !pose.reduced) {
             val stepMs = when (pose.action) {
-                PetAction.IDLE, PetAction.WAIT, PetAction.PAUSED, PetAction.STOPPED -> 55L
-                else -> 34L
+                PetAction.PAUSED, PetAction.STOPPED -> 52L
+                PetAction.IDLE, PetAction.WAIT -> 36L
+                else -> 24L
             }
             ((android.os.SystemClock.uptimeMillis() / stepMs) % totalCells).toInt()
         } else {
@@ -319,7 +325,7 @@ internal class CompanionPetDrawable(
         if (!pose.reduced && ambientTickAllowed) {
             val isResting = pose.action == PetAction.IDLE || pose.action == PetAction.WAIT ||
                 pose.action == PetAction.PAUSED || pose.action == PetAction.STOPPED
-            val tickMs = if (usagiTheme) (if (isResting) 33L else 20L) else (if (isResting) 42L else 16L)
+            val tickMs = if (usagiTheme) (if (isResting) 20L else 16L) else (if (isResting) 42L else 16L)
             main.removeCallbacks(liveTick)
             main.postDelayed(liveTick, tickMs)
         }
@@ -340,7 +346,7 @@ internal class CompanionPetDrawable(
         cache.clear()
     }
     companion object {
-        const val MAX_ATLASES = 8
+        const val MAX_ATLASES = 10
         const val MAX_BITMAP_BYTES = 48L * 1024 * 1024
     }
 }
