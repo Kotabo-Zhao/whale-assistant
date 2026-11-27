@@ -4,9 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { beforeEachAppTest, bridge, shizuku } from './__tests__/appTestHarness'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
-vi.mock('./components/TerminalPanel', () => ({
-  TerminalPanel: () => <div data-testid="terminal-panel" />,
-}))
 
 import { App } from './App'
 
@@ -103,7 +100,6 @@ describe('设置首页：分组与分类筛选', () => {
 
     // 版本面板已经不在「运行与后台」页里：这一屏自己是标题，页内有版本列表与两个操作。
     expect(await screen.findByRole('heading', { name: '版本管理' })).toBeVisible()
-    expect(await screen.findByRole('heading', { name: '运行时版本管理' })).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: '返回设置' }))
     expect(await screen.findByRole('heading', { name: '设置' })).toBeVisible()

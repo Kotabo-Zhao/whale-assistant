@@ -3,8 +3,6 @@ import { harnessVersionRequest, validateHarnessProgress, validateHarnessReleases
 import { validateInstalledApplications } from './installedApplications'
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { PluginListenerHandle } from '@capacitor/core'
-import { validateSyncedTheme } from '../adaptiveAccent'
-import { validateBackgroundRef, validateBackgroundState } from '../backgroundRef'
 import { createBrowserBridge } from './browser'
 import { validateSelfCheckOperation, type SelfCheckOperation } from '../runtimeSelfCheck'
 import type {
@@ -137,14 +135,6 @@ interface NativeRuntimePlugin {
   /** 同步主题模式给原生，由原生把它落到状态栏（登记册 5.4）。 */
   setAppTheme(options: { mode: AppThemeMode; style?: 'simple' | 'cute' | 'usagi' }): Promise<void>
   /** 同步主题给 DSH 页面；原生侧只接受固定字段。 */
-  applyHarnessTheme(options: { theme: unknown }): Promise<void>
-  clearHarnessTheme(): Promise<void>
-  pickHarnessBackground(): Promise<{ uri: string, mime: string, kind: string }>
-  clearHarnessBackground(): Promise<void>
-  /** 落盘「连背景一起同步」开关；只接受布尔。 */
-  setHarnessSyncBackground(options: { enabled: boolean }): Promise<unknown>
-  /** 读回同步状态：开关、上次同步时间、已选背景（没有时是 null）。 */
-  harnessThemeState(): Promise<unknown>
   getState(): Promise<RuntimeState>
   getSettings(): Promise<RuntimeSettings>
   saveSettings(settings: RuntimeSettingsUpdate): Promise<RuntimeSettings>
@@ -376,18 +366,6 @@ function createNativeBridge(): RuntimeBridge {
       return NativeRuntime.setAppTheme(style ? { mode, style } : { mode })
     },
     setHarnessViewport: viewport => NativeRuntime.setHarnessViewport(viewport),
-    applyHarnessTheme: theme => {
-      // 与原生侧同一套校验：非法配置在过桥之前就拒掉，原生不负责猜测。
-      const checked = validateSyncedTheme(theme)
-      return NativeRuntime.applyHarnessTheme({ theme: checked })
-    },
-    clearHarnessTheme: () => NativeRuntime.clearHarnessTheme(),
-    pickHarnessBackground: async () => validateBackgroundRef(await NativeRuntime.pickHarnessBackground()),
-    clearHarnessBackground: () => NativeRuntime.clearHarnessBackground(),
-    setHarnessSyncBackground: enabled => typeof enabled === 'boolean'
-      ? NativeRuntime.setHarnessSyncBackground({ enabled }).then(() => undefined)
-      : Promise.reject(new Error('背景同步开关只能是布尔值')),
-    harnessThemeState: async () => validateBackgroundState(await NativeRuntime.harnessThemeState()),
     getState: () => NativeRuntime.getState().then(validateRuntimeState),
     getSettings: () => NativeRuntime.getSettings().then(validateStoredSettings),
     saveSettings: settings => NativeRuntime.saveSettings(validateSettingsUpdate(settings)).then(validateSettings),

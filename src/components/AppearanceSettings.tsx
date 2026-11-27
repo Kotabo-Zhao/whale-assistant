@@ -5,10 +5,8 @@ import whaleChanAvatar from '../assets/whale-chan-avatar.png'
 import usagiAvatar from '../assets/usagi-avatar.png'
 import { Moon, Palette, Sun, SunMoon, RotateCcw } from 'lucide-react'
 import { t } from '../i18n'
-import { applyTextColor, applyTheme, clearCustomAccentColor, clearCustomTextColor, effectiveAccentColor, readCustomAccentColor, readCustomTextColor, readThemeMode, saveAccentMode, saveAccentSource, saveCustomAccentColor, saveCustomTextColor, saveThemeMode, useAccentMode, useAccentSource, useResolvedTheme, useThemeMode } from '../theme'
-import { clearAdaptiveAccent, deriveSurface, extractAccentFromBackground, readAccentSync, readAdaptiveAccent, saveAccentSync, saveAdaptiveAccent, clearAccentSync, type AccentSource, type AdaptiveAccent, type SyncedTheme } from '../adaptiveAccent'
-import { runtimeBridge } from '../platform/native'
-import { clearBackgroundState, readBackgroundState, saveBackgroundState, type HarnessBackgroundRef, type HarnessBackgroundState } from '../backgroundRef'
+import { applyTextColor, applyTheme, clearCustomAccentColor, clearCustomTextColor, readCustomAccentColor, readCustomTextColor, readThemeMode, saveAccentMode, saveAccentSource, saveCustomAccentColor, saveCustomTextColor, saveThemeMode, useAccentMode, useAccentSource, useResolvedTheme, useThemeMode } from '../theme'
+import { clearAdaptiveAccent, extractAccentFromBackground, readAdaptiveAccent, saveAdaptiveAccent, type AccentSource, type AdaptiveAccent } from '../adaptiveAccent'
 import type { AccentMode, ThemeMode } from '../theme'
 import { applyCard, clearBackground, DEFAULT_CARD, hasBackgroundFlag, readBackground, readCard, saveBackground, saveCard, type CardAppearance } from '../appearance'
 
@@ -33,7 +31,7 @@ const ACCENT_OPTIONS: readonly { value: AccentMode; label: string; color: string
 ]
 
 /** 一个页面里只显示其中一段：字号与配色、背景、或同步到 DSH。默认全显示（组件单独测试时用）。 */
-export type AppearanceScope = 'all' | 'appearance' | 'background' | 'dsh'
+export type AppearanceScope = 'all' | 'appearance' | 'background'
 
 /**
  * 外观设置：自包含区块，接进设置页的方式与 LanguageSettings 一致。
@@ -47,8 +45,6 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
   const [style, setStyle] = useState(readInterfaceStyle)
   const showAppearance = scope === 'all' || scope === 'appearance'
   const showBackground = scope === 'all' || scope === 'background'
-  // DSH 的主题与背景在同一页：两者都改的是另一个页面，分开只会让人来回找。
-  const showDsh = scope === 'all' || scope === 'dsh'
   const mode = useThemeMode()
   const accent = useAccentMode()
   const resolved = useResolvedTheme()
@@ -77,52 +73,6 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
   const [adaptive, setAdaptive] = useState<AdaptiveAccent | null>(() => readAdaptiveAccent())
   const [extracting, setExtracting] = useState(false)
   const [accentError, setAccentError] = useState('')
-  const [syncRecord, setSyncRecord] = useState(() => readAccentSync())
-  const [syncing, setSyncing] = useState(false)
-  const [syncMessage, setSyncMessage] = useState('')
-  /**
-   * DSH 页面的三档透明度，与外壳的「卡片不透明度」分开：
-   * 遮住背景视频的面板要够实才读得清正文，侧边栏与右侧面板则可以更透一些让视频透出来。
-   * 左右两块面板分开调：左栏是导航，右栏承载正文，同一条滑杆调不好两边。
-   * 初值取上次同步的载荷（重开设置页仍是上次的值），没同步过才回落到默认值。
-   */
-  const [overlayOpacity, setOverlayOpacity] = useState(() => syncRecord?.theme.surfaceOpacity ?? card.opacity)
-  const [sidebarOpacity, setSidebarOpacity] = useState(() => syncRecord?.theme.sidebarOpacity ?? 100)
-  const [rightPanelOpacity, setRightPanelOpacity] = useState(() => syncRecord?.theme.rightPanelOpacity ?? 40)
-  // 背景默认不跟着颜色走：它体积大、还要解码，得用户自己勾。
-  // 初值取本地镜像，重启后首屏就是上次的选择；原生回来后立刻对齐（见下面的 effect）。
-  const [withBackground, setWithBackground] = useState(() => {
-    const saved = readBackgroundState()
-    // 开关为真但没有文件不算「开着」：勾选框不能停在一个画不出背景的状态上。
-    return saved.syncBackground && saved.background !== null
-  })
-  // 只记地址（content:// + 持久读授权）：视频多大都不复制、不过桥。
-  const [backgroundRef, setBackgroundRef] = useState<HarnessBackgroundRef | null>(() => readBackgroundState().background)
-
-  // 原生是唯一真相：开关与已选背景都从它回来；浏览器预览没有原生可问，退回本地镜像。
-  useEffect(() => {
-    let active = true
-    const local = readBackgroundState()
-    const restore = (state: HarnessBackgroundState) => {
-      if (!active) return
-      setWithBackground(state.syncBackground && state.background !== null)
-      setBackgroundRef(state.background)
-    }
-    Promise.resolve(runtimeBridge.harnessThemeState())
-      .then((state: HarnessBackgroundState) => {
-        const normalized = { ...state, syncBackground: state.syncBackground && state.background !== null }
-        // 回读结果顺手镜像一份：下次首屏不必等过桥。
-        saveBackgroundState(normalized)
-        restore(normalized)
-      })
-      .catch(() => restore(local))
-    return () => { active = false }
-  }, [])
-
-  /** 记住当前背景选择；同步时间沿用上次的，没有就是 0。 */
-  const persistBackground = (enabled: boolean, background: HarnessBackgroundRef | null) =>
-    saveBackgroundState({ syncBackground: enabled && background !== null, syncedAt: syncRecord?.syncedAt ?? 0, background })
-
   const changeSource = (value: AccentSource) => {
     if (saveAccentSource(value)) { setFailed(null); setAccentError('') } else setFailed('accent')
   }
@@ -141,100 +91,6 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
     } catch { setAccentError('读取背景失败，请重试') } finally { setExtracting(false) }
   }
 
-  /** 选背景文件：只把 SAF 地址交给原生，视频不复制、不过桥。 */
-  const pickBackground = async () => {
-    setAccentError('')
-    try {
-      const picked = await runtimeBridge.pickHarnessBackground()
-      setBackgroundRef(picked)
-      persistBackground(withBackground, picked)
-      setSyncMessage(t('已选择背景：{0}', picked.mime))
-      // 开关已经打开时换文件，页面应该立刻换成新背景，不要求用户再点一次同步。
-      if (withBackground && syncRecord) await sync(true)
-    } catch (error) {
-      setAccentError(error instanceof Error ? error.message : t('选择背景失败'))
-    }
-  }
-
-  /**
-   * 「连背景一起同步」：先落盘，再（同步过的话）重放。
-   *
-   * 只改 useState 是不够的——刷新页面或从后台回来，勾选框会自己弹回未勾，
-   * 而原生那边还认为背景在显示。两条路必须一起改。
-   */
-  const toggleBackground = async (enabled: boolean) => {
-    const effective = enabled && backgroundRef !== null
-    setWithBackground(enabled)
-    setAccentError('')
-    try {
-      await runtimeBridge.setHarnessSyncBackground(effective)
-      persistBackground(effective, backgroundRef)
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : t('无法保存背景同步开关'))
-      return
-    }
-    // 没有任何文件时如实说明只同步了颜色，不把「开着但没内容」当成成功。
-    if (enabled && !effective) {
-      setSyncMessage(t('还没有选择背景文件，已只同步颜色'))
-      return
-    }
-    // 已经同步过：页面立刻按新档位重放，不用等下一次加载。
-    if (syncRecord) await sync(effective)
-  }
-
-  /**
-   * 同步只传固定字段：明暗模式 + 三个颜色 + 三档透明度与控件透明度，外加「要不要带背景」。
-   *
-   * 背景开关作为参数传入而不是读 state：勾选后立刻调用时，state 还没提交到这一帧，
-   * 读到的会是旧值，页面就会少一次重放。
-   */
-  const sync = async (includeBackground = withBackground) => {
-    setSyncing(true)
-    setSyncMessage('')
-    try {
-      const preset = ACCENT_OPTIONS.find(option => option.value === accent)?.color ?? ACCENT_OPTIONS[0].color
-      const accentColor = effectiveAccentColor() || preset
-      // 面板色按「当前明暗模式」现推，不复用自适应结果：那是提取那一刻的明暗算出来的，
-      // 用户后来切到浅色再同步，就会把深色面板配浅色文字一起带过去（黑屏就是这么来的）。
-      const surface = deriveSurface(accentColor, resolved)
-      const theme: SyncedTheme = { mode: readThemeMode(), accent: accentColor, background: surface.background, surface: surface.surface, surfaceOpacity: overlayOpacity, controlOpacity: card.controlOpacity, sidebarOpacity, rightPanelOpacity, syncBackground: includeBackground && backgroundRef !== null }
-      await runtimeBridge.applyHarnessTheme(theme)
-      let note = '已让 DSH 使用当前主题'
-      if (theme.syncBackground) {
-        if (backgroundRef) {
-          // 原生只记地址；页面播放时由 /__shell/background 流式取，不经过这里。
-          note = backgroundRef.kind === 'video' ? t('已让 DSH 使用当前主题与背景视频') : t('已让 DSH 使用当前主题与背景')
-        } else {
-          // 没选过背景就只同步颜色，并把原因说清楚，不静默丢内容。
-          note = t('还没有选择背景文件，已只同步颜色')
-        }
-      }
-      setSyncRecord(saveAccentSync(theme))
-      // 本地镜像跟着主题一起更新：下次首屏直接就是这次同步后的状态。
-      persistBackground(theme.syncBackground, backgroundRef)
-      setSyncMessage(note)
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : '同步失败，请重试')
-    } finally { setSyncing(false) }
-  }
-
-  const unsync = async () => {
-    setSyncing(true)
-    setSyncMessage('')
-    try {
-      await runtimeBridge.clearHarnessTheme()
-      await runtimeBridge.clearHarnessBackground()
-      clearAccentSync()
-      setSyncRecord(null)
-      // 主题都清了，开关与已选文件也不该留在这块界面上：否则下次打开会显示上一条遗留。
-      setWithBackground(false)
-      setBackgroundRef(null)
-      clearBackgroundState()
-      setSyncMessage('DSH 已回到默认主题')
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : '恢复失败，请重试')
-    } finally { setSyncing(false) }
-  }
   const updateCard = (next: CardAppearance) => {
     try { saveCard(next); setCard(next); setBackgroundError('') }
     catch { setBackgroundError(t('无法保存外观，请检查本地存储空间')) }
@@ -261,7 +117,7 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
     <section
       className="settings-section appearance-settings"
       aria-labelledby={showAppearance ? 'appearance-title' : undefined}
-      aria-label={showAppearance ? undefined : t(scope === 'dsh' ? 'DSH 主题与同步' : '背景与卡片')}
+      aria-label={showAppearance ? undefined : t('背景与卡片')}
     >
       {showAppearance && (
         <>
@@ -414,78 +270,6 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
             {accentError && <p role="alert">{t(accentError)}</p>}
           </div>
         </>
-      )}
-      {showDsh && (
-          <div className="appearance-customization appearance-sync">
-            <div className="appearance-accent-heading"><strong>{t('同步背景')}</strong><span>{t('背景文件只记地址；勾选后才随主题一起画到 DSH 页面。')}</span></div>
-            <div className="appearance-sync-background">
-              <label><input type="checkbox" checked={withBackground} onChange={event => void toggleBackground(event.target.checked)} /><span>{t('连背景一起同步')}</span></label>
-              <button type="button" className="compact-button" onClick={() => void pickBackground()}>{backgroundRef ? t('重新选择背景文件') : t('选择背景文件')}</button>
-              <small>{backgroundRef ? t('已选：{0}', backgroundRef.mime) : t('只记录文件地址，视频不复制、不设大小上限')}</small>
-              <small>{t('开关与所选文件会记住，重启后仍按上次的选择显示。')}</small>
-            </div>
-          </div>
-      )}
-      {showDsh && (
-          <div className="appearance-customization appearance-sync">
-            <div className="appearance-accent-heading"><strong>{t('同步到 DSH 页面')}</strong><span>{t('外壳与 DSH 是两个独立页面，主题不会自动共享。')}</span></div>
-            {/* 这一项与外壳的「按钮与输入框不透明度」是同一个值：改完点同步即可带去 DSH。 */}
-            <label className="range-field">
-              <span><strong>{t('按钮与输入框不透明度')}</strong><small>{card.controlOpacity}%</small></span>
-              <input
-                type="range"
-                min="40"
-                max="100"
-                step="1"
-                value={card.controlOpacity}
-                onChange={event => updateCard({ ...card, controlOpacity: Number(event.target.value) })}
-              />
-            </label>
-            {/*
-              * 遮住背景的面板、左侧栏与右侧面板分开调：正文面板要够实才读得清，
-              * 左右两栏可以更透，且各调各的——左栏是导航，右栏承载正文。
-              */}
-            <div className="appearance-range-grid">
-              <label className="range-field">
-                <span><strong>{t('遮盖背景的界面不透明度')}</strong><small>{overlayOpacity}%</small></span>
-                <input
-                  type="range"
-                  min="30"
-                  max="100"
-                  step="1"
-                  value={overlayOpacity}
-                  onChange={event => setOverlayOpacity(Number(event.target.value))}
-                />
-              </label>
-              <label className="range-field">
-                <span><strong>{t('侧边栏不透明度')}</strong><small>{sidebarOpacity}%</small></span>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={sidebarOpacity}
-                  onChange={event => setSidebarOpacity(Number(event.target.value))}
-                />
-              </label>
-              <label className="range-field">
-                <span><strong>{t('右侧面板不透明度')}</strong><small>{rightPanelOpacity}%</small></span>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={rightPanelOpacity}
-                  onChange={event => setRightPanelOpacity(Number(event.target.value))}
-                />
-              </label>
-            </div>
-            <small className="appearance-hint">{t('只有勾选「连背景一起同步」时，这三项才会在 DSH 页面里透出背景。')}</small>
-            <button type="button" className="compact-button" onClick={() => void sync()} disabled={syncing}>{t('让 DSH 使用当前主题')}</button>
-            <button type="button" className="compact-button" onClick={() => void unsync()} disabled={syncing}>{t('恢复 DSH 默认主题')}</button>
-            <p>{syncRecord ? `${t('上次同步')} ${new Date(syncRecord.syncedAt).toLocaleString()}` : t('还没有同步过')}</p>
-            {syncMessage && <p role="status">{t(syncMessage)}</p>}
-          </div>
       )}
     </section>
   )

@@ -26,7 +26,6 @@ import { lazy, Suspense, type ReactNode, useCallback, useEffect, useRef, useStat
 import { WhaleAutonomyCard } from './components/WhaleAutonomyCard'
 
 const WhaleChatScreen = lazy(() => import('./screens/WhaleChatScreen').then(m => ({ default: m.WhaleChatScreen })))
-const TerminalScreen = lazy(() => import('./screens/TerminalScreen').then(m => ({ default: m.TerminalScreen })))
 const ToolsWorkspace = lazy(() => import('./components/ToolsWorkspace').then(m => ({ default: m.ToolsWorkspace })))
 const AssistantTasks = lazy(() => import('./components/AssistantTasks').then(m => ({ default: m.AssistantTasks })))
 const CompanionPersona = lazy(() => import('./components/CompanionPersona').then(m => ({ default: m.CompanionPersona })))
@@ -171,11 +170,11 @@ const DeviceCapabilityCard = lazy(() => import('./components/DeviceCapabilityCar
 const RootEngineCard = lazy(() => import('./components/RootEngineCard').then(module => ({ default: module.RootEngineCard })))
 const PluginSettings = lazy(() => import('./components/PluginSettings').then(module => ({ default: module.PluginSettings })))
 const FilesScreen = lazy(() => import('./screens/FilesScreen').then(module => ({ default: module.FilesScreen })))
-const RuntimeVersionsScreen = lazy(() => import('./screens/RuntimeVersionsScreen').then(module => ({ default: module.RuntimeVersionsScreen })))
+const AppUpdateSection = lazy(() => import('./screens/AppUpdateSection').then(module => ({ default: module.AppUpdateSection })))
 
 /** 设置二级页：把原先的单页设置按功能分类，避免所有选项挤在一屏里。 */
 type SettingsPage = 'models' | 'runtime' | 'terminal' | 'device-shell' | 'automation' | 'diagnostics' | 'automation-accessibility' | 'automation-subscreen' | 'automation-params'
-  | 'terminal-typography' | 'terminal-background' | 'terminal-dsh-background'
+  | 'terminal-typography' | 'terminal-background'
   | 'diagnostics-log' | 'diagnostics-capability' | 'diagnostics-feedback'
 
 const SETTINGS_PAGE_META: Record<SettingsPage, { title: string; hint: string; view: AppView; parent?: SettingsPage }> = {
@@ -187,7 +186,6 @@ const SETTINGS_PAGE_META: Record<SettingsPage, { title: string; hint: string; vi
   'terminal-background': { title: '背景', hint: '背景图片或视频、卡片外观', view: 'settings-terminal-background', parent: 'terminal' },
   // DSH 是另一个页面：它的主题与背景单独一页，不和外壳自己的背景混在一起。
   // DSH 是另一个页面：它的主题、按钮透明度和背景都收在同一页，不和外壳自己的外观混在一起。
-  'terminal-dsh-background': { title: 'DSH 主题', hint: '主题同步、按钮与输入框透明度、背景文件', view: 'settings-terminal-dsh-background', parent: 'terminal' },
   'device-shell': { title: '设备 Shell 设置', hint: 'Shizuku 授权与设备命令', view: 'settings-device-shell' },
   automation: { title: '自动化设置', hint: '无障碍、副屏与自动参数', view: 'settings-automation' },
   // 自动化设置下的三个三级页：都是同一件事的三条腿，返回键统一回「自动化设置」。
@@ -201,7 +199,7 @@ const SETTINGS_PAGE_META: Record<SettingsPage, { title: string; hint: string; vi
   'diagnostics-feedback': { title: '反馈', hint: '交流群与 GitHub 反馈入口', view: 'settings-diagnostics-feedback', parent: 'diagnostics' },
 }
 
-const SETTINGS_PAGES: SettingsPage[] = ['models', 'runtime', 'terminal', 'device-shell', 'automation', 'automation-accessibility', 'automation-subscreen', 'automation-params', 'diagnostics', 'diagnostics-log', 'diagnostics-capability', 'diagnostics-feedback', 'terminal-typography', 'terminal-background', 'terminal-dsh-background']
+const SETTINGS_PAGES: SettingsPage[] = ['models', 'runtime', 'terminal', 'device-shell', 'automation', 'automation-accessibility', 'automation-subscreen', 'automation-params', 'diagnostics', 'diagnostics-log', 'diagnostics-capability', 'diagnostics-feedback', 'terminal-typography', 'terminal-background']
 
 function settingsPageOf(view: AppView): SettingsPage | null {
   const entry = SETTINGS_PAGES.find(page => SETTINGS_PAGE_META[page].view === view)
@@ -425,7 +423,6 @@ const APP_VIEWS: AppView[] = [
   'settings-device-shell',
   'settings-diagnostics',
   'settings-automation',
-  'terminal',
   'environment',
   'plugins',
   'tools',
@@ -867,13 +864,12 @@ interface ConversationScreenProps {
   onLaunch: (sessionId?: string) => void
   /** 启动卡片上那一格按需求从「应用设置」换成「停止」：只管停 Harness 服务。 */
   onStop: () => void
-  onOpenTerminal: () => void
   onOpenTasks: () => void
   onNavigate: (view: AppView) => void
   onUpdate: () => void
 }
 
-function ConversationScreen({ mode = 'gate', busy, keepAlive, runtime, onInstall, onLaunch, onStop, onOpenTerminal, onOpenTasks, onNavigate, onUpdate }: ConversationScreenProps) {
+function ConversationScreen({ mode = 'gate', busy, keepAlive, runtime, onInstall, onLaunch, onStop, onOpenTasks, onNavigate, onUpdate }: ConversationScreenProps) {
   const installed = runtimeInstalled(runtime)
   const transitioning = runtimeTransitioning(runtime)
   const updateRequired = installed && runtime.updateAvailable && !transitioning
@@ -1011,10 +1007,6 @@ function ConversationScreen({ mode = 'gate', busy, keepAlive, runtime, onInstall
           {installed && !transitioning && !updateRequired && busy !== 'launch' && (
             <button className="button button-primary" type="button" onClick={() => onLaunch()} disabled={busy !== null}>
               <Play size={18} fill="currentColor" />{t("打开对话")}</button>
-          )}
-          {runtime.phase === 'error' && installed && !updateRequired && (
-            <button className="button button-secondary" type="button" onClick={onOpenTerminal} disabled={busy !== null}>
-              <SquareTerminal size={18} />{t("打开终端排查")}</button>
           )}
           {/* 这一格是「停止 Harness 服务」：应用设置入口在顶部图标与底部导航里都有，
               不必占着启动卡片的重心；没在跑的时候不摆一个按不动的停止键。 */}
@@ -1598,7 +1590,6 @@ interface SettingsScreenProps {
   /** 跳到同一页里拆出来的三级页（自动化设置里的无障碍 / 副屏 / 自动参数）。 */
   onOpenSubpage: (page: SettingsPage) => void
   /** 打开「设备 Shell」整屏终端（原先是设置首页的一个独立入口，现在挂在设备 Shell 设置页里）。 */
-  onOpenShellView: () => void
   onOpenAccessibilitySettings: () => void
   /**
    * 保存白名单。已设置验证密码时**必须**带上 `password`：
@@ -1633,7 +1624,7 @@ interface SettingsScreenProps {
   onShareDiagnostic: () => void
 }
 
-function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loadDiagnosticLog, loadHarnessLog, lastStop, overlayBall, overlayBallReadFailed, onDraftChange, page, runSelfCheck, runtime, settingsReadStatus, shizuku, onAuthorize, onBack, onClearAccessibilityPassword, onClearDiagnostic, onConnect, onDiagnosticSettings, onLaunch, onLaunchConfirmed, onOpenAccessibilitySettings, onOpenExternalHarness, externalBrowsers, onSelectExternalBrowser, onOpenOverlaySettings, onOpenShizuku, onOpenDeviceShell, onOpenSubpage, onOpenShellView, onReloadSettings, onRequestNotificationPermission, onResetAccessibilityPassword, onSaveAccessibilityPackages, onSaveAccessibilityPassword, onSaveCredentials, settledCredentials, onSetAccessibilityRuntime, onSetAutomationRuleEnabled, onShareDiagnostic }: SettingsScreenProps) {
+function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loadDiagnosticLog, loadHarnessLog, lastStop, overlayBall, overlayBallReadFailed, onDraftChange, page, runSelfCheck, runtime, settingsReadStatus, shizuku, onAuthorize, onBack, onClearAccessibilityPassword, onClearDiagnostic, onConnect, onDiagnosticSettings, onLaunch, onLaunchConfirmed, onOpenAccessibilitySettings, onOpenExternalHarness, externalBrowsers, onSelectExternalBrowser, onOpenOverlaySettings, onOpenShizuku, onOpenDeviceShell, onOpenSubpage, onReloadSettings, onRequestNotificationPermission, onResetAccessibilityPassword, onSaveAccessibilityPackages, onSaveAccessibilityPassword, onSaveCredentials, settledCredentials, onSetAccessibilityRuntime, onSetAutomationRuleEnabled, onShareDiagnostic }: SettingsScreenProps) {
   const [accessibilityDraft, setAccessibilityDraft] = useState(accessibility.allowedPackages.join('\n'))
   const [whitelistEnabledDraft, setWhitelistEnabledDraft] = useState(accessibility.whitelistEnabled ?? true)
   const [testingProvider, setTestingProvider] = useState<string | null>(null)
@@ -2621,13 +2612,11 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         {page === 'terminal' && <details className="appearance-details"><summary>{t("背景与对话外观")}</summary>
           <div className="settings-subpage-links">
             <SettingsPageRow icon={<Image size={20} />} page="terminal-background" onOpen={onOpenSubpage} />
-            <SettingsPageRow icon={<RefreshCw size={20} />} page="terminal-dsh-background" onOpen={onOpenSubpage} />
           </div>
         </details>}
         </>
         )}
         {page === 'terminal-background' && <AppearanceSettings scope="background" />}
-        {page === 'terminal-dsh-background' && <AppearanceSettings scope="dsh" />}
 
         {page === 'runtime' && <section className="settings-section" aria-labelledby="pet-start-settings">
           <div className="section-title section-title-plain"><div><h2 id="pet-start-settings">{t('设置桌宠')}</h2><p>{t('开启悬浮球并保存后，即可在桌面打开鲸鱼娘。')}</p></div></div>
@@ -2762,8 +2751,6 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
             <div><h2 id="device-shell-entry">{t("设备 Shell")}</h2><p>{t("在宿主机直接执行 Android Shell 命令（需 Shizuku 授权）")}</p></div>
           </div>
           <div className="settings-inline-actions">
-            <button className="button button-primary" type="button" onClick={onOpenShellView} disabled={busy !== null}>
-              <ExternalLink size={18} />{t("打开设备 Shell")}</button>
           </div>
           <p className="settings-note">
             {t("命令直接跑在设备上，独立于 Ubuntu 终端；未授权时仍可进入查看状态。")}
@@ -3642,7 +3629,6 @@ export function App() {
     }
   }, [])
 
-  const terminalError = useCallback((message: string) => notify(message, 'error'), [notify])
 
   /**
    * 写入设置草稿。[dirty] 为假表示这次只改「正在看什么」（例如点击供应商卡片），
@@ -4643,10 +4629,6 @@ export function App() {
   }, [pendingInstall, performRuntimeInstall])
 
   /** 版本管理页读的三块数据：都只是读，失败由各自的区块自己显示。 */
-  const loadSessionSnapshots = useCallback(() => runtimeBridge.getRuntimeSessionSnapshotState(), [])
-  const createSessionSnapshot = useCallback(() => runtimeBridge.createRuntimeSessionSnapshot(), [])
-  const restoreSessionSnapshot = useCallback((id: string) => runtimeBridge.restoreRuntimeSessionSnapshot(id), [])
-  const deleteSessionSnapshot = useCallback((id: string) => runtimeBridge.deleteRuntimeSessionSnapshot(id), [])
   const loadAppUpdate = useCallback((forceRefresh = false) => runtimeBridge.getAppUpdateState(forceRefresh), [])
   const setAppUpdateChannel = useCallback((channel: AppUpdateChannel) => runtimeBridge.setAppUpdateChannel(channel), [])
   const appUpdateReminder = useAppUpdateReminder(!booting && !onboardingOpen, loadAppUpdate)
@@ -4942,40 +4924,6 @@ export function App() {
    * 与自检不同，这里不启动访客进程，所以不需要「按需触发」那条纪律；
    * 引用保持稳定，版本区块不会因为父组件重渲染而反复拉取。
    */
-  const loadRuntimeVersions = useCallback(() => runtimeBridge.getRuntimeVersions(), [])
-
-  /** 切换运行时版本（支持 previous、bundled 或版本库条目 ID）。 */
-  const switchRuntimeVersion = useCallback(
-    (target: string) => runtimeBridge.switchRuntimeVersion(target),
-    [],
-  )
-
-  /** 删除上一版本或版本库中的历史版本。 */
-  const deleteRuntimeVersion = useCallback(
-    (target: string) => runtimeBridge.deleteRuntimeVersion(target),
-    [],
-  )
-
-  /** 锁定/解锁版本库里的归档；目标必须是条目 ID（槽位不是归档），校验在桥接层完成。 */
-  const setRuntimeVersionPinned = useCallback(
-    (target: string, pinned: boolean) => runtimeBridge.setRuntimeVersionPinned(target, pinned),
-    [],
-  )
-
-  /** 下载远端运行时发布到本地版本库（不立即激活）。 */
-  const downloadRuntimeRelease = useCallback(
-    (manifestUrl: string, manifestSha256: string) => runtimeBridge.downloadRuntimeRelease(manifestUrl, manifestSha256),
-    [],
-  )
-
-  /** 查询可用版本发布列表。 */
-  const listRuntimeReleases = useCallback(() => runtimeBridge.listRuntimeReleases(), [])
-
-  /** 切换成功后重新读运行时状态：已安装版本与阶段都变了，不能沿用旧值。 */
-  const refreshRuntimeState = useCallback(async () => {
-    runtimeStateRevision.current += 1
-    setRuntime(await runtimeBridge.getState())
-  }, [])
 
   const stopRuntime = useCallback(() => {
     // 先记下「这次停止由本应用发起」：阶段变化可能早于桥接返回，晚记会把显式停止误报成自行停止。
@@ -5500,9 +5448,9 @@ export function App() {
   const screen = (() => {
     switch (activeView) {
       case 'harness':
-        return <ConversationScreen mode={canEnterConversation(runtime, settings) ? 'session' : 'gate'} busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; setActiveView('harness') }} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
+        return <ConversationScreen mode={canEnterConversation(runtime, settings) ? 'session' : 'gate'} busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; setActiveView('harness') }} onStop={stopRuntime} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
       case 'conversation':
-        return <ConversationScreen mode="gate" busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; if (canEnterConversation(runtime, settings) && !keepAlive.reconnectRequired) setActiveView('harness'); else launchHarness() }} onStop={stopRuntime} onOpenTerminal={() => setActiveView('terminal')} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
+        return <ConversationScreen mode="gate" busy={busy} keepAlive={keepAlive} runtime={runtime} onInstall={installRuntime} onLaunch={() => { conversationEntrySuppressed.current = false; if (canEnterConversation(runtime, settings) && !keepAlive.reconnectRequired) setActiveView('harness'); else launchHarness() }} onStop={stopRuntime} onOpenTasks={() => setActiveView('assistant-tasks')} onNavigate={setActiveView} onUpdate={requestRuntimeUpdate} />
       case 'whale-chat':
         return null
       case 'sessions':
@@ -5513,8 +5461,6 @@ export function App() {
         return <Suspense fallback={null}><AssistantTasks onOpenSession={() => setActiveView('whale-chat')} /></Suspense>
       case 'assistant-persona':
         return <Suspense fallback={null}><CompanionPersona onBack={() => backToView('settings')} /></Suspense>
-      case 'terminal':
-        return <Suspense fallback={null}><TerminalScreen bridge={runtimeBridge} fontSize={settings?.terminalFontSize ?? 14} onAuthorize={requestShizukuPermission} onBack={() => backToView('settings')} onConnect={connectShizuku} onError={terminalError} onOpenEnvironment={() => setActiveView('environment')} onOpenShizuku={openShizuku} runtime={runtime} shizuku={shizuku} /></Suspense>
       case 'tools':
         return <Suspense fallback={null}><ToolsWorkspace plugins={() => setActiveView('plugins')} /></Suspense>
       case 'plugins': {
@@ -5526,32 +5472,32 @@ export function App() {
         return <EnvironmentScreen busy={busy} bundledSource={settings === null || settings.manifestUrl.trim() === ''} runtime={runtime} onBack={() => backToView('settings')} onInstall={installRuntime} onReset={() => setResetOpen(true)} onStart={() => launchHarness()} onStop={stopRuntime} onUpdate={requestRuntimeUpdate} />
       case 'versions':
         return (
-        <RuntimeVersionsScreen
-          runtime={runtime}
-          loadVersions={loadRuntimeVersions}
-          switchVersion={switchRuntimeVersion}
-          deleteVersion={deleteRuntimeVersion}
-          setPinned={setRuntimeVersionPinned}
-          downloadRelease={downloadRuntimeRelease}
-          listReleases={listRuntimeReleases}
-          refreshRuntime={refreshRuntimeState}
-          notify={notify}
-          onBack={() => backToView('settings')}
-          loadSnapshots={loadSessionSnapshots}
-          createSnapshot={createSessionSnapshot}
-          restoreSnapshot={restoreSessionSnapshot}
-          deleteSnapshot={deleteSessionSnapshot}
-          loadUpdate={loadAppUpdate}
-          setUpdateChannel={setAppUpdateChannel}
-          downloadUpdate={downloadAppUpdate}
-          installUpdate={installAppUpdate}
-          subscribeUpdateProgress={runtimeBridge.addAppUpdateProgressListener}
-          openInstallSettings={openAppUpdateInstallSettings}
-          reminderEnabled={appUpdateReminder.enabled}
-          onReminderEnabledChange={appUpdateReminder.setEnabled}
-          reminderStorageAvailable={appUpdateReminder.storageAvailable}
-        />
-      )
+          <div className="screen versions-screen">
+            <div className="screen-heading">
+              <div>
+                <h1>{t('版本管理')}</h1>
+                <p className="screen-subtitle">{t('应用版本更新与提醒设置')}</p>
+              </div>
+              <div className="heading-actions">
+                <button className="icon-button" type="button" title={t('返回设置')} aria-label={t('返回设置')} onClick={() => backToView('settings')}>
+                  <ArrowLeft size={19} />
+                </button>
+              </div>
+            </div>
+            <AppUpdateSection
+              loadUpdate={loadAppUpdate}
+              setUpdateChannel={setAppUpdateChannel}
+              downloadUpdate={downloadAppUpdate}
+              installUpdate={installAppUpdate}
+              subscribeProgress={runtimeBridge.addAppUpdateProgressListener}
+              openInstallSettings={openAppUpdateInstallSettings}
+              reminderEnabled={appUpdateReminder.enabled}
+              onReminderEnabledChange={appUpdateReminder.setEnabled}
+              reminderStorageAvailable={appUpdateReminder.storageAvailable}
+              notify={notify}
+            />
+          </div>
+        )
       case 'files':
         return <FilesScreen busy={busy} filesRoot={filesRoot} lastMailboxExport={lastMailboxExport} lastMailboxImport={lastMailboxImport} mailbox={mailbox} mailboxDirectory={mailboxDirectory} mailboxDirectoryReadFailed={mailboxDirectoryReadFailed} mailboxReadFailed={mailboxReadFailed} storageAccess={storageAccess} storageDirectory={storageDirectory} storageDirectoryReadFailed={storageDirectoryReadFailed} storageDirs={storageDirs} storageDirsReadFailed={storageDirsReadFailed} onAddStorageDirectory={addStorageDirectory} onBack={() => backToView('settings')} onCreateFilesFolder={createFilesFolder} onExternalFileAction={externalFileAction} onExportMailbox={exportMailbox} onImportMailbox={importMailbox} onOpenAllFilesAccess={openAllFilesAccessSettings} onOpenFilesDirectory={openFilesDirectory} onRefreshMailbox={refreshMailbox} onRemoveStorageDirectory={removeStorageDirectory} onSelectFilesRoot={selectFilesRoot} />
       case 'settings':
@@ -5562,7 +5508,7 @@ export function App() {
         /** 三级页的返回键回它的二级页；二级页照旧回设置首页。 */
         const parentPage = SETTINGS_PAGE_META[page].parent
         const backTarget: AppView = parentPage === undefined ? 'settings' : SETTINGS_PAGE_META[parentPage].view
-        return <SettingsScreen key={`${page}-${settingsReadStatus}`} accessibility={accessibility} busy={busy} diagnostic={diagnostic} draft={settingsDraft} keepAlive={keepAlive} lastStop={lastStop} loadDiagnosticLog={loadDiagnosticLog} loadHarnessLog={loadHarnessLog} overlayBall={overlayBall} overlayBallReadFailed={overlayBallReadFailed} onDraftChange={updateSettingsDraft} page={page} runSelfCheck={runSelfCheck} runtime={runtime} settingsReadStatus={settingsReadStatus} shizuku={shizuku} onAuthorize={requestShizukuPermission} onBack={() => backToView(backTarget)} onClearDiagnostic={clearDiagnostic} onConnect={connectShizuku} onDiagnosticSettings={saveDiagnosticSettings} onLaunch={() => launchHarness()} onLaunchConfirmed={() => launchHarnessConfirmed()} onOpenAccessibilitySettings={openAccessibilitySettings} onOpenExternalHarness={openExternalHarness} externalBrowsers={externalBrowsers} onSelectExternalBrowser={selectExternalBrowser} onOpenOverlaySettings={openOverlaySettings} onOpenShizuku={openShizuku} onOpenEnvironment={() => setActiveView('environment')} onOpenDeviceShell={() => setActiveView('settings-device-shell')} onOpenSubpage={target => setActiveView(SETTINGS_PAGE_META[target].view)} onOpenShellView={() => setActiveView('terminal')} onReloadSettings={() => openSettings(page)} onRequestNotificationPermission={requestNotificationPermission} onSaveCredentials={() => saveSettingsDraft()} settledCredentials={settledCredentials.current} onSaveAccessibilityPackages={saveAccessibilityPackages} onSaveAccessibilityPassword={saveAccessibilityPassword} onSetAccessibilityRuntime={setAccessibilityRuntime} onSetAutomationRuleEnabled={setAccessibilityRuleEnabled} onClearAccessibilityPassword={clearAccessibilityPassword} onResetAccessibilityPassword={resetAccessibilityPassword} onShareDiagnostic={shareDiagnostic} />
+        return <SettingsScreen key={`${page}-${settingsReadStatus}`} accessibility={accessibility} busy={busy} diagnostic={diagnostic} draft={settingsDraft} keepAlive={keepAlive} lastStop={lastStop} loadDiagnosticLog={loadDiagnosticLog} loadHarnessLog={loadHarnessLog} overlayBall={overlayBall} overlayBallReadFailed={overlayBallReadFailed} onDraftChange={updateSettingsDraft} page={page} runSelfCheck={runSelfCheck} runtime={runtime} settingsReadStatus={settingsReadStatus} shizuku={shizuku} onAuthorize={requestShizukuPermission} onBack={() => backToView(backTarget)} onClearDiagnostic={clearDiagnostic} onConnect={connectShizuku} onDiagnosticSettings={saveDiagnosticSettings} onLaunch={() => launchHarness()} onLaunchConfirmed={() => launchHarnessConfirmed()} onOpenAccessibilitySettings={openAccessibilitySettings} onOpenExternalHarness={openExternalHarness} externalBrowsers={externalBrowsers} onSelectExternalBrowser={selectExternalBrowser} onOpenOverlaySettings={openOverlaySettings} onOpenShizuku={openShizuku} onOpenEnvironment={() => setActiveView('environment')} onOpenDeviceShell={() => setActiveView('settings-device-shell')} onOpenSubpage={target => setActiveView(SETTINGS_PAGE_META[target].view)} onReloadSettings={() => openSettings(page)} onRequestNotificationPermission={requestNotificationPermission} onSaveCredentials={() => saveSettingsDraft()} settledCredentials={settledCredentials.current} onSaveAccessibilityPackages={saveAccessibilityPackages} onSaveAccessibilityPassword={saveAccessibilityPassword} onSetAccessibilityRuntime={setAccessibilityRuntime} onSetAutomationRuleEnabled={setAccessibilityRuleEnabled} onClearAccessibilityPassword={clearAccessibilityPassword} onResetAccessibilityPassword={resetAccessibilityPassword} onShareDiagnostic={shareDiagnostic} />
       }
     }
   })()

@@ -6,9 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { beforeEachAppTest, bridge } from './__tests__/appTestHarness'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
-vi.mock('./components/TerminalPanel', () => ({
-  TerminalPanel: () => <div data-testid="terminal-panel" />,
-}))
 
 import { App } from './App'
 import { applyCard, DEFAULT_CARD } from './appearance'

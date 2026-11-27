@@ -800,12 +800,6 @@ class CompanionActivity : AppCompatActivity() {
                 render()
             }
         }
-        if (databaseActive == true) button("将长期记忆回退到原格式") {
-            runMemoryIo("正在导出并核对长期记忆…", { memory.rollbackToLegacy() }) { result ->
-                android.widget.Toast.makeText(this, result.fold({ "已回退并核对 $it 条记忆。" }, { "回退失败；旧格式最多 100 条，数据库仍为当前数据。" }), android.widget.Toast.LENGTH_LONG).show()
-                render()
-            }
-        }
         button("校验长期记忆迁移副本") {
             runMemoryIo("正在核对记忆迁移副本…", {
                 val snapshot = CompanionMemoryStore(this).exportForUser()

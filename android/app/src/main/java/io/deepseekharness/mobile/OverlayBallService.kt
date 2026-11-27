@@ -2238,7 +2238,7 @@ class OverlayBallService : Service() {
      * HarnessActivity 并撤销会话凭据。
      */
     private fun openHarness(sessionId: String? = null) {
-        val intent = Intent(this, KeepAliveEntryActivity::class.java).putExtra(HarnessActivity.EXTRA_SESSION_ID, sessionId).addFlags(
+        val intent = Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_SESSION_ID, sessionId).putExtra(MainActivity.EXTRA_SHOW_HARNESS, MainHarnessSurface.hasOwnedSurface()).addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP,
         )
         val pending = PendingIntent.getActivity(
@@ -2416,7 +2416,7 @@ class OverlayBallService : Service() {
                 onDeepSeekAuthorization = ::openDeepSeekAuthorization,
                 onMainFrameFailure = { if (conversationWebView === web) error.visibility = View.VISIBLE },
                 onRendererGone = { detachConversation() },
-                onMainFrameLoaded = { loaded -> HarnessThemeBridge.apply(loaded) },
+                onMainFrameLoaded = { },
             )
             web.webChromeClient = object : WebChromeClient() {
                 override fun onCreateWindow(
@@ -3184,7 +3184,7 @@ class OverlayBallService : Service() {
         val openApp = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, KeepAliveEntryActivity::class.java).addFlags(
+            Intent(this, MainActivity::class.java).addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP,
             ),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

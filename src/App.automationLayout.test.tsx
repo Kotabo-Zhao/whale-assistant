@@ -3,9 +3,6 @@ import { beforeEachAppTest, bridge, openSettingsPage } from './__tests__/appTest
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
-vi.mock('./components/TerminalPanel', () => ({
-  TerminalPanel: () => <div data-testid="terminal-panel" />,
-}))
 
 import { App } from './App'
 
@@ -31,7 +28,7 @@ describe('自动化设置：三条腿分成三个页面', () => {
 
   it('自动化设置页只给出三个入口，不在这里展开控件', async () => {
     await openAutomation()
-    expect(screen.getByRole('button', { name: /无障碍/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /^无障碍 / })).toBeVisible()
     expect(screen.getByRole('button', { name: /副屏/ })).toBeVisible()
     expect(screen.getByRole('button', { name: /自动参数/ })).toBeVisible()
     // 入口页不直接摆控件：总开关、白名单这些都在各自的三级页里。

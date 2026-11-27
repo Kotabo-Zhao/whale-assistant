@@ -289,15 +289,9 @@ class MobileRuntimeController(
                     sharedInbox.deliver()
                 }
             }
-            // 应用（APK）升级迁移：判定是「上次迁移成功的 versionCode + 当前 versionCode +
-            // 运行时代次是否变化」（[PluginMigrationPolicy]，纯逻辑）。需要迁移时由它**串行复用**
-            // 下面两步（先回放未提交事务，再按代次自愈链接）并按版本账本核对包目录，因此这时不再
-            // 重复调用 —— recover 虽然幂等，但多调用一次就多起一次访客 Node 进程。
-            if (!plugins.migrateIfNeeded(BuildConfig.VERSION_CODE)) {
-                plugins.recoverIfNeeded()
-                // 启动前自愈：运行时升级后插件目录里的链接可能已悬空，修复必须在插件被加载前完成。
-                plugins.repairInstalledIfNeeded()
-            }
+            plugins.recoverIfNeeded()
+            // 启动前自愈：运行时升级后插件目录里的链接可能已悬空，修复必须在插件被加载前完成。
+            plugins.repairInstalledIfNeeded()
         }
         val snapshot = supervisor.startHarness(expectedStartEpoch)
         // 启动前取证：自愈按代次指纹只跑一次，探测则每次冷启动都跑 —— 它只读、只遍历固定候选根，
@@ -423,18 +417,6 @@ class MobileRuntimeController(
                 throw RuntimeFailure("RUNTIME_BUSY", "请先停止 Harness 和 Ubuntu 终端")
             }
             supervisor.preparePluginManagement()
-        } else {
-            // 用户可能刚更新了 APK 或运行时，还没有点击启动 Harness 就直接进入了插件设置页。
-            // 若当前运行时未在运行，防御性执行一次 migrateIfNeeded，自动接回保留区的插件软链接，
-            // 避免用户打开插件列表时看到全部插件呈现“未安装”假象。
-            if (!supervisor.isRunning() && !terminals.hasRuntimeSessions()) {
-                try {
-                    supervisor.preparePluginManagement()
-                    plugins.migrateIfNeeded(BuildConfig.VERSION_CODE)
-                } catch (_: Exception) {
-                    // 防御性迁移失败不阻断只读列表读取
-                }
-            }
         }
         // `repair` 是用户主动触发的显式修复：绕过「同一代次只修一次」的自愈闸门，也不进冷却
         // 窗口退避。它不另造返回形状，而是紧接着回读一次 `list` —— 刚接回的插件直接出现在列表里，

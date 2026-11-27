@@ -51,12 +51,6 @@ class CompanionMemoryCutoverTest {
         assertArrayEquals(original, legacyFile.readBytes())
         assertEquals(UserMemoryResult.ADDED, store.addForUser("迁移后", "user_edit"))
         assertEquals(2, CompanionMemoryStore(testContext).listForUser().length())
-        assertEquals(2, store.rollbackToLegacy())
-        assertFalse(store.usesDatabase())
-        assertEquals(2, CompanionMemoryFormat.parse(legacyFile.readBytes()).length())
-        assertTrue(prefs.getBoolean("automatic_memory_suppressed_all", false))
-        assertEquals(UserMemoryResult.ADDED, store.addForUser("回退后", "user_edit"))
-        assertEquals(3, store.migrateToDatabase())
         assertEquals(3, store.listForUser().length())
     }
 

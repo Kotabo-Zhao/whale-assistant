@@ -4,9 +4,6 @@ import { beforeEachAppTest, bridge, openFilesPage } from './__tests__/appTestHar
 import type { StorageDirEntry, StorageDirsState } from './platform/types'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
-vi.mock('./components/TerminalPanel', () => ({
-  TerminalPanel: () => <div data-testid="terminal-panel" />,
-}))
 
 import { App } from './App'
 

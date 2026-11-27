@@ -216,13 +216,6 @@
         </receiver>
 
         <activity
-            android:name=".HarnessActivity"
-            android:exported="false"
-            android:screenOrientation="unspecified"
-            android:theme="@style/AppTheme.Harness"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
             android:name=".virtualscreen.VirtualScreenActivity"
             android:exported="false"
             android:excludeFromRecents="true"
@@ -234,18 +227,6 @@
             android:name=".OverlayFileChooserActivity"
             android:exported="false"
             android:excludeFromRecents="true"
-            android:theme="@style/AppTheme.Transparent" />
-
-        <!-- 常驻通知的点击入口：全透明转发后立即 finish。
-             noHistory + excludeFromRecents：不留在任务栈与最近任务里。
-             保留默认 taskAffinity：任务已存在时它直接叠在 HarnessActivity 之上，
-             finish() 后对话界面原样可见，不需要重建任何 Activity。
-             使用透明转发，避免通知入口重建管理页并销毁正在显示的 HarnessActivity。 -->
-        <activity
-            android:name=".KeepAliveEntryActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:noHistory="true"
             android:theme="@style/AppTheme.Transparent" />
 
         <activity android:name=".companion.WhaleScreenConsentActivity" android:exported="false"

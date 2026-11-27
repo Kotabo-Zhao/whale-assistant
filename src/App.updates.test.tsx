@@ -6,7 +6,6 @@ import { APP_UPDATE_REMINDER_ENABLED_KEY } from './appUpdateReminder'
 import type { AppUpdateState } from './platform/types'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
-vi.mock('./components/TerminalPanel', () => ({ TerminalPanel: () => <div /> }))
 import { App } from './App'
 
 const cachedUpdate: AppUpdateState = {
@@ -116,21 +115,14 @@ describe('应用更新入口与缓存交互', () => {
     expect(await screen.findByText('设置无法打开')).toBeVisible()
   })
 
-  it('历史版本与应用更新长公告分别折叠，展开后保留纯文本全文', async () => {
-    const notes = '<img src=x onerror=alert(1)>' + '历史公告'.repeat(100)
-    bridge.listRuntimeReleases.mockResolvedValue({ entries: [{ version: '0.2.9', notes }] })
+  it('应用更新长公告折叠，展开后保留纯文本全文', async () => {
     render(<App />)
     await openVersions()
-    const toggles = await screen.findAllByRole('button', { name: '展开完整更新公告' })
-    expect(toggles).toHaveLength(2)
-    expect(screen.queryByText(notes)).toBeNull()
+    const toggle = await screen.findByRole('button', { name: '展开完整更新公告' })
     expect(screen.queryByText(cachedUpdate.available!.notes)).toBeNull()
-    fireEvent.click(toggles[0])
-    expect(screen.getByText(notes)).toBeVisible()
-    expect(screen.queryByText(cachedUpdate.available!.notes)).toBeNull()
-    expect(document.querySelector('.release-notes img')).toBeNull()
-    fireEvent.click(toggles[1])
+    fireEvent.click(toggle)
     expect(screen.getByText(cachedUpdate.available!.notes)).toBeVisible()
+    expect(document.querySelector('.release-notes img')).toBeNull()
   })
 
   it('切换频道未结束时阻止下载和安装，返回后采用新候选', async () => {

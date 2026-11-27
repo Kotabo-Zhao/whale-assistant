@@ -5,9 +5,6 @@ import { availableMailbox, beforeEachAppTest, bridge, openFilesPage, storageAcce
 import type { StorageDirEntry, StorageDirsState } from './platform/types'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
-vi.mock('./components/TerminalPanel', () => ({
-  TerminalPanel: () => <div data-testid="terminal-panel" />,
-}))
 
 import { App } from './App'
 

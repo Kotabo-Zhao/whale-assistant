@@ -13,7 +13,7 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import io.deepseekharness.mobile.AppForeground
-import io.deepseekharness.mobile.KeepAliveEntryActivity
+import io.deepseekharness.mobile.MainActivity
 import io.deepseekharness.mobile.R
 import io.deepseekharness.mobile.runtime.audit.AuditEvent
 import io.deepseekharness.mobile.runtime.audit.AuditResult
@@ -412,7 +412,7 @@ internal object TaskNotification {
     private fun openAppIntent(context: Context): PendingIntent = PendingIntent.getActivity(
         context,
         0,
-        Intent(context, KeepAliveEntryActivity::class.java).apply {
+        Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

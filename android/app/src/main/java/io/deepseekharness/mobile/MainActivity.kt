@@ -96,7 +96,7 @@ class MainActivity : BridgeActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.getBooleanExtra(EXTRA_SHOW_HARNESS, false)) {
-            val sessionId = runCatching { HarnessPageUrl.requireValidSessionId(intent.getStringExtra(HarnessActivity.EXTRA_SESSION_ID)) }.getOrNull()
+            val sessionId = runCatching { HarnessPageUrl.requireValidSessionId(intent.getStringExtra(EXTRA_SESSION_ID)) }.getOrNull()
             if (sessionId == null || !openHarnessSurface(sessionId)) harnessSurface.showIfOwned()
         }
         handleExternalFileIntent(intent)
@@ -521,7 +521,8 @@ class MainActivity : BridgeActivity() {
     }
 
     companion object {
-        internal const val EXTRA_SHOW_HARNESS = "io.deepseekharness.mobile.extra.SHOW_EMBEDDED_HARNESS"
+        internal const val EXTRA_SESSION_ID = "io.deepseekharness.mobile.extra.SESSION_ID"
+        const val EXTRA_SHOW_HARNESS = "io.deepseekharness.mobile.extra.SHOW_EMBEDDED_HARNESS"
         /**
          * WebView 提供方预热专用线程：进程级单线程、守护线程，不随 Activity 销毁关闭。
          */

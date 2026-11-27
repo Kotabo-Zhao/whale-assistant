@@ -500,18 +500,6 @@ class CompanionMemoryStore(context: Context) {
         legacy.length()
     }
 
-    /** Write and verify the current state before selecting the legacy reader again. */
-    internal fun rollbackToLegacy(): Int = synchronized(lock) {
-        if (!usesDatabase()) return@synchronized loadLegacy().length()
-        val current = load()
-        writeLegacy(current)
-        check(loadLegacy().toString() == current.toString()) { "回退核对失败" }
-        if (!prefs.edit().putBoolean("memory_sqlite_active", false).commit()) {
-            prefs.edit().putBoolean("memory_sqlite_active", true).commit()
-            error("无法保存回退状态")
-        }
-        current.length()
-    }
 
     private fun load(): JSONArray {
         if (!usesDatabase()) return loadLegacy()

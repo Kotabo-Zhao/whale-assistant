@@ -194,7 +194,6 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         web = view
         container = root
         activity.addContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        HarnessThemeBridge.attach(view)
         refreshTheme()
         return view
     }
@@ -243,7 +242,7 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         target.animate().cancel()
         visuallyReady=false; placeSurface()
         val generation=++visualGeneration
-        HarnessThemeBridge.apply(target); HarnessVisualStyle.apply(target)
+        HarnessVisualStyle.apply(target)
         target.evaluateJavascript("true") {
             if(generation!=visualGeneration || target!==web || !authorized()) return@evaluateJavascript
             target.postVisualStateCallback(generation,object:WebView.VisualStateCallback(){
@@ -281,7 +280,6 @@ internal class MainHarnessSurface(private val activity: MainActivity) {
         container = null
         boundAccess = null
         if (old != null) {
-            HarnessThemeBridge.detach(old)
             old.stopLoading()
             old.webChromeClient = null
             old.webViewClient = WebViewClient()

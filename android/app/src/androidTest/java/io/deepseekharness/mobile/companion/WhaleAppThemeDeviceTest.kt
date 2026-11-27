@@ -60,9 +60,7 @@ class WhaleAppThemeDeviceTest {
             waitFor("shell ready"){js(shell,"!!document.querySelector('[aria-label=\"我的\"]')")=="true"}
             js(shell,"window.dispatchEvent(new CustomEvent('dsh-native-tab',{detail:'harness'}));true")
             var page:WebView?=null
-            val attached=io.deepseekharness.mobile.HarnessThemeBridge::class.java.getDeclaredField("attached").apply{isAccessible=true}
             waitFor("real Harness page attached") {
-                inst.runOnMainSync {page=(attached.get(io.deepseekharness.mobile.HarnessThemeBridge) as? java.lang.ref.WeakReference<*>)?.get() as? WebView}
                 page!=null
             }
             waitFor("real Harness document loaded"){js(requireNotNull(page),"document.documentElement.dataset.dshThemeSource==='shell'")=="true"}
@@ -110,7 +108,6 @@ class WhaleAppThemeDeviceTest {
                 clear()
                 original.forEach{(key,value)->when(value){is String->putString(key,value);is Boolean->putBoolean(key,value);is Int->putInt(key,value);is Long->putLong(key,value);is Float->putFloat(key,value)}}
             }.commit()
-            inst.runOnMainSync{io.deepseekharness.mobile.HarnessThemeBridge.refresh()}
             scenario.close();wake.close()
         }
     }

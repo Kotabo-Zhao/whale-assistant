@@ -1623,8 +1623,6 @@ export type AppThemeMode = 'system' | 'light' | 'dark'
 /** 同步给 DSH 页面（访客 WebView）的受控主题：只有固定字段，没有 CSS / JS / URL。 */
 export type { SyncedTheme } from '../adaptiveAccent'
 export type { HarnessBackgroundRef, HarnessBackgroundState } from '../backgroundRef'
-import type { SyncedTheme } from '../adaptiveAccent'
-import type { HarnessBackgroundRef, HarnessBackgroundState } from '../backgroundRef'
 
 export interface RuntimeWorkspaceFileList {
   files: string[]
@@ -1704,30 +1702,6 @@ export interface RuntimeBridge {
    * **为什么是显式按钮**：外壳与 DSH 是两个独立 WebView，localStorage 不共享。用户可能
    * 只想调外壳外观，所以同步必须由用户主动触发，并且只传固定字段的颜色与明暗模式。
    */
-  applyHarnessTheme: (theme: SyncedTheme) => Promise<void>
-  /** 清除已同步的主题，DSH 页面回到它自己的默认外观。 */
-  clearHarnessTheme: () => Promise<void>
-  /**
-   * 第二阶段：让用户挑一个背景文件，原生只记地址（`content://` + 持久读授权）。
-   *
-   * 不复制文件，所以视频没有大小上限；访客页面从 `/__shell/background` 同源取，
-   * 由原生按需从同一个地址流式转发。
-   */
-  pickHarnessBackground: () => Promise<HarnessBackgroundRef>
-  clearHarnessBackground: () => Promise<void>
-  /**
-   * 落盘「连背景一起同步」开关。
-   *
-   * 这个开关必须活在原生侧：外壳刷新、进程重启之后还要能读回上次的选择；
-   * 只写页面的内存状态，重启就会自己弹回未勾，看起来像背景被丢了。
-   */
-  setHarnessSyncBackground: (enabled: boolean) => Promise<void>
-  /**
-   * 读回同步状态（开关、上次同步时间、已选背景）。
-   *
-   * 外壳启动时用它恢复界面：勾选框、已选文件提示都从这一个返回值来。
-   */
-  harnessThemeState: () => Promise<HarnessBackgroundState>
   getState: () => Promise<RuntimeState>
   getSettings: () => Promise<RuntimeSettings>
   saveSettings: (settings: RuntimeSettingsUpdate) => Promise<RuntimeSettings>
@@ -2354,7 +2328,6 @@ type PluginRecoveryStatus = 'none' | 'restored' | 'partial' | 'failed'
  * `failed`：这一步没做成（下次启动会自动重试）—— 迁移本身失败时启动会照旧中断并报错，
  * 界面能看到这个状态的是「跑完了但记账没写成」这一种。
  */
-type PluginMigrationStatus = 'none' | 'done' | 'partial' | 'failed'
 /**
  * 已装插件的「版本事实」记录（由访客侧维护、原生侧只读）在设备上的可用性：
  * `ok` 可用、`missing` 还没有（新设备或从未装过插件）、`invalid` 已损坏、`unwritable` 写不进去。
@@ -2371,7 +2344,6 @@ export interface PluginRecoveryState {
    * 下面三项是后加的：旧版原生侧不带这些键，此时保持 `undefined`，界面按「没有迁移信息」处理。
    * 只要带了就必须落在受控取值里，否则整份目录数据视为无效。
    */
-  migration?: PluginMigrationStatus
   lock?: PluginLockStatus
   /** 迁移时按版本记录逐条核对过的已装插件数；没有版本记录时为 0。 */
   checked?: number

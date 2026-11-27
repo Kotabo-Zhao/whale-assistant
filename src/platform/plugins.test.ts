@@ -76,9 +76,9 @@ describe('插件桥接校验', () => {
     expect(validatePluginCatalog({ ...group({}), recovery: { ...base } }).recovery).toEqual(base)
     expect(validatePluginCatalog({
       ...group({}),
-      recovery: { ...base, migration: 'partial', lock: 'invalid', checked: 3 },
-    }).recovery).toEqual({ ...base, migration: 'partial', lock: 'invalid', checked: 3 })
-    for (const bad of [{ migration: 'unknown' }, { lock: 'broken' }, { checked: -1 }, { checked: 1025 }]) {
+      recovery: { ...base, lock: 'invalid', checked: 3 },
+    }).recovery).toEqual({ ...base, lock: 'invalid', checked: 3 })
+    for (const bad of [{ lock: 'broken' }, { checked: -1 }, { checked: 1025 }]) {
       expect(() => validatePluginCatalog({ ...group({}), recovery: { ...base, ...bad } })).toThrow()
     }
   })

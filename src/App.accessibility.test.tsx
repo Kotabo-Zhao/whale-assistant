@@ -11,9 +11,6 @@ import { AUTOMATION_DISCLAIMER_STORAGE_KEY } from './accessibilityDisclaimer'
 import { arriveAtShell, beforeEachAppTest, bridge, openSettingsPage } from './__tests__/appTestHarness'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
-vi.mock('./components/TerminalPanel', () => ({
-  TerminalPanel: () => <div data-testid="terminal-panel" />,
-}))
 
 import { App } from './App'
 

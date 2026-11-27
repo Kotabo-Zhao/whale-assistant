@@ -5,9 +5,6 @@ import { beforeEachAppTest, bridge, openSettingsPage } from './__tests__/appTest
 import type { DiagnosticLogState } from './platform/types'
 
 vi.mock('./platform/native', () => ({ runtimeBridge: bridge }))
-vi.mock('./components/TerminalPanel', () => ({
-  TerminalPanel: () => <div data-testid="terminal-panel" />,
-}))
 
 import { App } from './App'
 

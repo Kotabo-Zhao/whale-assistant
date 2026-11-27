@@ -33,6 +33,7 @@ internal object HarnessManageReturnPolicy {
 }
 
 internal object HarnessSessionCookie {
+    const val AUTH_TOKEN_COOKIE = "dsh_mobile_token"
     private val TOKEN = Regex("[A-Za-z0-9_-]{43}")
 
     fun origin(port: Int): String {
@@ -42,11 +43,11 @@ internal object HarnessSessionCookie {
 
     fun authenticated(token: String): String {
         require(TOKEN.matches(token)) { "Harness token has an invalid format" }
-        return "${HarnessActivity.AUTH_TOKEN_COOKIE}=$token; Path=/; HttpOnly; SameSite=Strict"
+        return "${AUTH_TOKEN_COOKIE}=$token; Path=/; HttpOnly; SameSite=Strict"
     }
 
     fun expired(): String =
-        "${HarnessActivity.AUTH_TOKEN_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"
+        "${AUTH_TOKEN_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"
 
     /** A browser cookie from an earlier runtime would suppress the native Basic challenge. */
     fun expiredBrowserSession(): String =

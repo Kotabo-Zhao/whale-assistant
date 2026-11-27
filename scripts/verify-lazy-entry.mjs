@@ -9,7 +9,7 @@ assert.ok(entryName, 'entry script missing')
 const entry = fs.readFileSync(path.join(root, entryName), 'utf8')
 const staticImports = [...entry.matchAll(/(?:^|[;\n])\s*import\s*(?!\()(?:[^;]*?\s*from\s*)?["']([^"']+)["']/g)].map(match => match[1])
 const files = fs.readdirSync(path.join(root, 'assets'))
-for (const screen of ['PluginSettings', 'FilesScreen', 'RuntimeVersionsScreen', 'VirtualScreenSettings', 'AutomationRuleForm', 'AutomationAppConfigForm', 'AppearanceSettings', 'CustomProviders', 'DeviceCapabilityCard', 'RootEngineCard', 'RuntimeSelfCheckPanel', 'ApplicationPicker']) {
+for (const screen of ['PluginSettings', 'FilesScreen', 'VirtualScreenSettings', 'AutomationRuleForm', 'AutomationAppConfigForm', 'AppearanceSettings', 'CustomProviders', 'DeviceCapabilityCard', 'RootEngineCard', 'RuntimeSelfCheckPanel', 'ApplicationPicker']) {
   const chunk = files.find(file => file.startsWith(`${screen}-`) && file.endsWith('.js'))
   assert.ok(chunk, `${screen} async chunk missing`)
   assert.ok(!html.includes(chunk), `${screen} referenced by initial HTML`)

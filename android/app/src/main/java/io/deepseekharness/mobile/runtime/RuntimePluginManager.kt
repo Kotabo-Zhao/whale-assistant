@@ -51,10 +51,6 @@ class RuntimePluginManager(context: Context, private val store: RuntimeStore) {
     @Volatile
     private var recoveryRefused: Int = 0
 
-    /** 应用升级迁移的结果：`none`（本次进程没跑）/ `done` / `partial` / `failed`。 */
-    @Volatile
-    private var migrationStatus: String = "none"
-
     /**
      * 版本账本（`installed-lock.json`）的可用性：
      * `ok`（已按账本核对）/ `missing`（还没有账本）/ `invalid`（账本损坏）/ `unwritable`（访客报告写入失败）。
@@ -78,7 +74,6 @@ class RuntimePluginManager(context: Context, private val store: RuntimeStore) {
         .put("missing", recoveryMissing)
         .put("failed", recoveryFailed)
         .put("refused", recoveryRefused)
-        .put("migration", migrationStatus)
         .put("lock", lockStatus)
         .put("checked", lockChecked)
 
@@ -256,82 +251,6 @@ class RuntimePluginManager(context: Context, private val store: RuntimeStore) {
     private fun installedGeneration(): String? =
         store.installedManifest()?.let { "${it.runtimeId}|${it.version}|${it.rootfs.sha256}|${HarnessVersions.selectedOrBundled(store)}" }
 
-    /**
-     * 应用（APK）升级后的插件迁移。
-     *
-     * 判定在 [PluginMigrationPolicy]（纯逻辑，可单测）；动作**串行复用**已有的两步 ——
-     * 先 [recoverIfNeeded]（回放未提交事务、按状态快照回填启停状态），再
-     * [repairInstalledIfNeeded]（按运行时代次自愈插件链接）—— 最后按版本账本核对每个已装插件的
-     * 包目录是否还在。**不另写一套接链接逻辑**：`plugin-manager.cjs` 的 repair 分支已经处理了
-     * 「保留区里没有副本只记 missing」「已经能解析就不动」这些边界，重写一遍只会多出第二个真相。
-     *
-     * 三条硬约束：
-     *  - **绝不覆盖或删除用户数据**：整个过程只有 recover 与 repair 两类动作，而数据目录
-     *    （`data`/`config`/`storage`/`.config`）的复制只发生在更新与导入的提交路径上，
-     *    原样受既有的 `PLUGIN_DATA_UNSAFE` / `PLUGIN_DATA_TOO_LARGE` 约束；
-     *  - **失败不许静默**：结果写进 [recoverySnapshot] 的 `migration` / `lock` / `checked`，
-     *    失败与部分完成另写一条 `REPAIR` 诊断记录（受控 `code`，见下）；
-     *  - **记账失败不能让启动失败**：只有 recover 自己的异常照旧往上抛（与改动前逐字一致），
-     *    记账与核对失败一律只记录状态。
-     *
-     * @param currentVersionCode 当前 `BuildConfig.VERSION_CODE`（由调用方传入，本类不依赖 BuildConfig，
-     *   这样策略与判定都能在纯 JVM 单测里覆盖）。
-     * @return true 表示本次判定需要迁移并已执行；调用方不必再单独调用上面那两步。
-     */
-    fun migrateIfNeeded(currentVersionCode: Int): Boolean {
-        val stateFile = File(home, PluginMigrationState.FILE_NAME)
-        val recorded = PluginMigrationState.read(stateFile)
-        val generation = installedGeneration()
-        val decision = PluginMigrationPolicy.decide(
-            lastMigratedVersionCode = recorded?.appVersionCode,
-            currentVersionCode = currentVersionCode,
-            generationChanged = recorded != null && recorded.runtimeGeneration != generation,
-        )
-        if (!decision.migrate) return false
-        try {
-            recoverIfNeeded()
-            repairInstalledIfNeeded()
-        } catch (failure: Exception) {
-            // recover 的失败在本次改动前就会中断启动（recoverIfNeeded 直接向上抛）：保持同一语义，
-            // 但先留下「迁移没跑成」的状态与一条受控诊断，免得只看到一句运行时错误。
-            migrationStatus = "failed"
-            recordMigration(DiagnosticLevel.WARN, "failed", PLUGIN_MIGRATION_RECOVER_FAILED, decision.reason)
-            throw failure
-        }
-        val lock = verifyInstallLock()
-        // 迁移成功与否的记账：写不进去就等于"这一步没做成"，下次启动照旧重试一次
-        // （recover 幂等、repair 受代次闸门约束，重试的代价是一次访客进程，不是重复改动）。
-        val recordedNow = try {
-            PluginMigrationState.write(
-                stateFile,
-                PluginMigrationState.Record(currentVersionCode, generation, System.currentTimeMillis(), decision.reason),
-            )
-            true
-        } catch (_: Exception) {
-            false
-        }
-        val settled = recoveryMissing == 0 && recoveryFailed == 0 && recoveryRefused == 0
-        migrationStatus = when {
-            !recordedNow -> "failed"
-            lock == "ok" && settled -> "done"
-            else -> "partial"
-        }
-        // 失败与部分完成各带一个受控错误码：`code` 是诊断记录里唯一能区分「卡在哪一步」的字段。
-        // 成功不写 code（成功由 `result=ok` 与 `installed-migration.json` 自证）。
-        val code = when {
-            !recordedNow -> PLUGIN_MIGRATION_RECORD_FAILED
-            migrationStatus == "partial" -> PLUGIN_MIGRATION_PARTIAL
-            else -> null
-        }
-        val level = if (migrationStatus == "failed") DiagnosticLevel.WARN else DiagnosticLevel.INFO
-        val result = when (migrationStatus) {
-            "done" -> "ok"
-            "partial" -> "denied"
-            else -> "failed"
-        }
-        recordMigration(level, result, code, decision.reason)
-        return true
-    }
 
     /**
      * 按版本账本核对每个已装插件的包目录是否还在（**只读**：读一份小 JSON + 逐条 stat 目录）。
@@ -362,18 +281,6 @@ class RuntimePluginManager(context: Context, private val store: RuntimeStore) {
     }
 
     /** 迁移的诊断记录：受控取值只有 `result` / `code` / `reason` / `count`，**不含路径与文件名**。 */
-    private fun recordMigration(level: DiagnosticLevel, result: String, code: String?, reason: String) {
-        store.diagnostics.record(
-            level,
-            DiagnosticEvent.REPAIR,
-            buildMap {
-                put("result", result)
-                put("reason", reason)
-                put("count", recoveryMissing.toString())
-                if (code != null) put("code", code)
-            },
-        )
-    }
 
     /**
      * 只读模块图探测：统计访客里 `@deepseek-ai/dsh-tools` 出现了几处，以及**不同真实路径数**。
@@ -546,14 +453,8 @@ class RuntimePluginManager(context: Context, private val store: RuntimeStore) {
         val DETAIL = Regex("^[A-Za-z0-9@/._+, =!<>~^|()\\-]{1,300}$")
         val ERROR_CODES = setOf("PLUGIN_INPUT_INVALID", "PLUGIN_PATH_INVALID", "PLUGIN_CONFIG_INVALID", "PLUGIN_NOT_FOUND", "PLUGIN_PROTECTED", "PLUGIN_RECOVERY_FAILED", "PLUGIN_UPDATER_MISSING", "PLUGIN_UPDATE_FAILED", "PLUGIN_LINK_UNSUPPORTED", "PLUGIN_DEPENDENCY_UNSUPPORTED", "PLUGIN_ENGINE_UNSUPPORTED", "PLUGIN_ENGINE_SCAN_INCOMPLETE", "PLUGIN_NATIVE_UNSUPPORTED", "PLUGIN_SCAN_UNAVAILABLE", "PLUGIN_PLATFORM_UNSUPPORTED", "PLUGIN_NODE_UNSUPPORTED", "PLUGIN_METADATA_UNAVAILABLE", "PLUGIN_RUNTIME_VERSION_UNAVAILABLE", "PLUGIN_GROUP_DISABLED", "PLUGIN_OPERATION_FAILED", "PLUGIN_SOURCE_INVALID", "PLUGIN_IMPORT_UNRESOLVED", "PLUGIN_GIT_MISSING", "PLUGIN_GIT_UNVERIFIED", "PLUGIN_DATA_TOO_LARGE", "PLUGIN_DATA_UNSAFE", "PLUGIN_ROLLBACK_UNAVAILABLE", "PLUGIN_ROLLBACK_FAILED")
 
-        /** 迁移在 recover 这一步就失败：异常已向上抛出，启动照旧中断。 */
-        const val PLUGIN_MIGRATION_RECOVER_FAILED = "PLUGIN_MIGRATION_RECOVER_FAILED"
 
-        /** 迁移跑完了，但「上次迁移成功」的记账没写成：下次启动会再跑一次。 */
-        const val PLUGIN_MIGRATION_RECORD_FAILED = "PLUGIN_MIGRATION_RECORD_FAILED"
 
-        /** 迁移跑完了，但账本不可用或仍有缺失/失败/拒绝的缺口。 */
-        const val PLUGIN_MIGRATION_PARTIAL = "PLUGIN_MIGRATION_PARTIAL"
     }
 }
 
