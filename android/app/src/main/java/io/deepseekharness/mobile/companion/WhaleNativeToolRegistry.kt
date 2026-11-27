@@ -105,6 +105,14 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             mapOf("tool" to "精确工具名，如 whale_phone_launch / whale_tool_create / custom_xxx", "argsJson" to "JSON 对象字符串形式的工具参数，如 {\"app\":\"微信\"}"),
             listOf("tool"),
         ))
+        arr.put(schema("whale_code_read", "读取本地代码工程中的文件内容（支持行号范围）。", mapOf("project" to "项目名", "path" to "相对路径", "startLine" to "可选起始行", "endLine" to "可选结束行"), listOf("project", "path")))
+        arr.put(schema("whale_code_write", "向本地代码工程写入或新建文件。", mapOf("project" to "项目名", "path" to "相对路径", "content" to "文件全文"), listOf("project", "path", "content")))
+        arr.put(schema("whale_code_patch", "对本地代码工程文件做精准查找替换补丁。", mapOf("project" to "项目名", "path" to "相对路径", "find" to "原片段", "replace" to "替换内容"), listOf("project", "path", "find", "replace")))
+        arr.put(schema("whale_phone_ui_tree", "获取当前手机屏幕语义剪枝控件树（带 #ref 短编号与坐标）。", mapOf("maxElements" to "可选最大元素数(默认80)"), emptyList()))
+        arr.put(schema("whale_phone_action", "执行单步手机无障碍控屏操作（点击/输入/滑动）。", mapOf("action" to "click/setText/scroll/swipe", "ref" to "可选 #ref 编号", "text" to "可选文本或输入内容", "viewId" to "可选 viewId"), listOf("action")))
+        arr.put(schema("whale_worker_submit", "派发独立后台 Worker 异步执行长耗时任务（写代码/调研/多步整理）。", mapOf("task" to "完整任务说明", "title" to "可选简短标题", "mode" to "create/read/device"), listOf("task")))
+        arr.put(schema("whale_todo_write", "更新当前会话的结构化多步任务清单（pending/in_progress/completed）。", mapOf("todos" to "JSON 数组 [{content,status}]"), listOf("todos")))
+        arr.put(schema("whale_tool_create", "自造并持久化 custom_* 可复用工具（支持 python/composite/http_json/js）。", mapOf("name" to "custom_开头工具名", "kind" to "python/composite/http_json/js", "description" to "功能说明", "spec" to "实现定义 JSON"), listOf("name", "kind", "description")))
         arr.put(schema("whale_self_capabilities", "自检自身全部能力域、已自造工具、工坊小软件、0-Token 宏与运行环境状态。", emptyMap(), emptyList()))
         val minified = WhaleContextBudgeter.minifyToolSchemas(arr)
         cachedStaticSchemas = minified
@@ -150,7 +158,7 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                     .put("params", paramNames.joinToString(","))
                     .put("required", reqNames.joinToString(",")),
             )
-            if (items.length() >= 36) break
+            if (items.length() >= 128) break
         }
         return JSONObject()
             .put("ok", true)
@@ -598,8 +606,8 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
             if (isWorker) {
             array.put(schema(
                 "whale_worker_ask",
-                "当后台 Worker 遇到关键信息缺失、需要用户做决定或需要站点授权登录时，主动向用户/Router 发起提问并挂起等待回复（进入 person/answer 状态）。调用后请立即结束本轮输出，等待用户回复自动唤醒。",
-                mapOf("question" to "要向用户确认的具体、简洁问题（≤600字）"),
+                "当后台 Worker 遇到关键信息缺失、需要用户做决定或需要站点授权登录时，主动向用户/桌宠发起提问并挂起等待回复（进入 person/answer 状态）。调用后请立即结束本轮输出，等待用户回复自动唤醒。",
+                mapOf("question" to "要向用户确认的具体、简洁问题（≤600字）", "options" to "可选：逗号分隔的快捷选项（最多4项，如 方案A,方案B,先暂停）"),
                 listOf("question"),
             ))
         }
@@ -1695,11 +1703,17 @@ internal class WhaleNativeToolRegistry(private val context: Context) {
                 "whale_worker_ask" -> {
                     val question = args.str("question").trim()
                     require(question.isNotEmpty()) { "缺少要向用户确认的问题 question" }
+                    val rawOpts = args.opt("options")
+                    val options = when (rawOpts) {
+                        is JSONArray -> (0 until rawOpts.length()).mapNotNull { rawOpts.optString(it).trim().takeIf(String::isNotEmpty) }.take(4)
+                        is String -> rawOpts.split(",", "，", "|", "\n").map { it.trim() }.filter { it.isNotEmpty() }.take(4)
+                        else -> emptyList()
+                    }
                     val workerId = callerSessionId
                         .removePrefix("whale-worker-")
                         .replace(Regex("""-s\d+$"""), "")
                         .ifBlank { callerSessionId }
-                    val res = WorkerRuntimeWake.askUserAndPause(app, workerId, question)
+                    val res = WorkerRuntimeWake.askUserAndPause(app, workerId, question, options)
                     ToolOutcome(name, "已向用户发起确认并挂起", true, res.toString(), mutating = true)
                 }
                 "whale_worker_board" -> {

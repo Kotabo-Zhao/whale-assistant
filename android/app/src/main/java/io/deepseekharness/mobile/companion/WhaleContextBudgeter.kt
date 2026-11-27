@@ -67,10 +67,10 @@ internal object WhaleContextBudgeter {
     var lastTurnStats: TurnCompressionStats = TurnCompressionStats()
 
     // KV Cache 高水位阈值：上下文未达此水位前，严禁原地篡改历史 tool 消息，最大化 DeepSeek/OpenAI 前缀缓存命中率
-    const val KV_OBSERVATION_MASK_HIGH_WATER_CHARS = 20_000
-    const val TOOL_INLINE_MAX_CHARS = 3_800
-    const val TOOL_INLINE_HEAD_POINTS = 1_900
-    const val TOOL_INLINE_TAIL_POINTS = 1_300
+    const val KV_OBSERVATION_MASK_HIGH_WATER_CHARS = 36_000
+    const val TOOL_INLINE_MAX_CHARS = 6_400
+    const val TOOL_INLINE_HEAD_POINTS = 3_200
+    const val TOOL_INLINE_TAIL_POINTS = 2_400
 
     private val nextTagRegex = Regex("<!--\\s*whale_next:[^>]*-->", RegexOption.IGNORE_CASE)
     private val fencedCodeRegex = Regex("```[a-zA-Z0-9_-]*\\n[\\s\\S]*?```")
@@ -234,21 +234,20 @@ internal object WhaleContextBudgeter {
     /** 判断本轮用户输入是否值得触发自动 RAG（纯控制短指令/接续词直接跳过，省 500–1200 字符噪音）。 */
     fun shouldTriggerAutoRag(userQuery: String): Boolean {
         val q = userQuery.trim()
-        if (q.length < 6) return false
+        if (q.length < 3) return false
         if (WhaleNativeRagRetriever.isGreetingOnly(q)) return false
         if (uiOrControlOnlyRegex.matches(q)) return false
-        if (q.length <= 16 && !memoryOrKnowledgeCueRegex.containsMatchIn(q)) return false
         return true
     }
 
-    /** 根据用户提问长度与历史轮数动态分配本轮上下文字符预算，简单问题极省，复杂任务充裕。 */
+    /** 根据用户提问长度与历史轮数动态分配本轮上下文字符预算，保持充裕上下文不轻易失忆。 */
     fun dynamicContextBudget(userQuery: String, hasCheckpoint: Boolean, hasActiveTodo: Boolean): Int {
         val qLen = userQuery.trim().length
         return when {
-            qLen <= 14 && !hasCheckpoint && !hasActiveTodo -> 600
-            qLen <= 60 && !hasCheckpoint -> 1_650
-            hasCheckpoint || hasActiveTodo || qLen > 120 -> 3_000
-            else -> 2_200
+            qLen <= 14 && !hasCheckpoint && !hasActiveTodo -> 1_200
+            qLen <= 60 && !hasCheckpoint -> 2_400
+            hasCheckpoint || hasActiveTodo || qLen > 120 -> 4_500
+            else -> 3_200
         }
     }
 

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, CheckSquare, Hammer, Pause, Play, RotateCcw, Sliders, Sparkles, Square, Table2, Timer } from 'lucide-react'
+import { Check, CheckSquare, Hammer, HelpCircle, Pause, Play, RotateCcw, Send, Sliders, Sparkles, Square, Table2, Timer } from 'lucide-react'
 
 import type {
   CalcWidgetSpec,
   ChecklistWidgetSpec,
   CompareWidgetSpec,
+  QuestionWidgetSpec,
   TimerWidgetSpec,
   WhaleWidgetSpec,
 } from './chatWidgetProtocol'
@@ -110,6 +111,7 @@ export function ChatWidgetCard({ spec, storageKey, onSaveToWorkshop, onSendActio
           {spec.type === 'compare' && <Table2 size={15} aria-hidden="true" />}
           {spec.type === 'timer' && <Timer size={15} aria-hidden="true" />}
           {spec.type === 'calc' && <Sliders size={15} aria-hidden="true" />}
+          {spec.type === 'question' && <HelpCircle size={15} aria-hidden="true" />}
           <strong>{spec.title}</strong>
         </span>
         {onSaveToWorkshop && (
@@ -122,9 +124,10 @@ export function ChatWidgetCard({ spec, storageKey, onSaveToWorkshop, onSendActio
       {spec.type === 'checklist' && (
         <ChecklistBody spec={spec} storageKey={storageKey} onSendAction={onSendAction} />
       )}
-      {spec.type === 'compare' && <CompareBody spec={spec} />}
+      {spec.type === 'compare' && <CompareBody spec={spec} onSendAction={onSendAction} />}
       {spec.type === 'timer' && <TimerBody spec={spec} />}
       {spec.type === 'calc' && <CalcBody spec={spec} />}
+      {spec.type === 'question' && <QuestionBody spec={spec} storageKey={storageKey} onSendAction={onSendAction} />}
     </div>
   )
 }
@@ -190,7 +193,7 @@ function ChecklistBody({ spec, storageKey, onSendAction }: { spec: ChecklistWidg
   )
 }
 
-function CompareBody({ spec }: { spec: CompareWidgetSpec }) {
+function CompareBody({ spec, onSendAction }: { spec: CompareWidgetSpec; onSendAction?: (prompt: string) => void }) {
   const [onlyHighlight, setOnlyHighlight] = useState(false)
   const hasHighlights = spec.rows.some(r => r.highlight)
   const visibleRows = onlyHighlight ? spec.rows.filter(r => r.highlight) : spec.rows
@@ -212,6 +215,7 @@ function CompareBody({ spec }: { spec: CompareWidgetSpec }) {
             <tr>
               <th>选项</th>
               {spec.columns.map(col => <th key={col}>{col}</th>)}
+              {onSendAction && <th>操作</th>}
             </tr>
           </thead>
           <tbody>
@@ -222,6 +226,17 @@ function CompareBody({ spec }: { spec: CompareWidgetSpec }) {
                   {row.badge && <span className="whale-a2ui-tag">{row.badge}</span>}
                 </td>
                 {spec.columns.map((_, cIdx) => <td key={cIdx}>{row.values[cIdx] ?? '—'}</td>)}
+                {onSendAction && (
+                  <td>
+                    <button
+                      type="button"
+                      className="whale-a2ui-mini-pill is-active"
+                      onClick={() => onSendAction(`我选择「${row.name}」这个方案，请直接按此推进。`)}
+                    >
+                      选择
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -326,6 +341,104 @@ function CalcBody({ spec }: { spec: CalcWidgetSpec }) {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+function QuestionBody({
+  spec,
+  storageKey,
+  onSendAction,
+}: {
+  spec: QuestionWidgetSpec
+  storageKey: string
+  onSendAction?: (prompt: string) => void
+}) {
+  const persistKey = `whale.a2ui.q.${storageKey}`
+  const [selected, setSelected] = useState<string[]>([])
+  const [customText, setCustomText] = useState('')
+  const [submitted, setSubmitted] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(persistKey) ?? ''
+    } catch {
+      return ''
+    }
+  })
+
+  const submitAnswer = (answerText: string) => {
+    const clean = answerText.trim()
+    if (!clean || !onSendAction) return
+    setSubmitted(clean)
+    try { window.localStorage.setItem(persistKey, clean) } catch { /* ignore */ }
+    onSendAction(clean)
+  }
+
+  const handleOptionClick = (opt: QuestionWidgetSpec['options'][number]) => {
+    if (submitted) return
+    const val = (opt.value || opt.label).trim()
+    if (!spec.multiSelect) {
+      setSelected([val])
+      submitAnswer(val)
+      return
+    }
+    setSelected(prev => (prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]))
+  }
+
+  const handleConfirm = () => {
+    const parts = [...selected]
+    if (customText.trim()) parts.push(customText.trim())
+    if (parts.length === 0) return
+    submitAnswer(parts.join('；'))
+  }
+
+  return (
+    <div className="whale-a2ui-body">
+      {spec.question && <div className="whale-a2ui-question-text">{spec.question}</div>}
+      <div className="whale-a2ui-checklist">
+        {spec.options.map((opt, idx) => {
+          const val = (opt.value || opt.label).trim()
+          const isPicked = selected.includes(val) || (Boolean(submitted) && submitted.includes(val))
+          return (
+            <button
+              key={`${idx}-${opt.label.slice(0, 16)}`}
+              type="button"
+              disabled={Boolean(submitted)}
+              className={`whale-a2ui-check-row${isPicked ? ' is-done' : ''}`}
+              onClick={() => handleOptionClick(opt)}
+            >
+              {isPicked ? <Check size={15} className="whale-a2ui-check-ico is-done" /> : <Square size={15} className="whale-a2ui-check-ico" />}
+              <span className="whale-a2ui-check-text">
+                <strong>{opt.label}</strong>
+                {opt.description ? <small style={{ display: 'block', opacity: 0.72 }}>{opt.description}</small> : null}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      {submitted ? (
+        <div className="whale-a2ui-foot">
+          <span className="whale-a2ui-progress-label">已提交回答：{submitted}</span>
+        </div>
+      ) : (
+        <div className="whale-a2ui-foot" style={{ gap: 6, width: '100%' }}>
+          <input
+            type="text"
+            value={customText}
+            onChange={e => setCustomText(e.target.value)}
+            placeholder="或直接输入其他回答…"
+            style={{ flex: 1, minWidth: 0, padding: '6px 10px', borderRadius: 9, border: '1px solid var(--line)', background: 'var(--surface-muted)', color: 'var(--ink)', fontSize: '0.82rem' }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleConfirm() } }}
+          />
+          <button
+            type="button"
+            className="whale-a2ui-action-btn is-primary"
+            disabled={selected.length === 0 && !customText.trim()}
+            onClick={handleConfirm}
+          >
+            <Send size={12} aria-hidden="true" /> 确认
+          </button>
+        </div>
+      )}
     </div>
   )
 }
