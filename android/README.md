@@ -1,6 +1,6 @@
 # Android 原生工程说明
 
-本目录是 **Whale Assistant（鲸鱼助手 `0.4.0-whale.1`）** 的 Capacitor 7 + Kotlin + Chaquopy Android 工程。目标 SDK 为 **API 35**，最低支持 **Android 8.0（API 26）**，仅打包 `arm64-v8a`。
+本目录是 **Whale Assistant（鲸鱼助手 `0.5.0-whale.1`）** 的 Capacitor 7 + Kotlin + Chaquopy Android 工程。目标 SDK 为 **API 35**，最低支持 **Android 8.0（API 26）**，仅打包 `arm64-v8a`。
 
 当前主线发布形态为 **Lite 纯原生版（`-PwhaleSeparateRuntime=true`）**：零 PRoot / Ubuntu `rootfs.bundle` 依赖，内嵌原生 **CPython 3.11（Chaquopy）** 与全部 Kotlin Super Agent 内核，单 APK 约 63 MB。
 
@@ -39,7 +39,7 @@ pnpm run android:build:lite
 
 包名固定为 `io.deepseekharness.mobile`（`app/build.gradle` 的 `applicationId`）。
 
-1. **每日构建 / Debug（`whaleNightly`）**：未配置团队签名时，`debug` 变体默认使用仓库内置的固定测试密钥库 `android/app/whale-nightly-debug.keystore`，配合递增 `whaleVersionCode`（CI 使用 `146 + GITHUB_RUN_NUMBER`），确保每日 Lite APK 可直接无缝覆盖安装且本地记忆/设置无损。
+1. **每日构建 / Debug（`whaleNightly`）**：未配置团队签名时，`debug` 变体默认使用仓库内置的固定测试密钥库 `android/app/whale-nightly-debug.keystore`，配合递增 `whaleVersionCode`（CI 使用 `147 + GITHUB_RUN_NUMBER`），确保每日 Lite APK 可直接无缝覆盖安装且本地记忆/设置无损。
 2. **正式 Release（团队签名，fail-closed）**：
    - 本地：在 `android/keystore.properties` 配置团队密钥库（模板见 `keystore.properties.example`，密钥库与密码严禁提交 Git）。
    - CI：通过环境变量 `DSH_KEYSTORE_BASE64` 与 `DSH_KEYSTORE_PASSWORD` 注入。

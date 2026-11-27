@@ -1,10 +1,10 @@
-# Release Checklist（`0.4.0-whale.1` Lite 纯原生版）
+# Release Checklist（`0.5.0-whale.1` Lite 纯原生版）
 
 本清单对应当前 **Whale Assistant Lite 纯原生版**（`-PwhaleSeparateRuntime=true`，零 PRoot / Ubuntu `rootfs.bundle` 依赖，内嵌 Chaquopy CPython 3.11，单 APK 约 63 MB）。发版或合并关键改动前，按以下条目逐项核验。
 
 ## 1. 版本与自动化 CI 门禁
 
-- **版本一致性**：确认 `package.json` 的 `version` 与 `android/app/build.gradle` 的 `versionName` 一致（当前 `0.4.0-whale.1`），`versionCode` 递增（每日构建通过 `-PwhaleVersionCode=$((146 + GITHUB_RUN_NUMBER))` 自动递增）。
+- **版本一致性**：确认 `package.json` 的 `version` 与 `android/app/build.gradle` 的 `versionName` 一致（当前 `0.5.0-whale.1`），`versionCode` 递增（每日构建通过 `-PwhaleVersionCode=$((147 + GITHUB_RUN_NUMBER))` 自动递增）。
 - **前端构建与静态检查**：
   ```bash
   pnpm install --frozen-lockfile

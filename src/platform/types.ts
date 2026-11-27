@@ -1620,7 +1620,6 @@ export interface ListenerHandle {
 export type AppThemeMode = 'system' | 'light' | 'dark'
 
 /** 同步给 DSH 页面（访客 WebView）的受控主题：只有固定字段，没有 CSS / JS / URL。 */
-export type { SyncedTheme } from '../adaptiveAccent'
 
 export interface RuntimeWorkspaceFileList {
   files: string[]

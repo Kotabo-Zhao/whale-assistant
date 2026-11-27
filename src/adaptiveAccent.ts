@@ -14,7 +14,6 @@ export type AccentSource = 'default' | 'custom' | 'adaptive'
 
 export const ACCENT_SOURCE_KEY = 'dsh-mobile-accent-mode-v2'
 export const ADAPTIVE_ACCENT_KEY = 'dsh-mobile-adaptive-accent-v1'
-export const ACCENT_SYNC_KEY = 'dsh-mobile-accent-sync-v1'
 
 const SOURCES: readonly AccentSource[] = ['default', 'custom', 'adaptive']
 const HEX_COLOR = /^#[0-9a-f]{6}$/i
@@ -31,47 +30,7 @@ export interface AdaptiveAccent {
 }
 
 /** 同步给 DSH 页面的受控主题对象：字段固定，不含任何 CSS / JS / URL。 */
-export interface SyncedTheme {
-  mode: 'light' | 'dark' | 'system'
-  accent: string
-  background: string
-  surface: string
-  surfaceOpacity: number
-  /**
-   * DSH 页面里按钮与输入框的底色透明度（百分比）。
-   *
-   * 与 surfaceOpacity 分开：面板要够不透才读得清正文，控件则要能跟外壳的
-   * 「按钮与输入框不透明度」对齐。老记录没有这个字段，按 100 迁移。
-   */
-  controlOpacity?: number
-  /**
-   * DSH 侧边栏底色的不透明度（百分比）。
-   *
-   * 与 surfaceOpacity 分开：面板要够实才读得清正文，而侧边栏（尤其收起后的 56px 导轨）
-   * 透一些能让背景视频透出来，两者是不同用途。老记录没有这个字段，按 100 迁移。
-   */
-  sidebarOpacity?: number
-  /**
-   * DSH 右侧面板底色不透明度（百分比）。
-   *
-   * 右侧面板是右上角按钮打开的那一栏（「开始 / 工作区文件」），与左侧侧栏是两套界面：
-   * 左栏是导航，右栏承载正文，用户需要分开调。老记录没有这个字段，按 40 迁移——
-   * 此前右栏在有背景时整层透明、等于没有底，40% 是补上底色又仍透出背景的默认值。
-   */
-  rightPanelOpacity?: number
-  /**
-   * 「连背景一起同步」：页面是否连背景层一起画。
-   *
-   * 放进来而不是另开一条通道，是因为它与主题在同一次落盘里：地址、开关、颜色分两次写，
-   * 中间崩溃就会出现「开关说开了、页面却没有地址」这种半截状态。
-   */
-  syncBackground: boolean
-}
 
-export interface AccentSync {
-  syncedAt: number
-  theme: SyncedTheme
-}
 
 /** 亮度与饱和度区间：低于下限会糊进底色，高于上限会在深色模式里发光。 */
 export const ACCENT_LIGHTNESS_RANGE = [0.34, 0.62] as const
@@ -302,69 +261,6 @@ export function clearAdaptiveAccent(): void {
 }
 
 /** 校验同步主题对象：字段固定、类型受控，任何额外内容都不进存储。 */
-export function validateSyncedTheme(value: unknown): SyncedTheme {
-  if (!value || typeof value !== 'object') throw new Error('同步主题参数无效')
-  const data = value as Record<string, unknown>
-  if ((data.mode !== 'light' && data.mode !== 'dark' && data.mode !== 'system') ||
-    !isHexColor(data.accent) || !isHexColor(data.background) || !isHexColor(data.surface) ||
-    typeof data.surfaceOpacity !== 'number' || !Number.isInteger(data.surfaceOpacity) || data.surfaceOpacity < 0 || data.surfaceOpacity > 100) {
-    throw new Error('同步主题参数无效')
-  }
-  // 老记录里没有这个字段：那时同步的一定只有颜色，按 false 迁移，不再回头看用户。
-  const syncBackground = data.syncBackground
-  if (syncBackground !== undefined && typeof syncBackground !== 'boolean') throw new Error('同步主题参数无效')
-  // 老记录同样没有 controlOpacity：按 100（不透明）迁移，外观不变。
-  const controlOpacity = data.controlOpacity === undefined ? 100 : data.controlOpacity
-  if (typeof controlOpacity !== 'number' || !Number.isInteger(controlOpacity) || controlOpacity < 40 || controlOpacity > 100) {
-    throw new Error('同步主题参数无效')
-  }
-  // 侧栏透明度可以到 0（只剩按钮与文字），老记录同样按 100 迁移。
-  const sidebarOpacity = data.sidebarOpacity === undefined ? 100 : data.sidebarOpacity
-  if (typeof sidebarOpacity !== 'number' || !Number.isInteger(sidebarOpacity) || sidebarOpacity < 0 || sidebarOpacity > 100) {
-    throw new Error('同步主题参数无效')
-  }
-  // 右栏同样可到 0（整层透出背景），老记录按 40 迁移：此前右栏没有底色，补上默认档。
-  const rightPanelOpacity = data.rightPanelOpacity === undefined ? 40 : data.rightPanelOpacity
-  if (typeof rightPanelOpacity !== 'number' || !Number.isInteger(rightPanelOpacity) || rightPanelOpacity < 0 || rightPanelOpacity > 100) {
-    throw new Error('同步主题参数无效')
-  }
-  return {
-    mode: data.mode,
-    accent: data.accent,
-    background: data.background,
-    surface: data.surface,
-    surfaceOpacity: data.surfaceOpacity,
-    controlOpacity,
-    sidebarOpacity,
-    rightPanelOpacity,
-    syncBackground: syncBackground === true,
-  }
-}
-
-export function readAccentSync(): AccentSync | null {
-  const raw = storage()?.getItem(ACCENT_SYNC_KEY) ?? null
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    if (typeof parsed.syncedAt !== 'number' || !Number.isFinite(parsed.syncedAt)) return null
-    return { syncedAt: parsed.syncedAt, theme: validateSyncedTheme(parsed.theme) }
-  } catch { return null }
-}
-
-export function saveAccentSync(theme: SyncedTheme, now = Date.now()): AccentSync | null {
-  let checked: SyncedTheme
-  try { checked = validateSyncedTheme(theme) } catch { return null }
-  const store = storage()
-  if (!store) return null
-  const record: AccentSync = { syncedAt: now, theme: checked }
-  try { store.setItem(ACCENT_SYNC_KEY, JSON.stringify(record)) } catch { return null }
-  return record
-}
-
-export function clearAccentSync(): void {
-  try { storage()?.removeItem(ACCENT_SYNC_KEY) } catch { /* 同上 */ }
-}
-
 /**
  * 从背景 Blob 取像素：图片直接解码，视频只读首帧。
  *

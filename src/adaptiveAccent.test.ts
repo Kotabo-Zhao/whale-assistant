@@ -3,11 +3,9 @@ import {
   ACCENT_LIGHTNESS_RANGE,
   ACCENT_SATURATION_RANGE,
   ACCENT_SOURCE_KEY,
-  ACCENT_SYNC_KEY,
   ADAPTIVE_ACCENT_KEY,
   MIN_CONTRAST,
   clampAccent,
-  clearAccentSync,
   clearAdaptiveAccent,
   contrastRatio,
   deriveAccentFromPixels,
@@ -17,7 +15,6 @@ import {
   hexToRgb,
   pickOnColor,
   readAccentSource,
-  readAccentSync,
   readAdaptiveAccent,
   relativeLuminance,
   rgbToHex,
@@ -26,9 +23,7 @@ import {
   isAccentSource,
   isHexColor,
   saveAccentSource,
-  saveAccentSync,
   saveAdaptiveAccent,
-  validateSyncedTheme,
 } from './adaptiveAccent'
 
 /** 造一块像素：每个 `[r, g, b]` 重复 `repeat` 次，alpha 固定不透明。 */
@@ -189,50 +184,4 @@ describe('存储：三份互不覆盖的配置', () => {
     expect(readAdaptiveAccent()).toEqual(sample)
   })
 
-  it('同步记录只接受固定字段，非法配置拒绝写入', () => {
-    const theme = { mode: 'dark' as const, accent: '#6fa8dc', background: '#101820', surface: '#18222c', surfaceOpacity: 86, syncBackground: false }
-    const record = saveAccentSync(theme, 1700000000000)!
-    expect(record.syncedAt).toBe(1700000000000)
-    expect(readAccentSync()).toEqual(record)
-    expect(saveAccentSync({ ...theme, mode: 'blue' as never })).toBeNull()
-    expect(saveAccentSync({ ...theme, accent: '#6fa8d' })).toBeNull()
-    expect(saveAccentSync({ ...theme, accent: 'url(https://example.com/x.png)' as never })).toBeNull()
-    expect(saveAccentSync({ ...theme, surfaceOpacity: 101 })).toBeNull()
-    expect(saveAccentSync({ ...theme, surfaceOpacity: 86.5 })).toBeNull()
-    expect(saveAccentSync({ ...theme, surface: '<script>alert(1)</script>' as never })).toBeNull()
-    window.localStorage.setItem(ACCENT_SYNC_KEY, '{"syncedAt":"yesterday","theme":{}}')
-    expect(readAccentSync()).toBeNull()
-    clearAccentSync()
-    expect(readAccentSync()).toBeNull()
-  })
-
-  it('背景开关随主题一起落盘，老记录按 false 迁移', () => {
-    const base = { mode: 'dark' as const, accent: '#6fa8dc', background: '#101820', surface: '#18222c', surfaceOpacity: 86 }
-    // 老版本记录里没有这个字段：那时同步的一定只有颜色。
-    expect(validateSyncedTheme(base).syncBackground).toBe(false)
-    // 控件透明度同样按 100 迁移（老记录没有这一项）。
-    expect(validateSyncedTheme(base).controlOpacity).toBe(100)
-    expect(validateSyncedTheme({ ...base, controlOpacity: 60 }).controlOpacity).toBe(60)
-    expect(() => validateSyncedTheme({ ...base, controlOpacity: 39 })).toThrow()
-    expect(() => validateSyncedTheme({ ...base, controlOpacity: 100.5 })).toThrow()
-    // 侧栏透明度同样按 100 迁移；它可以到 0（导轨完全透出背景），但不接受负数与越界。
-    expect(validateSyncedTheme(base).sidebarOpacity).toBe(100)
-    expect(validateSyncedTheme({ ...base, sidebarOpacity: 0 }).sidebarOpacity).toBe(0)
-    expect(validateSyncedTheme({ ...base, sidebarOpacity: 45 }).sidebarOpacity).toBe(45)
-    expect(() => validateSyncedTheme({ ...base, sidebarOpacity: -1 })).toThrow()
-    expect(() => validateSyncedTheme({ ...base, sidebarOpacity: 101 })).toThrow()
-    expect(() => validateSyncedTheme({ ...base, sidebarOpacity: 45.5 })).toThrow()
-    // 右侧面板是独立一项：老记录没有字段按 40 迁移，同样允许 0..100。
-    expect(validateSyncedTheme(base).rightPanelOpacity).toBe(40)
-    expect(validateSyncedTheme({ ...base, rightPanelOpacity: 0 }).rightPanelOpacity).toBe(0)
-    expect(validateSyncedTheme({ ...base, rightPanelOpacity: 65 }).rightPanelOpacity).toBe(65)
-    expect(() => validateSyncedTheme({ ...base, rightPanelOpacity: -1 })).toThrow()
-    expect(() => validateSyncedTheme({ ...base, rightPanelOpacity: 101 })).toThrow()
-    expect(() => validateSyncedTheme({ ...base, rightPanelOpacity: 45.5 })).toThrow()
-    const withBackground = saveAccentSync({ ...base, syncBackground: true }, 1700000000000)!
-    expect(withBackground.theme.syncBackground).toBe(true)
-    expect(readAccentSync()?.theme.syncBackground).toBe(true)
-    // 非布尔取值来自序列化错误或页面注入，不能替用户猜。
-    expect(saveAccentSync({ ...base, syncBackground: 'true' as never })).toBeNull()
-  })
 })

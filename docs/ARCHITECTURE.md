@@ -1,11 +1,11 @@
 # Whale Assistant 架构说明
 
-Whale Assistant（`0.4.0-whale.1`）是一款 100% 原生 Android 个人 Super Agent，采用 **React + Capacitor 壳层** 与 **Kotlin 原生内核 + 内嵌 CPython 3.11** 分离架构，在 Lite 构建模式（`-PwhaleSeparateRuntime=true`）下无需任何 PRoot / Ubuntu 容器或离线 ONNX 向量模型即可运行全部核心能力。
+Whale Assistant（`0.5.0-whale.1`）是一款 100% 原生 Android 个人 Super Agent，采用 **React + Capacitor 壳层** 与 **Kotlin 原生内核 + 内嵌 CPython 3.11** 分离架构，在 Lite 构建模式（`-PwhaleSeparateRuntime=true`）下无需任何 PRoot / Ubuntu 容器或离线 ONNX 向量模型即可运行全部核心能力。
 
 ## 1. 前端交互层（`src/`）
 
 - **主对话工作台（`src/screens/WhaleChatScreen.tsx`）**：多会话持久化（最多 24 个会话）、原生 SSE 逐字流式渲染、中途插话修正（`whaleNativeChatSteer`）、一键中止（`whaleNativeChatCancel`）、实时步骤/计划反馈、行动回执卡（待办/记忆/资料/工坊）、同轮下一步建议胶囊（`<!--whale_next:[...]-->`）、Canvas 图片压缩、视频关键帧抽取与原生语音识别输入。
-- **双视觉主题体系（`src/whale-design.css`、`src/theme.ts`、`src/components/CuteIcon.tsx`）**：支持 `simple`（极简高对比）与 `cute`（原版鲸鱼娘 + 18 枚贴纸图标），同步控制 Android 状态栏与导航栏配色，支持强调色切换与减少动效开关。
+- **三主题 Quiet Luxury V3 视觉体系（`src/whale-studio-v2.css`、`src/whale-design.css`、`src/whale-motion.css`、`src/theme.ts`、`src/components/CuteIcon.tsx`）**：支持 `simple`（极简·静奢编辑）、`cute`（鲸鱼娘·雾面瓷白）与 `usagi`（乌萨奇·温润手账），同步控制 Android 状态栏与导航栏配色，支持强调色切换与减少动效开关。
 - **设置与工作台中心（`src/App.tsx`、`src/ui/appNavigation.ts`、`src/components/WhaleAutonomyCard.tsx`）**：聚焦「常用 · AI 模型 · 人格与陪伴 · 外观与语言」四大设置分组，集成自治预设（`fluent / balanced / strict`）、44dp–160dp 桌宠无级缩放、供应商密钥管理、记忆与资料库、任务面板及离线功能工坊。
 - **前端桥接层（`src/platform/native.ts`、`src/platform/types.ts`）**：统一对接 Android 侧 `MobileRuntimePlugin` 暴露的 144 个 `@PluginMethod`。
 

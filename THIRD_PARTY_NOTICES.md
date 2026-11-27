@@ -19,7 +19,6 @@ PRoot, and Operit runtime materials.
 | --- | --- | --- |
 | Capacitor | Android application shell and native bridge | MIT |
 | React | Management UI | MIT |
-| xterm.js | Terminal emulator | MIT |
 | Lucide | Interface icons | ISC |
 | Vite | Web build tooling | MIT |
 | TypeScript | Type checking and compilation | Apache-2.0 |
@@ -132,4 +131,4 @@ Official unmodified Shizuku v13.6.0.r1086.2650830c APK (Apache-2.0), copyright R
 
 ## DeepSeek dsh-superagent domain engine
 
-The domain engine is derived from `src/core` of https://github.com/deepseek-ai/dsh-superagent-prototype at commit `6337fc823ce20251c8de8085948165c81aaa701e`, copyright 2026 DeepSeek Harness Team, licensed under MIT. Original TypeScript and the license are in `scripts/vendor/dsh-superagent`; the license is also bundled alongside the generated engine in the Android runtime.
+The domain engine is derived from `src/core` of https://github.com/deepseek-ai/dsh-superagent-prototype at commit `6337fc823ce20251c8de8085948165c81aaa701e`, copyright 2026 DeepSeek Harness Team, licensed under MIT.

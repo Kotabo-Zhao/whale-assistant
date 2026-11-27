@@ -12,7 +12,7 @@ Whale Assistant 采用纯原生 Lite 架构（零 PRoot / Ubuntu 容器、零离
 
 | 项目 | 说明 |
 | :--- | :--- |
-| 应用版本 | `0.4.0-whale.1`（Lite 纯原生版，~63 MB） |
+| 应用版本 | `0.5.0-whale.1`（Lite 纯原生版，~63 MB） |
 | 应用包名 | `io.deepseekharness.mobile` |
 | 最低系统 | Android 8.0（API 26）及以上，`arm64-v8a` |
 | 核心引擎 | Kotlin 原生 SSE 流式引擎 + `WhaleHarnessCore` + 内嵌 CPython 3.11（PTC）+ 3+1 并发 Worker 池 |
