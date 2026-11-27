@@ -105,6 +105,21 @@ internal object WhaleExecutionRouter {
             )
         }
 
+        // 2b. 若恰有 1 个活跃 Worker 正处于等待用户回答态（attention 非空），用户直接回复或点选选项即自动透传唤醒该 Worker
+        val waitingWorkers = activeWorkers.filter { it.attention.isNotBlank() }
+        if (waitingWorkers.size == 1 && !asksCancel && !(mentionsWorker && (clearHints.any { it in lower } || statusHints.any { it in lower })) && !explicitSpawnHints.any { it in lower }) {
+            val target = waitingWorkers.single()
+            val cleaned = raw
+                .replace(Regex("^回复后台任务\s*${Regex.escape(target.id)}\s*[：:]?\s*", RegexOption.IGNORE_CASE), "")
+                .trim()
+            return Decision(
+                mode = Mode.WORKER_FOLLOWUP,
+                reason = "auto_reply_waiting_worker",
+                targetWorker = target,
+                payload = cleaned.ifBlank { raw },
+            )
+        }
+
         // 3. 追问/转向透传给活跃 Worker
         val asksFollowup = followupHints.any { it in lower }
         if (activeWorkers.isNotEmpty() && asksFollowup && (mentionsWorker || matchedActive.isNotEmpty() || "刚才那个" in raw || "那个任务" in raw)) {

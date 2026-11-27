@@ -703,13 +703,23 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
         const res = await bridge.companionDashboard?.({ operation: 'workerList' })
         const rawList = Array.isArray(res?.workers) ? res.workers : (Array.isArray(res?.items) ? res.items : [])
         const mapped = (rawList as Array<Record<string, unknown>>)
-          .map(w => ({
-            id: typeof w.id === 'string' ? w.id : '',
-            title: (typeof w.title === 'string' ? w.title : (typeof w.task === 'string' ? w.task : '后台任务')).slice(0, 26),
-            status: typeof w.status === 'string' ? w.status : '',
-            attention: typeof w.attention === 'string' ? w.attention : (typeof w.question === 'string' ? w.question : ''),
-          }))
-          .filter(w => w.id && ['running', 'queued', 'blocked', 'needs_input', 'attention'].includes(w.status))
+          .map(w => {
+            const rawStatus = typeof w.status === 'string' && w.status
+              ? w.status
+              : (typeof w.state === 'string' && w.state ? w.state : '')
+            const rawStage = typeof w.stage === 'string' ? w.stage : ''
+            const attention = typeof w.attention === 'string' ? w.attention : (typeof w.question === 'string' ? w.question : '')
+            const normalizedStatus = attention || rawStage === 'person/answer' || rawStage === 'person/blocked'
+              ? 'attention'
+              : rawStatus
+            return {
+              id: typeof w.id === 'string' ? w.id : '',
+              title: (typeof w.title === 'string' ? w.title : (typeof w.task === 'string' ? w.task : '后台任务')).slice(0, 26),
+              status: normalizedStatus,
+              attention,
+            }
+          })
+          .filter(w => w.id && (Boolean(w.attention) || ['running', 'queued', 'blocked', 'needs_input', 'attention'].includes(w.status)))
         const sig = mapped.map(w => `${w.id}:${w.status}:${w.title}:${w.attention}`).join('|')
         if (sig !== lastWorkersSigRef.current) {
           lastWorkersSigRef.current = sig
@@ -1095,23 +1105,38 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
         </div>
       </header>
 
-      {activeWorkers.length > 0 && (
-        <div className="whale-worker-capsule" role="status">
-          <span className="whale-worker-capsule-dot" aria-hidden="true" />
-          <span className="whale-worker-capsule-text">
-            {activeWorkers.find(w => w.status === 'blocked' || w.status === 'needs_input' || w.status === 'attention')
-              ? `后台任务待确认：${activeWorkers.find(w => w.status === 'blocked' || w.status === 'needs_input' || w.status === 'attention')!.attention || activeWorkers[0].title}`
-              : `${activeWorkers.length} 个后台任务运行中 · ${activeWorkers[0].title}`}
-          </span>
-          <button
-            type="button"
-            className="whale-worker-capsule-btn"
-            onClick={() => onNavigate('assistant-tasks')}
-          >
-            {t('查看')}
-          </button>
-        </div>
-      )}
+      {activeWorkers.length > 0 && (() => {
+        const waitingWorker = activeWorkers.find(w => Boolean(w.attention) || w.status === 'blocked' || w.status === 'needs_input' || w.status === 'attention')
+        return (
+          <div className="whale-worker-capsule" role="status">
+            <span className="whale-worker-capsule-dot" aria-hidden="true" />
+            <span className="whale-worker-capsule-text">
+              {waitingWorker
+                ? `后台任务待确认：${waitingWorker.attention || waitingWorker.title}`
+                : `${activeWorkers.length} 个后台任务运行中 · ${activeWorkers[0].title}`}
+            </span>
+            {waitingWorker && (
+              <button
+                type="button"
+                className="whale-worker-capsule-btn"
+                onClick={() => {
+                  setInput(`回复后台任务 ${waitingWorker.id}：`)
+                  inputRef.current?.focus()
+                }}
+              >
+                {t('去回复')}
+              </button>
+            )}
+            <button
+              type="button"
+              className="whale-worker-capsule-btn"
+              onClick={() => onNavigate('assistant-tasks')}
+            >
+              {t('查看')}
+            </button>
+          </div>
+        )
+      })()}
 
       {sessionsOpen && (
         <aside className="whale-sessions-drawer" aria-label={t('本地会话管理')}>
@@ -1468,7 +1493,10 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
                         key={`${msg.id}-sug-${idx}`}
                         type="button"
                         className="whale-next-chip"
-                        onClick={() => { void sendText(sug) }}
+                        disabled={sending}
+                        onClick={() => {
+                          if (!sending) void sendText(sug)
+                        }}
                       >
                         {sug}
                       </button>

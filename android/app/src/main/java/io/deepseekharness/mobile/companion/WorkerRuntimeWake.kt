@@ -225,7 +225,7 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
         }
 
         /** Worker 遇到缺参或需用户拍板时主动挂起提问（进入 person/answer 态并即时通知 Router/桌宠）。 */
-        fun askUserAndPause(context: Context, workerId: String, question: String): JSONObject {
+        fun askUserAndPause(context: Context, workerId: String, question: String, options: List<String> = emptyList()): JSONObject {
             val app = context.applicationContext
             val cleanQ = question.trim().take(600)
             require(cleanQ.isNotEmpty()) { "提问内容不能为空" }
@@ -246,7 +246,17 @@ internal class WorkerRuntimeWake(private val context: Context) : RuntimeEventSin
                         .put("next", "任务 ID：$workerId"),
                 )
                 WhaleSharedChatStore.appendTurn(app, "", notice, "pet")
-                io.deepseekharness.mobile.OverlayBallService.companionTaskHint()
+                if (!io.deepseekharness.mobile.AppForeground.isForeground()) {
+                    io.deepseekharness.mobile.OverlayBallService.pushQuestionToPet(
+                        title = "后台任务待你确认：$title",
+                        question = cleanQ,
+                        options = options,
+                        workerId = workerId,
+                        sessionId = null,
+                    )
+                } else {
+                    io.deepseekharness.mobile.OverlayBallService.companionTaskHint()
+                }
             }
             return JSONObject().put("ok", true).put("workerId", workerId).put("stage", "person/answer").put("question", cleanQ)
         }

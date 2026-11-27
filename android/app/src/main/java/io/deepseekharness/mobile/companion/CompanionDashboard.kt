@@ -580,7 +580,35 @@ internal class CompanionDashboard(private val context: Context) {
             "workerGroups" -> JSONObject().put("groups",WorkerDashboardStore(context).groups())
             "workerGroupAnalysisDraft" -> JSONObject().put("draft",WorkerDashboardStore(context).analysisDraft(text("group")))
             "workerDetail" -> WorkerDashboardStore(context).detail(text("id"),request.optInt("offset",0))
-            "workerList" -> WorkerDashboardStore(context).list()
+            "workerList" -> {
+                val base = WorkerDashboardStore(context).list()
+                val items = base.optJSONArray("items") ?: JSONArray()
+                val byId = LinkedHashMap<String, JSONObject>()
+                for (i in 0 until items.length()) {
+                    val row = items.optJSONObject(i) ?: continue
+                    val id = row.optString("id", "").trim()
+                    if (id.isNotEmpty()) {
+                        if (!row.has("status") && row.has("state")) row.put("status", row.optString("state"))
+                        byId[id] = row
+                    }
+                }
+                val live = WhaleNativeWorkerPool.snapshot()
+                for (i in 0 until live.length()) {
+                    val row = live.optJSONObject(i) ?: continue
+                    val id = row.optString("id", "").trim()
+                    if (id.isNotEmpty()) {
+                        val statusVal = when {
+                            row.optString("attention").isNotBlank() || row.optString("stage") == "person/answer" -> "attention"
+                            else -> row.optString("state", "running")
+                        }
+                        row.put("status", statusVal)
+                        byId[id] = row
+                    }
+                }
+                val merged = JSONArray()
+                byId.values.forEach { merged.put(it) }
+                base.put("items", merged).put("workers", merged)
+            }
             "workerPreviewDraft" -> {
                 WorkerDashboardStore(context).previewDraft(text("id"), text("revision"))
                 JSONObject().put("ok", true)

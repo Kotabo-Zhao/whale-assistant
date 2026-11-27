@@ -225,9 +225,15 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                     val replyText = when {
                         execDecision.targetWorker != null -> {
                             val t = execDecision.targetWorker
-                            val (ok, detail) = WhaleNativeWorkerPool.deliverFollowup(t.id, execDecision.payload)
-                            if (ok) "已将补充指令实时透传给后台任务「${t.title}」（`${t.id}`）：\n> ${execDecision.payload}"
-                            else "透传失败：$detail"
+                            val wakeRes = WorkerRuntimeWake.followupOrResume(app, t.id, execDecision.payload)
+                            val ok = wakeRes.optBoolean("delivered", false)
+                            val resumed = wakeRes.optBoolean("resumed", false)
+                            if (ok) {
+                                val verb = if (resumed) "已唤醒并继续推进后台任务" else "已将回复实时透传给后台任务"
+                                "$verb「${t.title}」（`${t.id}`）：\n> ${execDecision.payload}"
+                            } else {
+                                "透传失败：${wakeRes.optString("error", "未知错误")}"
+                            }
                         }
                         execDecision.ambiguousWorkers.isNotEmpty() -> {
                             buildString {
@@ -317,7 +323,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         val allEndpoints = resolveEndpoints(store, settings)
         val rawEndpoint = allEndpoints.first()
         val budgetProgress = runCatching { WhaleTokenMeter.snapshot(app).progress }.getOrDefault(0f)
-        val effectiveBudget = if (execMode == WhaleExecutionRouter.Mode.DIRECT_CHAT) maxOf(budgetProgress, 0.90f) else budgetProgress
+        val effectiveBudget = budgetProgress
         val routeDecision = WhaleModelRouter.routeWithPrefs(app, rawEndpoint.model, trimmed, images.isNotEmpty(), effectiveBudget)
         val endpoint = rawEndpoint.copy(model = routeDecision.model)
         val fallbackEndpoints = allEndpoints.drop(1)
@@ -485,7 +491,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 }
                 maskedUpToRound = maskEnd
             }
-            WhaleHarnessCore.ImageOffloadPolicy.offloadOldestImages(messages, maxRetainedImages = 2)
+            WhaleHarnessCore.ImageOffloadPolicy.offloadOldestImages(messages, maxRetainedImages = 4)
 
             // 4b. KV 缓存友好型结构化压缩：上下文超 24k 字符且距上次压缩 >= 4 轮时触发（支持超长任务多次无损续跑）
             if (round - lastCompactedRound >= 4 && round >= 3 && WhaleHarnessCore.PrefixCacheCompactor.estimateMessagesChars(messages) > WhaleHarnessCore.PrefixCacheCompactor.COMPACTION_CHAR_THRESHOLD) {
@@ -654,7 +660,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val outcome = if (isForegroundSlowTool) {
                     val future = parallelToolPool.submit(Callable { tools.execute(p.fnName, p.fnArgs, sessionId) })
                     try {
-                        future.get(12_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        future.get(25_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
                     } catch (_: java.util.concurrent.TimeoutException) {
                         val jobId = "bg-${UUID.randomUUID().toString().take(8)}"
                         WhaleNativeWorkerPool.submit(title = "后台执行 ${p.fnName}", id = jobId, priorityBy = "launch") {
@@ -663,7 +669,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                         }
                         WhaleNativeToolRegistry.ToolOutcome(
                             p.fnName,
-                            "超过 12 秒已自动转后台",
+                            "超过 25 秒已自动转后台",
                             true,
                             JSONObject()
                                 .put("status", "promoted_to_background")
@@ -874,6 +880,20 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         }
         val (cleanReply, parsedSuggestions) = extractSuggestions(finalReply)
         val suggestions = if (parsedSuggestions.isNotEmpty() || wasCancelled) parsedSuggestions else inferFallbackSuggestions(cleanReply)
+        // 若软件在后台、仅桌宠在前台，且本轮回复需要用户做选择或回答问题，自动经桌宠推送交互式提问卡
+        if (!isWorkerSession && !wasCancelled && !io.deepseekharness.mobile.AppForeground.isForeground() &&
+            suggestions.isNotEmpty() && (inferFallbackSuggestions(cleanReply).isNotEmpty() || cleanReply.trimEnd().endsWith("？") || cleanReply.trimEnd().endsWith("?"))
+        ) {
+            runCatching {
+                io.deepseekharness.mobile.OverlayBallService.pushQuestionToPet(
+                    title = "鲸鱼娘等你确认",
+                    question = cleanReply.take(280),
+                    options = suggestions,
+                    workerId = null,
+                    sessionId = sessionId,
+                )
+            }
+        }
         // 本轮正常交付后自动清理临时压缩检查点与已续跑完的 paused 断点，防止下一轮切换新话题时发生串号
         if (!hitRoundLimit && !wasCancelled && !isWorkerSession) {
             WhaleHarnessCore.PrefixCacheCompactor.clearCheckpoint(app, sessionId)
@@ -952,8 +972,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
         append("1. 清楚自身能力、绝不轻言做不到：你拥有内置全功能 Python 3.11（预装 numpy/pandas/matplotlib/pillow/openpyxl/docx/pptx/pypdf/reportlab/requests/httpx/bs4/lxml/sympy/qrcode；装纯 Python 第三方包直接用代码内置 pip_install(\"包名\") 或 whale_py_install 自动递归装依赖到可写 SITE_PACKAGES，禁止 subprocess 调系统 pip/python）、自主造工具引擎（whale_tool_create 支持 python/composite/http_json/js）、功能工坊离线小软件、全网+B站/小红书/搜图检索、无障碍与副屏 0-Token 录制宏、事件主动守护与长期目标图。除常驻工具外，全部 94+ 专域工具（手机屏控/截屏/副屏/工坊/文件/设置/定时/造工具/自造 custom_*/MCP）均通过 whale_tool_catalog(domain) 查参数并用 whale_call(tool, argsJson) 直接调用，绝不轻言做不到。\n")
         append("2. 缺工具自己造、本地 MCP 与加密登录态直接用：遇到可复用需求主动用 whale_tool_create(kind=\"python\"|\"composite\"|\"http_json\"|\"js\") 造 custom_* 工具，或用 whale_mcp_add(url=\"python://<id>\", code=...) 在内置 CPython 3.11 进程内直接部署本地 Python MCP（无需 npx/stdio）；需要读取 B站/小红书/知乎等用户已登录账号数据时，绝不索要明文 SESSDATA/Cookie，直接调 whale_call(tool=\"whale_site_auth\", argsJson=\"{\\\"action\\\":\\\"open_login\\\",\\\"url\\\":\\\"https://...\\\"}\") 让用户在安全 WebView 授权，Cookie 由 Android Keystore 加密托管并由 whale_web_fetch 自动携带。\n")
         append("3. 先做后报、遇阻自主换路：所有只读调研、查证与代码验证直接一步做完再交付，严禁停在半路反问\"要不要我帮你查\"；工具报错或抓空时立刻自主换通道（web_fetch→web_render/web_search/image_search；代码报错自修重跑至通过；宏遇弹窗单步视觉自愈），绝不把原始报错甩给用户；仅支付、删除、对外发消息等不可逆操作才先确认；察觉长期目标或高频习惯时主动用 whale_goal_create / whale_playbook_save / whale_routine_manage 帮主人沉淀。\n")
-        append("交互卡片（按需）：当回复涉及可勾选清单、多方案对比、倒计时或参数试算时，可直接输出 ```whale-widget JSON 块（type=checklist|compare|timer|calc，含 title 及对应 items/columns+rows/durationSec/fields+formula+resultLabel），前端会原生渲染为可交互卡片。\n")
-        append("快捷回复（强制）：每次最终回复末尾另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（≤14字）；若向用户提问或给选项，必须给出可直接点选的简短回答。")
+        append("交互卡片（按需）：当回复涉及向用户提问选择、可勾选清单、多方案对比、倒计时或参数试算时，可直接输出 ```whale-widget JSON 块（type=question|checklist|compare|timer|calc，其中 question 含 title/question/multiSelect/options:[{label,description}]），前端与桌宠会原生渲染为可一键提交的交互卡片。\n")
+        append("快捷回复（强制）：每次最终回复末尾另起一行输出 <!--whale_next:[\"选项1\",\"选项2\",\"选项3\"]-->（≤18字，最多4项）；若向用户提问或给选项，必须给出可直接点选的简短回答。")
     }
 
     /** 为独立后台 Worker 注入精简事实上下文（时间/主人核心偏好/已启用 Skill 与 MCP/共享黑板键），不掺闲聊人设与世界书。 */
@@ -1442,7 +1462,7 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 val arr = JSONArray(match.groupValues[1])
                 for (i in 0 until arr.length()) {
                     val item = arr.optString(i).trim()
-                    if (item.isNotEmpty() && item.length <= 28 && list.size < 3) list.add(item)
+                    if (item.isNotEmpty() && item.length <= 36 && list.size < 4) list.add(item)
                 }
             }
             return clean to list
@@ -1477,8 +1497,8 @@ internal class WhaleNativeAgentEngine(private val context: Context) {
                 else -> listOf("好的，按你建议做", "再详细说说", "先这样")
             }
         }
-        private const val MAX_TOOL_ROUNDS = 48
-        private const val MAX_WORKER_TOOL_ROUNDS = 64
+        private const val MAX_TOOL_ROUNDS = 64
+        private const val MAX_WORKER_TOOL_ROUNDS = 96
         private val parallelToolPool = Executors.newFixedThreadPool(4)
     }
 

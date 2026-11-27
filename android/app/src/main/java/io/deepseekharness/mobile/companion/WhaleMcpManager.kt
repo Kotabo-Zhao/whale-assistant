@@ -22,7 +22,7 @@ internal object WhaleMcpManager {
     private const val PREFS_NAME = "whale_mcp_servers_v1"
     private const val KEY_SERVERS = "servers"
     private const val MAX_SERVERS = 16
-    private const val MAX_DYNAMIC_TOOLS = 24
+    private const val MAX_DYNAMIC_TOOLS = 64
     private val rpcId = AtomicInteger(1)
 
     private fun prefs(context: Context) =

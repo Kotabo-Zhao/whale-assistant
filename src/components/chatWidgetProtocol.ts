@@ -27,7 +27,22 @@ export interface CalcWidgetSpec {
   resultUnit?: string
 }
 
-export type WhaleWidgetSpec = ChecklistWidgetSpec | CompareWidgetSpec | TimerWidgetSpec | CalcWidgetSpec
+export interface QuestionWidgetOption {
+  label: string
+  description?: string
+  value?: string
+}
+
+export interface QuestionWidgetSpec {
+  type: 'question'
+  title: string
+  question?: string
+  multiSelect?: boolean
+  workerId?: string
+  options: QuestionWidgetOption[]
+}
+
+export type WhaleWidgetSpec = ChecklistWidgetSpec | CompareWidgetSpec | TimerWidgetSpec | CalcWidgetSpec | QuestionWidgetSpec
 
 export interface ExtractedWidgets {
   cleanMarkdown: string
@@ -50,6 +65,9 @@ function isValidWidget(obj: unknown): obj is WhaleWidgetSpec {
   }
   if (rec.type === 'calc') {
     return Array.isArray(rec.fields) && rec.fields.length > 0 && typeof rec.formula === 'string' && typeof rec.resultLabel === 'string'
+  }
+  if (rec.type === 'question') {
+    return Array.isArray(rec.options) && rec.options.length > 0 && rec.options.every(o => o && typeof (o as Record<string, unknown>).label === 'string' && ((o as Record<string, unknown>).label as string).trim().length > 0)
   }
   return false
 }

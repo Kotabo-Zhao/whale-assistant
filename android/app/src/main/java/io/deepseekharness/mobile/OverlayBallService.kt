@@ -366,6 +366,7 @@ class OverlayBallService : Service() {
      * 球再也挂不回来。状态由视图的附着回调维护，并在挂载成功时置位、摘除时清零。
      */
     private var ballAttached = false
+    private var askPromptDialog: android.app.AlertDialog? = null
     private var hiddenForHostApp = false
 
     /**
@@ -643,6 +644,8 @@ class OverlayBallService : Service() {
     }
 
     override fun onDestroy() {
+        runCatching { askPromptDialog?.dismiss() }
+        askPromptDialog = null
         cancelSnapSpring()
         dragVelocityTracker?.recycle()
         dragVelocityTracker = null
@@ -993,6 +996,101 @@ class OverlayBallService : Service() {
             }
         }
         return false
+    }
+
+    internal fun showAskPrompt(
+        title: String,
+        question: String,
+        options: List<String> = emptyList(),
+        workerId: String? = null,
+        sessionId: String? = null,
+    ) {
+        if (!ballAttached || ballView == null || CompanionStore(this).inQuietHours()) return
+        if (!Settings.canDrawOverlays(this)) return
+        petActing.react(PetAction.NOTICE, SystemClock.uptimeMillis())
+        wakePetMotion()
+        runCatching { askPromptDialog?.dismiss() }
+        askPromptDialog = null
+
+        val dp = resources.displayMetrics.density
+        val pad = (16 * dp).toInt()
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, (10 * dp).toInt(), pad, (8 * dp).toInt())
+        }
+        container.addView(android.widget.TextView(this).apply {
+            text = question.trim()
+            textSize = 14.5f
+            setPadding(0, 0, 0, (10 * dp).toInt())
+        })
+
+        fun dispatchAnswer(answerText: String) {
+            val clean = answerText.trim()
+            if (clean.isEmpty()) return
+            runCatching { askPromptDialog?.dismiss() }
+            askPromptDialog = null
+            toastCurrentThread("已收到回复，鲸鱼娘继续推进中…")
+            val appCtx = applicationContext
+            Thread({
+                runCatching {
+                    if (!workerId.isNullOrBlank()) {
+                        io.deepseekharness.mobile.companion.WorkerRuntimeWake.followupOrResume(appCtx, workerId, clean)
+                    } else {
+                        val engine = io.deepseekharness.mobile.companion.WhaleNativeAgentEngine(appCtx)
+                        val res = engine.send(
+                            userMessage = clean,
+                            history = listOf("assistant" to question),
+                            sessionId = sessionId ?: "whale-main",
+                        )
+                        if (res.reply.isNotBlank()) {
+                            io.deepseekharness.mobile.companion.WhaleSharedChatStore.appendTurn(appCtx, clean, res.reply, "pet")
+                        }
+                    }
+                }
+            }, "whale-pet-ask-reply").start()
+        }
+
+        options.filter { it.isNotBlank() }.take(4).forEach { opt ->
+            val btn = android.widget.Button(this).apply {
+                text = opt
+                isAllCaps = false
+                setOnClickListener { dispatchAnswer(opt) }
+            }
+            val lp = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = (6 * dp).toInt() }
+            container.addView(btn, lp)
+        }
+
+        val inputBox = android.widget.EditText(this).apply {
+            hint = "或直接输入你的回答…"
+            maxLines = 4
+        }
+        container.addView(inputBox)
+
+        val scroll = android.widget.ScrollView(this).apply { addView(container) }
+        val themedCtx = android.view.ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+        val dialog = android.app.AlertDialog.Builder(themedCtx)
+            .setTitle(title.ifBlank { "鲸鱼娘需要你确认" })
+            .setView(scroll)
+            .setNegativeButton("稍后", null)
+            .setPositiveButton("发送回答", null)
+            .create()
+        dialog.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+        dialog.setOnDismissListener { if (askPromptDialog === dialog) askPromptDialog = null }
+        runCatching {
+            dialog.show()
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
+                val txt = inputBox.text?.toString().orEmpty().trim()
+                if (txt.isEmpty()) {
+                    toastCurrentThread("请点选一个选项或输入回答")
+                } else {
+                    dispatchAnswer(txt)
+                }
+            }
+            askPromptDialog = dialog
+        }
     }
 
     /**
@@ -3329,6 +3427,21 @@ class OverlayBallService : Service() {
                 }
             }
         }
+        /**
+         * 软件在后台、仅桌宠在前台时，由桌宠直接推送可交互提问弹窗（支持一键点选选项或输入自定义回答）。
+         */
+        internal fun pushQuestionToPet(
+            title: String,
+            question: String,
+            options: List<String> = emptyList(),
+            workerId: String? = null,
+            sessionId: String? = null,
+        ) {
+            Handler(Looper.getMainLooper()).post {
+                activeService?.showAskPrompt(title, question, options, workerId, sessionId)
+            }
+        }
+
         internal fun companionHint(message: String) {
             Handler(Looper.getMainLooper()).post {
                 activeService?.let { service ->
