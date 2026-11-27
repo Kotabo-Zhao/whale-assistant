@@ -399,14 +399,36 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
     return inst
   }, [])
   const renderedHtmlCache = useRef<Map<string, string>>(new Map())
+  const widgetExtractCache = useRef<Map<string, ReturnType<typeof extractWhaleWidgets>>>(new Map())
   const renderCachedMarkdown = (id: string, text: string): string => {
     const key = `${id}:${text.length}`
-    const hit = renderedHtmlCache.current.get(key)
-    if (hit !== undefined) return hit
+    const cache = renderedHtmlCache.current
+    const hit = cache.get(key)
+    if (hit !== undefined) {
+      cache.delete(key)
+      cache.set(key, hit)
+      return hit
+    }
     const html = md.render(text)
-    if (renderedHtmlCache.current.size > 120) renderedHtmlCache.current.clear()
-    renderedHtmlCache.current.set(key, html)
+    if (cache.size >= 160) {
+      const oldest = cache.keys().next().value
+      if (oldest !== undefined) cache.delete(oldest)
+    }
+    cache.set(key, html)
     return html
+  }
+  const extractCachedWidgets = (id: string, text: string): ReturnType<typeof extractWhaleWidgets> => {
+    const key = `${id}:${text.length}`
+    const cache = widgetExtractCache.current
+    const hit = cache.get(key)
+    if (hit !== undefined) return hit
+    const parsed = extractWhaleWidgets(text, false)
+    if (cache.size >= 160) {
+      const oldest = cache.keys().next().value
+      if (oldest !== undefined) cache.delete(oldest)
+    }
+    cache.set(key, parsed)
+    return parsed
   }
 
   const currentSession = useMemo(
@@ -416,19 +438,36 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
   const messages = currentSession.messages
   const showArchiveHint = !sending && looksLikeArchivableContent(input) && !input.startsWith('帮我把下面内容存入')
 
-  useEffect(() => {
+  const latestPersistRef = useRef({ sessions, activeSessionId: currentSession.id })
+  latestPersistRef.current = { sessions, activeSessionId: currentSession.id }
+  const flushSessionsToStorage = useCallback(() => {
     try {
+      const { sessions: list, activeSessionId } = latestPersistRef.current
       // 图片 Base64 仅保留在当前内存会话中，避免撑爆 WebView 5MB localStorage 配额导致后续会话丢失
-      const compactSessions = sessions.slice(0, MAX_SESSIONS).map(s => ({
+      const compactSessions = list.slice(0, MAX_SESSIONS).map(s => ({
         ...s,
         messages: s.messages.map(m => (m.images ? { ...m, images: undefined } : m)),
       }))
       window.localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(compactSessions))
-      window.localStorage.setItem(ACTIVE_SESSION_KEY, currentSession.id)
+      window.localStorage.setItem(ACTIVE_SESSION_KEY, activeSessionId)
     } catch {
       // Ignore storage quota errors.
     }
-  }, [sessions, currentSession.id])
+  }, [])
+  useEffect(() => {
+    const timer = window.setTimeout(flushSessionsToStorage, 320)
+    return () => window.clearTimeout(timer)
+  }, [sessions, currentSession.id, flushSessionsToStorage])
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === 'hidden') flushSessionsToStorage() }
+    window.addEventListener('pagehide', flushSessionsToStorage)
+    document.addEventListener('visibilitychange', onHide)
+    return () => {
+      flushSessionsToStorage()
+      window.removeEventListener('pagehide', flushSessionsToStorage)
+      document.removeEventListener('visibilitychange', onHide)
+    }
+  }, [flushSessionsToStorage])
 
   const autoFollowRef = useRef(true)
   const programmaticScrollRef = useRef(false)
@@ -453,18 +492,51 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
     if (!bridge.addWhaleChatListener) return
     let disposed = false
     let cleanup: (() => Promise<void>) | undefined
+    let pendingDelta = ''
+    let reasoningDirty = false
+    let flushRaf: number | null = null
+    const flushStreamFrame = () => {
+      flushRaf = null
+      if (disposed) return
+      if (pendingDelta) {
+        const chunk = pendingDelta
+        pendingDelta = ''
+        setStreamingText(prev => prev + chunk)
+      }
+      if (reasoningDirty) {
+        reasoningDirty = false
+        setStreamingReasoning(streamingReasoningRef.current)
+      }
+    }
+    const scheduleStreamFlush = () => {
+      if (flushRaf === null) {
+        flushRaf = window.requestAnimationFrame(flushStreamFrame)
+      }
+    }
     void bridge.addWhaleChatListener(event => {
       if (disposed || !activeRequestRef.current || event.requestId !== activeRequestRef.current) return
       if (event.type === 'delta' && event.text) {
-        setStreamingText(prev => prev + event.text)
+        pendingDelta += event.text
+        scheduleStreamFlush()
       } else if (event.type === 'reasoning' && event.text) {
         if (reasoningStartRef.current === 0) reasoningStartRef.current = Date.now()
         streamingReasoningRef.current += event.text
-        setStreamingReasoning(streamingReasoningRef.current)
+        reasoningDirty = true
+        scheduleStreamFlush()
       } else if (event.type === 'step' && event.step) {
+        if (flushRaf !== null) {
+          window.cancelAnimationFrame(flushRaf)
+          flushStreamFrame()
+        }
         setStreamingSteps(prev => [...prev, event.step!])
       } else if (event.type === 'phase' && event.phase) {
         if (event.phase === 'restarting') {
+          pendingDelta = ''
+          reasoningDirty = false
+          if (flushRaf !== null) {
+            window.cancelAnimationFrame(flushRaf)
+            flushRaf = null
+          }
           setStreamingText('')
         }
         setStreamingPhase(event.phase)
@@ -478,6 +550,7 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
     }).catch(() => {})
     return () => {
       disposed = true
+      if (flushRaf !== null) window.cancelAnimationFrame(flushRaf)
       if (cleanup) void cleanup()
     }
   }, [bridge])
@@ -611,8 +684,8 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
     const onVis = () => { if (document.visibilityState === 'visible') void pullPetTurns() }
     const onFocus = () => { void pullPetTurns() }
     const pollTimer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void pullPetTurns()
-    }, 2500)
+      if (isVisible && document.visibilityState === 'visible') void pullPetTurns()
+    }, 4000)
     document.addEventListener('visibilitychange', onVis)
     window.addEventListener('focus', onFocus)
     return () => {
@@ -621,8 +694,9 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
       document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('focus', onFocus)
     }
-  }, [bridge, activeId])
+  }, [bridge, activeId, isVisible])
 
+  const lastWorkersSigRef = useRef('')
   useEffect(() => {
     const pollWorkers = async () => {
       try {
@@ -636,15 +710,19 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
             attention: typeof w.attention === 'string' ? w.attention : (typeof w.question === 'string' ? w.question : ''),
           }))
           .filter(w => w.id && ['running', 'queued', 'blocked', 'needs_input', 'attention'].includes(w.status))
-        setActiveWorkers(mapped)
+        const sig = mapped.map(w => `${w.id}:${w.status}:${w.title}:${w.attention}`).join('|')
+        if (sig !== lastWorkersSigRef.current) {
+          lastWorkersSigRef.current = sig
+          setActiveWorkers(mapped)
+        }
       } catch { /* ignore */ }
     }
     void pollWorkers()
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void pollWorkers()
+      if (isVisible && document.visibilityState === 'visible') void pollWorkers()
     }, 6000)
     return () => window.clearInterval(timer)
-  }, [bridge])
+  }, [bridge, isVisible])
 
   const cancelCurrentTurn = async (): Promise<void> => {
     const reqId = activeRequestRef.current
@@ -1213,7 +1291,7 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
                         </details>
                       )}
                       {(() => {
-                        const extracted = extractWhaleWidgets(msg.text, false)
+                        const extracted = extractCachedWidgets(msg.id, msg.text)
                         return (
                           <>
                             {extracted.cleanMarkdown && (

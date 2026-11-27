@@ -277,8 +277,8 @@ body {
 .mobile-header,
 .whale-chat-header.is-minimal {
   background: var(--header-bg) !important;
-  backdrop-filter: blur(22px) saturate(165%) !important;
-  -webkit-backdrop-filter: blur(22px) saturate(165%) !important;
+  backdrop-filter: blur(12px) saturate(135%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(135%) !important;
   border: 0 !important;
   border-bottom: 0 !important;
   border-radius: 0 !important;
@@ -305,8 +305,8 @@ body {
 /* Floating Borderless Pill Bottom Navigation (All 3 Themes) */
 .bottom-navigation {
   background: color-mix(in srgb, var(--surface-raised) 84%, transparent) !important;
-  backdrop-filter: blur(24px) saturate(175%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(175%) !important;
+  backdrop-filter: blur(14px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
   border: 1px solid var(--line-faint) !important;
   box-shadow: var(--shadow-dock) !important;
 }
@@ -715,8 +715,8 @@ select:focus {
   border-radius: 26px !important;
   border: 1px solid var(--line-faint) !important;
   background: color-mix(in srgb, var(--surface-raised) 92%, transparent) !important;
-  backdrop-filter: blur(22px) saturate(165%) !important;
-  -webkit-backdrop-filter: blur(22px) saturate(165%) !important;
+  backdrop-filter: blur(12px) saturate(135%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(135%) !important;
   box-shadow: var(--shadow-elevated) !important;
 }
 .whale-chat-composer:focus-within {
@@ -818,8 +818,8 @@ select:focus {
 .toast {
   border-radius: 999px !important;
   border: 1px solid var(--line-faint) !important;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   box-shadow: var(--shadow-elevated) !important;
 }
 

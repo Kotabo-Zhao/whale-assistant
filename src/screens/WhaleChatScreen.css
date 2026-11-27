@@ -2979,3 +2979,22 @@
 .whale-a2ui-slider-row { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; }
 .whale-a2ui-slider-head { display: flex; justify-content: space-between; color: var(--ink); }
 .whale-a2ui-slider-row input[type=range] { width: 100%; accent-color: var(--blue); }
+
+/* 120fps scroll & streaming containment */
+.whale-chat-list {
+  contain: layout style;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.whale-msg {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+  contain: layout style;
+}
+.whale-msg-bubble.whale-streaming {
+  contain: layout style;
+}
+.whale-chat-header,
+.whale-composer-dock {
+  transform: translateZ(0);
+}

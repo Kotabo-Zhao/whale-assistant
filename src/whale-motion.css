@@ -629,3 +629,16 @@ body,
 :root[data-power-profile='eco'] button:active {
   transform: none !important;
 }
+
+/* Pause infinite ambient loops in Eco mode or reduced-motion to save GPU/battery */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+:root[data-power-profile='eco'] .whale-chan-float,
+:root[data-power-profile='eco'] .whale-usagi-idle,
+:root[data-power-profile='eco'] .whale-halo-breathe {
+  animation: none !important;
+}

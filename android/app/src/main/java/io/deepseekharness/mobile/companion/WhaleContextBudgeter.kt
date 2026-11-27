@@ -96,8 +96,8 @@ internal object WhaleContextBudgeter {
      */
     fun minifyToolSchemas(
         rawTools: JSONArray,
-        maxToolDescChars: Int = 96,
-        maxParamDescChars: Int = 64,
+        maxToolDescChars: Int = 78,
+        maxParamDescChars: Int = 48,
     ): JSONArray {
         val list = ArrayList<Pair<String, JSONObject>>(rawTools.length())
         val seenNames = HashSet<String>(rawTools.length())
@@ -129,7 +129,16 @@ internal object WhaleContextBudgeter {
                         val pDesc = compactSentence(pObj.optString("description", ""), maxParamDescChars)
                         if (pDesc.isNotEmpty()) slimP.put("description", pDesc)
                         pObj.optJSONArray("enum")?.let { if (it.length() > 0) slimP.put("enum", it) }
-                        pObj.optJSONObject("items")?.let { slimP.put("items", it) }
+                        pObj.optJSONObject("items")?.let { itemsObj ->
+                            val slimItems = JSONObject()
+                            val itType = itemsObj.optString("type", "")
+                            if (itType.isNotEmpty()) slimItems.put("type", itType)
+                            val itDesc = compactSentence(itemsObj.optString("description", ""), 32)
+                            if (itDesc.isNotEmpty()) slimItems.put("description", itDesc)
+                            itemsObj.optJSONArray("enum")?.let { if (it.length() > 0) slimItems.put("enum", it) }
+                            itemsObj.optJSONObject("properties")?.let { slimItems.put("properties", it) }
+                            slimP.put("items", if (slimItems.length() > 0) slimItems else itemsObj)
+                        }
                         slimProps.put(k, slimP)
                     }
                 }
@@ -236,10 +245,10 @@ internal object WhaleContextBudgeter {
     fun dynamicContextBudget(userQuery: String, hasCheckpoint: Boolean, hasActiveTodo: Boolean): Int {
         val qLen = userQuery.trim().length
         return when {
-            qLen <= 14 && !hasCheckpoint && !hasActiveTodo -> 720
-            qLen <= 60 && !hasCheckpoint -> 1_900
-            hasCheckpoint || hasActiveTodo || qLen > 120 -> 3_200
-            else -> 2_400
+            qLen <= 14 && !hasCheckpoint && !hasActiveTodo -> 600
+            qLen <= 60 && !hasCheckpoint -> 1_650
+            hasCheckpoint || hasActiveTodo || qLen > 120 -> 3_000
+            else -> 2_200
         }
     }
 
@@ -315,7 +324,32 @@ internal object WhaleContextBudgeter {
         "whale_phone_screen",
         "whale_phone_vision",
         "whale_web_search",
+        "whale_web_fetch",
         "whale_self_capabilities",
+        "whale_workspace_list",
+        "whale_knowledge_search",
+        "whale_memory_search",
+        "whale_apps_list",
+        "whale_worker_list",
+        "whale_skill_list",
+        "whale_mcp_list",
+    )
+
+    private val DEFAULT_FALSE_NOISE_KEYS = setOf(
+        "truncated",
+        "hasMore",
+        "isError",
+        "cached",
+        "stale",
+    )
+
+    private val PRESERVE_WHITESPACE_KEYS = setOf(
+        "content",
+        "code",
+        "diff",
+        "stdout",
+        "stderr",
+        "patch",
     )
 
     /**
@@ -324,10 +358,10 @@ internal object WhaleContextBudgeter {
      * 保留关键代码产物与资料正文，大幅压缩 48–64 轮长轨迹 Token。
      */
     fun pruneExploratoryToolMessage(toolName: String, content: String): String? {
-        if (content.length <= 420) return null
+        if (content.length <= 360) return null
         val isExploratory = toolName in EXPLORATORY_TOOLS || content.contains("UNKNOWN_TOOL")
         if (!isExploratory) return null
-        val head = content.replace(Regex("\\s+"), " ").take(180).trim()
+        val head = content.replace(whitespaceRegex, " ").take(150).trim()
         return "[ActKV 折叠旧探索输出 · $toolName · 原长 ${content.length} 字] $head…"
     }
 
@@ -352,9 +386,16 @@ internal object WhaleContextBudgeter {
             val v = obj.opt(k)
             if (v == null || v === JSONObject.NULL) continue
             when (v) {
+                is Boolean -> {
+                    if (!v && k in DEFAULT_FALSE_NOISE_KEYS) continue
+                    out.put(k, v)
+                }
                 is String -> {
-                    val s = v.trim()
+                    var s = v.trim()
                     if (s.isEmpty() && k !in setOf("error", "status", "message")) continue
+                    if (s.length > 200 && k !in PRESERVE_WHITESPACE_KEYS) {
+                        s = s.replace(Regex("[ \t]{2,}"), " ")
+                    }
                     out.put(k, s)
                 }
                 is JSONObject -> {

@@ -187,4 +187,28 @@ class WhaleContextBudgeterTest {
         assertEquals(h1[1], h2[1])
         assertFalse(h1[1].second.contains("whale_next"))
     }
+
+    @Test
+    fun compactToolPayloadStripsDefaultFalseNoiseAndActKvFoldsSearchOutputs() {
+        val raw = JSONObject()
+            .put("ok", true)
+            .put("truncated", false)
+            .put("hasMore", false)
+            .put("cached", false)
+            .put("summary", "正常内容   带有    多余空格   " + "详情片段 ".repeat(60))
+            .put("code", "fun main() {\n    println(\"keep indent\")\n" + "    val x = 1\n".repeat(20) + "}")
+            .toString()
+        val compacted = WhaleContextBudgeter.compactToolPayload(raw)
+        val parsed = JSONObject(compacted)
+        assertTrue(parsed.getBoolean("ok"))
+        assertFalse(parsed.has("truncated"))
+        assertFalse(parsed.has("hasMore"))
+        assertFalse(parsed.has("cached"))
+        assertFalse(parsed.getString("summary").contains("   "))
+        assertTrue(parsed.getString("code").contains("    println"))
+
+        val longSearch = "检索命中列表：".plus("条目详情内容 ".repeat(80))
+        val folded = WhaleContextBudgeter.pruneExploratoryToolMessage("whale_knowledge_search", longSearch)
+        assertTrue(folded != null && folded.contains("ActKV 折叠旧探索输出"))
+    }
 }
