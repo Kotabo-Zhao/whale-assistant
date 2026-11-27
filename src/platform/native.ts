@@ -1,5 +1,4 @@
 import { validatePluginCatalog, validatePluginRequest } from './plugins'
-import { harnessVersionRequest, validateHarnessProgress, validateHarnessReleases, validateHarnessVersions, type HarnessProgress, type HarnessVersionOperation } from './harnessVersions'
 import { validateInstalledApplications } from './installedApplications'
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { PluginListenerHandle } from '@capacitor/core'
@@ -127,8 +126,6 @@ interface NativeRuntimePlugin {
   whaleNativeChatSteer(request: { requestId: string; message: string }): Promise<{ ok: boolean; steered: boolean }>
   whaleNativeChatCancel(request: { requestId: string }): Promise<{ ok: boolean }>
   setHarnessViewport(options: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
-  listHarnessReleases(): Promise<unknown>
-  manageHarnessVersions(options: { operation: HarnessVersionOperation; version?: string }): Promise<unknown>
   managePlugins(options: PluginRequest): Promise<PluginCatalog>
   marketProposal(options: { operation: 'get' | 'dismiss'; id?: string }): Promise<unknown>
   setAppLanguage(options: { language: 'zh-CN' | 'en' }): Promise<void>
@@ -311,7 +308,6 @@ interface NativeRuntimePlugin {
   addListener(eventName: 'appUpdateProgress', listener: (event: AppUpdateProgress) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'terminalOutput', listener: (event: TerminalChunk) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'terminalExit', listener: (event: TerminalExit) => void): Promise<PluginListenerHandle>
-  addListener(eventName: 'harnessProgress', listener: (event: HarnessProgress) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'whaleNativeChatEvent', listener: (event: { requestId: string; sessionId: string; type: 'delta' | 'step' | 'phase'; text?: string; step?: { tool: string; label: string; ok: boolean; durationMs: number }; phase?: string }) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'whaleAppControl', listener: (event: { action: 'navigate' | 'appearance' | 'language' | 'autonomy'; view?: string; style?: 'simple' | 'cute' | 'usagi'; theme?: 'system' | 'light' | 'dark'; accent?: 'ocean' | 'mint' | 'amber' | 'rose'; reduceMotion?: boolean; language?: 'zh-CN' | 'en'; preset?: 'fluent' | 'balanced' | 'strict' }) => void): Promise<PluginListenerHandle>
 }
@@ -331,8 +327,6 @@ function validatedListener<T>(validator: (value: unknown) => T, listener: (event
 
 function createNativeBridge(): RuntimeBridge {
   return {
-    listHarnessReleases: () => NativeRuntime.listHarnessReleases().then(validateHarnessReleases),
-    manageHarnessVersions: (operation, version) => NativeRuntime.manageHarnessVersions(harnessVersionRequest(operation, version)).then(validateHarnessVersions),
     managePlugins: request => NativeRuntime.managePlugins(validatePluginRequest(request)).then(validatePluginCatalog),
     getMarketProposal: () => NativeRuntime.marketProposal({ operation: 'get' }).then(value => {
       if (!value || typeof value !== 'object' || !('proposal' in value)) throw new Error('无效安装请求')
@@ -752,7 +746,6 @@ function createNativeBridge(): RuntimeBridge {
     addFeatureToolsListener: listener => NativeRuntime.addListener('featureToolsChanged', listener),
     addKnowledgeCapturesListener: listener => NativeRuntime.addListener('knowledgeCapturesChanged', listener),
     addAssistantBriefingsListener: listener => NativeRuntime.addListener('assistantBriefingsChanged', listener),
-  addHarnessProgressListener: listener => NativeRuntime.addListener('harnessProgress', validatedListener(validateHarnessProgress, listener)),
     addAppUpdateProgressListener: listener => NativeRuntime.addListener('appUpdateProgress', validatedListener(validateAppUpdateProgress, listener)),
     addTerminalOutputListener: listener => NativeRuntime.addListener('terminalOutput', validatedListener(validateTerminalChunk, listener)),
     addTerminalExitListener: listener => NativeRuntime.addListener('terminalExit', validatedListener(validateTerminalExit, listener)),

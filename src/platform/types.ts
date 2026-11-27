@@ -1,5 +1,4 @@
 import type { SelfCheckOperation, SelfCheckReport } from '../runtimeSelfCheck'
-import type { HarnessProgress, HarnessReleaseList, HarnessVersionOperation, HarnessVersionsState } from './harnessVersions'
 
 export type RuntimePhase =
   | 'not-installed'
@@ -1622,7 +1621,6 @@ export type AppThemeMode = 'system' | 'light' | 'dark'
 
 /** 同步给 DSH 页面（访客 WebView）的受控主题：只有固定字段，没有 CSS / JS / URL。 */
 export type { SyncedTheme } from '../adaptiveAccent'
-export type { HarnessBackgroundRef, HarnessBackgroundState } from '../backgroundRef'
 
 export interface RuntimeWorkspaceFileList {
   files: string[]
@@ -1678,10 +1676,7 @@ export interface RuntimeBridge {
   setPetSize?: (sizeDp: number) => Promise<{ ok: boolean; sizeDp: number; appliedLive: boolean }>
   requestRecordAudioPermission?: () => Promise<{ granted: boolean; requested?: boolean }>
   setHarnessViewport?(viewport: { view: string; visible: boolean; x: number; y: number; width: number; height: number; viewportWidth: number }): Promise<void>
-  listHarnessReleases: () => Promise<HarnessReleaseList>
-  manageHarnessVersions: (operation: HarnessVersionOperation, version?: string) => Promise<HarnessVersionsState>
   /** Harness 包安装的阶段进度；只有安装会上报，其它操作没有事件。 */
-  addHarnessProgressListener: (listener: (event: HarnessProgress) => void) => Promise<ListenerHandle>
   managePlugins: (request: PluginRequest) => Promise<PluginCatalog>
   getMarketProposal: () => Promise<MarketProposal | null>
   dismissMarketProposal: (id: string) => Promise<boolean>

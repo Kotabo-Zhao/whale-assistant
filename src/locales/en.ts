@@ -665,7 +665,7 @@ export const english: Readonly<Record<string, string>> = {
   "采集开关、保留天数、诊断与运行日志": "Collection toggle, retention days, diagnostic and runtime logs",
   "运行时自检、能力清单与根通道": "Runtime self-check, capability list, and root channel",
   "反馈": "Feedback",
-  "交流群与 GitHub 反馈入口": "Community group and GitHub feedback entry",
+  "GitHub 问题反馈入口": "Report issues on GitHub",
   "文件管理": "File management",
   "外部工作区": "External workspace",
   "搬运": "Transfer",
@@ -1691,7 +1691,6 @@ export const english: Readonly<Record<string, string>> = {
   "底部导航": "Bottom navigation",
   "问题反馈": "Feedback",
   "反馈时请附上应用版本、屏幕方向和复现步骤。分享日志前请检查是否包含个人信息。": "Please include the app version, screen orientation, and the steps to reproduce. Before sharing logs, check that they contain no personal information.",
-  "交流群": "Chat group",
   "在 GitHub 反馈问题": "Report an issue on GitHub",
   // 无障碍应用选择器的搜索与过滤（拼音、多关键词、可见性开关）新增文案。
   "支持拼音与首字母：微信可搜 wx、weixin；多个词用空格分开，顺序随意。": "Pinyin and initials work too: WeChat matches wx or weixin. Separate several words with spaces; the order does not matter.",
@@ -2386,4 +2385,5 @@ export const english: Readonly<Record<string, string>> = {
   '待发送文档': 'Pending document',
   '移除文档': 'Remove document',
   '和乌萨奇聊聊…': 'Chat with Usagi...',
+  '检查应用更新与提醒设置': 'Check for app updates and reminder settings',
 }

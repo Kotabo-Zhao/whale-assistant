@@ -184,8 +184,6 @@ const SETTINGS_PAGE_META: Record<SettingsPage, { title: string; hint: string; vi
   // 主题下的两个三级页：字号与配色、背景与卡片，两段各自立即生效。
   'terminal-typography': { title: '字号与配色', hint: '字号、屏幕常亮、明暗模式与强调色', view: 'settings-terminal-typography', parent: 'terminal' },
   'terminal-background': { title: '背景', hint: '背景图片或视频、卡片外观', view: 'settings-terminal-background', parent: 'terminal' },
-  // DSH 是另一个页面：它的主题与背景单独一页，不和外壳自己的背景混在一起。
-  // DSH 是另一个页面：它的主题、按钮透明度和背景都收在同一页，不和外壳自己的外观混在一起。
   'device-shell': { title: '设备 Shell 设置', hint: 'Shizuku 授权与设备命令', view: 'settings-device-shell' },
   automation: { title: '自动化设置', hint: '无障碍、副屏与自动参数', view: 'settings-automation' },
   // 自动化设置下的三个三级页：都是同一件事的三条腿，返回键统一回「自动化设置」。
@@ -196,7 +194,7 @@ const SETTINGS_PAGE_META: Record<SettingsPage, { title: string; hint: string; vi
   // 诊断与日志下的三个三级页：采集、能力、反馈是三件事，返回键统一回「诊断与日志」。
   'diagnostics-log': { title: '日志与采集', hint: '采集开关、保留天数、诊断与运行日志', view: 'settings-diagnostics-log', parent: 'diagnostics' },
   'diagnostics-capability': { title: '设备能力', hint: '运行时自检、能力清单与根通道', view: 'settings-diagnostics-capability', parent: 'diagnostics' },
-  'diagnostics-feedback': { title: '反馈', hint: '交流群与 GitHub 反馈入口', view: 'settings-diagnostics-feedback', parent: 'diagnostics' },
+  'diagnostics-feedback': { title: '反馈', hint: 'GitHub 问题反馈入口', view: 'settings-diagnostics-feedback', parent: 'diagnostics' },
 }
 
 const SETTINGS_PAGES: SettingsPage[] = ['models', 'runtime', 'terminal', 'device-shell', 'automation', 'automation-accessibility', 'automation-subscreen', 'automation-params', 'diagnostics', 'diagnostics-log', 'diagnostics-capability', 'diagnostics-feedback', 'terminal-typography', 'terminal-background']
@@ -341,7 +339,7 @@ const SETTINGS_HOME_ENTRIES: SettingsHomeEntry[] = [
     id: 'versions',
     group: 'workspace',
     title: '版本管理',
-    hint: '保留上一版本，可一键切回；装新版本仍在运行环境页',
+    hint: '检查应用更新与提醒设置',
     keywords: ['版本', 'version', '运行时版本', '上一版本', '回退', '切回', '切换', '回滚', '降级', '升级', '更新', 'dsh', 'previous', 'rollback', 'switch', 'retained'],
     target: { kind: 'view', view: 'versions' },
     icon: <RotateCcw size={20} />,
@@ -3392,7 +3390,6 @@ function SettingsScreen({ accessibility, busy, diagnostic, draft, keepAlive, loa
         <section className="settings-section" aria-labelledby="feedback-title">
           <h2 id="feedback-title">{t('问题反馈')}</h2>
           <p>{t('反馈时请附上应用版本、屏幕方向和复现步骤。分享日志前请检查是否包含个人信息。')}</p>
-          <p>QQ {t('交流群')}：1108895375</p>
           <a className="button button-secondary" href="https://github.com/Kotabo-Zhao/whale-assistant/issues" target="_blank" rel="noopener noreferrer">
             <ExternalLink size={18} />{t('在 GitHub 反馈问题')}
           </a>
