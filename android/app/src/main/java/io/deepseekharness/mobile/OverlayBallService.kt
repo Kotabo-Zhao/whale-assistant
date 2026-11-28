@@ -1013,16 +1013,109 @@ class OverlayBallService : Service() {
         askPromptDialog = null
 
         val dp = resources.displayMetrics.density
-        val pad = (16 * dp).toInt()
-        val container = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(pad, (10 * dp).toInt(), pad, (8 * dp).toInt())
+        val style = getSharedPreferences("whale-interface", 0).getString("style", "cute") ?: "cute"
+        val dark = AppThemePreference.isDark(AppThemePreference.current(this), AppThemePreference.systemNight(this))
+
+        // V8 Three-World Native Floating Card Palette (simple = Classic iOS, cute = Liquid Glass, usagi = Chiikawa Manga)
+        val cardBg: Int
+        val cardStroke: Int
+        val cardStrokePx: Int
+        val cardRadiusDp: Float
+        val titleColor: Int
+        val bodyColor: Int
+        val optBg: Int
+        val optStroke: Int
+        val optText: Int
+        val optRadiusDp: Float
+        val inputBg: Int
+        val sendBg: Int
+        val sendText: Int
+        val mutedText: Int
+
+        when (style) {
+            "simple" -> {
+                cardBg = if (dark) 0xF51C1C1E.toInt() else 0xF8FFFFFF.toInt()
+                cardStroke = if (dark) 0x7A545458.toInt() else 0x383C3C43.toInt()
+                cardStrokePx = (0.75f * dp).toInt().coerceAtLeast(1)
+                cardRadiusDp = 14f
+                titleColor = if (dark) 0xFFFFFFFF.toInt() else 0xFF1C1C1E.toInt()
+                bodyColor = if (dark) 0xFFEBEBF5.toInt() else 0xFF3A3A3C.toInt()
+                optBg = if (dark) 0xFF2C2C2E.toInt() else 0xFFF2F2F7.toInt()
+                optStroke = if (dark) 0x66545458.toInt() else 0x2E3C3C43.toInt()
+                optText = if (dark) 0xFF0A84FF.toInt() else 0xFF007AFF.toInt()
+                optRadiusDp = 10f
+                inputBg = if (dark) 0xFF2C2C2E.toInt() else 0xFFF2F2F7.toInt()
+                sendBg = if (dark) 0xFF0A84FF.toInt() else 0xFF007AFF.toInt()
+                sendText = 0xFFFFFFFF.toInt()
+                mutedText = 0xFF8E8E93.toInt()
+            }
+            "usagi" -> {
+                cardBg = if (dark) 0xFA2C221B.toInt() else 0xFCFFFBF0.toInt()
+                cardStroke = if (dark) 0xFFF3D28F.toInt() else 0xFF3A2618.toInt()
+                cardStrokePx = (2f * dp).toInt().coerceAtLeast(2)
+                cardRadiusDp = 20f
+                titleColor = if (dark) 0xFFFFF5DF.toInt() else 0xFF3A2618.toInt()
+                bodyColor = if (dark) 0xFFEAD4B5.toInt() else 0xFF5C402C.toInt()
+                optBg = if (dark) 0xFF3D2E22.toInt() else 0xFFFFF0A8.toInt()
+                optStroke = cardStroke
+                optText = if (dark) 0xFFFFF5DF.toInt() else 0xFF3A2618.toInt()
+                optRadiusDp = 14f
+                inputBg = if (dark) 0xFF231B15.toInt() else 0xFFFFFFFF.toInt()
+                sendBg = if (dark) 0xFFFFD464.toInt() else 0xFFFFE875.toInt()
+                sendText = 0xFF3A2618.toInt()
+                mutedText = if (dark) 0xFFD9BE9D.toInt() else 0xFF7A5C46.toInt()
+            }
+            else -> { // cute — Liquid Glass
+                cardBg = if (dark) 0xE60D203D.toInt() else 0xECF0F8FF.toInt()
+                cardStroke = if (dark) 0x80BAE8FF.toInt() else 0xE6FFFFFF.toInt()
+                cardStrokePx = (1.25f * dp).toInt().coerceAtLeast(1)
+                cardRadiusDp = 24f
+                titleColor = if (dark) 0xFFF2F8FF.toInt() else 0xFF0B1E3B.toInt()
+                bodyColor = if (dark) 0xFFC5DEF7.toInt() else 0xFF2A4A75.toInt()
+                optBg = if (dark) 0xCC1A3866.toInt() else 0xE8FFFFFF.toInt()
+                optStroke = if (dark) 0x668CD8FF.toInt() else 0x4D1474FF.toInt()
+                optText = if (dark) 0xFF7BD0FF.toInt() else 0xFF1474FF.toInt()
+                optRadiusDp = 999f
+                inputBg = if (dark) 0xB8142B50.toInt() else 0xD9FFFFFF.toInt()
+                sendBg = if (dark) 0xFF58C6FF.toInt() else 0xFF1474FF.toInt()
+                sendText = if (dark) 0xFF041224.toInt() else 0xFFFFFFFF.toInt()
+                mutedText = if (dark) 0xFF9BC4EE.toInt() else 0xFF355885.toInt()
+            }
         }
-        container.addView(android.widget.TextView(this).apply {
+
+        fun roundBg(fill: Int, stroke: Int, strokeW: Int, radiusDp: Float): android.graphics.drawable.GradientDrawable =
+            android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = radiusDp * dp
+                setColor(fill)
+                if (strokeW > 0) setStroke(strokeW, stroke)
+            }
+
+        val pad = (18 * dp).toInt()
+        val card = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, (16 * dp).toInt(), pad, (14 * dp).toInt())
+            background = roundBg(cardBg, cardStroke, cardStrokePx, cardRadiusDp)
+            elevation = 14f * dp
+        }
+
+        val titleView = android.widget.TextView(this).apply {
+            text = title.ifBlank { "鲸鱼娘需要你确认" }
+            textSize = 16f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(titleColor)
+            setPadding(0, 0, 0, (6 * dp).toInt())
+        }
+        card.addView(titleView)
+
+        val bodyView = android.widget.TextView(this).apply {
             text = question.trim()
-            textSize = 14.5f
-            setPadding(0, 0, 0, (10 * dp).toInt())
-        })
+            textSize = 14f
+            setLineSpacing(3f * dp, 1f)
+            setTextColor(bodyColor)
+            setPadding(0, 0, 0, (12 * dp).toInt())
+        }
+        card.addView(bodyView)
 
         fun dispatchAnswer(answerText: String) {
             val clean = answerText.trim()
@@ -1051,37 +1144,65 @@ class OverlayBallService : Service() {
         }
 
         options.filter { it.isNotBlank() }.take(4).forEach { opt ->
-            val btn = android.widget.Button(this).apply {
+            val btn = android.widget.TextView(this).apply {
                 text = opt
-                isAllCaps = false
+                textSize = 14f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(optText)
+                gravity = Gravity.CENTER
+                minHeight = (44 * dp).toInt()
+                setPadding((14 * dp).toInt(), (10 * dp).toInt(), (14 * dp).toInt(), (10 * dp).toInt())
+                background = roundBg(optBg, optStroke, if (style == "usagi") (1.8f * dp).toInt() else (1f * dp).toInt(), optRadiusDp)
                 setOnClickListener { dispatchAnswer(opt) }
             }
             val lp = android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = (6 * dp).toInt() }
-            container.addView(btn, lp)
+            ).apply { bottomMargin = (8 * dp).toInt() }
+            card.addView(btn, lp)
         }
 
         val inputBox = android.widget.EditText(this).apply {
             hint = "或直接输入你的回答…"
+            setHintTextColor(mutedText)
+            setTextColor(titleColor)
+            textSize = 14f
             maxLines = 4
+            minHeight = (42 * dp).toInt()
+            setPadding((12 * dp).toInt(), (8 * dp).toInt(), (12 * dp).toInt(), (8 * dp).toInt())
+            background = roundBg(inputBg, optStroke, (1f * dp).toInt(), if (style == "cute") 18f else 12f)
         }
-        container.addView(inputBox)
+        val inputLp = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = (2 * dp).toInt()
+            bottomMargin = (12 * dp).toInt()
+        }
+        card.addView(inputBox, inputLp)
 
-        val scroll = android.widget.ScrollView(this).apply { addView(container) }
-        val themedCtx = android.view.ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
-        val dialog = android.app.AlertDialog.Builder(themedCtx)
-            .setTitle(title.ifBlank { "鲸鱼娘需要你确认" })
-            .setView(scroll)
-            .setNegativeButton("稍后", null)
-            .setPositiveButton("发送回答", null)
-            .create()
-        dialog.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
-        dialog.setOnDismissListener { if (askPromptDialog === dialog) askPromptDialog = null }
-        runCatching {
-            dialog.show()
-            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
+        val actionRow = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        }
+        val laterBtn = android.widget.TextView(this).apply {
+            text = "稍后"
+            textSize = 13.5f
+            setTextColor(mutedText)
+            setPadding((14 * dp).toInt(), (9 * dp).toInt(), (14 * dp).toInt(), (9 * dp).toInt())
+            setOnClickListener {
+                runCatching { askPromptDialog?.dismiss() }
+                askPromptDialog = null
+            }
+        }
+        val sendBtn = android.widget.TextView(this).apply {
+            text = "发送回答"
+            textSize = 13.5f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(sendText)
+            setPadding((16 * dp).toInt(), (9 * dp).toInt(), (16 * dp).toInt(), (9 * dp).toInt())
+            background = roundBg(sendBg, if (style == "usagi") cardStroke else 0, if (style == "usagi") (1.8f * dp).toInt() else 0, if (style == "cute") 999f else 11f)
+            setOnClickListener {
                 val txt = inputBox.text?.toString().orEmpty().trim()
                 if (txt.isEmpty()) {
                     toastCurrentThread("请点选一个选项或输入回答")
@@ -1089,6 +1210,30 @@ class OverlayBallService : Service() {
                     dispatchAnswer(txt)
                 }
             }
+        }
+        actionRow.addView(laterBtn)
+        actionRow.addView(sendBtn, android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { marginStart = (8 * dp).toInt() })
+        card.addView(actionRow)
+
+        val scroll = android.widget.ScrollView(this).apply {
+            setPadding((12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
+            addView(card)
+        }
+        val themedCtx = android.view.ContextThemeWrapper(
+            this,
+            if (dark) android.R.style.Theme_DeviceDefault_Dialog_Alert else android.R.style.Theme_DeviceDefault_Light_Dialog_Alert,
+        )
+        val dialog = android.app.AlertDialog.Builder(themedCtx)
+            .setView(scroll)
+            .create()
+        dialog.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        dialog.setOnDismissListener { if (askPromptDialog === dialog) askPromptDialog = null }
+        runCatching {
+            dialog.show()
             askPromptDialog = dialog
         }
     }
