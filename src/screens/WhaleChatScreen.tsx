@@ -34,6 +34,7 @@ import {
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
 import usagiAvatar from '../assets/usagi-avatar.png'
+import pixelWhaleAvatar from '../assets/whale-pixel-avatar.png'
 import { CuteIcon, type CuteIconName } from '../components/CuteIcon'
 import { AgentStatusIcon } from '../components/AgentStatusIcon'
 import { ChatMediaCard } from '../components/ChatMediaCard'
@@ -313,7 +314,8 @@ export interface WhaleChatScreenProps {
 export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleChatScreenProps) {
   const style = useInterfaceStyle()
   const isUsagi = style === 'usagi'
-  const activeAvatar = isUsagi ? usagiAvatar : whaleChanAvatar
+  const isPixel = style === 'pixel'
+  const activeAvatar = isUsagi ? usagiAvatar : (isPixel ? pixelWhaleAvatar : whaleChanAvatar)
   const heroMark = style === 'simple' ? grokMark : activeAvatar
   const [sessions, setSessions] = useState<WhaleChatSession[]>(loadSessions)
   const [activeId, setActiveId] = useState<string>(() => loadActiveSessionId(loadSessions()))

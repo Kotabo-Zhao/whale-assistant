@@ -2,6 +2,7 @@ import { History, MessageSquare, Settings2 } from 'lucide-react'
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanBadge from '../assets/whale-chan-badge.png'
 import usagiAvatar from '../assets/usagi-avatar.png'
+import pixelWhaleAvatar from '../assets/whale-pixel-avatar.png'
 import { CuteIcon, type CuteIconName } from './CuteIcon'
 import { t, useLanguage } from '../i18n'
 import { useInterfaceStyle } from '../theme'
@@ -32,7 +33,7 @@ function DestinationButtons({ activeView, onNavigate, mobile }: AppSidebarProps 
 export function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
   useLanguage()
   const style = useInterfaceStyle()
-  const brandMark = style === 'simple' ? grokMark : (style === 'usagi' ? usagiAvatar : whaleChanBadge)
+  const brandMark = style === 'simple' ? grokMark : (style === 'usagi' ? usagiAvatar : (style === 'pixel' ? pixelWhaleAvatar : whaleChanBadge))
   return <aside className="app-sidebar" aria-label={t('应用导航')}>
     <button className="sidebar-mark" type="button" aria-label={t('鲸鱼助手')} title={t('鲸鱼助手')} onClick={() => onNavigate('whale-chat')}>
       <img className="app-mark" src={brandMark} alt="" width={28} height={28}/><span>{t('鲸鱼助手')}</span></button>

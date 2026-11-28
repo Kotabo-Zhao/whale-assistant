@@ -24,9 +24,10 @@ internal class CompanionPetDrawable(
     private val decoder: Executor,
     private val main: Handler = Handler(Looper.getMainLooper()),
     private val usagiTheme: Boolean = false,
+    private val pixelTheme: Boolean = false,
 ) : Drawable(), AutoCloseable {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private val prevPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val paint = Paint(if (pixelTheme) 0 else (Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+    private val prevPaint = Paint(if (pixelTheme) 0 else (Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
     private val source = Rect()
     private val prevSource = Rect()
     private val destination = RectF()
@@ -70,6 +71,7 @@ internal class CompanionPetDrawable(
     private var retainedCel: Bitmap? = null
     var onAtlasReady: (() -> Unit)? = null
     val isUsagiTheme get() = usagiTheme
+    val isPixelTheme get() = pixelTheme
     val displayedClipName get() = displayedClip
     val cachedAtlasCount get() = cache.size
     val cachedBitmapBytes get() = cache.values.sumOf { it.allocationByteCount.toLong() }
@@ -125,13 +127,32 @@ internal class CompanionPetDrawable(
 
     private fun assetKey(name: String): String {
         val rows = PetCels.clips.getValue(name).rows
-        return if (usagiTheme) usagiAtlasPath(name, rows) else "pet-cels/$name.webp"
+        return when {
+            pixelTheme -> pixelAtlasPath(name)
+            usagiTheme -> usagiAtlasPath(name, rows)
+            else -> "pet-cels/$name.webp"
+        }
     }
 
     init {
         displayed = decode("idle")
         cache[assetKey("idle")] = displayed
         prewarmHotAtlases()
+    }
+
+    private fun pixelAtlasPath(name: String): String {
+        val base = name.removeSuffix("_enter").removeSuffix("_return")
+        return when (base) {
+            "drag" -> "pet-cels-pixel/drag_16.webp"
+            "touch" -> "pet-cels-pixel/touch_16.webp"
+            "paused", "stopped", "sleep" -> "pet-cels-pixel/sleep_16.webp"
+            "writing", "control" -> "pet-cels-pixel/writing_16.webp"
+            "reading", "observe", "wait", "think" -> "pet-cels-pixel/reading_16.webp"
+            "ask", "notice" -> "pet-cels-pixel/ask_16.webp"
+            "celebrate", "accept", "reply" -> "pet-cels-pixel/celebrate_16.webp"
+            "error", "setback" -> "pet-cels-pixel/error_16.webp"
+            else -> "pet-cels-pixel/idle_16.webp"
+        }
     }
 
     private fun usagiAtlasPath(name: String, @Suppress("UNUSED_PARAMETER") rows: Int): String {
@@ -150,11 +171,19 @@ internal class CompanionPetDrawable(
     }
 
     private fun decode(name: String): Bitmap {
-        val maxSide = if (usagiTheme) 192 else PetCels.CELL
+        val maxSide = if (usagiTheme || pixelTheme) 192 else PetCels.CELL
         val cellSize = targetSize.coerceIn(96, maxSide)
         val clipRows = PetCels.clips.getValue(name).rows
-        val assetPath = if (usagiTheme) usagiAtlasPath(name, clipRows) else "pet-cels/$name.webp"
-        val rows = if (usagiTheme && assetPath.endsWith("_32.webp")) 8 else clipRows
+        val assetPath = when {
+            pixelTheme -> pixelAtlasPath(name)
+            usagiTheme -> usagiAtlasPath(name, clipRows)
+            else -> "pet-cels/$name.webp"
+        }
+        val rows = when {
+            pixelTheme && assetPath.endsWith("_16.webp") -> 4
+            usagiTheme && assetPath.endsWith("_32.webp") -> 8
+            else -> clipRows
+        }
         val raw = resources.assets.open(assetPath).use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply {
                 inScaled = true; inDensity = PetCels.CELL; inTargetDensity = cellSize
@@ -166,7 +195,7 @@ internal class CompanionPetDrawable(
         if (raw.width == expectedW && raw.height == expectedH) return raw
         if (raw.width >= PetCels.COLUMNS && raw.height >= rows) {
             return if (raw.width > expectedW || raw.height > expectedH) {
-                Bitmap.createScaledBitmap(raw, expectedW, expectedH, true).also {
+                Bitmap.createScaledBitmap(raw, expectedW, expectedH, !pixelTheme).also {
                     if (it !== raw) raw.recycle()
                 }
             } else raw
@@ -219,7 +248,7 @@ internal class CompanionPetDrawable(
             if (assetKey(name) in cache) true else { request(name); false }
         }
         cache[assetKey(currentCel.clip)]?.let { show(it, currentCel) }
-        if (usagiTheme && !pose.reduced && ambientTickAllowed) {
+        if ((usagiTheme || pixelTheme) && !pose.reduced && ambientTickAllowed) {
             scheduleNextFrame(immediate = true)
         }
         playback.nextAtlas?.let { name ->
@@ -344,8 +373,9 @@ internal class CompanionPetDrawable(
         val cellW = (displayed.width / PetCels.COLUMNS).coerceAtLeast(1)
         val rows = (displayed.height / cellW).coerceAtLeast(1)
         val totalCells = (PetCels.COLUMNS * rows).coerceAtLeast(1)
-        val effectiveFrame = if (usagiTheme && !pose.reduced) {
+        val effectiveFrame = if ((usagiTheme || pixelTheme) && !pose.reduced) {
             val stepMs = when {
+                pixelTheme -> 72L
                 displayedClip in setOf("paused", "stopped", "sleep") -> 46L
                 pose.action == PetAction.IDLE && displayedClip == "idle" -> 34L
                 else -> 22L

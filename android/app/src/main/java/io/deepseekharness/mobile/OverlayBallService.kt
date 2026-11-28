@@ -1049,6 +1049,22 @@ class OverlayBallService : Service() {
                 sendText = 0xFFFFFFFF.toInt()
                 mutedText = 0xFF8E8E93.toInt()
             }
+            "pixel" -> {
+                cardBg = if (dark) 0xFA1E173A.toInt() else 0xFCFFFDF0.toInt()
+                cardStroke = if (dark) 0xFF6EF0FF.toInt() else 0xFF1D1829.toInt()
+                cardStrokePx = (2.5f * dp).toInt().coerceAtLeast(3)
+                cardRadiusDp = 2f
+                titleColor = if (dark) 0xFFF4F7FF.toInt() else 0xFF1D1829.toInt()
+                bodyColor = if (dark) 0xFFD4DCFF.toInt() else 0xFF3E3552.toInt()
+                optBg = if (dark) 0xFF2B2152.toInt() else 0xFFFFF2B2.toInt()
+                optStroke = cardStroke
+                optText = if (dark) 0xFFFFD93D.toInt() else 0xFF1D1829.toInt()
+                optRadiusDp = 2f
+                inputBg = if (dark) 0xFF120D26.toInt() else 0xFFEFE6C8.toInt()
+                sendBg = if (dark) 0xFF4DFF88.toInt() else 0xFF2CC76E.toInt()
+                sendText = 0xFF120D26.toInt()
+                mutedText = if (dark) 0xFFA4ACD8.toInt() else 0xFF5A5070.toInt()
+            }
             "usagi" -> {
                 cardBg = if (dark) 0xFA2C221B.toInt() else 0xFCFFFBF0.toInt()
                 cardStroke = if (dark) 0xFFF3D28F.toInt() else 0xFF3A2618.toInt()
@@ -1152,7 +1168,7 @@ class OverlayBallService : Service() {
                 gravity = Gravity.CENTER
                 minHeight = (44 * dp).toInt()
                 setPadding((14 * dp).toInt(), (10 * dp).toInt(), (14 * dp).toInt(), (10 * dp).toInt())
-                background = roundBg(optBg, optStroke, if (style == "usagi") (1.8f * dp).toInt() else (1f * dp).toInt(), optRadiusDp)
+                background = roundBg(optBg, optStroke, if (style == "usagi" || style == "pixel") (2f * dp).toInt() else (1f * dp).toInt(), optRadiusDp)
                 setOnClickListener { dispatchAnswer(opt) }
             }
             val lp = android.widget.LinearLayout.LayoutParams(
@@ -1201,7 +1217,7 @@ class OverlayBallService : Service() {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(sendText)
             setPadding((16 * dp).toInt(), (9 * dp).toInt(), (16 * dp).toInt(), (9 * dp).toInt())
-            background = roundBg(sendBg, if (style == "usagi") cardStroke else 0, if (style == "usagi") (1.8f * dp).toInt() else 0, if (style == "cute") 999f else 11f)
+            background = roundBg(sendBg, if (style == "usagi" || style == "pixel") cardStroke else 0, if (style == "usagi" || style == "pixel") (2f * dp).toInt() else 0, if (style == "cute") 999f else if (style == "pixel") 2f else 11f)
             setOnClickListener {
                 val txt = inputBox.text?.toString().orEmpty().trim()
                 if (txt.isEmpty()) {
@@ -1554,7 +1570,8 @@ class OverlayBallService : Service() {
         val generation = ++avatarGeneration
         avatarExecutor.execute {
             val next = runCatching {
-                io.deepseekharness.mobile.overlay.CompanionPetDrawable(resources,size,avatarExecutor,hintHandler,getSharedPreferences("whale-interface",0).getString("style","cute")=="usagi")
+                val curStyle = getSharedPreferences("whale-interface",0).getString("style","cute")
+                io.deepseekharness.mobile.overlay.CompanionPetDrawable(resources,size,avatarExecutor,hintHandler,curStyle=="usagi",curStyle=="pixel")
             }.onFailure {
                 android.util.Log.w("WhalePet", "Failed to load companion avatar (size=$size)", it)
             }.getOrNull() ?: return@execute
@@ -3009,9 +3026,11 @@ class OverlayBallService : Service() {
                 }
             }
         }
-        val wantUsagi = getSharedPreferences("whale-interface", 0).getString("style", "cute") == "usagi"
+        val curStyle = getSharedPreferences("whale-interface", 0).getString("style", "cute")
+        val wantUsagi = curStyle == "usagi"
+        val wantPixel = curStyle == "pixel"
         val curView = ballView
-        if (curView != null && ballAttached && petDrawable?.isUsagiTheme != wantUsagi) {
+        if (curView != null && ballAttached && (petDrawable?.isUsagiTheme != wantUsagi || petDrawable?.isPixelTheme != wantPixel)) {
             val sizePx = maxOf(curView.width, curView.height, dp(64))
             loadCompanionAvatar(curView, sizePx)
         } else {
