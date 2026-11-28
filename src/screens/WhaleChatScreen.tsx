@@ -470,21 +470,28 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
   }, [flushSessionsToStorage])
 
   const autoFollowRef = useRef(true)
-  const programmaticScrollRef = useRef(false)
+  const programmaticUntilRef = useRef(0)
+  const lastUserTouchRef = useRef(0)
   useLayoutEffect(() => {
     const el = listRef.current
     if (!el || !autoFollowRef.current) return
-    programmaticScrollRef.current = true
-    el.scrollTop = el.scrollHeight
-    const raf = window.requestAnimationFrame(() => {
-      if (listRef.current && autoFollowRef.current) {
-        listRef.current.scrollTop = listRef.current.scrollHeight
-      }
-      programmaticScrollRef.current = false
+    const pinBottom = () => {
+      const node = listRef.current
+      if (!node || !autoFollowRef.current) return
+      programmaticUntilRef.current = performance.now() + 240
+      node.scrollTop = node.scrollHeight
+    }
+    pinBottom()
+    let raf2 = 0
+    const raf1 = window.requestAnimationFrame(() => {
+      pinBottom()
+      raf2 = window.requestAnimationFrame(() => {
+        pinBottom()
+      })
     })
     return () => {
-      window.cancelAnimationFrame(raf)
-      programmaticScrollRef.current = false
+      window.cancelAnimationFrame(raf1)
+      if (raf2) window.cancelAnimationFrame(raf2)
     }
   }, [messages, streamingText, streamingSteps, sending, isVisible])
 
@@ -1217,10 +1224,20 @@ export function WhaleChatScreen({ bridge, onNavigate, isVisible = true }: WhaleC
       <div
         className="whale-chat-stream"
         ref={listRef}
+        onTouchStart={() => { lastUserTouchRef.current = performance.now() }}
+        onWheel={() => { lastUserTouchRef.current = performance.now() }}
+        onPointerDown={() => { lastUserTouchRef.current = performance.now() }}
         onScroll={event => {
-          if (programmaticScrollRef.current) return
+          const now = performance.now()
+          if (now < programmaticUntilRef.current) return
           const el = event.currentTarget
           const dist = el.scrollHeight - (el.scrollTop + el.clientHeight)
+          // 防止流式结束 DOM 高度突变引发浏览器瞬时 scrollTop=0 误判：仅在用户近期有触控/滚轮交互时允许解除自动跟底
+          if (autoFollowRef.current && dist > 120 && now - lastUserTouchRef.current > 1200) {
+            programmaticUntilRef.current = now + 200
+            el.scrollTop = el.scrollHeight
+            return
+          }
           autoFollowRef.current = dist <= 120
           setShowScrollBottom(dist > 200)
         }}

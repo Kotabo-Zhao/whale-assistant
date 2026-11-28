@@ -283,7 +283,11 @@ body {
   border-bottom: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  padding: 10px 16px !important;
+  min-height: 40px !important;
+  padding: 5px 14px !important;
+}
+.app-frame.is-headerless:not(.is-chat-frame) > .app-main {
+  padding-top: 4px !important;
 }
 
 .whale-icon-chip {
@@ -313,10 +317,10 @@ body {
 
 @media (max-width: 900px) {
   .bottom-navigation {
-    margin: 4px 18px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
-    padding: 5px 8px !important;
+    margin: 2px 12px 4px !important;
+    padding: 3px 6px !important;
     border-radius: 999px !important;
-    gap: 6px !important;
+    gap: 4px !important;
   }
 }
 
@@ -324,6 +328,11 @@ body {
   border: 0 !important;
   box-shadow: none !important;
   border-radius: 999px !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 2px 8px !important;
+  gap: 2px !important;
+  font-size: 0.72rem !important;
   color: var(--muted) !important;
   transition: transform var(--press-ms) var(--press-ease), background-color 180ms ease, color 180ms ease;
 }
@@ -1072,11 +1081,13 @@ select:focus {
 :root[data-style='simple'] .app-shell { background: var(--bg) !important; letter-spacing: -0.01em; }
 
 :root[data-style='simple'] .whale-chat-header {
+  width: 100% !important;
+  margin: 0 !important;
   background: var(--header-bg) !important;
   backdrop-filter: saturate(180%) blur(24px);
   -webkit-backdrop-filter: saturate(180%) blur(24px);
   border-bottom: 0.5px solid var(--line-strong) !important;
-  padding: 10px 16px !important;
+  padding: 6px 12px !important;
 }
 :root[data-style='simple'] .whale-chat-brand-name { font-weight: 600 !important; font-size: 16.5px !important; letter-spacing: -0.025em !important; }
 :root[data-style='simple'] .whale-chat-mood-pill { border-radius: 999px !important; background: var(--surface-muted) !important; border: 0 !important; color: var(--muted) !important; font-size: 11px !important; padding: 2px 8px !important; }
@@ -1276,14 +1287,15 @@ select:focus {
 }
 
 :root[data-style='cute'] .whale-chat-header {
-  margin: 10px 12px 0 !important;
+  width: calc(100% - 16px) !important;
+  margin: 4px 8px 0 !important;
   border-radius: 999px !important;
-  padding: 6px 12px !important;
+  padding: 5px 10px !important;
   background: var(--lg-surface) !important;
-  backdrop-filter: blur(30px) saturate(220%);
-  -webkit-backdrop-filter: blur(30px) saturate(220%);
+  backdrop-filter: blur(26px) saturate(210%);
+  -webkit-backdrop-filter: blur(26px) saturate(210%);
   border: 1px solid var(--line-strong) !important;
-  box-shadow: var(--lg-shadow) !important;
+  box-shadow: var(--lg-shadow-sm) !important;
 }
 :root[data-style='cute'] .whale-chat-brand-avatar { padding: 2px; background: linear-gradient(135deg, #58c6ff, #ff88c0) !important; border-radius: 999px !important; box-shadow: inset 0 1px 2px #fff, 0 6px 16px -2px rgba(20, 116, 255, 0.48) !important; }
 :root[data-style='cute'] .whale-chat-mood-pill { border-radius: 999px !important; background: var(--lg-pill) !important; border: 1px solid var(--line) !important; box-shadow: var(--lg-shadow-sm) !important; }
@@ -1310,23 +1322,27 @@ select:focus {
 }
 
 :root[data-style='cute'] .whale-msg-user .whale-msg-bubble {
-  background: linear-gradient(142deg, rgba(20, 116, 255, 0.80) 0%, rgba(72, 194, 255, 0.74) 100%) !important;
-  backdrop-filter: blur(24px) saturate(220%);
+  background: linear-gradient(142deg, rgba(20, 116, 255, 0.86) 0%, rgba(72, 194, 255, 0.82) 100%) !important;
+  backdrop-filter: blur(18px) saturate(190%);
+  -webkit-backdrop-filter: blur(18px) saturate(190%);
   color: #ffffff !important;
-  border-radius: 24px 24px 6px 24px !important;
-  border: 1px solid rgba(255, 255, 255, 0.70) !important;
-  box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.76), inset 0 -2px 6px rgba(10, 62, 168, 0.28), 0 16px 34px -8px rgba(20, 104, 240, 0.50) !important;
+  border-radius: 22px 22px 6px 22px !important;
+  border: 1px solid rgba(255, 255, 255, 0.68) !important;
+  box-shadow: inset 0 1.5px 2px rgba(255, 255, 255, 0.65), 0 6px 16px -4px rgba(20, 104, 240, 0.32) !important;
 }
 
 :root[data-style='cute'] .whale-msg-assistant .whale-msg-bubble {
   position: relative;
   background: var(--lg-surface) !important;
-  backdrop-filter: blur(32px) saturate(225%);
-  -webkit-backdrop-filter: blur(32px) saturate(225%);
+  backdrop-filter: blur(22px) saturate(195%);
+  -webkit-backdrop-filter: blur(22px) saturate(195%);
   border: 1px solid var(--line-strong) !important;
-  border-radius: 24px 24px 24px 6px !important;
-  box-shadow: var(--lg-shadow) !important;
-  padding: 12px 15px !important;
+  border-radius: 22px 22px 22px 6px !important;
+  box-shadow: inset 0 1.5px 1.5px rgba(255, 255, 255, 0.90), 0 6px 18px -6px rgba(16, 84, 198, 0.16) !important;
+  padding: 11px 14px !important;
+}
+:root[data-style='cute'][data-theme='dark'] .whale-msg-assistant .whale-msg-bubble {
+  box-shadow: inset 0 1px 1.5px rgba(210, 242, 255, 0.40), 0 8px 20px -6px rgba(0, 4, 16, 0.54) !important;
 }
 
 :root[data-style='cute'] .whale-a2ui-card,
@@ -1460,9 +1476,11 @@ select:focus {
 }
 
 :root[data-style='usagi'] .whale-chat-header {
+  width: 100% !important;
+  margin: 0 !important;
   background: var(--header-bg) !important;
   border-bottom: 1.8px solid var(--manga-ink) !important;
-  padding: 9px 14px !important;
+  padding: 6px 12px !important;
 }
 :root[data-style='usagi'] .whale-chat-brand-avatar { background: #fff !important; border: 1.8px solid var(--manga-ink) !important; border-radius: 54% 46% 52% 48% / 47% 53% 47% 53% !important; box-shadow: var(--manga-sh-sm) !important; }
 :root[data-style='usagi'] .whale-chat-brand-name { font-weight: 800 !important; }
@@ -1558,3 +1576,41 @@ select:focus {
 :root[data-style='usagi'] .whale-bottom-nav { margin: 0 14px 8px; border-radius: 16px 18px 15px 17px; background: var(--nav-bg); border: 1.9px solid var(--manga-ink); box-shadow: var(--manga-sh); padding: 3px 6px; min-height: 38px; }
 :root[data-style='usagi'] .whale-nav-item { color: var(--muted); border-radius: 10px; height: 30px; padding: 0 14px; font-size: 12px; font-weight: 800; }
 :root[data-style='usagi'] .whale-nav-item.is-active { color: #3a2618; background: #ffe875; border: 1.6px solid #3a2618; box-shadow: 1.5px 1.5px 0 #3a2618; }
+
+/* Real app .bottom-navigation three-theme compact polish */
+:root[data-style='simple'] .bottom-navigation {
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: 0 !important;
+  border-top: 0.5px solid var(--line-strong) !important;
+  background: var(--nav-bg) !important;
+  box-shadow: none !important;
+  padding: 2px 8px 3px !important;
+}
+:root[data-style='simple'] .bottom-navigation-item.is-active {
+  background: transparent !important;
+  color: var(--blue) !important;
+}
+:root[data-style='cute'] .bottom-navigation {
+  margin: 2px 14px 4px !important;
+  border-radius: 999px !important;
+  background: var(--lg-surface) !important;
+  backdrop-filter: blur(26px) saturate(210%) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(210%) !important;
+  border: 1px solid var(--line-strong) !important;
+  box-shadow: var(--lg-shadow-sm) !important;
+  padding: 3px 6px !important;
+}
+:root[data-style='usagi'] .bottom-navigation {
+  margin: 2px 12px 4px !important;
+  border-radius: 16px 18px 15px 17px !important;
+  background: var(--nav-bg) !important;
+  border: 1.8px solid var(--manga-ink) !important;
+  box-shadow: var(--manga-sh-sm) !important;
+  padding: 3px 6px !important;
+}
+:root[data-style='usagi'] .bottom-navigation-item.is-active {
+  background: #ffe875 !important;
+  color: #3a2618 !important;
+  border: 1.4px solid #3a2618 !important;
+}
