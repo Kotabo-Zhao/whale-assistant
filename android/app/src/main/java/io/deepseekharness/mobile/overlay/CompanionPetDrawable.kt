@@ -26,8 +26,8 @@ internal class CompanionPetDrawable(
     private val usagiTheme: Boolean = false,
     private val pixelTheme: Boolean = false,
 ) : Drawable(), AutoCloseable {
-    private val paint = Paint(if (pixelTheme) 0 else (Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
-    private val prevPaint = Paint(if (pixelTheme) 0 else (Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val prevPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
     private val prevSource = Rect()
     private val destination = RectF()
@@ -171,7 +171,7 @@ internal class CompanionPetDrawable(
     }
 
     private fun decode(name: String): Bitmap {
-        val maxSide = if (usagiTheme || pixelTheme) 192 else PetCels.CELL
+        val maxSide = if (usagiTheme) 192 else PetCels.CELL
         val cellSize = targetSize.coerceIn(96, maxSide)
         val clipRows = PetCels.clips.getValue(name).rows
         val assetPath = when {
@@ -195,7 +195,7 @@ internal class CompanionPetDrawable(
         if (raw.width == expectedW && raw.height == expectedH) return raw
         if (raw.width >= PetCels.COLUMNS && raw.height >= rows) {
             return if (raw.width > expectedW || raw.height > expectedH) {
-                Bitmap.createScaledBitmap(raw, expectedW, expectedH, !pixelTheme).also {
+                Bitmap.createScaledBitmap(raw, expectedW, expectedH, true).also {
                     if (it !== raw) raw.recycle()
                 }
             } else raw
