@@ -130,7 +130,7 @@ interface NativeRuntimePlugin {
   marketProposal(options: { operation: 'get' | 'dismiss'; id?: string }): Promise<unknown>
   setAppLanguage(options: { language: 'zh-CN' | 'en' }): Promise<void>
   /** 同步主题模式给原生，由原生把它落到状态栏（登记册 5.4）。 */
-  setAppTheme(options: { mode: AppThemeMode; style?: 'simple' | 'cute' | 'usagi' | 'pixel' }): Promise<void>
+  setAppTheme(options: { mode: AppThemeMode; style?: 'simple' | 'cute' | 'usagi' | 'pixel' | 'pixel' }): Promise<void>
   /** 同步主题给 DSH 页面；原生侧只接受固定字段。 */
   getState(): Promise<RuntimeState>
   getSettings(): Promise<RuntimeSettings>
@@ -309,7 +309,7 @@ interface NativeRuntimePlugin {
   addListener(eventName: 'terminalOutput', listener: (event: TerminalChunk) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'terminalExit', listener: (event: TerminalExit) => void): Promise<PluginListenerHandle>
   addListener(eventName: 'whaleNativeChatEvent', listener: (event: { requestId: string; sessionId: string; type: 'delta' | 'step' | 'phase'; text?: string; step?: { tool: string; label: string; ok: boolean; durationMs: number }; phase?: string }) => void): Promise<PluginListenerHandle>
-  addListener(eventName: 'whaleAppControl', listener: (event: { action: 'navigate' | 'appearance' | 'language' | 'autonomy'; view?: string; style?: 'simple' | 'cute' | 'usagi' | 'pixel'; theme?: 'system' | 'light' | 'dark'; accent?: 'ocean' | 'mint' | 'amber' | 'rose'; reduceMotion?: boolean; language?: 'zh-CN' | 'en'; preset?: 'fluent' | 'balanced' | 'strict' }) => void): Promise<PluginListenerHandle>
+  addListener(eventName: 'whaleAppControl', listener: (event: { action: 'navigate' | 'appearance' | 'language' | 'autonomy'; view?: string; style?: 'simple' | 'cute' | 'usagi' | 'pixel' | 'pixel'; theme?: 'system' | 'light' | 'dark'; accent?: 'ocean' | 'mint' | 'amber' | 'rose'; reduceMotion?: boolean; language?: 'zh-CN' | 'en'; preset?: 'fluent' | 'balanced' | 'strict' }) => void): Promise<PluginListenerHandle>
 }
 
 const MAX_TERMINAL_INPUT_BYTES = 256 * 1024
