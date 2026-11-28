@@ -110,7 +110,7 @@ internal object WhaleExecutionRouter {
         if (waitingWorkers.size == 1 && !asksCancel && !(mentionsWorker && (clearHints.any { it in lower } || statusHints.any { it in lower })) && !explicitSpawnHints.any { it in lower }) {
             val target = waitingWorkers.single()
             val cleaned = raw
-                .replace(Regex("^回复后台任务\s*${Regex.escape(target.id)}\s*[：:]?\s*", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("^回复后台任务\\s*${Regex.escape(target.id)}\\s*[：:]?\\s*", RegexOption.IGNORE_CASE), "")
                 .trim()
             return Decision(
                 mode = Mode.WORKER_FOLLOWUP,
