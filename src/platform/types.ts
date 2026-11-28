@@ -1689,7 +1689,7 @@ export interface RuntimeBridge {
    * 只传模式、不传「深/浅」：原生在 `system` 模式下要自己按 `uiMode` 现算，
    * 传结论会把某一刻的取值固化成用户的显式选择，之后系统再切就不跟随了。
    */
-  setAppTheme: (mode: AppThemeMode, style?: 'simple' | 'cute' | 'usagi') => Promise<void>
+  setAppTheme: (mode: AppThemeMode, style?: 'simple' | 'cute' | 'usagi' | 'pixel' | 'pixel') => Promise<void>
   /**
    * 把外壳主题同步给 DSH 页面（登记册 5.5）。
    *

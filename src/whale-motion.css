@@ -807,3 +807,23 @@ body,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --- 4. PIXEL (Stepped 16-Bit Arcade Snap) --- */
+:root[data-style='pixel'] .whale-msg {
+  animation: whale-pane-fade 160ms steps(4) both;
+}
+:root[data-style='pixel'] .whale-a2ui-check-row,
+:root[data-style='pixel'] .whale-next-chip,
+:root[data-style='pixel'] .whale-starter-card,
+:root[data-style='pixel'] .whale-island-chip,
+:root[data-style='pixel'] .whale-send-btn {
+  transition: transform 55ms steps(2), box-shadow 55ms steps(2);
+}
+:root[data-style='pixel'] .whale-a2ui-check-row:active,
+:root[data-style='pixel'] .whale-next-chip:active,
+:root[data-style='pixel'] .whale-starter-card:active,
+:root[data-style='pixel'] .whale-island-chip:active,
+:root[data-style='pixel'] .whale-send-btn:active {
+  transform: translate3d(2px, 2px, 0) !important;
+  box-shadow: none !important;
+}

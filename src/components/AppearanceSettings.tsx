@@ -3,6 +3,7 @@ import { readInterfaceStyle, saveInterfaceStyle } from '../theme'
 import grokMark from '../assets/whale-grok-mark.png'
 import whaleChanAvatar from '../assets/whale-chan-avatar.png'
 import usagiAvatar from '../assets/usagi-avatar.png'
+import pixelWhaleAvatar from '../assets/whale-pixel-avatar.png'
 import { Moon, Palette, Sun, SunMoon, RotateCcw } from 'lucide-react'
 import { t } from '../i18n'
 import { applyTextColor, applyTheme, clearCustomAccentColor, clearCustomTextColor, readCustomAccentColor, readCustomTextColor, readThemeMode, saveAccentMode, saveAccentSource, saveCustomAccentColor, saveCustomTextColor, saveThemeMode, useAccentMode, useAccentSource, useResolvedTheme, useThemeMode } from '../theme'
@@ -128,7 +129,8 @@ export function AppearanceSettings({ scope = 'all', loadBackground = readBackgro
             {([
               { value: 'simple' as const, title: '极简·静奢编辑', desc: '暖石白/深曜石 · 无框排版 · 克制留白', thumb: grokMark, swatches: ['#F4F5F7', '#0B0F17', '#0F52BA'] },
               { value: 'cute' as const, title: '鲸鱼娘·雾面瓷白', desc: '低饱和冰雾瓷 · 柔雾玻璃 · 悬浮胶囊', thumb: whaleChanAvatar, swatches: ['#EEF6FF', '#1B7EF2', '#FF6B9D'] },
-              { value: 'usagi' as const, title: '乌萨奇·温润手账', desc: '羊皮纸米白/黑巧丝绒 · 去粗边柔影', thumb: usagiAvatar, swatches: ['#FFFBEA', '#5C3A1B', '#F59E0B'] },
+              { value: 'usagi' as const, title: '乌萨奇·漫画手绘', desc: '暖棕墨线/水彩手绘 · 零模糊硬影', thumb: usagiAvatar, swatches: ['#FFFBF0', '#FFE875', '#3A2618'] },
+              { value: 'pixel' as const, title: '像素·复古游戏', desc: '16-Bit 掌机/CRT 街机 · 像素鲸鱼娘', thumb: pixelWhaleAvatar, swatches: ['#8FD3FF', '#2D74F5', '#FFD43B'] },
             ]).map(item => (
               <button
                 type="button"

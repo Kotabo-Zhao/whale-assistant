@@ -8,6 +8,7 @@ import appMark from './assets/app-mark.png'
 import whaleWave from './assets/whale-wave.svg'
 import whaleChanBadge from './assets/whale-chan-badge.png'
 import usagiAvatar from './assets/usagi-avatar.png'
+import pixelWhaleAvatar from './assets/whale-pixel-avatar.png'
 import { CuteIcon } from './components/CuteIcon'
 import { saveLanguage, t, useLanguage } from './i18n'
 import { formatByteCount as formatBytes, formatDuration, useDownloadTelemetry } from './downloadTelemetry'
@@ -1288,7 +1289,9 @@ function SettingsHomeScreen({ lastGroup, onGroupChange, busy, diagnostic, keepAl
           <h1>{t("设置")}</h1>
         </div>
         <div className="heading-actions account-heading-actions">
-          {interfaceStyle === 'usagi'
+          {interfaceStyle === 'pixel'
+            ? <img className="whale-signature is-maid-badge is-pixel-sprite" src={pixelWhaleAvatar} alt="" width={34} height={34} />
+            : interfaceStyle === 'usagi'
             ? <img className="whale-signature is-maid-badge" src={usagiAvatar} alt="" width={34} height={34} />
             : interfaceStyle === 'cute'
               ? <img className="whale-signature is-maid-badge" src={whaleChanBadge} alt="" width={34} height={34} />
@@ -3850,7 +3853,7 @@ export function App() {
       if (event.action === 'navigate' && event.view) {
         setActiveView(event.view as AppView)
       } else if (event.action === 'appearance') {
-        if (event.style === 'simple' || event.style === 'cute' || event.style === 'usagi') saveInterfaceStyle(event.style)
+        if (event.style === 'simple' || event.style === 'cute' || event.style === 'usagi' || event.style === 'pixel') saveInterfaceStyle(event.style)
         if (event.theme === 'system' || event.theme === 'light' || event.theme === 'dark') saveThemeMode(event.theme)
         if (event.accent === 'ocean' || event.accent === 'mint' || event.accent === 'amber' || event.accent === 'rose') saveAccentMode(event.accent)
         if (typeof event.reduceMotion === 'boolean') {
