@@ -1815,7 +1815,7 @@
   border-right: 0 !important;
   border-bottom: 1px solid var(--line, rgba(148, 163, 184, 0.16)) !important;
   box-shadow: none !important;
-  padding: max(6px, env(safe-area-inset-top, 6px)) 10px 6px !important;
+  padding: 6px 12px !important;
   background: color-mix(in srgb, var(--bg) 90%, transparent) !important;
   backdrop-filter: blur(14px) !important;
   -webkit-backdrop-filter: blur(14px) !important;
@@ -1825,13 +1825,13 @@
   border-bottom-color: rgba(132, 208, 255, 0.18) !important;
 }
 .whale-chat-stream {
-  padding: 8px 8px 12px !important;
-  overflow-anchor: none !important;
+  padding: 6px 12px 10px !important;
+  overflow-anchor: auto !important;
   box-sizing: border-box !important;
   width: 100% !important;
 }
 .whale-chat-composer-wrap {
-  padding: 4px 8px max(6px, env(safe-area-inset-bottom, 6px)) !important;
+  padding: 4px 10px 4px !important;
   box-sizing: border-box !important;
   width: 100% !important;
 }
@@ -2980,19 +2980,22 @@
 .whale-a2ui-slider-head { display: flex; justify-content: space-between; color: var(--ink); }
 .whale-a2ui-slider-row input[type=range] { width: 100%; accent-color: var(--blue); }
 
-/* 120fps scroll & streaming containment */
-.whale-chat-list {
-  contain: layout style;
+/* 120fps scroll & shadow-safe message layout (avoid content-visibility:auto paint clipping & scroll-to-top jumps) */
+.whale-chat-list,
+.whale-chat-stream {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
-.whale-msg {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 96px;
-  contain: layout style;
+.whale-msg,
+.whale-msg-row,
+.whale-msg-col {
+  overflow: visible !important;
+}
+.whale-msg-bubble {
+  isolation: isolate;
 }
 .whale-msg-bubble.whale-streaming {
-  contain: layout style;
+  contain: style;
 }
 .whale-chat-header,
 .whale-composer-dock {
