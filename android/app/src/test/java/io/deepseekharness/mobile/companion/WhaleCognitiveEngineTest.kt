@@ -22,11 +22,11 @@ class WhaleCognitiveEngineTest {
     }
 
     @Test
-    fun extractSuggestionsStripsInlineMarkerAndParsesUpToThreeChips() {
-        val raw = "好的，我已经帮你把明天早上的日程整理好了。\n<!--whale_next:[\"顺手设个8点闹钟\",\"查看本周其他日程\",\"导出成待办清单\",\"忽略第四条\"]-->"
+    fun extractSuggestionsStripsInlineMarkerAndParsesUpToFourChips() {
+        val raw = "好的，我已经帮你把明天早上的日程整理好了。\n<!--whale_next:[\"顺手设个8点闹钟\",\"查看本周其他日程\",\"导出成待办清单\",\"同步到日历\",\"忽略第五条\"]-->"
         val (clean, chips) = WhaleNativeAgentEngine.extractSuggestions(raw)
         assertEquals("好的，我已经帮你把明天早上的日程整理好了。", clean)
-        assertEquals(listOf("顺手设个8点闹钟", "查看本周其他日程", "导出成待办清单"), chips)
+        assertEquals(listOf("顺手设个8点闹钟", "查看本周其他日程", "导出成待办清单", "同步到日历"), chips)
         assertTrue(!clean.contains("whale_next"))
     }
 
